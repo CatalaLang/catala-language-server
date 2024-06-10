@@ -12,8 +12,8 @@
 
 # Command line
 
-tree-sitter parse ./server/src/catala/tree-sitter ./home/user/dev/projects/midnight/midnight-highgrass-code/packages/catala-test-app/test.catala_en
-tree-sitter parse /home/user/dev/projects/midnight/midnight-highgrass-code/packages/catala-test-app/test.catala_en
+- `tree-sitter parse ./server/src/catala/tree-sitter <catala_file>`
+- `tree-sitter parse <catala_file>`
 
 # Research
 
