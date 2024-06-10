@@ -96,3 +96,9 @@ $ catala test-scope A
 
 ### Get syntax highlighting to work
 - [ ] vscode extension
+
+# License
+
+All the code contained in this repository is released under the Apache
+license (version 2) unless another license is explicited for a
+sub-directory.
