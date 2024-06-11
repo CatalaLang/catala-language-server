@@ -92,6 +92,31 @@ $ catala test-scope A
 [RESULT] z = 390.0
 ```
 
+# Development
+## Prerequisites
+1. For the "Setup" part, understand how to build tree-sitter grammars for local usage
+    (https://tree-sitter.github.io/tree-sitter/)
+    1. And and to use the grammar in your code
+        (https://github.com/tree-sitter/node-tree-sitter)
+2. For the "Run" part, understand how to run a VSCode extension locally
+    (https://code.visualstudio.com/api/language-extensions/language-server-extension-guide)
+
+## Setup
+1. Clone https://github.com/AltGr/tree-sitter-catala
+    1. npm i
+    2. npm run build
+    3. /bindings dir gets created
+    4. copy path  "path/to/tree-sitter-catala/bindings/node/index.js"
+2. Go to file `server/src/catala/parser.ts`
+    1. Paste (1.4) to import path in `import * as Catala from '<here>'`
+
+## Run
+1. Go to "Run and Debug" in the VSCode sidebar (invoked by command "View: Show Run and Debug")
+2. Choose "Launch Client" and click on the play button
+3. A new VSCode window should open with the extension running
+    - you can press CTRL+R to reload the extension window to apply changes
+
+
 # TODOs
 
 ### Get syntax highlighting to work
