@@ -1,0 +1,16 @@
+# Generated directories
+_build/
+src/_build/
+
+# Generated files
+.merlin
+*.install
+
+# opam local switch
+_opam
+
+# swap files
+*.swp
+
+# Vendored dirs
+vendors/*

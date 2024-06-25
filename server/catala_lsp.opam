@@ -1,0 +1,25 @@
+version: "0.0.1"
+opam-version: "2.0"
+name: "catala_lsp"
+maintainer: "Vincent Botbol"
+authors: "Vincent Botbol"
+license: "Apache-2.0"
+build: [
+  ["dune" "build"]
+]
+depends: [
+  "ocaml" {>= "4.14.1"}
+  "dune" { >= "3.0" }
+  "logs"
+  "lsp"
+  "linol" { >= "0.6" }
+  "linol-lwt" { >= "0.6" }
+  "uri"
+]
+tags: [ "catala" "lsp" ]
+homepage: "https://github.com/CatalaLang/catala-language-server"
+dev-repo: "https://github.com/CatalaLang/catala-language-server"
+bug-reports: "https://github.com/CatalaLang/catala-language-server/issues"
+
+doc: "A LSP server for Catala"
+synopsis: "A LSP server for Catala"

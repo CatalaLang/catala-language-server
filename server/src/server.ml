@@ -1,0 +1,201 @@
+open Lwt.Syntax
+
+exception ServerError of string
+
+let parse_settings settings =
+  match settings with
+  | `Assoc [("preludes", `List l)] ->
+    List.map
+      (fun s ->
+        match s with
+        | `String f -> f
+        | _ ->
+          raise
+            (ServerError
+               (Format.asprintf
+                  "Expected a path to a prelude file as a string, instead got \
+                   %a@."
+                  Yojson.Safe.pp s)))
+      l
+  | _ ->
+    raise
+      (ServerError
+         (Format.asprintf
+            "ChangeConfiguration: received unexpected settings: \n%a@."
+            Yojson.Safe.pp settings))
+
+let preprocess_uri uri =
+  let prefix = "file://" in
+  let prefix_len = String.length prefix in
+  let uri_len = String.length uri in
+  if prefix_len < uri_len && String.sub uri 0 prefix_len = prefix then
+    String.sub uri prefix_len (uri_len - prefix_len)
+  else uri
+
+let mk_prelude _files = []
+let current_thread = ref Lwt.return_unit
+
+let run_with_delay ?(delay = 1.) ~when_ready f =
+  let run_with_delay () =
+    let* () = Lwt_unix.sleep delay in
+    f ()
+  in
+  match Lwt.state !current_thread with
+  | Fail _ | Return () ->
+    when_ready ();
+    current_thread := run_with_delay ()
+  | Sleep ->
+    Lwt.cancel !current_thread;
+    current_thread := run_with_delay ()
+
+class catala_lsp_server =
+  let open Linol_lwt in
+  object (self)
+    inherit Linol_lwt.Jsonrpc2.server
+    method! config_code_action_provider = `Bool true
+    method! config_completion = Some (CompletionOptions.create ())
+    val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
+    method spawn_query_handler = Lwt.async
+
+    (* A list of include statements of the prelude files *)
+    val mutable prelude = []
+
+    method private process_and_update_file ?contents uri =
+      let f = State.process_document ?contents uri in
+      Hashtbl.replace buffers uri f;
+      f
+
+    method private use_or_process_file ?contents uri =
+      match Hashtbl.find_opt buffers uri with
+      | Some v -> v
+      | None -> self#process_and_update_file ?contents uri
+
+    method! config_sync_opts =
+      (* configure how sync happens *)
+      let change = Lsp.Types.TextDocumentSyncKind.Incremental in
+      (* Lsp.Types.TextDocumentSyncKind.Full *)
+      Lsp.Types.TextDocumentSyncOptions.create ~openClose:true ~change
+        ~save:
+          (`SaveOptions (Lsp.Types.SaveOptions.create ~includeText:false ()))
+        ()
+
+    method private _on_doc
+        ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
+        (uri : DocumentUri.t)
+        (contents : string option) =
+      let uri_s = DocumentUri.to_string uri in
+      let file = self#process_and_update_file ?contents uri_s in
+      State.all_diagnostics file
+      |> function
+      | [] -> Lwt.return_unit | diags -> notify_back#send_diagnostic diags
+
+    method on_notif_doc_did_open ~notify_back d ~content =
+      self#_on_doc ~notify_back d.uri (Some content)
+
+    method on_notif_doc_did_change
+        ~notify_back
+        d
+        (_c : TextDocumentContentChangeEvent.t list)
+        ~old_content:_
+        ~new_content =
+      let when_ready () =
+        Lwt.async @@ fun () -> notify_back#send_diagnostic []
+      in
+      run_with_delay ~when_ready (fun () ->
+          self#_on_doc ~notify_back d.uri (Some new_content));
+      Lwt.return_unit
+
+    method! on_notif_doc_did_save ~notify_back d =
+      let { DidSaveTextDocumentParams.textDocument; _ } = d in
+      self#_on_doc ~notify_back textDocument.uri None
+
+    method! on_notification_unhandled
+        ~notify_back:_
+        (n : Lsp.Client_notification.t) =
+      match n with
+      | Lsp.Client_notification.ChangeConfiguration { settings } -> begin
+        try
+          prelude <- mk_prelude (parse_settings settings);
+          Linol_lwt.Jsonrpc2.IO.return ()
+        with ServerError s -> Linol_lwt.Jsonrpc2.IO.failwith s
+      end
+      | UnknownNotification notif ->
+        let json = Jsonrpc.Notification.yojson_of_t notif in
+        Format.eprintf "[unkown notification] %a@." Yojson.Safe.pp json;
+        Lwt.return ()
+      | _ ->
+        Format.eprintf "%s@." __LOC__;
+        Lwt.return ()
+
+    method on_notif_doc_did_close ~notify_back d =
+      Hashtbl.remove buffers (DocumentUri.to_string d.uri);
+      notify_back#send_diagnostic []
+
+    method! on_req_code_action
+        ~notify_back:_
+        ~id:_
+        {
+          textDocument = doc_id;
+          range;
+          context = _;
+          partialResultToken = _;
+          workDoneToken = _;
+        }
+        : CodeActionResult.t Lwt.t =
+      let f = self#use_or_process_file (DocumentUri.to_string doc_id.uri) in
+      let suggestions_opt = State.lookup_suggestions f range in
+      let action_opt : CodeAction.t list option =
+        Option.map
+          (fun (range, suggestions) ->
+            let changes : (DocumentUri.t * TextEdit.t list) list option =
+              Option.some
+              @@ List.map
+                   (fun suggestion ->
+                     doc_id.uri, [TextEdit.create ~range ~newText:suggestion])
+                   suggestions
+            in
+            [
+              CodeAction.create ~title:"completion"
+                ~kind:CodeActionKind.QuickFix ~isPreferred:true
+                ~edit:
+                  { changes; documentChanges = None; changeAnnotations = None }
+                ();
+            ])
+          suggestions_opt
+      in
+      let result =
+        match action_opt with
+        | None ->
+          Format.eprintf "%s@." __LOC__;
+          None
+        | Some l ->
+          Format.eprintf "%s@." __LOC__;
+          Some (List.map (fun action -> `CodeAction action) l)
+      in
+      Lwt.return result
+
+    method! on_req_completion
+        ~notify_back:_
+        ~id:_
+        ~uri
+        ~pos
+        ~ctx:_
+        ~workDoneToken:_
+        ~partialResultToken:_
+        _doc_state =
+      let f = self#use_or_process_file (DocumentUri.to_string uri) in
+      let suggestions_opt = State.lookup_suggestions_by_pos f pos in
+      match suggestions_opt with
+      | None -> Lwt.return_none
+      | Some (range, suggestions) ->
+        Lwt.return
+        @@ Some
+             (`List
+               (List.map
+                  (fun sugg ->
+                    let textEdit =
+                      `TextEdit (TextEdit.create ~range ~newText:sugg)
+                    in
+                    CompletionItem.create ~label:sugg ~textEdit ())
+                  suggestions))
+  end

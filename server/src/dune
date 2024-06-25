@@ -1,0 +1,15 @@
+(executable
+  (name         main)
+  (public_name  catala-lsp)
+  (package      catala_lsp)
+  (libraries
+    threads.posix
+    lsp linol linol-lwt
+    gen logs logs.fmt
+    catala.driver
+    uri
+  )
+ (flags
+  (:standard)
+ )
+)
