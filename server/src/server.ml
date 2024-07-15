@@ -54,6 +54,7 @@ class catala_lsp_server =
     inherit Linol_lwt.Jsonrpc2.server
     method! config_code_action_provider = `Bool true
     method! config_completion = Some (CompletionOptions.create ())
+    method! config_definition = Some (`Bool true)
     val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
     method spawn_query_handler = Lwt.async
 
@@ -123,9 +124,7 @@ class catala_lsp_server =
         let json = Jsonrpc.Notification.yojson_of_t notif in
         Format.eprintf "[unkown notification] %a@." Yojson.Safe.pp json;
         Lwt.return ()
-      | _ ->
-        Format.eprintf "%s@." __LOC__;
-        Lwt.return ()
+      | _ -> Lwt.return ()
 
     method on_notif_doc_did_close ~notify_back d =
       Hashtbl.remove buffers (DocumentUri.to_string d.uri);
@@ -144,7 +143,7 @@ class catala_lsp_server =
         : CodeActionResult.t Lwt.t =
       let f = self#use_or_process_file (DocumentUri.to_string doc_id.uri) in
       let suggestions_opt = State.lookup_suggestions f range in
-      let action_opt : CodeAction.t list option =
+      let actions_opt : CodeAction.t list option =
         Option.map
           (fun (range, suggestions) ->
             let changes : (DocumentUri.t * TextEdit.t list) list option =
@@ -164,13 +163,9 @@ class catala_lsp_server =
           suggestions_opt
       in
       let result =
-        match action_opt with
-        | None ->
-          Format.eprintf "%s@." __LOC__;
-          None
-        | Some l ->
-          Format.eprintf "%s@." __LOC__;
-          Some (List.map (fun action -> `CodeAction action) l)
+        Option.map
+          (fun l -> List.map (fun action -> `CodeAction action) l)
+          actions_opt
       in
       Lwt.return result
 
@@ -198,4 +193,22 @@ class catala_lsp_server =
                     in
                     CompletionItem.create ~label:sugg ~textEdit ())
                   suggestions))
+
+    method! on_req_definition
+        ~notify_back
+        ~(id : Jsonrpc2.Req_id.t)
+        ~(uri : Lsp.Uri.t)
+        ~(pos : Position.t)
+        ~(workDoneToken : Linol_lwt.ProgressToken.t option)
+        ~(partialResultToken : Linol_lwt.ProgressToken.t option)
+        doc_state =
+      ignore (notify_back, id, workDoneToken, partialResultToken, doc_state);
+      let f = self#use_or_process_file (DocumentUri.to_string uri) in
+      match State.lookup_def f pos with
+      | None -> Lwt.return_none
+      | Some (file, range) ->
+        let uri = DocumentUri.of_path file in
+        let location = Lsp.Types.Location.create ~range ~uri in
+        let locs : Linol_lwt.Locations.t = `Location [location] in
+        Lwt.return_some locs
   end
