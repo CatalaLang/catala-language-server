@@ -1,3 +1,4 @@
+open Utils
 open Diagnostic
 open Linol_lwt
 
@@ -23,6 +24,8 @@ type metadata = { suggestions : string list }
 type file = {
   has_errors : bool;
   uri : string;
+  desugared : Desugared.Ast.program option;
+  jump_table : Jump.t option;
   errors : (Range.t * err_kind * metadata) RangeMap.t;
 }
 
@@ -48,7 +51,14 @@ let pp_range fmt { Range.start; end_ } =
   in
   fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
 
-let create uri = { has_errors = false; uri; errors = RangeMap.empty }
+let create ?prog uri =
+  {
+    has_errors = false;
+    uri;
+    errors = RangeMap.empty;
+    desugared = prog;
+    jump_table = None;
+  }
 
 let add_suggestions file range kind suggestions =
   let metadata = { suggestions } in
@@ -76,9 +86,21 @@ let all_diagnostics file =
       diag_r severity range message)
     errs
 
+let lookup_def { uri; jump_table; _ } (p : Position.t) =
+  let open Option in
+  let p = Utils.(lsp_range p p |> pos_of_range uri) in
+  let open Jump in
+  let ( let* ) = Option.bind in
+  let* jump_table = jump_table in
+  let* def_pos =
+    map (fun { definition; _ } -> definition) (lookup jump_table p) |> join
+  in
+  Some (Catala_utils.Pos.get_file def_pos, Utils.range_of_pos def_pos)
+
 let process_document ?contents (uri : string) : t =
   Log.debug (fun m -> m "Processing %s" uri);
   let uri = Uri.path (Uri.of_string uri) in
+  Log.debug (fun m -> m "Processing %s" uri);
   let input_src =
     let open Catala_utils.Global in
     match contents with None -> FileName uri | Some c -> Contents (c, uri)
@@ -91,7 +113,7 @@ let process_document ?contents (uri : string) : t =
   let () =
     Catala_utils.Message.install_generic_error_catcher on_generic_error
   in
-  let parsing_errs =
+  let parsing_errs, prg_opt =
     try
       (* Resets the lexing context to a fresh one *)
       Surface.Lexer_common.context := Law;
@@ -106,8 +128,8 @@ let process_document ?contents (uri : string) : t =
           Uid.Module.Map.empty
       in
       let prg = Desugared.From_surface.translate_program ctx prg in
-      let _prg = Desugared.Disambiguate.program prg in
-      []
+      let prg = Desugared.Disambiguate.program prg in
+      [], Some prg
     with e ->
       (match e with
       | Catala_utils.Message.CompilerError er ->
@@ -116,9 +138,11 @@ let process_document ?contents (uri : string) : t =
       Log.debug (fun m ->
           m "caught exn: %s - %d diags to send" (Printexc.to_string e)
             (List.length !l));
-      List.rev !l
+      List.rev !l, None
   in
-  let file = create uri in
+  let file = create ?prog:prg_opt uri in
+  let jump_table = Option.map Jump.traverse prg_opt in
+  let file = { file with jump_table } in
   List.fold_left
     (fun f -> function
       | Parsing (Parsing_error parse_err) as err ->

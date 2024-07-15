@@ -33,5 +33,4 @@ let run () =
     Printf.eprintf "error: %s\n%!" e;
     exit 1
 
-(* Finally, we actually run the server *)
 let () = run ()
