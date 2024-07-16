@@ -51,12 +51,44 @@ let run_with_delay ?(delay = 1.) ~when_ready f =
 class catala_lsp_server =
   let open Linol_lwt in
   object (self)
-    inherit Linol_lwt.Jsonrpc2.server
+    inherit Linol_lwt.Jsonrpc2.server as super
     method! config_code_action_provider = `Bool true
     method! config_completion = Some (CompletionOptions.create ())
     method! config_definition = Some (`Bool true)
+    method private config_declaration = Some (`Bool true)
+    method private config_references = Some (`Bool true)
+
+    method! config_sync_opts =
+      (* configure how sync happens *)
+      let change = Lsp.Types.TextDocumentSyncKind.Incremental in
+      (* Lsp.Types.TextDocumentSyncKind.Full *)
+      Lsp.Types.TextDocumentSyncOptions.create ~openClose:true ~change
+        ~save:
+          (`SaveOptions (Lsp.Types.SaveOptions.create ~includeText:false ()))
+        ()
+
     val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
     method spawn_query_handler = Lwt.async
+
+    method! on_req_initialize ~notify_back:_ (_i : InitializeParams.t) =
+      let sync_opts = self#config_sync_opts in
+      let capabilities =
+        ServerCapabilities.create
+          ?codeLensProvider:self#config_code_lens_options
+          ~codeActionProvider:self#config_code_action_provider
+          ~executeCommandProvider:
+            (ExecuteCommandOptions.create ~commands:self#config_list_commands ())
+          ?completionProvider:self#config_completion
+          ?definitionProvider:self#config_definition
+          ?declarationProvider:self#config_declaration
+          ?referencesProvider:self#config_references
+          ?hoverProvider:self#config_hover
+          ?inlayHintProvider:self#config_inlay_hints
+          ?documentSymbolProvider:self#config_symbol
+          ~textDocumentSync:(`TextDocumentSyncOptions sync_opts) ()
+        |> self#config_modify_capabilities
+      in
+      Lwt.return (InitializeResult.create ~capabilities ())
 
     (* A list of include statements of the prelude files *)
     val mutable prelude = []
@@ -70,15 +102,6 @@ class catala_lsp_server =
       match Hashtbl.find_opt buffers uri with
       | Some v -> v
       | None -> self#process_and_update_file ?contents uri
-
-    method! config_sync_opts =
-      (* configure how sync happens *)
-      let change = Lsp.Types.TextDocumentSyncKind.Incremental in
-      (* Lsp.Types.TextDocumentSyncKind.Full *)
-      Lsp.Types.TextDocumentSyncOptions.create ~openClose:true ~change
-        ~save:
-          (`SaveOptions (Lsp.Types.SaveOptions.create ~includeText:false ()))
-        ()
 
     method private _on_doc
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
@@ -113,6 +136,7 @@ class catala_lsp_server =
     method! on_notification_unhandled
         ~notify_back:_
         (n : Lsp.Client_notification.t) =
+      Log.debug (fun m -> m "%s" __LOC__);
       match n with
       | Lsp.Client_notification.ChangeConfiguration { settings } -> begin
         try
@@ -125,6 +149,23 @@ class catala_lsp_server =
         Format.eprintf "[unkown notification] %a@." Yojson.Safe.pp json;
         Lwt.return ()
       | _ -> Lwt.return ()
+
+    method! on_request_unhandled : type r.
+        notify_back:_ -> id:_ -> r Lsp.Client_request.t -> r Lwt.t =
+      fun ~notify_back ~id r ->
+        Log.debug (fun m -> m "%s" __LOC__);
+        Log.debug (fun k -> k "req: unhandled request");
+        match r with
+        | TextDocumentDeclaration (params : TextDocumentPositionParams.t) ->
+          Log.debug (fun m -> m "%s" __LOC__);
+          self#on_req_declaration ~notify_back ~uri:params.textDocument.uri
+            ~pos:params.position ()
+        | TextDocumentReferences (params : ReferenceParams.t) ->
+          Log.debug (fun m -> m "%s" __LOC__);
+          self#on_req_references ~notify_back ~uri:params.textDocument.uri
+            ~pos:params.position ()
+        | _ -> super#on_request_unhandled ~notify_back ~id r
+    (** Override to process other requests *)
 
     method on_notif_doc_did_close ~notify_back d =
       Hashtbl.remove buffers (DocumentUri.to_string d.uri);
@@ -210,5 +251,37 @@ class catala_lsp_server =
         let uri = DocumentUri.of_path file in
         let location = Lsp.Types.Location.create ~range ~uri in
         let locs : Linol_lwt.Locations.t = `Location [location] in
+        Lwt.return_some locs
+
+    method private on_req_declaration
+        ~notify_back
+        ~(uri : Lsp.Uri.t)
+        ~(pos : Position.t)
+        ()
+        : Locations.t option t =
+      ignore notify_back;
+      let f = self#use_or_process_file (DocumentUri.to_string uri) in
+      match State.lookup_declaration f pos with
+      | None -> Lwt.return_none
+      | Some (file, range) ->
+        let uri = DocumentUri.of_path file in
+        let location = Lsp.Types.Location.create ~range ~uri in
+        let locs : Linol_lwt.Locations.t = `Location [location] in
+        Lwt.return_some locs
+
+    method private on_req_references
+        ~notify_back
+        ~(uri : Lsp.Uri.t)
+        ~(pos : Position.t)
+        ()
+        : Location.t list option Lwt.t =
+      ignore notify_back;
+      let f = self#use_or_process_file (DocumentUri.to_string uri) in
+      match State.lookup_usages f pos with
+      | None -> Lwt.return_none
+      | Some (file, range) ->
+        let uri = DocumentUri.of_path file in
+        let location = Lsp.Types.Location.create ~range ~uri in
+        let locs = [location] in
         Lwt.return_some locs
   end
