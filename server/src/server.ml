@@ -247,11 +247,15 @@ class catala_lsp_server =
       let f = self#use_or_process_file (DocumentUri.to_string uri) in
       match State.lookup_def f pos with
       | None -> Lwt.return_none
-      | Some (file, range) ->
-        let uri = DocumentUri.of_path file in
-        let location = Lsp.Types.Location.create ~range ~uri in
-        let locs : Linol_lwt.Locations.t = `Location [location] in
-        Lwt.return_some locs
+      | Some l ->
+        let locs =
+          List.map
+            (fun (file, range) ->
+              let uri = DocumentUri.of_path file in
+              Lsp.Types.Location.create ~range ~uri)
+            l
+        in
+        Lwt.return_some (`Location locs)
 
     method private on_req_declaration
         ~notify_back

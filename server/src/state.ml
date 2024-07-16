@@ -24,7 +24,7 @@ type metadata = { suggestions : string list }
 type file = {
   has_errors : bool;
   uri : string;
-  desugared : Desugared.Ast.program option;
+  desugared : Shared_ast.typed Scopelang.Ast.program option;
   jump_table : Jump.t option;
   errors : (Range.t * err_kind * metadata) RangeMap.t;
 }
@@ -98,8 +98,8 @@ let generic_lookup { uri; jump_table; _ } (p : Position.t) f =
 let to_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
 
 let lookup_def jt p =
-  generic_lookup jt p (fun { definition; _ } -> definition)
-  |> Option.map to_position
+  generic_lookup jt p (fun { definitions; _ } -> definitions)
+  |> Option.map (List.map to_position)
 
 let lookup_declaration jt p =
   generic_lookup jt p (fun { declaration; _ } -> declaration)
@@ -141,6 +141,17 @@ let process_document ?contents (uri : string) : t =
       in
       let prg = Desugared.From_surface.translate_program ctx prg in
       let prg = Desugared.Disambiguate.program prg in
+      let exceptions_graphs =
+        Scopelang.From_desugared.build_exceptions_graph prg
+      in
+      let prg =
+        Scopelang.From_desugared.translate_program prg exceptions_graphs
+      in
+      let _type_ordering =
+        Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+          prg.program_ctx.ctx_enums
+      in
+      let prg = Scopelang.Ast.type_program prg in
       [], Some prg
     with e ->
       (match e with
@@ -153,7 +164,7 @@ let process_document ?contents (uri : string) : t =
       List.rev !l, None
   in
   let file = create ?prog:prg_opt uri in
-  let jump_table = Option.map Jump.traverse prg_opt in
+  let jump_table = Option.map Jump.populate prg_opt in
   let file = { file with jump_table } in
   List.fold_left
     (fun f -> function
