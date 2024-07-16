@@ -26,13 +26,12 @@ type jump = { name : string; var_id : int }
 module LTable = Stdlib.Map.Make (Int)
 
 type lookup_entry = {
-  (* TODO: lists? *)
   declaration : Pos.t option;
   definition : Pos.t option;
-  usage : Pos.t option;
+  usages : Pos.t list option;
 }
 
-let empty_lookup = { declaration = None; definition = None; usage = None }
+let empty_lookup = { declaration = None; definition = None; usages = None }
 
 type t = {
   declarations : jump PMap.t;
@@ -193,7 +192,16 @@ let populate_lookup_table ~definitions ~declarations ~usage =
   let lookup_table =
     PMap.fold
       (fun p { var_id; _ } tbl ->
-        LTable.update var_id (add (fun v -> { v with usage = Some p })) tbl)
+        LTable.update var_id
+          (add (fun v ->
+               {
+                 v with
+                 usages =
+                   (match v.usages with
+                   | None -> Some [p]
+                   | Some l -> Some (p :: l));
+               }))
+          tbl)
       usage lookup_table
   in
   lookup_table

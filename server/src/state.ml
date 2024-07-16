@@ -92,15 +92,22 @@ let generic_lookup { uri; jump_table; _ } (p : Position.t) f =
   let open Jump in
   let ( let* ) = Option.bind in
   let* jump_table = jump_table in
-  let* def_pos = map f (lookup jump_table p) |> join in
-  Some (Catala_utils.Pos.get_file def_pos, Utils.range_of_pos def_pos)
+  let* v = map f (lookup jump_table p) |> join in
+  Some v
 
-let lookup_def jt p = generic_lookup jt p (fun { definition; _ } -> definition)
+let to_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
+
+let lookup_def jt p =
+  generic_lookup jt p (fun { definition; _ } -> definition)
+  |> Option.map to_position
 
 let lookup_declaration jt p =
   generic_lookup jt p (fun { declaration; _ } -> declaration)
+  |> Option.map to_position
 
-let lookup_usages jt p = generic_lookup jt p (fun { usage; _ } -> usage)
+let lookup_usages jt p =
+  generic_lookup jt p (fun { usages; _ } -> usages)
+  |> Option.map (List.map to_position)
 
 let process_document ?contents (uri : string) : t =
   Log.debug (fun m -> m "Processing %s" uri);
