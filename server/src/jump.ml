@@ -79,6 +79,26 @@ let traverse_expr e m =
       in
       let var = Usage { name; var_id = TopdefName.id topdef_var; typ } in
       PMap.add pos var acc
+    | EStructAccess { name = _; e = sub_expr; field } ->
+      let name =
+        Printf.sprintf "SField(%s#%d)"
+          (StructField.to_string field)
+          (StructField.id field)
+      in
+      let (Typed { pos = expr_pos; ty = typ }) = Mark.get e in
+      let (Typed { pos = sub_expr_pos; ty = _ }) = Mark.get sub_expr in
+      let var = Usage { name; var_id = StructField.id field; typ } in
+      let pos =
+        let open Pos in
+        (* Hack to extract the field's position as StructField's mark points to
+           the declaration, i.e., compute the disjoint position of expr_pos (the
+           full expression) deprived of sub_expr_pos (structure's name) *)
+        from_info (get_file expr_pos) (get_start_line expr_pos)
+          (get_end_column sub_expr_pos + 1)
+          (get_end_line expr_pos) (get_end_column expr_pos)
+      in
+      let acc = PMap.add pos var acc in
+      f sub_expr acc
     | _ -> Expr.shallow_fold f e acc
   in
   Expr.shallow_fold f e m
@@ -146,6 +166,7 @@ let traverse (prog : Shared_ast.typed Scopelang.Ast.program) : var PMap.t =
   List.fold_right traverse_scope all_scopes m
 
 let populate (prog : Shared_ast.typed Scopelang.Ast.program) : t =
+  (* TODO: add scopes *)
   let variables = traverse prog in
   let pp_o ppf { declaration; definitions; usages } =
     let open Format in
