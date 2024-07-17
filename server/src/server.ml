@@ -55,6 +55,7 @@ class catala_lsp_server =
     method! config_code_action_provider = `Bool true
     method! config_completion = Some (CompletionOptions.create ())
     method! config_definition = Some (`Bool true)
+    method! config_hover = Some (`Bool true)
     method private config_declaration = Some (`Bool true)
     method private config_references = Some (`Bool true)
 
@@ -292,4 +293,22 @@ class catala_lsp_server =
             l
         in
         Lwt.return_some locs
+
+    method! on_req_hover
+        ~notify_back:_
+        ~id:_
+        ~uri
+        ~pos
+        ~workDoneToken:_
+        _doc_state
+        : Hover.t option Lwt.t =
+      let f = self#use_or_process_file (DocumentUri.to_string uri) in
+      match State.lookup_type f pos with
+      | None -> Lwt.return_none
+      | Some typ_s ->
+        let typ_s =
+          Format.asprintf "@[<hov 2>Type:@\n%a@]" Format.pp_print_text typ_s
+        in
+        let mc = MarkupContent.create ~kind:PlainText ~value:typ_s in
+        Lwt.return_some (Hover.create ~contents:(`MarkupContent mc) ())
   end
