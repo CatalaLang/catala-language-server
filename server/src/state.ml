@@ -24,7 +24,7 @@ type metadata = { suggestions : string list }
 type file = {
   has_errors : bool;
   uri : string;
-  desugared : Shared_ast.typed Scopelang.Ast.program option;
+  scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
   jump_table : Jump.t option;
   errors : (Range.t * err_kind * metadata) RangeMap.t;
 }
@@ -56,7 +56,7 @@ let create ?prog uri =
     has_errors = false;
     uri;
     errors = RangeMap.empty;
-    desugared = prog;
+    scopelang_prg = prog;
     jump_table = None;
   }
 
@@ -97,17 +97,26 @@ let generic_lookup { uri; jump_table; _ } (p : Position.t) f =
 
 let to_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
 
-let lookup_def jt p =
-  generic_lookup jt p (fun { definitions; _ } -> definitions)
+let lookup_def f p =
+  generic_lookup f p (fun { definitions; _ } -> definitions)
   |> Option.map (List.map to_position)
 
-let lookup_declaration jt p =
-  generic_lookup jt p (fun { declaration; _ } -> declaration)
+let lookup_declaration f p =
+  generic_lookup f p (fun { declaration; _ } -> declaration)
   |> Option.map to_position
 
-let lookup_usages jt p =
-  generic_lookup jt p (fun { usages; _ } -> usages)
+let lookup_usages f p =
+  generic_lookup f p (fun { usages; _ } -> usages)
   |> Option.map (List.map to_position)
+
+let lookup_type f p =
+  let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
+  let ( let* ) = Option.bind in
+  let* jt = f.jump_table in
+  let* typ = Jump.lookup_type jt p in
+  let* prg = f.scopelang_prg in
+  let typ_s = Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ in
+  Some typ_s
 
 let process_document ?contents (uri : string) : t =
   Log.debug (fun m -> m "Processing %s" uri);
