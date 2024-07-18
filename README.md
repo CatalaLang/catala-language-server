@@ -66,6 +66,11 @@ npm run compile
 4. A new VSCode window should open with the extension running
    - you can press CTRL+R to reload the extension window to apply changes
 
+### Developing
+
+When developing on the "front" (typescript side) of the extension, you may invoke
+`npm run watch` to continuously build the extension.
+
 # License
 
 All the code contained in this repository is released under the Apache
