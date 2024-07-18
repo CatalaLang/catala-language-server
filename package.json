@@ -22,6 +22,18 @@
     ],
     "main": "./extension.js",
     "contributes": {
+        "customEditors": [
+            {
+              "viewType": "catala.catalaTestCaseEditor",
+              "displayName": "Catala Test Case Editor",
+              "selector": [
+                {
+                  "filenamePattern": "*test*.catala_*"
+                }
+              ],
+              "priority": "default"
+            }
+        ],
         "languages": [
             {
                 "id": "catala_en",

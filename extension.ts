@@ -5,7 +5,8 @@ import {
   DidChangeConfigurationNotification
 } from 'vscode-languageclient/node';
 import * as path from 'path';
-import * as os from 'os';
+
+import { CatalaTestCaseEditorProvider } from './catalaTestCaseEditor';
 
 let client: LanguageClient;
 
@@ -27,6 +28,9 @@ export function activate(context: ExtensionContext) {
   )
 
   client.start();
+
+  console.log('activating test case editor');
+  context.subscriptions.push(CatalaTestCaseEditorProvider.register(context));
 }
 
 export function deactivate(): Thenable<void> | undefined {
