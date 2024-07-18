@@ -6,7 +6,7 @@ import {
 } from 'vscode-languageclient/node';
 import * as path from 'path';
 
-import { CatalaTestCaseEditorProvider } from './catalaTestCaseEditor';
+import { TestCaseEditorProvider } from './testCaseEditor';
 
 let client: LanguageClient;
 
@@ -17,6 +17,7 @@ export function activate(context: ExtensionContext) {
 
   const run: Executable = { command: cmd };
 
+  console.log('Activating LSP client');
   client = new LanguageClient(
     cmd,
     'Catala Language Server Protocol',
@@ -31,8 +32,8 @@ export function activate(context: ExtensionContext) {
 
   client.start();
 
-  console.log('activating test case editor');
-  context.subscriptions.push(CatalaTestCaseEditorProvider.register(context));
+  console.log('Activating test case editor');
+  context.subscriptions.push(TestCaseEditorProvider.register(context));
 }
 
 export function deactivate(): Thenable<void> | undefined {
