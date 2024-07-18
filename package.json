@@ -24,7 +24,7 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "catala.catalaTestCaseEditor",
+        "viewType": "catala.testCaseEditor",
         "displayName": "Catala Test Case Editor",
         "selector": [
           {
@@ -76,7 +76,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -b; cd server; dune build; cd ..",
     "format": "prettier --write .",
-    "watch": "tsc -b -p",
+    "watch": "tsc -b --watch",
     "prepare": "husky"
   },
   "dependencies": {
