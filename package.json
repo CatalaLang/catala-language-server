@@ -1,93 +1,93 @@
 {
-    "name": "catala-vscode-extension",
-    "displayName": "Catala VSCode Extension",
-    "description": "A VSCode extension and LSP server for the Catala language",
-    "version": "0.0.1",
-    "publisher": "INRIA",
-    "license": "Apache-2.0",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/CatalaLang/catala-language-server/"
-    },
-    "icon": "logo.png",
-    "categories": [
-        "Programming Languages"
+  "name": "catala-vscode-extension",
+  "displayName": "Catala VSCode Extension",
+  "description": "A VSCode extension and LSP server for the Catala language",
+  "version": "0.0.1",
+  "publisher": "INRIA",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CatalaLang/catala-language-server/"
+  },
+  "icon": "logo.png",
+  "categories": [
+    "Programming Languages"
+  ],
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "activationEvents": [
+    "onLanguage:catala_en",
+    "onLanguage:catala_fr"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "catala.catalaTestCaseEditor",
+        "displayName": "Catala Test Case Editor",
+        "selector": [
+          {
+            "filenamePattern": "*test*.catala_*"
+          }
+        ],
+        "priority": "default"
+      }
     ],
-    "engines": {
-        "vscode": "^1.86.0"
-    },
-    "activationEvents": [
-        "onLanguage:catala_en",
-        "onLanguage:catala_fr"
+    "languages": [
+      {
+        "id": "catala_en",
+        "aliases": [
+          "Catala (English)"
+        ],
+        "extensions": [
+          ".catala_en"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_fr",
+        "aliases": [
+          "Catala (French)"
+        ],
+        "extensions": [
+          ".catala_fr"
+        ],
+        "configuration": "./language-configuration.json"
+      }
     ],
-    "main": "./extension.js",
-    "contributes": {
-        "customEditors": [
-            {
-                "viewType": "catala.catalaTestCaseEditor",
-                "displayName": "Catala Test Case Editor",
-                "selector": [
-                    {
-                        "filenamePattern": "*test*.catala_*"
-                    }
-                ],
-                "priority": "default"
-            }
-        ],
-        "languages": [
-            {
-                "id": "catala_en",
-                "aliases": [
-                    "Catala (English)"
-                ],
-                "extensions": [
-                    ".catala_en"
-                ],
-                "configuration": "./language-configuration.json"
-            },
-            {
-                "id": "catala_fr",
-                "aliases": [
-                    "Catala (French)"
-                ],
-                "extensions": [
-                    ".catala_fr"
-                ],
-                "configuration": "./language-configuration.json"
-            }
-        ],
-        "grammars": [
-            {
-                "language": "catala_en",
-                "scopeName": "source.catala_en",
-                "path": "./syntaxes/en.xml"
-            },
-            {
-                "language": "catala_fr",
-                "scopeName": "source.catala_fr",
-                "path": "./syntaxes/fr.xml"
-            }
-        ],
-        "comments": {
-            "lineComment": "#"
-        }
-    },
-    "scripts": {
-        "vscode:prepublish": "npm run compile",
-        "compile": "tsc -b; cd server; dune build; cd ..",
-        "format": "prettier --write .",
-        "watch": "tsc -b -p"
-    },
-    "dependencies": {
-        "tsc-watch": "^6.2.0",
-        "vscode-languageclient": "^8.0.2"
-    },
-    "devDependencies": {
-        "@types/mocha": "^10.0.6",
-        "@types/node": "^18.11.18",
-        "@types/vscode": "^1.86.0",
-        "eslint": "^8.56.0",
-        "prettier": "3.3.3",
-        "typescript": "^4.9.5"
+    "grammars": [
+      {
+        "language": "catala_en",
+        "scopeName": "source.catala_en",
+        "path": "./syntaxes/en.xml"
+      },
+      {
+        "language": "catala_fr",
+        "scopeName": "source.catala_fr",
+        "path": "./syntaxes/fr.xml"
+      }
+    ],
+    "comments": {
+      "lineComment": "#"
     }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -b; cd server; dune build; cd ..",
+    "format": "prettier --write .",
+    "watch": "tsc -b -p"
+  },
+  "dependencies": {
+    "tsc-watch": "^6.2.0",
+    "vscode-languageclient": "^8.0.2"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^18.11.18",
+    "@types/vscode": "^1.86.0",
+    "eslint": "^8.56.0",
+    "prettier": "3.3.3",
+    "typescript": "^4.9.5"
+  }
 }

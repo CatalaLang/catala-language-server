@@ -1,11 +1,8 @@
 {
-    "compilerOptions": {
-	"module": "commonjs",
-	"target": "es2020",
-	"lib": ["es2020"]
-    },
-    "exclude": [
-	"node_modules",
-	".vscode-test"
-    ]
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2020",
+    "lib": ["es2020"]
+  },
+  "exclude": ["node_modules", ".vscode-test"]
 }
