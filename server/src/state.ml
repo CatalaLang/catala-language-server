@@ -182,13 +182,13 @@ let process_document ?contents (uri : string) : t =
         let range = range_of_pos type_err.pos in
         add_suggestions f range err []
       | Generic { msg = _; pos } as err ->
-        let dummy_range () =
+        let dummy_range =
           Range.create
-            ~start:{ line = -1; character = -1 }
-            ~end_:{ line = -1; character = -1 }
+            ~start:{ line = 0; character = 0 }
+            ~end_:{ line = 0; character = 0 }
         in
         let range =
-          match pos with None -> dummy_range () | Some pos -> range_of_pos pos
+          match pos with None -> dummy_range | Some pos -> range_of_pos pos
         in
         add_suggestions f range err []
       | _ -> assert false)
