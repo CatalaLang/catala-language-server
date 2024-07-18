@@ -3,6 +3,9 @@ open Shared_ast
 open Utils
 open Scopelang.Ast
 
+let hash (type a) (module M : Uid.Id with type t = a) (v : a) : int =
+  Hashtbl.hash (M.get_info v)
+
 module PMap = Map.Make (struct
   type t = Pos.t
 
@@ -19,10 +22,10 @@ module PMap = Map.Make (struct
       let* () = Int.compare (get_end_column p) (get_end_column p') in
       0
 
-  let format ppf p = Format.fprintf ppf "%s" (Pos.to_string_short p)
+  let format ppf p = Format.pp_print_string ppf (Pos.to_string_short p)
 end)
 
-type jump = { name : string; var_id : int; typ : typ }
+type jump = { hash : int; name : string; typ : typ }
 
 module LTable = Stdlib.Map.Make (Int)
 
@@ -42,18 +45,36 @@ type var =
 
 type t = { variables : var PMap.t; lookup_table : lookup_entry LTable.t }
 
+let pp_var ppf =
+  let open Format in
+  function
+  | Topdef { name; hash; _ } -> fprintf ppf "topdef: %s#%d" name hash
+  | Definition { name; hash; _ } -> fprintf ppf "definition: %s#%d" name hash
+  | Declaration { name; hash; _ } -> fprintf ppf "declaration: %s#%d" name hash
+  | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
+
 let pp ppf variables =
   let open Format in
-  let pp_var ppf = function
-    | Topdef { name; _ } -> fprintf ppf "topdef: %s" name
-    | Definition { name; _ } -> fprintf ppf "definition: %s" name
-    | Declaration { name; _ } -> fprintf ppf "declaration: %s" name
-    | Usage { name; _ } -> fprintf ppf "usage: %s" name
-  in
-  Format.fprintf ppf "@[<v>@[<v 2>variables:@ %a@]@]"
-    (PMap.format_bindings ~pp_sep:Format.pp_print_cut (fun ppf f v ->
-         Format.fprintf ppf "%a: %t" pp_var v f))
+  fprintf ppf "@[<v>@[<v 2>variables:@ %a@]@]"
+    (PMap.format_bindings ~pp_sep:pp_print_cut (fun ppf f v ->
+         fprintf ppf "%a: %t" pp_var v f))
     variables
+
+let pp_table ppf { declaration; definitions; usages } =
+  let open Format in
+  fprintf ppf "decl: %a, def: %a, usage: %a"
+    (pp_print_option
+       ~none:(fun fmt () -> fprintf fmt "none")
+       (fun fmt _ -> fprintf fmt "some"))
+    declaration
+    (pp_print_option
+       ~none:(fun fmt () -> fprintf fmt "none")
+       (fun fmt _ -> fprintf fmt "some"))
+    definitions
+    (pp_print_option
+       ~none:(fun fmt () -> fprintf fmt "none")
+       (fun fmt _ -> fprintf fmt "some"))
+    usages
 
 let traverse_expr e m =
   let open Shared_ast in
@@ -63,31 +84,25 @@ let traverse_expr e m =
     | ELocation (ScopelangScopeVar { name; _ }) ->
       let (Typed { pos = _; ty = typ }) = Mark.get e in
       let (scope_var : ScopeVar.t), pos = name in
-      let name =
-        Format.asprintf "ScopeVar(%a#%d)" ScopeVar.format scope_var
-          (ScopeVar.id scope_var)
-      in
-      let var = Usage { name; var_id = ScopeVar.id scope_var; typ } in
+      let name = Format.asprintf "scopevaruse(%a)" ScopeVar.format scope_var in
+      let hash = hash (module ScopeVar) scope_var in
+      let var = Usage { name; hash; typ } in
       PMap.add pos var acc
     | ELocation (ToplevelVar { name; _ }) ->
       let (Typed { pos; ty = typ }) = Mark.get e in
       let (topdef_var : TopdefName.t), _ = name in
       let name =
-        Printf.sprintf "%s#%d"
-          (TopdefName.to_string topdef_var)
-          (TopdefName.id topdef_var)
+        Printf.sprintf "topdef(%s)" (TopdefName.to_string topdef_var)
       in
-      let var = Usage { name; var_id = TopdefName.id topdef_var; typ } in
+      let hash = Hashtbl.hash (TopdefName.get_info topdef_var) in
+      let var = Usage { name; hash; typ } in
       PMap.add pos var acc
     | EStructAccess { name = _; e = sub_expr; field } ->
-      let name =
-        Printf.sprintf "SField(%s#%d)"
-          (StructField.to_string field)
-          (StructField.id field)
-      in
+      let name = Printf.sprintf "sfield(%s)" (StructField.to_string field) in
       let (Typed { pos = expr_pos; ty = typ }) = Mark.get e in
       let (Typed { pos = sub_expr_pos; ty = _ }) = Mark.get sub_expr in
-      let var = Usage { name; var_id = StructField.id field; typ } in
+      let hash = hash (module StructField) field in
+      let var = Usage { name; hash; typ } in
       let pos =
         let open Pos in
         (* Hack to extract the field's position as StructField's mark points to
@@ -108,29 +123,32 @@ let traverse_scope_decl (rule : typed rule) m : var PMap.t =
   | ScopeVarDefinition { var; typ; io = _; e }
   | SubScopeVarDefinition { var; typ; var_within_origin_scope = _; e } ->
     let var, pos_l = var in
-    (* FIXME buggy locations *)
     let _pos = snd (ScopeVar.get_info var) in
-    let name =
-      Printf.sprintf "%s#%d" (ScopeVar.to_string var) (ScopeVar.id var)
-    in
-    let var = Definition { name; var_id = ScopeVar.id var; typ } in
+    let name = Printf.sprintf "scopevardef(%s)" (ScopeVar.to_string var) in
+    let hash = hash (module ScopeVar) var in
+    let var = Definition { name; hash; typ } in
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
     traverse_expr e m
   | Assertion e -> traverse_expr e m
 
 let traverse_scope_sig (type a) (scope : a scope_decl) m : var PMap.t =
-  Format.eprintf "%s@." __LOC__;
   ScopeVar.Map.fold
-    (fun var var_ty m ->
-      let name =
-        Printf.sprintf "%s#%d" (ScopeVar.to_string var) (ScopeVar.id var)
+    (fun scope_var var_ty m ->
+      let name = Printf.sprintf "scopdecl(%s)" (ScopeVar.to_string scope_var) in
+      let pos = snd (ScopeVar.get_info scope_var) in
+      let hash = hash (module ScopeVar) scope_var in
+      let var = Declaration { name; hash; typ = var_ty.svar_out_ty } in
+      let var_typ_name = "typ:" ^ name in
+      let typ =
+        Declaration
+          {
+            name = var_typ_name;
+            hash = Hashtbl.hash (var_typ_name, Mark.get var_ty.svar_out_ty);
+            typ = var_ty.svar_out_ty;
+          }
       in
-      let pos = snd (ScopeVar.get_info var) in
-      let var =
-        Declaration { name; var_id = ScopeVar.id var; typ = var_ty.svar_out_ty }
-      in
-      Format.eprintf "%s: %s@." name __LOC__;
-      PMap.add pos var m)
+      let m = PMap.add pos var m in
+      PMap.add (Mark.get var_ty.svar_out_ty) typ m)
     scope.scope_sig m
 
 let traverse_scope (scope : typed scope_decl) m : var PMap.t =
@@ -139,18 +157,14 @@ let traverse_scope (scope : typed scope_decl) m : var PMap.t =
 
 let traverse_topdef (topdef : TopdefName.t) ((e, typ) : typed expr * typ) m :
     var PMap.t =
-  let name =
-    Printf.sprintf "topdef(%s#%d)"
-      (TopdefName.to_string topdef)
-      (TopdefName.id topdef)
-  in
+  let name = Printf.sprintf "topdef(%s)" (TopdefName.to_string topdef) in
   let topdef_pos = snd (TopdefName.get_info topdef) in
-  let topdef = Topdef { name; var_id = TopdefName.id topdef; typ } in
+  let hash = Hashtbl.hash (TopdefName.get_info topdef) in
+  let topdef = Topdef { name; hash; typ } in
   let m = PMap.add topdef_pos topdef m in
   traverse_expr e m
 
 let traverse (prog : Shared_ast.typed Scopelang.Ast.program) : var PMap.t =
-  Log.debug (fun m -> m "%s" __LOC__);
   let m =
     ModuleName.Map.fold
       (fun _m_name decl_map acc ->
@@ -166,31 +180,8 @@ let traverse (prog : Shared_ast.typed Scopelang.Ast.program) : var PMap.t =
   List.fold_right traverse_scope all_scopes m
 
 let populate (prog : Shared_ast.typed Scopelang.Ast.program) : t =
-  (* TODO: add scopes *)
   let variables = traverse prog in
-  let pp_o ppf { declaration; definitions; usages } =
-    let open Format in
-    fprintf ppf "decl: %a, def: %a, usage: %a"
-      (pp_print_option
-         ~none:(fun fmt () -> fprintf fmt "none")
-         (fun fmt _ -> fprintf fmt "some"))
-      declaration
-      (pp_print_option
-         ~none:(fun fmt () -> fprintf fmt "none")
-         (fun fmt _ -> fprintf fmt "some"))
-      definitions
-      (pp_print_option
-         ~none:(fun fmt () -> fprintf fmt "none")
-         (fun fmt _ -> fprintf fmt "some"))
-      usages
-  in
-  let add f = function
-    | None -> Some (f empty_lookup)
-    | Some v ->
-      let af = f v in
-      Log.debug (fun m -> m "BEFORE:(%a) vs. AFTER:(%a)" pp_o v pp_o af);
-      Some (f v)
-  in
+  let add f = function None -> Some (f empty_lookup) | Some v -> Some (f v) in
   let add_def p =
     add (fun v ->
         {
@@ -213,24 +204,23 @@ let populate (prog : Shared_ast.typed Scopelang.Ast.program) : t =
   let lookup_table =
     PMap.fold
       (fun p x tbl ->
-        let add, var_id =
+        let add, hash =
           match x with
-          | Topdef jump -> (fun m -> add_def p m |> add_decl p), jump.var_id
-          | Definition jump -> add_def p, jump.var_id
-          | Declaration jump -> add_decl p, jump.var_id
-          | Usage jump -> add_usage p, jump.var_id
+          | Topdef jump -> (fun m -> add_def p m |> add_decl p), jump.hash
+          | Definition jump -> add_def p, jump.hash
+          | Declaration jump -> add_decl p, jump.hash
+          | Usage jump -> add_usage p, jump.hash
         in
-        LTable.update var_id add tbl)
+        LTable.update hash add tbl)
       variables LTable.empty
   in
-  Log.debug (fun m -> m "Jump populate done:@\n%a" pp variables);
   { variables; lookup_table }
 
 let lookup (tables : t) (p : Pos.t) : lookup_entry option =
   PMap.find_opt p tables.variables
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j) ->
-    LTable.find_opt j.var_id tables.lookup_table
+    LTable.find_opt j.hash tables.lookup_table
   | None -> None
 
 let lookup_type (tables : t) (p : Pos.t) : typ option =

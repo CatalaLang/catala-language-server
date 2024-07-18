@@ -22,7 +22,6 @@ type err_kind =
 type metadata = { suggestions : string list }
 
 type file = {
-  has_errors : bool;
   uri : string;
   scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
   jump_table : Jump.t option;
@@ -52,13 +51,7 @@ let pp_range fmt { Range.start; end_ } =
   fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
 
 let create ?prog uri =
-  {
-    has_errors = false;
-    uri;
-    errors = RangeMap.empty;
-    scopelang_prg = prog;
-    jump_table = None;
-  }
+  { uri; errors = RangeMap.empty; scopelang_prg = prog; jump_table = None }
 
 let add_suggestions file range kind suggestions =
   let metadata = { suggestions } in
@@ -86,8 +79,11 @@ let all_diagnostics file =
       diag_r severity range message)
     errs
 
-let generic_lookup { uri; jump_table; _ } (p : Position.t) f =
+let to_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
+
+let generic_lookup ?uri { uri = file_uri; jump_table; _ } (p : Position.t) f =
   let open Option in
+  let uri = Option.value uri ~default:file_uri in
   let p = Utils.(lsp_range p p |> pos_of_range uri) in
   let open Jump in
   let ( let* ) = Option.bind in
@@ -95,18 +91,16 @@ let generic_lookup { uri; jump_table; _ } (p : Position.t) f =
   let* v = map f (lookup jump_table p) |> join in
   Some v
 
-let to_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
-
-let lookup_def f p =
-  generic_lookup f p (fun { definitions; _ } -> definitions)
+let lookup_def ?uri f p =
+  generic_lookup ?uri f p (fun { definitions; _ } -> definitions)
   |> Option.map (List.map to_position)
 
-let lookup_declaration f p =
-  generic_lookup f p (fun { declaration; _ } -> declaration)
+let lookup_declaration ?uri f p =
+  generic_lookup ?uri f p (fun { declaration; _ } -> declaration)
   |> Option.map to_position
 
-let lookup_usages f p =
-  generic_lookup f p (fun { usages; _ } -> usages)
+let lookup_usages ?uri f p =
+  generic_lookup ?uri f p (fun { usages; _ } -> usages)
   |> Option.map (List.map to_position)
 
 let lookup_type f p =
@@ -121,7 +115,6 @@ let lookup_type f p =
 let process_document ?contents (uri : string) : t =
   Log.debug (fun m -> m "Processing %s" uri);
   let uri = Uri.path (Uri.of_string uri) in
-  Log.debug (fun m -> m "Processing %s" uri);
   let input_src =
     let open Catala_utils.Global in
     match contents with None -> FileName uri | Some c -> Contents (c, uri)
@@ -165,7 +158,9 @@ let process_document ?contents (uri : string) : t =
     with e ->
       (match e with
       | Catala_utils.Message.CompilerError er ->
-        Log.debug (fun _m -> Catala_utils.Message.Content.emit er Error)
+        Log.debug (fun m ->
+            m "caught CompilerError %t" (fun ppf ->
+                Catala_utils.Message.Content.emit ~ppf er Error))
       | _ -> ());
       Log.debug (fun m ->
           m "caught exn: %s - %d diags to send" (Printexc.to_string e)
