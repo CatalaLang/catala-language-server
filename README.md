@@ -8,9 +8,11 @@ considered as a fully functional VSCode extension.
 ## Features
 
 Client side:
+
 - Syntax highlighting
 
 LSP-server:
+
 - Highlighting of miscellaneous type of errors
 - Auto-completion
 
@@ -20,6 +22,7 @@ LSP-server:
 
 In order to build and use this extension, you will need to
 install:
+
 - [OPAM](https://github.com/ocaml/opam), the OCaml package manager
 - [npm](https://www.npmjs.com/), the JavaScript package manager
 
@@ -61,7 +64,7 @@ npm run compile
 2. Go to "Run and Debug" in the VSCode sidebar (invoked by command "View: Show Run and Debug")
 3. Choose "Launch Client" and click on the play button
 4. A new VSCode window should open with the extension running
-    - you can press CTRL+R to reload the extension window to apply changes
+   - you can press CTRL+R to reload the extension window to apply changes
 
 # License
 

@@ -1,1 +1,6 @@
 extension.js
+package-lock.json
+server/_build
+server/vendors
+.vscode
+
