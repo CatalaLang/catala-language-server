@@ -17,21 +17,21 @@
         "vscode": "^1.86.0"
     },
     "activationEvents": [
-	"onLanguage:catala_en",
-	"onLanguage:catala_fr"
+        "onLanguage:catala_en",
+        "onLanguage:catala_fr"
     ],
     "main": "./extension.js",
     "contributes": {
         "customEditors": [
             {
-              "viewType": "catala.catalaTestCaseEditor",
-              "displayName": "Catala Test Case Editor",
-              "selector": [
-                {
-                  "filenamePattern": "*test*.catala_*"
-                }
-              ],
-              "priority": "default"
+                "viewType": "catala.catalaTestCaseEditor",
+                "displayName": "Catala Test Case Editor",
+                "selector": [
+                    {
+                        "filenamePattern": "*test*.catala_*"
+                    }
+                ],
+                "priority": "default"
             }
         ],
         "languages": [
@@ -85,6 +85,7 @@
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -b; cd server; dune build; cd ..",
+        "format": "prettier --write .",
         "watch": "tsc -b -p"
     },
     "dependencies": {
@@ -96,6 +97,7 @@
         "@types/node": "^18.11.18",
         "@types/vscode": "^1.86.0",
         "eslint": "^8.56.0",
+        "prettier": "3.3.3",
         "typescript": "^4.9.5"
     }
 }
