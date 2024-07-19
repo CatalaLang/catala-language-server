@@ -7,17 +7,19 @@ import {
 import * as path from 'path';
 
 import { TestCaseEditorProvider } from './testCaseEditor';
+import { logger } from './logger';
 
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
+  logger.show();
+
   const cmd = context.asAbsolutePath(
     path.join('server', '_build', 'default', 'src', 'main.exe')
   );
 
   const run: Executable = { command: cmd };
 
-  console.log('Activating LSP client');
   client = new LanguageClient(
     cmd,
     'Catala Language Server Protocol',
@@ -32,8 +34,10 @@ export function activate(context: ExtensionContext) {
 
   client.start();
 
-  console.log('Activating test case editor');
   context.subscriptions.push(TestCaseEditorProvider.register(context));
+
+  // Ensure the logger is disposed when the extension is deactivated
+  context.subscriptions.push({ dispose: () => logger.dispose() });
 }
 
 export function deactivate(): Thenable<void> | undefined {
