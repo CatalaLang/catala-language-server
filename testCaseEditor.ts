@@ -5,7 +5,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
   public static register(context: vscode.ExtensionContext): vscode.Disposable {
     const provider = new TestCaseEditorProvider(context);
-    console.log(`registering ${TestCaseEditorProvider.viewType}`);
+    console.log(`Registering ${TestCaseEditorProvider.viewType}`);
     const providerRegistration = vscode.window.registerCustomEditorProvider(
       TestCaseEditorProvider.viewType,
       provider
@@ -55,7 +55,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               <title>Test Case Viewer</title>
               <style>
                   body {
-                      background-color: #FFFACD;
+                      border: thick double #FFFACD;
                       padding: 10px;
                   }
                   pre {
@@ -65,7 +65,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               </style>
           </head>
           <body>
-              <h1>Hello world! XXX</h1>
               <pre>${this.escapeHtml(content)}</pre>
               <script>
                   const vscode = acquireVsCodeApi();
