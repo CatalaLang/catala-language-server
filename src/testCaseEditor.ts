@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
+import { logger } from './logger';
 
 export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   public static register(context: vscode.ExtensionContext): vscode.Disposable {
     const provider = new TestCaseEditorProvider(context);
-    console.log(`Registering ${TestCaseEditorProvider.viewType}`);
+    logger.log(`Registering ${TestCaseEditorProvider.viewType}`);
     const providerRegistration = vscode.window.registerCustomEditorProvider(
       TestCaseEditorProvider.viewType,
       provider
