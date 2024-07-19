@@ -1,1 +1,4 @@
 # Test
+
+This is a baseline example of a catala test case file (whose name matches the pattern `*test*.catala_*`)
+for use with the visual editor.
