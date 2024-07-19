@@ -20,7 +20,7 @@
     "onLanguage:catala_en",
     "onLanguage:catala_fr"
   ],
-  "main": "./extension.js",
+  "main": "./build/extension.js",
   "contributes": {
     "customEditors": [
       {
