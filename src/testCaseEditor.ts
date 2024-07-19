@@ -53,7 +53,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           <head>
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Test Case Viewer</title>
+              <title>Test Case Editor</title>
               <style>
                   body {
                       border: thick double #FFFACD;
