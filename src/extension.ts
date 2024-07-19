@@ -1,9 +1,6 @@
-import { ExtensionContext, workspace } from 'vscode';
-import {
-  LanguageClient,
-  Executable,
-  DidChangeConfigurationNotification,
-} from 'vscode-languageclient/node';
+import type { ExtensionContext } from 'vscode';
+import type { Executable } from 'vscode-languageclient/node';
+import { LanguageClient } from 'vscode-languageclient/node';
 import * as path from 'path';
 
 import { TestCaseEditorProvider } from './testCaseEditor';
@@ -11,7 +8,7 @@ import { logger } from './logger';
 
 let client: LanguageClient;
 
-export function activate(context: ExtensionContext) {
+export function activate(context: ExtensionContext): void {
   logger.show();
 
   // let cmd = get_binary() //
