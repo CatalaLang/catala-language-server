@@ -1,0 +1,47 @@
+> Using Tutorial_en as T
+
+# Test
+
+This is an example of a catala test case file (whose name matches the pattern `*test*.catala_*`)
+for use with the visual editor.
+
+
+```catala
+declaration scope UnitTest1:
+  tax_computation scope T.NewIncomeTaxComputation
+
+scope UnitTest1:
+  definition
+    tax_computation.individual
+  equals
+    T.Individual {
+      -- income: $230,000
+      -- number_of_children: 0
+    }
+  assertion tax_computation.income_tax = $72,000
+
+declaration scope UnitTest2:
+  tax_computation scope T.NewIncomeTaxComputationFixed
+
+scope UnitTest2:
+  definition tax_computation.individual equals T.Individual {
+    -- income: $4,000
+    -- number_of_children: 0
+  }
+
+  assertion tax_computation.income_tax = $0.00
+```
+
+```catala-test-inline
+$ catala test-scope UnitTest1 --disable-warnings
+┌─[RESULT]─
+│ Computation successful!
+└─
+```
+
+```catala-test-inline
+$ catala test-scope UnitTest2 --disable-warnings
+┌─[RESULT]─
+│ Computation successful!
+└─
+```
