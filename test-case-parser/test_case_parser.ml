@@ -12,10 +12,15 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
-   let test_case_parser () : unit =
+  let test_case_parser _options : unit =
     Printf.printf "in test_case_parser module\n"
+  
+  let term = 
+    let open Cmdliner.Term in
+    const test_case_parser
 
-  (* For now, can be invoked through `catala TestCaseParser --plugin-dir _build/default/`
+  (* For now, can be invoked through 
+     `catala test-case-parser --plugin-dir _build/default/ <FILE>`
      but we need to figure out distribution through vscode or otherwise. *)
    let () =
-     test_case_parser ()
+     Driver.Plugin.register "test-case-parser" term
