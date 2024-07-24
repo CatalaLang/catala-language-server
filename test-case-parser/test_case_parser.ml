@@ -15,5 +15,7 @@
    let test_case_parser () : unit =
     Printf.printf "in test_case_parser module\n"
 
+  (* For now, can be invoked through `catala TestCaseParser --plugin-dir _build/default/`
+     but we need to figure out distribution through vscode or otherwise. *)
    let () =
      test_case_parser ()
