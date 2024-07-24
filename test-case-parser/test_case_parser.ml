@@ -11,16 +11,27 @@
    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
    License for the specific language governing permissions and limitations under
    the License. *)
+open Stdlib
+open Catala_utils
+open Shared_ast
 
-  let test_case_parser _options : unit =
-    Printf.printf "in test_case_parser module\n"
-  
-  let term = 
-    let open Cmdliner.Term in
-    const test_case_parser
+let test_case_parser includes options : unit =
+  let prg, _type_ordering = Driver.Passes.desugared options ~includes in
+  let modname =
+    match prg.program_module_name with
+    | Some (m, _) -> ModuleName.to_string m
+    | None -> "<unnamed>"
+  in
+  print_endline modname;
+  ModuleName.Map.iter
+    (fun k _ -> print_endline (ModuleName.to_string k))
+    prg.program_modules
 
-  (* For now, can be invoked through 
-     `catala test-case-parser --plugin-dir _build/default/ <FILE>`
-     but we need to figure out distribution through vscode or otherwise. *)
-   let () =
-     Driver.Plugin.register "test-case-parser" term
+let term =
+  let open Cmdliner.Term in
+  const test_case_parser $ Cli.Flags.include_dirs
+
+(* For now, can be invoked through
+   `catala test-case-parser --plugin-dir _build/default/ <FILE>`
+   but we need to figure out distribution through vscode or otherwise. *)
+let () = Driver.Plugin.register "test-case-parser" term
