@@ -130,28 +130,18 @@ let _desugared_program_to_test_ast (_prm : program) : test = assert false
 
 let test_case_parser includes options : unit =
   let prg, _type_ordering = Driver.Passes.desugared options ~includes in
-  Format.printf "Printing of program:\n%a"
-    (ScopeName.Map.format_bindings
-       ~pp_sep:(fun fmt _ -> Format.fprintf fmt "@\n")
-       (fun fmt pp_scope_name scope ->
-         Format.fprintf fmt "@[<hv 2>Scope name: %t@\n%a@]" pp_scope_name
-           (ScopeDef.Map.format_bindings
-              ~pp_sep:(fun fmt _ -> Format.fprintf fmt "@\n")
-              (fun fmt pp_scope_def_name _scope_def ->
-                Format.fprintf fmt "Scope def: %t = <truc>" pp_scope_def_name))
-           scope.scope_defs))
-    prg.program_root.module_scopes;
-  Format.printf "Test test:\n%s"
-    (Yojson.Safe.show
-       (test_to_yojson
-          {
-            test_scope_name = ScopeName.fresh [] ("Toto", Pos.no_pos);
-            scope_being_tested = ScopeName.fresh [] ("Tutu", Pos.no_pos);
-            test_inputs =
-              ScopeVar.Map.singleton
-                (ScopeVar.fresh ("x", Pos.no_pos))
-                { value = Runtime.Bool true, Pos.no_pos; typ = TLit TBool };
-          }))
+  let modname =
+    match prg.program_module_name with
+    | Some (m, _) -> ModuleName.to_string m
+    | None -> "<unnamed>"
+  in
+  print_endline modname;
+  ModuleName.Map.iter
+    (fun k _ -> print_endline (ModuleName.to_string k))
+    prg.program_modules;
+  ScopeName.Map.iter
+    (fun k _ -> print_endline (ScopeName.to_string k))
+    prg.program_root.module_scopes
 
 let term =
   let open Cmdliner.Term in
