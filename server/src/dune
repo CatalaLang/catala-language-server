@@ -3,14 +3,15 @@
   (public_name  catala-lsp)
   (package      catala_lsp)
   (libraries
-    threads.posix
-    lsp linol linol-lwt
-    gen logs logs.fmt
-    catala.driver
-    catala.clerk_config
-    uri
-  )
- (flags
-  (:standard)
- )
-)
+   threads.posix
+   lsp
+   linol
+   linol-lwt
+   gen
+   logs
+   logs.fmt
+   catala.driver
+   catala.surface
+   catala.clerk_config
+   uri)
+  (flags (:standard)))
