@@ -25,7 +25,10 @@ let test_case_parser includes options : unit =
   print_endline modname;
   ModuleName.Map.iter
     (fun k _ -> print_endline (ModuleName.to_string k))
-    prg.program_modules
+    prg.program_modules;
+  ScopeName.Map.iter
+    (fun k _ -> print_endline (ScopeName.to_string k))
+    prg.program_root.module_scopes
 
 let term =
   let open Cmdliner.Term in
