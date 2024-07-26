@@ -126,32 +126,82 @@ type test_file_item = Test of test [@to_yojson: test_to_yojson]
 
 type test_file = test_file_item list [@@deriving to_yojson]
 
-let _desugared_program_to_test_ast (_prm : program) : test = assert false
+let rec expr_to_runtime_value (e : (desugared, untyped) naked_gexpr) :
+    Runtime.runtime_value =
+  match e with
+  | ELit (LBool b) -> Runtime.Bool b
+  | ELit (LInt i) -> Runtime.Integer i
+  | ELit (LRat r) -> Runtime.Decimal r
+  | ELit (LMoney m) -> Runtime.Money m
+  | ELit LUnit -> Runtime.Unit
+  | ELit (LDate d) -> Runtime.Date d
+  | ELit (LDuration d) -> Runtime.Duration d
+  | EArray args ->
+    Runtime.Array
+      (Array.of_list
+         (List.map (fun a -> expr_to_runtime_value (Mark.remove a)) args))
+  | EStruct { name; fields } ->
+    let fields = StructField.Map.bindings fields in
+    Runtime.Struct
+      ( StructName.to_string name,
+        List.map
+          (fun (f_name, v) ->
+            StructField.to_string f_name, expr_to_runtime_value (Mark.remove v))
+          fields )
+  | EInj { name; e; cons } ->
+    Runtime.Enum
+      ( EnumName.to_string name,
+        (EnumConstructor.to_string cons, expr_to_runtime_value (Mark.remove e))
+      )
+  | _ -> failwith "A test input value is not a literal!"
+
+let desugared_program_to_test_file (prg : program) : test_file =
+  let root_module = prg.program_root in
+  let scopes = ScopeName.Map.bindings root_module.module_scopes in
+  List.map
+    (fun (scope_name, scope) ->
+      let subscope_var, scope_being_tested =
+        if ScopeVar.Map.cardinal scope.scope_sub_scopes <> 1 then
+          failwith "Multiple or no sub-scopes in a test scope!"
+        else ScopeVar.Map.choose scope.scope_sub_scopes
+      in
+      let test_inputs =
+        let scope_defs = ScopeDef.Map.bindings scope.scope_defs in
+        let subscope_inputs =
+          List.filter_map
+            (fun ((scope_def_var, scope_def_kind), scope_def) ->
+              match scope_def_kind with
+              | ScopeDef.SubScopeInput { name = _; var_within_origin_scope }
+                when ScopeVar.equal subscope_var (Mark.remove scope_def_var) ->
+                let typ = Mark.remove scope_def.scope_def_typ in
+                let value =
+                  let rules = scope_def.scope_def_rules in
+                  if RuleName.Map.cardinal rules <> 1 then
+                    failwith
+                      "Multiple or no definition of a test input value in a \
+                       test scope!"
+                  else
+                    let _, rule = RuleName.Map.choose rules in
+                    let e = Expr.unbox_closed rule.rule_cons in
+                    expr_to_runtime_value (Mark.remove e), Expr.pos e
+                in
+                Some (var_within_origin_scope, { value; typ })
+              | _ -> None)
+            scope_defs
+        in
+        ScopeVar.Map.of_list subscope_inputs
+      in
+      let test =
+        { test_scope_name = scope_name; scope_being_tested; test_inputs }
+      in
+      Test test)
+    scopes
 
 let test_case_parser includes options : unit =
   let prg, _type_ordering = Driver.Passes.desugared options ~includes in
-  Format.printf "Printing of program:\n%a"
-    (ScopeName.Map.format_bindings
-       ~pp_sep:(fun fmt _ -> Format.fprintf fmt "@\n")
-       (fun fmt pp_scope_name scope ->
-         Format.fprintf fmt "@[<hv 2>Scope name: %t@\n%a@]" pp_scope_name
-           (ScopeDef.Map.format_bindings
-              ~pp_sep:(fun fmt _ -> Format.fprintf fmt "@\n")
-              (fun fmt pp_scope_def_name _scope_def ->
-                Format.fprintf fmt "Scope def: %t = <truc>" pp_scope_def_name))
-           scope.scope_defs))
-    prg.program_root.module_scopes;
-  Format.printf "Test test:\n%s"
-    (Yojson.Safe.show
-       (test_to_yojson
-          {
-            test_scope_name = ScopeName.fresh [] ("Toto", Pos.no_pos);
-            scope_being_tested = ScopeName.fresh [] ("Tutu", Pos.no_pos);
-            test_inputs =
-              ScopeVar.Map.singleton
-                (ScopeVar.fresh ("x", Pos.no_pos))
-                { value = Runtime.Bool true, Pos.no_pos; typ = TLit TBool };
-          }))
+  let test_file = desugared_program_to_test_file prg in
+  let test_file_json = test_file_to_yojson test_file in
+  Format.printf "Test test:\n%s" (Yojson.Safe.show test_file_json)
 
 let term =
   let open Cmdliner.Term in
