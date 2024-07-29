@@ -18,8 +18,7 @@ depends: [
 ]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
-dev-repo: "https://github.com/CatalaLang/catala-language-server"
+dev-repo: "git+https://github.com/CatalaLang/catala-language-server.git"
 bug-reports: "https://github.com/CatalaLang/catala-language-server/issues"
-
-doc: "A LSP server for Catala"
-synopsis: "A LSP server for Catala"
+synopsis: "Catala Language Server Protocol (LSP)"
+description:"Implementation of a Language Server Protocol (LSP) for Catala. "
