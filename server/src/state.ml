@@ -112,6 +112,130 @@ let lookup_type f p =
   let typ_s = Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ in
   Some typ_s
 
+let lookup_clerk_toml (path : string) =
+  let from_dir = Filename.dirname path in
+  let open Catala_utils in
+  let find_in_parents cwd predicate =
+    let home = try Sys.getenv "HOME" with Not_found -> "" in
+    let rec lookup dir =
+      if predicate dir then Some dir
+      else if dir = home then None
+      else
+        let parent = Filename.dirname dir in
+        if parent = dir then None else lookup parent
+    in
+    match lookup cwd with Some rel -> Some rel | None -> None
+  in
+  try
+    begin
+      match
+        find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
+      with
+      | None ->
+        Log.debug (fun m -> m "no 'clerk.toml' config file found");
+        None
+      | Some dir ->
+        Log.debug (fun m ->
+            m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
+        Some (Clerk_config.read File.(dir / "clerk.toml"))
+    end
+  with exn ->
+    Log.err (fun m ->
+        m "failed to lookup config file: %s" (Printexc.to_string exn));
+    None
+
+let load_module_interfaces includes program =
+  (* Recurse into program modules, looking up files in [using] and loading
+     them *)
+  let open Catala_utils in
+  let open Shared_ast in
+  let err_req_pos chain =
+    List.map (fun mpos -> "Module required from", mpos) chain
+  in
+  let includes =
+    List.map File.Tree.build includes
+    |> List.fold_left File.Tree.union File.Tree.empty
+  in
+  let find_module req_chain (mname, mpos) =
+    let required_from_file = Pos.get_file mpos in
+    let includes =
+      File.Tree.union includes
+        (File.Tree.build (File.dirname required_from_file))
+    in
+    let extensions =
+      [".catala_fr", "fr"; ".catala_en", "en"; ".catala_pl", "pl"]
+    in
+    match
+      List.filter_map
+        (fun (ext, _) -> File.Tree.lookup includes (mname ^ ext))
+        extensions
+    with
+    | [] ->
+      Message.error
+        ~extra_pos:(err_req_pos (mpos :: req_chain))
+        "Required module not found: @{<blue>%s@}" mname
+    | [f] -> f
+    | ms ->
+      Message.error
+        ~extra_pos:(err_req_pos (mpos :: req_chain))
+        "Required module @{<blue>%s@} matches multiple files:@;<1 2>%a" mname
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space File.format)
+        ms
+  in
+  let rec aux req_chain seen uses :
+      (ModuleName.t * Surface.Ast.interface * ModuleName.t Ident.Map.t) option
+      File.Map.t
+      * ModuleName.t Ident.Map.t =
+    List.fold_left
+      (fun (seen, use_map) use ->
+        let f = find_module req_chain use.Surface.Ast.mod_use_name in
+        match File.Map.find_opt f seen with
+        | Some (Some (modname, _, _)) ->
+          ( seen,
+            Ident.Map.add
+              (Mark.remove use.Surface.Ast.mod_use_alias)
+              modname use_map )
+        | Some None ->
+          Message.error
+            ~extra_pos:
+              (err_req_pos (Mark.get use.Surface.Ast.mod_use_name :: req_chain))
+            "Circular module dependency"
+        | None ->
+          let intf = Surface.Parser_driver.load_interface (Global.FileName f) in
+          let modname = ModuleName.fresh intf.intf_modname.module_name in
+          let seen = File.Map.add f None seen in
+          let seen, sub_use_map =
+            aux
+              (Mark.get use.Surface.Ast.mod_use_name :: req_chain)
+              seen intf.Surface.Ast.intf_submodules
+          in
+          ( File.Map.add f (Some (modname, intf, sub_use_map)) seen,
+            Ident.Map.add
+              (Mark.remove use.Surface.Ast.mod_use_alias)
+              modname use_map ))
+      (seen, Ident.Map.empty) uses
+  in
+  let seen =
+    match program.Surface.Ast.program_module with
+    | Some m ->
+      let file = Pos.get_file (Mark.get m.module_name) in
+      File.Map.singleton file None
+    | None -> File.Map.empty
+  in
+  let file_module_map, root_uses =
+    aux [] seen program.Surface.Ast.program_used_modules
+  in
+  let modules =
+    File.Map.fold
+      (fun _ info acc ->
+        match info with
+        | None -> acc
+        | Some (mname, intf, use_map) ->
+          ModuleName.Map.add mname (intf, use_map) acc)
+      file_module_map ModuleName.Map.empty
+  in
+  root_uses, modules
+
 let process_document ?contents (uri : string) : t =
   Log.debug (fun m -> m "Processing document '%s'" uri);
   let uri = Uri.path (Uri.of_string uri) in
@@ -119,6 +243,7 @@ let process_document ?contents (uri : string) : t =
     let open Catala_utils.Global in
     match contents with None -> FileName uri | Some c -> Contents (c, uri)
   in
+  let config_opt = lookup_clerk_toml uri in
   let l = ref [] in
   let on_parsing_error e = l := Parsing e :: !l in
   let on_typing_error e = l := Typing e :: !l in
@@ -138,8 +263,12 @@ let process_document ?contents (uri : string) : t =
       let prg = Surface.Fill_positions.fill_pos_with_legislative_info prg in
       let open Catala_utils in
       let ctx =
-        Desugared.Name_resolution.form_context (prg, String.Map.empty)
-          Uid.Module.Map.empty
+        let mod_uses, modules =
+          match config_opt with
+          | None -> String.Map.empty, Uid.Module.Map.empty
+          | Some config -> load_module_interfaces config.include_dirs prg
+        in
+        Desugared.Name_resolution.form_context (prg, mod_uses) modules
       in
       let prg = Desugared.From_surface.translate_program ctx prg in
       let prg = Desugared.Disambiguate.program prg in
