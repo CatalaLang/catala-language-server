@@ -14,14 +14,14 @@ let parse_settings settings =
             (ServerError
                (Format.asprintf
                   "Expected a path to a prelude file as a string, instead got \
-                   %a@."
+                   %a"
                   Yojson.Safe.pp s)))
       l
   | _ ->
     raise
       (ServerError
          (Format.asprintf
-            "ChangeConfiguration: received unexpected settings: \n%a@."
+            "ChangeConfiguration: received unexpected settings: %a"
             Yojson.Safe.pp settings))
 
 let preprocess_uri uri =
@@ -146,12 +146,13 @@ class catala_lsp_server =
       end
       | UnknownNotification notif ->
         let json = Jsonrpc.Notification.yojson_of_t notif in
-        Format.eprintf "[unkown notification] %a@." Yojson.Safe.pp json;
+        Log.warn (fun m -> m "unkown notification: %a" Yojson.Safe.pp json);
         Lwt.return ()
       | _ -> Lwt.return ()
 
     method! on_request_unhandled : type r.
         notify_back:_ -> id:_ -> r Lsp.Client_request.t -> r Lwt.t =
+      (* Override to process other requests *)
       fun ~notify_back ~id r ->
         match r with
         | TextDocumentDeclaration (params : TextDocumentPositionParams.t) ->
@@ -161,7 +162,6 @@ class catala_lsp_server =
           self#on_req_references ~notify_back ~uri:params.textDocument.uri
             ~pos:params.position ()
         | _ -> super#on_request_unhandled ~notify_back ~id r
-    (** Override to process other requests *)
 
     method on_notif_doc_did_close ~notify_back d =
       Hashtbl.remove buffers (DocumentUri.to_path d.uri);

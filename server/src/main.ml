@@ -29,8 +29,7 @@ let run () =
   match Linol_lwt.run task with
   | () -> ()
   | exception e ->
-    let e = Printexc.to_string e in
-    Printf.eprintf "error: %s\n%!" e;
+    Log.err (fun m -> m "uncaught exception: %s" (Printexc.to_string e));
     exit 1
 
 let () = run ()

@@ -113,7 +113,7 @@ let lookup_type f p =
   Some typ_s
 
 let process_document ?contents (uri : string) : t =
-  Log.debug (fun m -> m "Processing %s" uri);
+  Log.debug (fun m -> m "Processing document '%s'" uri);
   let uri = Uri.path (Uri.of_string uri) in
   let input_src =
     let open Catala_utils.Global in
@@ -159,12 +159,12 @@ let process_document ?contents (uri : string) : t =
       (match e with
       | Catala_utils.Message.CompilerError er ->
         Log.debug (fun m ->
-            m "caught CompilerError %t" (fun ppf ->
+            m "caught (CompilerError %t)" (fun ppf ->
                 Catala_utils.Message.Content.emit ~ppf er Error))
       | _ -> ());
       Log.debug (fun m ->
-          m "caught exn: %s - %d diags to send" (Printexc.to_string e)
-            (List.length !l));
+          m "caught generic exception: %s (%d diagnostics to send)"
+            (Printexc.to_string e) (List.length !l));
       List.rev !l, None
   in
   let file = create ?prog:prg_opt uri in
