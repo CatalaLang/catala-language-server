@@ -11,7 +11,6 @@ let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
 
-    // let cmd = get_binary() //
   const cmd = context.asAbsolutePath(
       path.join('server','_build', 'default', 'src', 'main.exe')
   );
