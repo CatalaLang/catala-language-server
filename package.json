@@ -58,6 +58,16 @@
         ],
         "comments": {
             "lineComment": "#"
+        },
+        "configurationDefaults": {
+            "[catala_en]": {
+                "editor.tabSize": 2,
+                "editor.insertSpaces": true
+            },
+            "[catala_fr]": {
+                "editor.tabSize": 2,
+                "editor.insertSpaces": true
+            }
         }
     },
     "scripts": {
