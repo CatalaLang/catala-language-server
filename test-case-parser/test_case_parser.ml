@@ -96,7 +96,9 @@ let rec typ_to_yosjon (t : naked_typ) : Yojson.Safe.t =
     | TArray (t, _) -> "array", typ_to_yosjon t
     | TStruct name -> "struct", `String (StructName.to_string name)
     | TEnum name -> "enum", `String (EnumName.to_string name)
-    | _ -> failwith "type not supported for translation !"
+    | ty ->
+      Message.error "type %a not supported for translation !"
+        Type.format (Mark.add Pos.no_pos ty)
   in
   `Assoc ["typ_category", `String typ_category; "info", info]
 
@@ -153,7 +155,8 @@ let rec expr_to_runtime_value (e : (desugared, untyped) naked_gexpr) :
       ( EnumName.to_string name,
         (EnumConstructor.to_string cons, expr_to_runtime_value (Mark.remove e))
       )
-  | _ -> failwith "A test input value is not a literal!"
+  | e ->
+    Message.error "A test input value is not a literal! (found: %a)" Expr.format (Mark.add (Untyped { pos = Pos.no_pos }) e)
 
 let desugared_program_to_test_file (prg : program) : test_file =
   let root_module = prg.program_root in
@@ -162,7 +165,8 @@ let desugared_program_to_test_file (prg : program) : test_file =
     (fun (scope_name, scope) ->
       let subscope_var, scope_being_tested =
         if ScopeVar.Map.cardinal scope.scope_sub_scopes <> 1 then
-          failwith "Multiple or no sub-scopes in a test scope!"
+          Message.error "Multiple or no sub-scopes in test scope %a!"
+            ScopeName.format scope_name
         else ScopeVar.Map.choose scope.scope_sub_scopes
       in
       let test_inputs =
@@ -177,9 +181,11 @@ let desugared_program_to_test_file (prg : program) : test_file =
                 let value =
                   let rules = scope_def.scope_def_rules in
                   if RuleName.Map.cardinal rules <> 1 then
-                    failwith
-                      "Multiple or no definition of a test input value in a \
-                       test scope!"
+                    Message.error
+                      "Multiple or no definition of a test input value in \
+                       test scope %a.%a!"
+                      ScopeName.format scope_name
+                      ScopeVar.format (Mark.remove scope_def_var)
                   else
                     let _, rule = RuleName.Map.choose rules in
                     let e = Expr.unbox_closed rule.rule_cons in
