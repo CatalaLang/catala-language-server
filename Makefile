@@ -1,9 +1,13 @@
-all: extension.js caml-build
+BUILD=build
+TARGET=${BUILD}/extension.js
+SRC=src
+
+all: ${TARGET} caml-build
 
 node_modules: package.json
 	npm install
 
-extension.js: extension.ts
+${TARGET}: ${SRC}/extension.ts
 	npm run compile
 
 .PHONY: caml-build
@@ -12,7 +16,7 @@ caml-build: FORCE
 
 FORCE: ;
 
-.PHONY:
+.PHONY: clean
 clean:
-	rm extension.js
+	rm ${TARGET}
 	cd server; dune clean
