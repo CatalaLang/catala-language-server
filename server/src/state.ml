@@ -29,35 +29,18 @@ module RangeMap = Map.Make (struct
     else compare x y
 end)
 
-type err_kind =
-  | Parsing of Surface.Parser_driver.error
-  | Typing of Shared_ast.Typing.typing_error
-  | Generic of Catala_utils.Message.generic_error
-  | Warning of string
-
-type metadata = { suggestions : string list }
-
 type file = {
   uri : string;
   scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
   jump_table : Jump.t option;
-  errors : (Range.t * err_kind * metadata) RangeMap.t;
+  errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t;
 }
 
 type t = file
 
 let err_severity = function
-  | Parsing _ -> DiagnosticSeverity.Error
-  | Typing _ -> DiagnosticSeverity.Error
-  | Generic _ -> DiagnosticSeverity.Error
-  | Warning _ -> DiagnosticSeverity.Warning
-
-let msg_of_kind = function
-  | Parsing (Parsing_error err) -> err.msg
-  | Parsing (Lexing_error err) -> err.msg
-  | Typing err -> err.msg
-  | Generic err -> err.msg
-  | Warning s -> s
+  | Catala_utils.Message.Lexing | Parsing | Typing | Generic ->
+    DiagnosticSeverity.Error
 
 let pp_range fmt { Range.start; end_ } =
   let open Format in
@@ -69,29 +52,30 @@ let pp_range fmt { Range.start; end_ } =
 let create ?prog uri =
   { uri; errors = RangeMap.empty; scopelang_prg = prog; jump_table = None }
 
-let add_suggestions file range kind suggestions =
-  let metadata = { suggestions } in
-  let errors = RangeMap.add range (range, kind, metadata) file.errors in
+let add_suggestions file range err =
+  let errors = RangeMap.add range (range, err) file.errors in
   { file with errors }
 
 let lookup_suggestions file range =
   RangeMap.find_opt range file.errors
   |> function
   | None -> None
-  | Some (range, _kind, metadata) ->
-    let suggs = metadata.suggestions in
-    if suggs <> [] then Some (range, suggs) else None
+  | Some (range, err) -> (
+    match err.suggestion with
+    | None | Some [] -> None
+    | Some suggs -> Some (range, suggs))
 
 let lookup_suggestions_by_pos file pos =
   let range = { Range.start = pos; end_ = pos } in
   lookup_suggestions file range
 
 let all_diagnostics file =
+  let open Catala_utils.Message in
   let errs = RangeMap.bindings file.errors in
   List.map
-    (fun (range, (_range, kind, _metadata)) ->
-      let severity = err_severity kind in
-      let message = msg_of_kind kind in
+    (fun (range, (_range, err)) ->
+      let severity = err_severity err.kind in
+      let message = Format.asprintf "%t" err.message in
       diag_r severity range message)
     errs
 
@@ -259,23 +243,16 @@ let process_document ?contents (uri : string) : t =
     let open Catala_utils.Global in
     match contents with None -> FileName uri | Some c -> Contents (c, uri)
   in
+  let _ = Catala_utils.Global.enforce_options ~input_src () in
   let config_opt = lookup_clerk_toml uri in
   let l = ref [] in
-  let on_parsing_error e = l := Parsing e :: !l in
-  let on_typing_error e = l := Typing e :: !l in
-  let on_generic_error e = l := Generic e :: !l in
-  let () = Shared_ast.Typing.install_typing_error_catcher on_typing_error in
-  let () =
-    Catala_utils.Message.install_generic_error_catcher on_generic_error
-  in
+  let on_error e = l := e :: !l in
+  let () = Catala_utils.Message.register_lsp_error_notifier on_error in
   let parsing_errs, prg_opt =
     try
       (* Resets the lexing context to a fresh one *)
       Surface.Lexer_common.context := Law;
-      let prg =
-        Surface.Parser_driver.parse_top_level_file ~on_error:on_parsing_error
-          input_src
-      in
+      let prg = Surface.Parser_driver.parse_top_level_file input_src in
       let prg = Surface.Fill_positions.fill_pos_with_legislative_info prg in
       let open Catala_utils in
       let ctx =
@@ -316,25 +293,17 @@ let process_document ?contents (uri : string) : t =
   let jump_table = Option.map Jump.populate prg_opt in
   let file = { file with jump_table } in
   List.fold_left
-    (fun f -> function
-      | Parsing (Parsing_error parse_err) as err ->
-        let range = range_of_pos parse_err.pos in
-        add_suggestions f range err parse_err.suggestions
-      | Parsing (Lexing_error lexing_err) as err ->
-        let range = unclosed_range_of_pos lexing_err.pos in
-        add_suggestions f range err []
-      | Typing type_err as err ->
-        let range = range_of_pos type_err.pos in
-        add_suggestions f range err []
-      | Generic { msg = _; pos } as err ->
-        let dummy_range =
-          Range.create
-            ~start:{ line = 0; character = 0 }
-            ~end_:{ line = 0; character = 0 }
-        in
-        let range =
-          match pos with None -> dummy_range | Some pos -> range_of_pos pos
-        in
-        add_suggestions f range err []
-      | _ -> assert false)
+    (fun f (err : Catala_utils.Message.lsp_error) ->
+      let dummy_range =
+        Range.create
+          ~start:{ line = 0; character = 0 }
+          ~end_:{ line = 0; character = 0 }
+      in
+      let range =
+        match err.pos, err.kind with
+        | None, _ -> dummy_range
+        | Some pos, Lexing -> unclosed_range_of_pos pos
+        | Some pos, _ -> range_of_pos pos
+      in
+      add_suggestions f range err)
     file parsing_errs
