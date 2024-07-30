@@ -2,6 +2,7 @@
  (name test_case_parser)
  (modes plugin)
  (modules test_case_parser)
- (libraries catala.driver ppx_deriving_yojson.runtime)
+ (libraries catala.driver)
+ (embed_in_plugin_libraries ppx_deriving_yojson.runtime ppx_deriving.runtime yojson)
  (preprocess
   (pps ppx_deriving_yojson)))
