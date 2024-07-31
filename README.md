@@ -26,23 +26,6 @@ install:
 - [OPAM](https://github.com/ocaml/opam), the OCaml package manager
 - [npm](https://www.npmjs.com/), the JavaScript package manager
 
-As this extension is still a work in progress, it uses some Catala
-compiler's experimental features that are yet to be merged in the
-published OPAM's Catala package. Therefore, it requires to also clone
-[Catala](https://github.com/CatalaLang/catala/) and install the
-experimental branch locally through these steps:
-
-```
-git clone https://github.com/CatalaLang/catala.git
-cd catala
-git checkout vbot@lsp-tools
-opam pin add catala .
-```
-
-Instead of pinning the experimental version, it is also possible to
-copy the Catala's cloned repository (including the branch switch) to
-`server/vendors/`.
-
 ### Installation
 
 ```bash

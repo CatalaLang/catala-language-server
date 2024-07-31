@@ -15,6 +15,12 @@ depends: [
   "linol" { >= "0.6" }
   "linol-lwt" { >= "0.6" }
   "uri"
+  "catala"
+]
+pin-depends: [
+  # TODO: remove this dependency once the LSP required changes are
+  # published in opam
+  ["catala.dev" "git+https://github.com/CatalaLang/catala#master"]
 ]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
