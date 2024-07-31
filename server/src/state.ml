@@ -29,11 +29,13 @@ module RangeMap = Map.Make (struct
     else compare x y
 end)
 
+module UriMap = Map.Make (String)
+
 type file = {
   uri : string;
   scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
   jump_table : Jump.t option;
-  errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t;
+  errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t UriMap.t;
 }
 
 type t = file
@@ -50,14 +52,22 @@ let pp_range fmt { Range.start; end_ } =
   fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
 
 let create ?prog uri =
-  { uri; errors = RangeMap.empty; scopelang_prg = prog; jump_table = None }
+  { uri; errors = UriMap.empty; scopelang_prg = prog; jump_table = None }
 
-let add_suggestions file range err =
-  let errors = RangeMap.add range (range, err) file.errors in
+let add_suggestions file uri range err =
+  let errors =
+    UriMap.update uri
+      (function
+        | None -> Some (RangeMap.singleton range (range, err))
+        | Some rmap -> Some (RangeMap.add range (range, err) rmap))
+      file.errors
+  in
   { file with errors }
 
 let lookup_suggestions file range =
-  RangeMap.find_opt range file.errors
+  Option.bind (UriMap.find_opt file.uri file.errors)
+  @@ fun rmap ->
+  RangeMap.find_opt range rmap
   |> function
   | None -> None
   | Some (range, err) -> (
@@ -71,12 +81,16 @@ let lookup_suggestions_by_pos file pos =
 
 let all_diagnostics file =
   let open Catala_utils.Message in
-  let errs = RangeMap.bindings file.errors in
+  let errs = UriMap.bindings file.errors in
   List.map
-    (fun (range, (_range, err)) ->
-      let severity = err_severity err.kind in
-      let message = Format.asprintf "%t" err.message in
-      diag_r severity range message)
+    (fun (uri, rmap) ->
+      ( uri,
+        List.map
+          (fun (range, (_range, err)) ->
+            let severity = err_severity err.kind in
+            let message = Format.asprintf "%t" err.message in
+            diag_r severity range message)
+          (RangeMap.bindings rmap) ))
     errs
 
 let to_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
@@ -166,7 +180,7 @@ let lookup_clerk_toml (path : string) =
       | Some dir ->
         Log.debug (fun m ->
             m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
-        Some (Clerk_config.read File.(dir / "clerk.toml"))
+        Some (Clerk_config.read File.(dir / "clerk.toml"), dir)
     end
   with exn ->
     Log.err (fun m ->
@@ -265,6 +279,74 @@ let load_module_interfaces includes program =
   in
   root_uses, modules
 
+let find_inclusion (config_opt : (Clerk_config.t * string) option) file =
+  let open Catala_utils in
+  match config_opt with
+  | None -> None
+  | Some (config, config_dir) ->
+    String.Map.fold
+      (fun mod_name modul acc ->
+        if acc <> None then acc
+        else
+          let is_present =
+            List.exists
+              (fun included_file ->
+                Log.debug (fun m ->
+                    m "%s vs. %s"
+                      (Filename.concat config_dir included_file)
+                      file);
+                File.equal (Filename.concat config_dir included_file) file)
+              modul.Clerk_config.includes
+          in
+          if is_present then Some (mod_name, modul) else None)
+      config.modules None
+
+let convert_meta_module
+    ~config_dir
+    (meta_module_name, (modul : Clerk_config.modul)) :
+    string Catala_utils.Global.input_src =
+  let language =
+    (* The language is the same as the included files or module used. *)
+    List.fold_left
+      (function
+        | None -> (
+          fun f -> try Some (Catala_utils.Cli.file_lang f) with _ -> None)
+        | acc -> fun _ -> acc)
+      None
+      (modul.includes @ List.map fst modul.module_uses)
+    |> Option.value ~default:Catala_utils.Global.En
+  in
+  let pp_module
+      ppf
+      {
+        Clerk_config.module_uses : (string * string option) list;
+        includes : string list;
+      } =
+    let open Format in
+    let use_kwd, alias_kwd, include_kwd, module_kwd =
+      match language with
+      | Pl | En -> "Using", "as", "Include:", "Module"
+      | Fr -> "Usage de", "en tant que", "Inclusion:", "Module"
+    in
+    let pp_use ppf = function
+      | mod_name, None -> fprintf ppf "> %s %s" use_kwd mod_name
+      | mod_name, Some alias ->
+        fprintf ppf "> %s %s %s %s" use_kwd mod_name alias_kwd alias
+    in
+    let pp_include ppf mod_path = fprintf ppf "> %s %s" include_kwd mod_path in
+    fprintf ppf "@[<v>@[<v>%a@]@ > %s %s@ @[<v>%a@]@]"
+      (pp_print_list ~pp_sep:pp_print_cut pp_use)
+      module_uses module_kwd meta_module_name
+      (pp_print_list ~pp_sep:pp_print_cut pp_include)
+      includes
+  in
+  Log.debug (fun m -> m "Generated meta-module:@\n%a@." pp_module modul);
+  Catala_utils.Global.Contents
+    ( Format.asprintf "%a" pp_module modul,
+      Filename.concat config_dir
+        (meta_module_name ^ ".catala_" ^ Catala_utils.Cli.language_code language)
+    )
+
 let process_document ?contents (uri : string) : t =
   Log.debug (fun m -> m "Processing document '%s'" uri);
   let uri = Uri.path (Uri.of_string uri) in
@@ -272,12 +354,20 @@ let process_document ?contents (uri : string) : t =
     let open Catala_utils.Global in
     match contents with None -> FileName uri | Some c -> Contents (c, uri)
   in
-  let _ = Catala_utils.Global.enforce_options ~input_src () in
   let config_opt = lookup_clerk_toml uri in
+  let input_src =
+    match config_opt, find_inclusion config_opt uri with
+    | Some (_, config_dir), Some i ->
+      Log.debug (fun m ->
+          m "Found document included as part of a meta-module: generating it.");
+      convert_meta_module ~config_dir i
+    | _ -> input_src
+  in
+  let _ = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
   let on_error e = l := e :: !l in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
-  let parsing_errs, prg_opt =
+  let errors, prg_opt =
     try
       (* Resets the lexing context to a fresh one *)
       Surface.Lexer_common.context := Law;
@@ -288,7 +378,8 @@ let process_document ?contents (uri : string) : t =
         let mod_uses, modules =
           match config_opt with
           | None -> String.Map.empty, Uid.Module.Map.empty
-          | Some config -> load_module_interfaces config.include_dirs prg
+          | Some (config, _config_dir) ->
+            load_module_interfaces config.include_dirs prg
         in
         Desugared.Name_resolution.form_context (prg, mod_uses) modules
       in
@@ -328,11 +419,12 @@ let process_document ?contents (uri : string) : t =
           ~start:{ line = 0; character = 0 }
           ~end_:{ line = 0; character = 0 }
       in
-      let range =
+      let uri, range =
         match err.pos, err.kind with
-        | None, _ -> dummy_range
-        | Some pos, Lexing -> unclosed_range_of_pos pos
-        | Some pos, _ -> range_of_pos pos
+        | None, _ -> uri, dummy_range
+        | Some pos, Lexing ->
+          Catala_utils.Pos.get_file pos, unclosed_range_of_pos pos
+        | Some pos, _ -> Catala_utils.Pos.get_file pos, range_of_pos pos
       in
-      add_suggestions f range err)
-    file parsing_errs
+      add_suggestions f uri range err)
+    file errors
