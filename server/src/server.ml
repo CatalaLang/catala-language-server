@@ -128,7 +128,13 @@ class catala_lsp_server =
       let file = self#process_and_update_file ?contents uri_s in
       State.all_diagnostics file
       |> function
-      | [] -> Lwt.return_unit | diags -> notify_back#send_diagnostic diags
+      | [] -> Lwt.return_unit
+      | all_diags ->
+        Lwt_list.iter_s
+          (fun (uri, diags) ->
+            notify_back#set_uri (DocumentUri.of_path uri);
+            notify_back#send_diagnostic diags)
+          all_diags
 
     method on_notif_doc_did_open ~notify_back d ~content =
       self#on_doc ~notify_back d.uri (Some content)
