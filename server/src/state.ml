@@ -158,7 +158,7 @@ let lookup_clerk_toml (path : string) =
         m "failed to lookup config file: %s" (Printexc.to_string exn));
     None
 
-let load_module_interfaces includes program =
+let load_module_interfaces config_dir includes program =
   (* Recurse into program modules, looking up files in [using] and loading
      them *)
   let open Catala_utils in
@@ -215,7 +215,10 @@ let load_module_interfaces includes program =
               (err_req_pos (Mark.get use.Surface.Ast.mod_use_name :: req_chain))
             "Circular module dependency"
         | None ->
-          let intf = Surface.Parser_driver.load_interface (Global.FileName f) in
+          let intf =
+            Surface.Parser_driver.load_interface
+              (Global.FileName File.(config_dir / f))
+          in
           let modname = ModuleName.fresh intf.intf_modname.module_name in
           let seen = File.Map.add f None seen in
           let seen, sub_use_map =
@@ -340,8 +343,8 @@ let process_document ?contents (uri : string) : t =
         let mod_uses, modules =
           match config_opt with
           | None -> String.Map.empty, Uid.Module.Map.empty
-          | Some (config, _config_dir) ->
-            load_module_interfaces config.include_dirs prg
+          | Some (config, config_dir) ->
+            load_module_interfaces config_dir config.include_dirs prg
         in
         Desugared.Name_resolution.form_context (prg, mod_uses) modules
       in

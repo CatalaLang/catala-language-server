@@ -147,7 +147,7 @@ let traverse_scope_decl (rule : typed rule) m : var PMap.t =
     traverse_expr e m
   | Assertion e -> traverse_expr e m
 
-let traverse_scope_sig (type a) (scope : a scope_decl) m : var PMap.t =
+let traverse_scope_sig scope m : var PMap.t =
   ScopeVar.Map.fold
     (fun scope_var var_ty m ->
       let name = Printf.sprintf "scopdecl(%s)" (ScopeVar.to_string scope_var) in
