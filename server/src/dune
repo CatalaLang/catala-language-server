@@ -13,5 +13,6 @@
    catala.driver
    catala.surface
    catala.clerk_config
-   uri)
+   uri
+   re)
   (flags (:standard)))

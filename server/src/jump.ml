@@ -100,21 +100,19 @@ let traverse_expr e m =
     | ELocation (ScopelangScopeVar { name; _ }) ->
       let (Typed { pos = _; ty = typ }) = Mark.get e in
       let (scope_var : ScopeVar.t), pos = name in
-      let name = Format.asprintf "scopevaruse(%a)" ScopeVar.format scope_var in
+      let name = ScopeVar.to_string scope_var in
       let hash = hash (module ScopeVar) scope_var in
       let var = Usage { name; hash; typ } in
       PMap.add pos var acc
     | ELocation (ToplevelVar { name; _ }) ->
       let (Typed { pos; ty = typ }) = Mark.get e in
       let (topdef_var : TopdefName.t), _ = name in
-      let name =
-        Printf.sprintf "topdef(%s)" (TopdefName.to_string topdef_var)
-      in
+      let name = TopdefName.to_string topdef_var in
       let hash = Hashtbl.hash (TopdefName.get_info topdef_var) in
       let var = Usage { name; hash; typ } in
       PMap.add pos var acc
     | EStructAccess { name = _; e = sub_expr; field } ->
-      let name = Printf.sprintf "sfield(%s)" (StructField.to_string field) in
+      let name = StructField.to_string field in
       let (Typed { pos = expr_pos; ty = typ }) = Mark.get e in
       let (Typed { pos = sub_expr_pos; ty = _ }) = Mark.get sub_expr in
       let hash = hash (module StructField) field in
@@ -140,7 +138,7 @@ let traverse_scope_decl (rule : typed rule) m : var PMap.t =
   | SubScopeVarDefinition { var; typ; var_within_origin_scope = _; e } ->
     let var, pos_l = var in
     let _pos = snd (ScopeVar.get_info var) in
-    let name = Printf.sprintf "scopevardef(%s)" (ScopeVar.to_string var) in
+    let name = ScopeVar.to_string var in
     let hash = hash (module ScopeVar) var in
     let var = Definition { name; hash; typ } in
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
@@ -150,7 +148,7 @@ let traverse_scope_decl (rule : typed rule) m : var PMap.t =
 let traverse_scope_sig (type a) (scope : a scope_decl) m : var PMap.t =
   ScopeVar.Map.fold
     (fun scope_var var_ty m ->
-      let name = Printf.sprintf "scopdecl(%s)" (ScopeVar.to_string scope_var) in
+      let name = ScopeVar.to_string scope_var in
       let pos = snd (ScopeVar.get_info scope_var) in
       let hash = hash (module ScopeVar) scope_var in
       let var = Declaration { name; hash; typ = var_ty.svar_out_ty } in
@@ -173,7 +171,7 @@ let traverse_scope (scope : typed scope_decl) m : var PMap.t =
 
 let traverse_topdef (topdef : TopdefName.t) ((e, typ) : typed expr * typ) m :
     var PMap.t =
-  let name = Printf.sprintf "topdef(%s)" (TopdefName.to_string topdef) in
+  let name = TopdefName.to_string topdef in
   let topdef_pos = snd (TopdefName.get_info topdef) in
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
   let topdef = Topdef { name; hash; typ } in
@@ -244,3 +242,18 @@ let lookup_type (tables : t) (p : Pos.t) : typ option =
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j) -> Some j.typ
   | None -> None
+
+let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t =
+  let open Linol_lwt in
+  let name, (kind : SymbolKind.t) =
+    match var with
+    | Topdef v -> v.name, Constant
+    | Definition v -> v.name, Function
+    | Declaration v -> v.name, Interface
+    | Usage v -> v.name, Variable
+  in
+  let location =
+    Location.create ~range:(range_of_pos p)
+      ~uri:(DocumentUri.of_path (Pos.get_file p))
+  in
+  Linol_lwt.SymbolInformation.create ~kind ~name ~location ()
