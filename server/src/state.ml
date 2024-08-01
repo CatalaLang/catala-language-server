@@ -112,6 +112,35 @@ let lookup_type f p =
   let typ_s = Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ in
   Some typ_s
 
+let lookup_document_symbols file =
+  let variables =
+    Option.bind file.jump_table @@ fun tbl -> Some tbl.variables
+  in
+  match variables with
+  | None -> []
+  | Some variables ->
+    List.filter_map
+      (fun (p, v) ->
+        if file.uri = Catala_utils.Pos.get_file p then
+          Some (Jump.var_to_symbol p v)
+        else None)
+      (Jump.PMap.bindings variables)
+
+let lookup_project_symbols all_files =
+  let all_variables =
+    let all_tbls =
+      List.filter_map
+        (fun f -> Option.bind f.jump_table @@ fun tbl -> Some tbl.variables)
+        all_files
+    in
+    List.fold_left
+      (Jump.PMap.union (fun _ l _ -> Some l))
+      Jump.PMap.empty all_tbls
+  in
+  List.map
+    (fun (p, v) -> Jump.var_to_symbol p v)
+    (Jump.PMap.bindings all_variables)
+
 let lookup_clerk_toml (path : string) =
   let from_dir = Filename.dirname path in
   let open Catala_utils in
