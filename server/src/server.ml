@@ -150,6 +150,7 @@ class catala_lsp_server =
       Lwt.return_unit
 
     method! on_notif_doc_did_save ~notify_back d =
+      Lwt.cancel !current_thread;
       let { DidSaveTextDocumentParams.textDocument; _ } = d in
       self#on_doc ~notify_back textDocument.uri None
 
