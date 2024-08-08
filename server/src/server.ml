@@ -105,7 +105,8 @@ class catala_lsp_server =
           ?inlayHintProvider:self#config_inlay_hints
           ?documentSymbolProvider:self#config_symbol
           ~textDocumentSync:(`TextDocumentSyncOptions sync_opts)
-          ~workspaceSymbolProvider:self#config_workspace_symbol ()
+          ~workspaceSymbolProvider:self#config_workspace_symbol
+          ~positionEncoding:PositionEncodingKind.UTF8 ()
         |> self#config_modify_capabilities
       in
       Lwt.return (InitializeResult.create ~capabilities ())
