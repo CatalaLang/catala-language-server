@@ -41,6 +41,20 @@ cd server ; opam install . --deps-only ; cd ..
 npm run compile
 ```
 
+From this point on, you may test the extension by skipping to the next
+section. Otherwise, you can package and install the extension in
+VSCode by following these extra steps:
+
+```bash
+# 1. Install VSCode extension CLI tool: e.g.,
+sudo npm install -g @vscode/vsce
+# 2. Package the extension
+vsce package
+# 3. Install the generated .vsix extension through the VSCode GUI or
+#    by invoking:
+code --install-extension catala-vscode-extension-0.0.1.vsix
+```
+
 ### Testing
 
 1. Open VSCode at the repository's root (e.g., in a terminal `$ code .`)
