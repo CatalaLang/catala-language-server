@@ -1,0 +1,3 @@
+**/*.ts
+!server/_build/default/src/main.exe
+server/**
