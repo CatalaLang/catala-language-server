@@ -20,7 +20,7 @@
     "onLanguage:catala_en",
     "onLanguage:catala_fr"
   ],
-  "main": "./build/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [
       {
@@ -83,16 +83,21 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -b; cd server; dune build; cd ..",
+    "vscode:prepublish": "cd server; dune build; cd ..; npm run package",
+    "compile": "cd server; dune build; cd ..; webpack --mode development",
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.ts",
     "lint:fix": "eslint . --ext .js,.ts --fix",
-    "watch": "tsc -b --watch",
+    "watch": "webpack --mode development --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
     "prepare": "husky"
   },
   "dependencies": {
-    "tsc-watch": "^6.2.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/vscode-webview": "^1.57.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "vscode-languageclient": "^8.0.2"
   },
   "devDependencies": {
@@ -105,7 +110,11 @@
     "husky": "^9.0.11",
     "lint-staged": "^15.2.7",
     "prettier": "3.3.3",
-    "typescript": "^4.9.5"
+    "ts-loader": "^9.5.1",
+    "tsc-watch": "^6.2.0",
+    "typescript": "^4.9.5",
+    "webpack": "^5.93.0",
+    "webpack-cli": "^5.1.4"
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx,md,json}": "npm run format",
