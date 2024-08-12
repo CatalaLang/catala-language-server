@@ -1,4 +1,7 @@
-build
+dist
 node_modules
 .vscode-test
 *.vsix
+.aider*
+.envrc
+

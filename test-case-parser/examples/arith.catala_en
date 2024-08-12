@@ -1,0 +1,24 @@
+> Module Arith
+
+```catala-metadata
+declaration structure Pair:
+  data x content integer
+  data y content decimal
+
+declaration scope A:
+  input a content integer
+  input b content integer
+  input c content Pair
+  output w content integer
+  output x content integer
+  output y content integer
+  output z content decimal
+```
+
+```catala
+scope A:
+  definition w equals a - b - b
+  definition x equals a - (b - b)
+  definition y equals a - b - -b
+  definition z equals c.x / a * c.y - 50. / - (5. - 20 / 2)
+```

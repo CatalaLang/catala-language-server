@@ -1,0 +1,11 @@
+> Using Arith
+
+```catala
+declaration scope A_test:
+  output a scope Arith.A
+
+scope A_test:
+  definition a.a equals 2
+  definition a.b equals 4
+  definition a.c equals Arith.Pair { -- x: 50 -- y: 200.0 }
+```

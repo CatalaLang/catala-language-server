@@ -1,10 +1,13 @@
 {
   "compilerOptions": {
-    "outDir": "build",
+    "outDir": "./dist",
     "module": "commonjs",
     "target": "es2020",
-    "lib": ["es2020"],
-    "strictNullChecks": true
+    "lib": ["dom", "es2020"],
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "sourceMap": true,
+    "jsx": "react-jsx"
   },
   "exclude": ["node_modules", ".vscode-test"]
 }

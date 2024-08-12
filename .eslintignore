@@ -1,4 +1,6 @@
-build/
+src/generated
+dist/
 server/_build
 server/vendors
 .eslintrc.js
+webpack.config.js

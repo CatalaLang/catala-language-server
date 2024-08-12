@@ -1,0 +1,90 @@
+(* Type info *)
+
+type typ = [
+  | TBool
+  | TInt
+  | TRat
+  | TMoney
+  | TDate
+  | TDuration
+  | TTuple of typ list
+  | TStruct of struct_declaration
+  | TEnum of enum_declaration
+  | TOption of typ
+  | TArray of typ
+] <ocaml repr="classic">
+
+type enum_declaration = {
+  enum_name: string;
+  constructors: (string * typ option) list <json repr="object"> <ts repr="map">;
+}
+
+type struct_declaration = {
+  struct_name: string;
+  fields: (string * typ) list <json repr="object"> <ts repr="map">;
+}
+
+type scope_def = {
+  name: string;
+  inputs: (string * typ) list <json repr="object"> <ts repr="map">;
+  outputs: (string * typ) list <json repr="object"> <ts repr="map">;
+}
+
+(* Runtime values *)
+
+type source_position = {
+  filename : string;
+  start_line : int;
+  start_column : int;
+  end_line : int;
+  end_column : int;
+  ~law_headings : string list;
+}
+
+type date = {
+  year : int;
+  month : int;
+  day : int;
+}
+
+type duration = {
+  years : int;
+  months : int;
+  days : int;
+}
+
+type runtime_value = [
+  | Bool of bool
+  | Money of int (* Counted in cents *)
+  | Integer of int
+  | Decimal of float
+  | Date of date
+  | Duration of duration
+  | Enum of (enum_declaration * (string * runtime_value))
+  | Struct of (struct_declaration * (string * runtime_value) list <json repr="object"> <ts repr="map">)
+  | Array of runtime_value list <ocaml repr="array">
+] <ocaml repr="classic">
+
+(* Test data *)
+
+type value_def = {
+  value: runtime_value;
+  ?pos: source_position option;
+}
+
+type test_io = {
+  typ: typ;
+  ?value: value_def option;
+}
+
+type test_inputs = (string * test_io) list <json repr="object"> <ts repr="map">
+type test_outputs = (string * test_io) list <json repr="object"> <ts repr="map">
+
+type test = {
+  testing_scope: string;
+  tested_scope : scope_def;
+  test_inputs : test_inputs;
+  test_outputs : test_outputs;
+}
+
+type test_list = test list
