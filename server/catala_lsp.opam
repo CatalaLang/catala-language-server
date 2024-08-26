@@ -21,8 +21,8 @@ pin-depends: [
   # TODO: remove this dependency once the LSP required changes are
   # published in opam
   ["catala.dev" "git+https://github.com/CatalaLang/catala#master"]
-  ["linol.dev" "git+https://github.com/vincent-botbol/linol#vbot/fix-positionEncoding"]
-  ["linol-lwt.dev" "git+https://github.com/vincent-botbol/linol#vbot/fix-positionEncoding"]
+  ["linol.dev" "git+https://github.com/c-cube/linol#a779942f9592a762d26484d03b1f93110dbaf577"]
+  ["linol-lwt.dev" "git+https://github.com/c-cube/linol#a779942f9592a762d26484d03b1f93110dbaf577"]
 ]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
