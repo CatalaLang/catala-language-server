@@ -18,5 +18,5 @@ FORCE: ;
 
 .PHONY: clean
 clean:
-	rm ${TARGET}
+	rm -f ${TARGET}
 	cd server; dune clean
