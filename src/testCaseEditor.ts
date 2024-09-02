@@ -118,12 +118,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               <link rel="stylesheet" type="text/css" href="${styleUri}">
               <style>
                   body {
-                      border: thick double #FFFACD;
                       padding: 10px;
-                  }
-                  pre {
-                      white-space: pre-wrap;
-                      word-wrap: break-word;
                   }
               </style>
           </head>
