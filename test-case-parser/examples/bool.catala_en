@@ -1,0 +1,14 @@
+> Module Bool
+
+```catala-metadata
+declaration scope A:
+  input x content integer
+  input add_meaning_of_life content boolean
+  output out content integer
+```
+
+```catala
+scope A:
+  definition out equals x
+  definition out under condition add_meaning_of_life consequence equals x + 42
+```
