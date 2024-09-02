@@ -60,7 +60,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
           // re-emit catala text file from ATD test definitions
           const newTextBuffer = atdToCatala(atdTests);
-          logger.log(`newTextBuffer: ${newTextBuffer}`);
+          logger.log(`newTextBuffer:\n ${newTextBuffer}`);
           // produce edit
           const edit = new vscode.WorkspaceEdit();
           edit.replace(
