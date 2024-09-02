@@ -101,18 +101,11 @@ export default function TestFileEditor({
     case 'success': {
       if (state.tests.length === 0) {
         return (
-          <div className="empty-state">
+          <div>
             <p>
               No test cases found. Would you like to create your first test?
             </p>
-            <button
-              className="add-test-button"
-              onClick={() => {
-                vscode.postMessage({ kind: 'addTest' });
-              }}
-            >
-              Add a test
-            </button>
+            <button>Add a test</button>
           </div>
         );
       }
