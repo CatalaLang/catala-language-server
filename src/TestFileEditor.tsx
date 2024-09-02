@@ -90,15 +90,32 @@ export default function TestFileEditor({
   switch (state.state) {
     case 'error': {
       return (
-        <div>
-          <b>Error: </b>
+        <div role="alert">
+          <strong>Error: </strong>
           {state.message}
         </div>
       );
     }
     case 'initializing':
-      return <b>Initializing...</b>;
+      return <strong>Initializing...</strong>;
     case 'success': {
+      if (state.tests.length === 0) {
+        return (
+          <div className="empty-state">
+            <p>
+              No test cases found. Would you like to create your first test?
+            </p>
+            <button
+              className="add-test-button"
+              onClick={() => {
+                vscode.postMessage({ kind: 'addTest' });
+              }}
+            >
+              Add a test
+            </button>
+          </div>
+        );
+      }
       return (
         <>
           {state.tests.map((test) => (
