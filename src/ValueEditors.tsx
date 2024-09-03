@@ -31,6 +31,22 @@ export default function ValueEditor(props: Props): ReactElement {
         />
       );
     case 'TBool':
+      return (
+        <BoolEditor
+          value={props.testIO.value?.value.value as boolean}
+          onValueChange={(newValue: boolean) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Bool',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
     case 'TRat':
     case 'TMoney':
     case 'TDate':
@@ -61,5 +77,24 @@ function IntEditor(props: IntEditorProps): ReactElement {
         props.onValueChange(Number(evt.target.value));
       }}
     ></input>
+  );
+}
+
+type BoolEditorProps = {
+  value?: boolean; // initial value, may not exist
+  onValueChange(newValue: boolean): void;
+};
+
+function BoolEditor(props: BoolEditorProps): ReactElement {
+  return (
+    <select
+      value={props.value?.toString() ?? ''}
+      onChange={(evt) => {
+        props.onValueChange(evt.target.value === 'true');
+      }}
+    >
+      <option value="false">false</option>
+      <option value="true">true</option>
+    </select>
   );
 }
