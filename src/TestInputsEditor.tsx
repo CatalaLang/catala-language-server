@@ -19,25 +19,32 @@ export default function TestInputsEditor(props: Props): ReactElement {
 
   return (
     <>
-      <i>Inputs</i>
-      {Array.from(props.test_inputs, ([inputName, testIo]) => {
-        function onTestInputChange(newValue: TestIo): void {
-          props.onTestInputsChange(
-            new Map([...props.test_inputs, [inputName, newValue]])
-          );
-        }
+      <strong>Inputs</strong>
+      <table className="test-inputs-table">
+        <tbody>
+          {Array.from(props.test_inputs, ([inputName, testIo]) => {
+            function onTestInputChange(newValue: TestIo): void {
+              props.onTestInputsChange(
+                new Map([...props.test_inputs, [inputName, newValue]])
+              );
+            }
 
-        return (
-          <span>
-            <pre>{inputName}</pre>
-            <ValueEditor
-              key={inputName}
-              testIO={testIo}
-              onValueChange={onTestInputChange}
-            />
-          </span>
-        );
-      })}
+            return (
+              <tr key={inputName}>
+                <td>
+                  <strong>{inputName}</strong>
+                </td>
+                <td>
+                  <ValueEditor
+                    testIO={testIo}
+                    onValueChange={onTestInputChange}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </>
   );
 }
