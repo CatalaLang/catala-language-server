@@ -39,7 +39,7 @@ export default function TestEditor(props: Props): ReactElement {
           title="Delete test"
           onClick={() => props.onTestDelete(props.test.testing_scope)}
         >
-          🗑️
+          <span className="codicon codicon-trash"></span>
         </button>
       </div>
       <div className="test-editor-content">
