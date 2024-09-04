@@ -46,13 +46,17 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       // (see if typescript offers something better?)
       const msg = message as UpMessage;
       switch (msg.kind) {
-        case 'ready':
-          logger.log('Got ready message from webview, sending parsed document');
+        case 'ready': {
+          const parseResults = parseTestFile(document.getText());
+          logger.log(
+            `Got ready message from webview, sending parsed document: \n ${JSON.stringify(parseResults)}`
+          );
           postMessageToWebView({
             kind: 'update',
-            parseResults: parseTestFile(document.getText()),
+            parseResults,
           });
           break;
+        }
         case 'edit': {
           logger.log('Got edit from webview');
           const jsonTests = JSON.parse(msg.tests);
