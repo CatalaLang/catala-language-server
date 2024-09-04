@@ -20,18 +20,34 @@ pre {
 
 .test-editor-scope {
   font-weight: bold;
+  flex-grow: 1;
+  margin-left: 8px;
 }
 
+.test-editor-run,
 .test-editor-delete {
   background: none;
   border: none;
   cursor: pointer;
   color: var(--vscode-editor-foreground);
   font-size: 16px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+.test-editor-run:hover,
 .test-editor-delete:hover {
   background: var(--vscode-toolbar-hoverBackground);
+}
+
+.test-editor-run {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.test-editor-run .codicon {
+  font-size: 14px;
 }
 
 .test-editor-content {
