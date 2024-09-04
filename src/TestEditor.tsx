@@ -21,6 +21,15 @@ export default function TestEditor(props: Props): ReactElement {
   return (
     <div className="test-editor">
       <div className="test-editor-bar">
+        <button
+          className="test-editor-run"
+          title="Run test"
+          onClick={() => {
+            /* TODO: Implement test run logic */
+          }}
+        >
+          <span className="codicon codicon-play"></span>
+        </button>
         <span className="test-editor-scope">
           <b>{props.test.testing_scope}</b> ➛{' '}
           {String(props.test.tested_scope.name)}
