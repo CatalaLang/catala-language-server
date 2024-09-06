@@ -47,7 +47,10 @@ export default function TestEditor(props: Props): ReactElement {
           test_inputs={props.test.test_inputs}
           onTestInputsChange={onTestInputsChange}
         />
-        <TestOutputsEditor />
+        <TestOutputsEditor
+          test={props.test}
+          onTestChange={props.onTestChange}
+        />
       </div>
     </div>
   );
