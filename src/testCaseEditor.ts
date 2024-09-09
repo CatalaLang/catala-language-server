@@ -17,7 +17,13 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
     logger.log(`Registering ${TestCaseEditorProvider.viewType}`);
     const providerRegistration = vscode.window.registerCustomEditorProvider(
       TestCaseEditorProvider.viewType,
-      provider
+      provider,
+      {
+        supportsMultipleEditorsPerDocument: false,
+        webviewOptions: {
+          retainContextWhenHidden: true,
+        },
+      }
     );
     return providerRegistration;
   }
@@ -27,6 +33,21 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
+    const config = vscode.workspace.getConfiguration('catala');
+    const isCustomEditorEnabled = config.get<boolean>(
+      'enableCustomTestCaseEditor'
+    );
+
+    if (!isCustomEditorEnabled) {
+      // If the custom editor is not enabled, show the default text editor
+      await vscode.commands.executeCommand(
+        'vscode.openWith',
+        document.uri,
+        'default'
+      );
+      return;
+    }
+
     webviewPanel.webview.options = {
       enableScripts: true,
     };

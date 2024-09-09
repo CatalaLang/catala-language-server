@@ -22,6 +22,16 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Catala",
+      "properties": {
+        "catala.enableCustomTestCaseEditor": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the custom test case editor for Catala test files"
+        }
+      }
+    },
     "customEditors": [
       {
         "viewType": "catala.testCaseEditor",
@@ -30,8 +40,7 @@
           {
             "filenamePattern": "*test*.catala_*"
           }
-        ],
-        "priority": "default"
+        ]
       }
     ],
     "languages": [

@@ -85,6 +85,20 @@ format document command: `Ctrl-p` and type 'Format Document'.
 4. A new VSCode window should open with the extension running
    - you can press CTRL+R to reload the extension window to apply changes
 
+### Using the Custom Test Case Editor
+
+The custom (visual) test case editor usage is controlled by a configuration setting. To enable or disable the custom editor:
+
+1. Open VSCode Settings (File > Preferences > Settings)
+2. Search for "Catala"
+3. Find the "Catala: Enable Custom Test Case Editor" setting
+4. Check or uncheck the box to enable or disable the custom test case editor
+5. Reload the VSCode window for the changes to take effect (you can do this by closing and reopening VSCode, or by running the "Developer: Reload Window" command from the Command Palette)
+
+When the custom editor is disabled, test files will open in the default text editor.
+
+Note: After changing the setting, you must reload the VSCode window for the changes to take effect. This is because the custom editor registration happens when the extension is activated, and changing the setting doesn't automatically re-register or unregister the editor.
+
 ### Developing
 
 When developing on the "front" (typescript side) of the extension, you may invoke

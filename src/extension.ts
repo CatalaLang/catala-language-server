@@ -1,4 +1,4 @@
-import type { ExtensionContext } from 'vscode';
+import { type ExtensionContext } from 'vscode';
 import type { Executable } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import * as path from 'path';
@@ -31,6 +31,7 @@ export function activate(context: ExtensionContext): void {
 
   client.start();
 
+  // Always register the custom editor provider
   context.subscriptions.push(TestCaseEditorProvider.register(context));
 
   // Ensure the logger is disposed when the extension is deactivated
