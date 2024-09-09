@@ -1,0 +1,10 @@
+> Usage de Bool
+
+```catala
+déclaration champ d'application A_test:
+  résultat aout champ d'application Bool.A
+
+champ d'application A_test:
+  définition aout.x égal à 22
+  définition aout.add_meaning_of_life égal à vrai
+```
