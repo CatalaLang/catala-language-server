@@ -5,6 +5,7 @@ import type { DownMessage, UpMessage } from './messages';
 import { assertUnreachable } from './util';
 import type { TestList } from './generated/test_case';
 import { readTestList, writeTestList } from './generated/test_case';
+import * as path from 'path';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
@@ -66,9 +67,10 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       // type coercion because cross-window message exchange is untyped
       // (see if typescript offers something better?)
       const msg = message as UpMessage;
+      const lang = getLanguageFromFileName(document.fileName);
       switch (msg.kind) {
         case 'ready': {
-          const parseResults = parseTestFile(document.getText());
+          const parseResults = parseTestFile(document.getText(), lang);
           logger.log(
             `Got ready message from webview, sending parsed document: \n ${JSON.stringify(parseResults)}`
           );
@@ -84,7 +86,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           const atdTests = readTestList(jsonTests);
 
           // re-emit catala text file from ATD test definitions
-          const newTextBuffer = atdToCatala(atdTests);
+          const newTextBuffer = atdToCatala(atdTests, lang);
           logger.log(`newTextBuffer:\n ${newTextBuffer}`);
           // produce edit
           const edit = new vscode.WorkspaceEdit();
@@ -96,7 +98,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           vscode.workspace.applyEdit(edit).then(() => {
             postMessageToWebView({
               kind: 'update',
-              parseResults: parseTestFile(document.getText()), //XXX concurrent edits?
+              parseResults: parseTestFile(document.getText(), lang), //XXX concurrent edits?
             });
           });
           break;
@@ -109,9 +111,10 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
       (e) => {
         if (e.document.uri.toString() === document.uri.toString()) {
+          const lang = getLanguageFromFileName(e.document.fileName);
           postMessageToWebView({
             kind: 'update',
-            parseResults: parseTestFile(document.getText()),
+            parseResults: parseTestFile(e.document.getText(), lang),
           });
         }
       }
@@ -174,13 +177,12 @@ export type ParseResults =
   | { results: unknown /* JSON-able equivalent of test file */ }
   | { error: string };
 
-function parseTestFile(content: string): ParseResults {
+function parseTestFile(content: string, lang: string): ParseResults {
   // plugin dir should be relative to VS code extension package root obviously
   // -- TODO check
   // obviously 'examples' is not appropriate here too
   // --scope XXX should also be removed -- it's a leftover from the current CLI
   // TODO we could revisit this to make the parsing async
-  // TODO we should also implement the language selection
   try {
     const results = execFileSync(
       'catala',
@@ -191,7 +193,7 @@ function parseTestFile(content: string): ParseResults {
         './test-case-parser/_build/default',
         '--read',
         '-l',
-        'en',
+        lang,
         '--scope',
         'XXX',
         '-I',
@@ -205,24 +207,38 @@ function parseTestFile(content: string): ParseResults {
   }
 }
 
-function atdToCatala(tests: TestList): string {
+function atdToCatala(tests: TestList, lang: string): string {
   //XXX this probably needs better error handling
-  const results = execFileSync(
-    'catala',
-    [
-      'testcase',
-      '-',
-      '--plugin-dir',
-      './test-case-parser/_build/default',
-      '--write',
-      '-l',
-      'en',
-      '--scope',
-      'XXX',
-      '-I',
-      './test-case-parser/examples',
-    ],
-    { input: JSON.stringify(writeTestList(tests)) }
-  );
-  return results.toString();
+  try {
+    const results = execFileSync(
+      'catala',
+      [
+        'testcase',
+        '-',
+        '--plugin-dir',
+        './test-case-parser/_build/default',
+        '--write',
+        '-l',
+        lang,
+        '--scope',
+        'XXX',
+        '-I',
+        './test-case-parser/examples',
+      ],
+      { input: JSON.stringify(writeTestList(tests)) }
+    );
+    return results.toString();
+  } catch (error) {
+    logger.log(`Error in atdToCatala: ${error}`);
+    throw error;
+  }
+}
+
+function getLanguageFromFileName(fileName: string): string {
+  const extension = path.extname(fileName);
+  const match = extension.match(/\.catala_(\w+)$/);
+  if (match?.[1]) {
+    return match[1];
+  }
+  throw new Error(`Unable to determine language from file name: ${fileName}`);
 }
