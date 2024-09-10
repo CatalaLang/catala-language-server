@@ -89,15 +89,29 @@ class catala_lsp_server =
     val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
     method spawn_query_handler = Lwt.async
 
-    method! on_req_initialize ~notify_back:_ (_i : InitializeParams.t) =
+    method! on_req_initialize ~notify_back (_i : InitializeParams.t) =
+      let open Lwt.Syntax in
       let sync_opts = self#config_sync_opts in
+      let* documentFormattingProvider =
+        let* available = Utils.check_topiary_availability () in
+        if available then Lwt.return (`Bool true)
+        else
+          let* () =
+            Utils.send_notification ~type_:MessageType.Warning ~notify_back
+              "Could not find 'topiary', code formatting is unavailable.\n\
+               Follow the instructions in the \
+               [README](https://github.com/CatalaLang/catala-language-server?tab=readme-ov-file#code-formatting) \
+               to setup code formatting."
+          in
+          Lwt.return (`Bool false)
+      in
       let capabilities =
         ServerCapabilities.create
           ?codeLensProvider:self#config_code_lens_options
           ~codeActionProvider:self#config_code_action_provider
           ~executeCommandProvider:
             (ExecuteCommandOptions.create ~commands:self#config_list_commands ())
-          ?completionProvider:self#config_completion
+          ~documentFormattingProvider ?completionProvider:self#config_completion
           ?definitionProvider:self#config_definition
           ?declarationProvider:self#config_declaration
           ?referencesProvider:self#config_references
@@ -189,6 +203,8 @@ class catala_lsp_server =
             ~pos:params.position ()
         | WorkspaceSymbol params ->
           self#on_req_workspace_symbol ~notify_back params
+        | TextDocumentFormatting params ->
+          self#on_req_document_formatting ~notify_back params
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
     method on_notif_doc_did_close ~notify_back d =
@@ -381,4 +397,20 @@ class catala_lsp_server =
         |> List.filter filter
       in
       Lwt.return_some all_symbols
+
+    method private on_req_document_formatting
+        ~notify_back
+        (params : DocumentFormattingParams.t)
+        : TextEdit.t list option Lwt.t =
+      let doc_id = params.textDocument in
+      let doc_path = DocumentUri.to_path doc_id.uri in
+      Log.info (fun m -> m "trying to format document %s" doc_path);
+      match self#find_doc doc_id.uri with
+      | None ->
+        Log.warn (fun m ->
+            m "cannot find document content of document %s" doc_path);
+        Lwt.return_none
+      | Some { content = doc_content; _ } ->
+        let (_f : State.file) = self#use_or_process_file doc_path in
+        Utils.try_format_document ~notify_back ~doc_content ~doc_path
   end
