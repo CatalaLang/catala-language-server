@@ -352,7 +352,7 @@ let convert_meta_module
 
 let process_document ?contents (uri : string) : t =
   Log.debug (fun m -> m "Processing document '%s'" uri);
-  let uri = Uri.path (Uri.of_string uri) in
+  let uri = Uri.(of_string uri |> path |> pct_decode) in
   let input_src =
     let open Catala_utils.Global in
     match contents with None -> FileName uri | Some c -> Contents (c, uri)
