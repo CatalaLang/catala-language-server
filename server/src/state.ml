@@ -175,10 +175,10 @@ let lookup_clerk_toml (path : string) =
         find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
       with
       | None ->
-        Log.debug (fun m -> m "no 'clerk.toml' config file found");
+        Log.info (fun m -> m "no 'clerk.toml' config file found");
         None
       | Some dir -> (
-        Log.debug (fun m ->
+        Log.info (fun m ->
             m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
         try
           let config = Clerk_config.read File.(dir / "clerk.toml") in
@@ -345,7 +345,7 @@ let convert_meta_module
       (pp_print_list ~pp_sep:pp_print_cut pp_include)
       includes
   in
-  Log.debug (fun m -> m "Generated meta-module:@\n%a@." pp_module modul);
+  Log.info (fun m -> m "generated meta-module:@\n%a@." pp_module modul);
   Catala_utils.Global.Contents
     ( Format.asprintf "%a" pp_module modul,
       Filename.concat config_dir
@@ -353,7 +353,7 @@ let convert_meta_module
     )
 
 let process_document ?contents (uri : string) : t =
-  Log.debug (fun m -> m "Processing document '%s'" uri);
+  Log.info (fun m -> m "processing document '%s'" uri);
   let uri = Uri.(of_string uri |> path |> pct_decode) in
   let input_src =
     let open Catala_utils.Global in
@@ -363,8 +363,8 @@ let process_document ?contents (uri : string) : t =
   let input_src =
     match config_opt, find_inclusion config_opt uri with
     | Some (_, config_dir), Some i ->
-      Log.debug (fun m ->
-          m "Found document included as part of a meta-module: generating it.");
+      Log.info (fun m ->
+          m "found document included as part of a meta-module: generating it.");
       convert_meta_module ~config_dir i
     | _ -> input_src
   in
@@ -409,7 +409,7 @@ let process_document ?contents (uri : string) : t =
             m "caught (CompilerError %t)" (fun ppf ->
                 Catala_utils.Message.Content.emit ~ppf er Error))
       | _ -> ());
-      Log.debug (fun m ->
+      Log.info (fun m ->
           m "caught generic exception: %s (%d diagnostics to send)"
             (Printexc.to_string e) (List.length !l));
       List.rev !l, None
