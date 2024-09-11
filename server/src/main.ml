@@ -22,16 +22,17 @@ let () =
     in
     { Logs.report }
   in
-  let logfile =
-    let oc = open_out "/tmp/log" in
+  let logfile_path, logfile =
+    let logfile_path, oc = Filename.open_temp_file "catala-lsp-logs" "" in
     let fmt = Format.formatter_of_out_channel oc in
-    Logs.format_reporter ~app:fmt ~dst:fmt ()
+    logfile_path, Logs.format_reporter ~app:fmt ~dst:fmt ()
   in
   let err_std =
     Logs.format_reporter ~app:Format.err_formatter ~dst:Format.err_formatter ()
   in
   Logs.set_reporter (combine logfile err_std);
-  Logs.set_level (Some Logs.Debug)
+  Logs.set_level (Some Logs.Info);
+  Logs.info (fun m -> m "log file created: '%s'" logfile_path)
 
 let run () =
   Log.app (fun m ->
