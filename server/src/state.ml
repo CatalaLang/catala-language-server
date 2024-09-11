@@ -88,7 +88,16 @@ let all_diagnostics file =
         List.map
           (fun (range, (_range, err)) ->
             let severity = err_severity err.kind in
-            let message = Format.asprintf "%t" err.message in
+            let message =
+              try Format.asprintf "%t" err.message
+              with exn ->
+                (* FIXME: the pretty-printer crashes due to shady UTF-8 byte
+                   access *)
+                Log.warn (fun m ->
+                    m "exception during error message decoding: %s"
+                      (Printexc.to_string exn));
+                "Cannot display the error description, save the file first."
+            in
             diag_r severity range message)
           (RangeMap.bindings rmap) ))
     errs
