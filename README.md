@@ -55,9 +55,31 @@ vsce package
 code --install-extension catala-vscode-extension-0.0.1.vsix
 ```
 
+#### Code formatting
+
+An automated code formatting tool for catala is available. This tool
+is based on [topiary](https://github.com/tweag/topiary/). As of right
+now, the Catala language is not officially supported by topiary and
+requires to install a [forked
+version](https://github.com/CatalaLang/topiary-catala-opam).
+
+To install this tool, pin and install the Catala's topiary fork using
+this command:
+
+```
+$ opam pin add topiary https://github.com/CatalaLang/topiary-catala-opam.git
+```
+
+N.b. the installation may be lengthy as the tool is written in Rust
+and requires quite a few dependencies.
+
+Once this is done, you may start (or reload) the extension and use the
+format document command: `Ctrl-p` and type 'Format Document'.
+
 ### Testing
 
-1. Open VSCode at the repository's root (e.g., in a terminal `$ code .`)
+1. Open VSCode at the repository's root (e.g., in a terminal `$ code
+.`)
 2. Go to "Run and Debug" in the VSCode sidebar (invoked by command "View: Show Run and Debug")
 3. Choose "Launch Client" and click on the play button
 4. A new VSCode window should open with the extension running
