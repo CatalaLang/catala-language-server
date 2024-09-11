@@ -362,20 +362,25 @@ let convert_meta_module
     )
 
 let process_document ?contents (uri : string) : t =
+  let open Catala_utils in
   Log.info (fun m -> m "processing document '%s'" uri);
   let uri = Uri.(of_string uri |> path |> pct_decode) in
   let input_src =
-    let open Catala_utils.Global in
-    match contents with None -> FileName uri | Some c -> Contents (c, uri)
+    match contents with
+    | None -> Global.FileName uri
+    | Some c -> Contents (c, uri)
   in
   let config_opt = lookup_clerk_toml uri in
-  let input_src =
+  let input_src, override_includes =
     match config_opt, find_inclusion config_opt uri with
     | Some (_, config_dir), Some i ->
       Log.info (fun m ->
           m "found document included as part of a meta-module: generating it.");
-      convert_meta_module ~config_dir i
-    | _ -> input_src
+      let override_includes ~path =
+        if File.equal path uri then input_src else Global.FileName path
+      in
+      convert_meta_module ~config_dir i, Some override_includes
+    | _ -> input_src, None
   in
   let _ = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
@@ -385,7 +390,9 @@ let process_document ?contents (uri : string) : t =
     try
       (* Resets the lexing context to a fresh one *)
       Surface.Lexer_common.context := Law;
-      let prg = Surface.Parser_driver.parse_top_level_file input_src in
+      let prg =
+        Surface.Parser_driver.parse_top_level_file ?override_includes input_src
+      in
       let prg = Surface.Fill_positions.fill_pos_with_legislative_info prg in
       let open Catala_utils in
       let ctx =
