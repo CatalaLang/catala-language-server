@@ -177,14 +177,20 @@ let lookup_clerk_toml (path : string) =
       | None ->
         Log.debug (fun m -> m "no 'clerk.toml' config file found");
         None
-      | Some dir ->
+      | Some dir -> (
         Log.debug (fun m ->
             m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
-        Some (Clerk_config.read File.(dir / "clerk.toml"), dir)
+        try
+          let config = Clerk_config.read File.(dir / "clerk.toml") in
+          Some (config, dir)
+        with Message.CompilerError c ->
+          Log.err (fun m ->
+              let pp fmt = Message.Content.emit ~ppf:fmt c Error in
+              m "error while parsing config file: %t" pp);
+          None)
     end
-  with exn ->
-    Log.err (fun m ->
-        m "failed to lookup config file: %s" (Printexc.to_string exn));
+  with _ ->
+    Log.err (fun m -> m "failed to lookup config file");
     None
 
 let load_module_interfaces config_dir includes program =
