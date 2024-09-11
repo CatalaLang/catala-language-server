@@ -300,10 +300,6 @@ let find_inclusion (config_opt : (Clerk_config.t * string) option) file =
           let is_present =
             List.exists
               (fun included_file ->
-                Log.debug (fun m ->
-                    m "%s vs. %s"
-                      (Filename.concat config_dir included_file)
-                      file);
                 File.equal (Filename.concat config_dir included_file) file)
               modul.Clerk_config.includes
           in
