@@ -101,11 +101,11 @@ export default function TestFileEditor({
     case 'success': {
       if (state.tests.length === 0) {
         return (
-          <div>
-            <p>
+          <div className="test-editor-empty">
+            <p className="test-editor-empty-message">
               No test cases found. Would you like to create your first test?
             </p>
-            <button className="test-editor-run">
+            <button className="test-editor-run test-editor-add">
               <span className="codicon codicon-add"></span>
               Add a test
             </button>
