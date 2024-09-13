@@ -1,7 +1,11 @@
 // Editors for a single value type (grouped with a factory function)
 
-import type { ReactElement } from 'react';
-import type { TestIo } from './generated/test_case';
+import { type ReactElement } from 'react';
+import type {
+  TestIo,
+  StructDeclaration,
+  RuntimeValue,
+} from './generated/test_case';
 import { assertUnreachable } from './util';
 
 type Props = {
@@ -47,12 +51,34 @@ export default function ValueEditor(props: Props): ReactElement {
           }}
         />
       );
+    case 'TStruct':
+      return (
+        <StructEditor
+          structDeclaration={typ.value}
+          value={
+            props.testIO.value?.value.value as [
+              StructDeclaration,
+              Map<string, RuntimeValue>,
+            ]
+          }
+          onValueChange={(newValue) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Struct',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
     case 'TRat':
     case 'TMoney':
     case 'TDate':
     case 'TDuration':
     case 'TTuple':
-    case 'TStruct':
     case 'TEnum':
     case 'TOption':
     case 'TArray':
@@ -96,5 +122,56 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
       <option value="false">false</option>
       <option value="true">true</option>
     </select>
+  );
+}
+
+type StructEditorProps = {
+  structDeclaration: StructDeclaration;
+  value?: [StructDeclaration, Map<string, RuntimeValue>];
+  onValueChange(newValue: [StructDeclaration, Map<string, RuntimeValue>]): void;
+};
+
+function StructEditor(props: StructEditorProps): ReactElement {
+  const { structDeclaration, value, onValueChange } = props;
+  const fields = structDeclaration.fields;
+
+  const handleFieldChange = (fieldName: string, fieldValue: RuntimeValue) => {
+    const newMap = new Map(value?.[1] || []);
+    newMap.set(fieldName, fieldValue);
+    onValueChange([structDeclaration, newMap]);
+  };
+
+  return (
+    <div className="struct-editor">
+      <h3>{structDeclaration.struct_name}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from(fields.entries()).map(([fieldName, fieldType]) => (
+            <tr key={fieldName}>
+              <td>{fieldName}</td>
+              <td>
+                <ValueEditor
+                  testIO={{
+                    typ: fieldType,
+                    value: value?.[1].get(fieldName)
+                      ? { value: value[1].get(fieldName)! }
+                      : undefined,
+                  }}
+                  onValueChange={(newValue) =>
+                    handleFieldChange(fieldName, newValue.value!.value)
+                  }
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

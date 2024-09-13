@@ -19,7 +19,6 @@ export default function TestInputsEditor(props: Props): ReactElement {
 
   return (
     <>
-      <strong>Inputs</strong>
       <table className="test-inputs-table">
         <tbody>
           {Array.from(props.test_inputs, ([inputName, testIo]) => {

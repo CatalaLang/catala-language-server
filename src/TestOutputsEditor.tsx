@@ -48,7 +48,6 @@ export default function TestOutputsEditor({
 
   return (
     <div className="test-outputs-editor">
-      <strong>Outputs/Assertions</strong>
       <table className="test-outputs-table">
         <tbody>
           {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {

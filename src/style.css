@@ -53,3 +53,73 @@ pre {
 .test-editor-content {
   padding: 8px;
 }
+
+.struct-editor {
+  margin-bottom: 15px;
+}
+
+.struct-editor h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: var(--vscode-editor-foreground);
+  font-weight: normal;
+}
+
+.test-section {
+  margin-bottom: 15px;
+}
+
+.test-section-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--vscode-editor-foreground);
+  color: var(--vscode-editor-foreground);
+}
+
+.struct-editor table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.struct-editor th,
+.struct-editor td {
+  padding: 6px;
+  border: 1px solid var(--vscode-editor-foreground);
+  text-align: left;
+}
+
+.struct-editor th {
+  background-color: var(--vscode-editor-background);
+  font-weight: bold;
+}
+
+.struct-editor td:first-child {
+  width: 30%;
+  font-weight: bold;
+}
+
+.struct-editor input,
+.struct-editor select {
+  width: calc(100% - 10px); /* Subtract padding and border */
+  padding: 4px;
+  border: 1px solid var(--vscode-input-border);
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  box-sizing: border-box;
+}
+
+.struct-editor input:focus,
+.struct-editor select:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+.struct-editor td {
+  padding: 6px;
+  border: 1px solid var(--vscode-editor-foreground);
+  text-align: left;
+  vertical-align: top;
+}
