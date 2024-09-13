@@ -92,6 +92,8 @@
   color: var(--vscode-editor-foreground);
 }
 
+.value-editor input,
+.value-editor select,
 .struct-editor input,
 .struct-editor select {
   width: calc(100% - 10px); /* Subtract padding and border */
@@ -102,12 +104,15 @@
   box-sizing: border-box;
 }
 
+.value-editor input:focus,
+.value-editor select:focus,
 .struct-editor input:focus,
 .struct-editor select:focus {
   outline: none;
   border-color: var(--vscode-focusBorder);
 }
 
+.value-editor,
 .struct-editor td {
   padding: 6px;
   border: 1px solid var(--vscode-editor-foreground);
