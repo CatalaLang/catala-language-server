@@ -58,12 +58,30 @@ pre {
   margin-bottom: 15px;
 }
 
-.struct-editor h3 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: var(--vscode-editor-foreground);
-  font-weight: normal;
+.struct-editor table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.struct-editor th,
+.struct-editor td {
+  padding: 6px;
+  border: 1px solid var(--vscode-editor-foreground);
+  text-align: left;
+}
+
+.struct-editor .struct-name {
+  background-color: var(--vscode-symbolIcon-structForeground);
+  color: var(--vscode-editor-background);
+  font-style: italic;
+  font-size: 12px;
+  padding: 6px;
+}
+
+.struct-editor .field-name {
+  width: 30%;
+  font-weight: bold;
+  color: var(--vscode-symbolIcon-propertyForeground);
 }
 
 .test-section {
@@ -77,28 +95,6 @@ pre {
   padding-bottom: 4px;
   border-bottom: 1px solid var(--vscode-editor-foreground);
   color: var(--vscode-editor-foreground);
-}
-
-.struct-editor table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.struct-editor th,
-.struct-editor td {
-  padding: 6px;
-  border: 1px solid var(--vscode-editor-foreground);
-  text-align: left;
-}
-
-.struct-editor th {
-  background-color: var(--vscode-editor-background);
-  font-weight: bold;
-}
-
-.struct-editor td:first-child {
-  width: 30%;
-  font-weight: bold;
 }
 
 .struct-editor input,
