@@ -9,7 +9,7 @@
   justify-content: space-between;
   align-items: center;
   background-color: var(--vscode-editor-background);
-  padding: 8px;
+  padding: 4px;
   border-bottom: 1px solid var(--vscode-editor-foreground);
 }
 
@@ -78,7 +78,7 @@
 }
 
 .test-editor-content {
-  padding: 8px;
+  padding: 4px;
 }
 
 .struct-editor {
@@ -120,8 +120,9 @@
 }
 
 .test-section-title {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: bold;
+  margin-top: 6px;
   margin-bottom: 4px;
   padding-bottom: 2px;
   border-bottom: 1px solid var(--vscode-editor-foreground);
