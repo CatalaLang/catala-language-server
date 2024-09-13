@@ -31,7 +31,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
             return (
               <tr key={inputName}>
                 <td>
-                  <strong>{inputName}</strong>
+                  <strong className="identifier">{inputName}</strong>
                 </td>
                 <td>
                   <ValueEditor
