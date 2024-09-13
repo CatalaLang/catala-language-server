@@ -158,7 +158,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
         <tbody>
           {Array.from(fields.entries()).map(([fieldName, fieldType]) => (
             <tr key={fieldName}>
-              <td className="field-name">{fieldName}</td>
+              <td className="field-name identifier">{fieldName}</td>
               <td>
                 <ValueEditor
                   testIO={{

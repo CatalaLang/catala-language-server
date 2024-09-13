@@ -110,7 +110,6 @@
 .struct-editor .field-name {
   width: 30%;
   font-weight: bold;
-  color: var(--vscode-symbolIcon-propertyForeground);
 }
 
 .test-section {
@@ -152,4 +151,8 @@
   border: 1px solid var(--vscode-editor-foreground);
   text-align: left;
   vertical-align: top;
+}
+
+.identifier {
+  color: var(--vscode-symbolIcon-variableForeground);
 }

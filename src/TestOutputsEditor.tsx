@@ -55,7 +55,9 @@ export default function TestOutputsEditor({
 
             return (
               <tr key={outputName}>
-                <td>{outputName}</td>
+                <td>
+                  <strong className="identifier">{outputName}</strong>
+                </td>
                 <td>
                   {existingOutput ? (
                     <ValueEditor
