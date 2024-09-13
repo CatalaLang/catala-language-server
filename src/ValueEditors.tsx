@@ -75,6 +75,22 @@ export default function ValueEditor(props: Props): ReactElement {
         />
       );
     case 'TRat':
+      return (
+        <RatEditor
+          value={props.testIO.value?.value.value as number}
+          onValueChange={(newValue: number) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Decimal',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
     case 'TMoney':
     case 'TDate':
     case 'TDuration':
@@ -100,6 +116,25 @@ function IntEditor(props: IntEditorProps): ReactElement {
         type="number"
         step="1"
         value={props?.value}
+        onChange={(evt) => {
+          props.onValueChange(Number(evt.target.value));
+        }}
+      />
+    </div>
+  );
+}
+
+type RatEditorProps = {
+  value?: number; // initial value, may not exist
+  onValueChange(newValue: number): void;
+};
+
+function RatEditor(props: RatEditorProps): ReactElement {
+  return (
+    <div className="value-editor">
+      <input
+        type="number"
+        value={props.value}
         onChange={(evt) => {
           props.onValueChange(Number(evt.target.value));
         }}
