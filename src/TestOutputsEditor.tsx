@@ -65,7 +65,11 @@ export default function TestOutputsEditor({
                       }
                     />
                   ) : (
-                    <button onClick={() => onAssertAdd(outputName)}>
+                    <button
+                      className="test-editor-run"
+                      onClick={() => onAssertAdd(outputName)}
+                    >
+                      <span className="codicon codicon-add"></span>
                       Add assertion
                     </button>
                   )}
