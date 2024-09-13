@@ -105,7 +105,10 @@ export default function TestFileEditor({
             <p>
               No test cases found. Would you like to create your first test?
             </p>
-            <button>Add a test</button>
+            <button className="test-editor-run">
+              <span className="codicon codicon-add"></span>
+              Add a test
+            </button>
           </div>
         );
       }
