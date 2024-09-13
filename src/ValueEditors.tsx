@@ -95,14 +95,16 @@ type IntEditorProps = {
 
 function IntEditor(props: IntEditorProps): ReactElement {
   return (
-    <input
-      type="number"
-      step="1"
-      value={props?.value}
-      onChange={(evt) => {
-        props.onValueChange(Number(evt.target.value));
-      }}
-    ></input>
+    <div className="value-editor">
+      <input
+        type="number"
+        step="1"
+        value={props?.value}
+        onChange={(evt) => {
+          props.onValueChange(Number(evt.target.value));
+        }}
+      />
+    </div>
   );
 }
 
@@ -113,15 +115,17 @@ type BoolEditorProps = {
 
 function BoolEditor(props: BoolEditorProps): ReactElement {
   return (
-    <select
-      value={props.value?.toString() ?? ''}
-      onChange={(evt) => {
-        props.onValueChange(evt.target.value === 'true');
-      }}
-    >
-      <option value="false">false</option>
-      <option value="true">true</option>
-    </select>
+    <div className="value-editor">
+      <select
+        value={props.value?.toString() ?? ''}
+        onChange={(evt) => {
+          props.onValueChange(evt.target.value === 'true');
+        }}
+      >
+        <option value="false">false</option>
+        <option value="true">true</option>
+      </select>
+    </div>
   );
 }
 
