@@ -89,14 +89,19 @@
 
 .struct-editor table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--vscode-editor-foreground);
 }
 
 .struct-editor th,
 .struct-editor td {
   padding: 6px;
-  border: 1px solid var(--vscode-editor-foreground);
   text-align: left;
+}
+
+.struct-editor th {
+  border-bottom: 1px solid var(--vscode-editor-foreground);
 }
 
 .struct-editor .struct-name {
@@ -113,14 +118,14 @@
 }
 
 .test-section {
-  margin-bottom: 15px;
+  margin-bottom: 10px;
 }
 
 .test-section-title {
   font-size: 14px;
   font-weight: bold;
-  margin-bottom: 8px;
-  padding-bottom: 4px;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
   border-bottom: 1px solid var(--vscode-editor-foreground);
   color: var(--vscode-editor-foreground);
 }
@@ -129,8 +134,8 @@
 .value-editor select,
 .struct-editor input,
 .struct-editor select {
-  width: calc(100% - 10px); /* Subtract padding and border */
-  padding: 4px;
+  width: 100%;
+  padding: 2px 4px;
   border: 1px solid var(--vscode-input-border);
   background-color: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
@@ -147,8 +152,7 @@
 
 .value-editor,
 .struct-editor td {
-  padding: 6px;
-  border: 1px solid var(--vscode-editor-foreground);
+  padding: 2px 4px;
   text-align: left;
   vertical-align: top;
 }
