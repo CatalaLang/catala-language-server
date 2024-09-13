@@ -143,18 +143,18 @@ function StructEditor(props: StructEditorProps): ReactElement {
 
   return (
     <div className="struct-editor">
-      <h3>{structDeclaration.struct_name}</h3>
       <table>
         <thead>
           <tr>
-            <th>Field</th>
-            <th>Value</th>
+            <th colSpan={2} className="struct-name">
+              {structDeclaration.struct_name}
+            </th>
           </tr>
         </thead>
         <tbody>
           {Array.from(fields.entries()).map(([fieldName, fieldType]) => (
             <tr key={fieldName}>
-              <td>{fieldName}</td>
+              <td className="field-name">{fieldName}</td>
               <td>
                 <ValueEditor
                   testIO={{
