@@ -10,5 +10,5 @@ declaration scope A:
 ```catala
 scope A:
   definition out equals x
-  definition out under condition add_meaning_of_life consequence equals x + 42
+  exception definition out under condition add_meaning_of_life consequence equals x + 42
 ```
