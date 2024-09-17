@@ -94,6 +94,7 @@
   "scripts": {
     "vscode:prepublish": "cd server; dune build; cd ..; npm run package",
     "compile": "cd server; dune build; cd ..; webpack --mode development",
+    "test": "tsc && vscode-test",
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.ts",
     "lint:fix": "eslint . --ext .js,.ts --fix",
@@ -116,6 +117,8 @@
     "@types/vscode": "^1.86.0",
     "@typescript-eslint/eslint-plugin": "^7.16.1",
     "@typescript-eslint/parser": "^7.16.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
     "eslint": "^8.57.0",
     "husky": "^9.0.11",
     "lint-staged": "^15.2.7",
