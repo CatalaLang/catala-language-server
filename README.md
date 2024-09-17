@@ -60,18 +60,16 @@ code --install-extension catala-vscode-extension-0.0.1.vsix
 An automated code formatting tool for catala is available. This tool
 is based on [topiary](https://github.com/tweag/topiary/). As of right
 now, the Catala language is not officially supported by topiary and
-requires to install a [forked
-version](https://github.com/CatalaLang/topiary-catala-opam).
+requires to install
+[catala-format](https://github.com/CatalaLang/catala-format).
 
-To install this tool, pin and install the Catala's topiary fork using
-this command:
+To install this tool pin (via opam) `catala-format` using this command:
 
 ```
-$ opam pin add topiary https://github.com/CatalaLang/topiary-catala-opam.git
+$ opam pin add catala-format https://github.com/CatalaLang/catala-format.git
 ```
 
-N.b. the installation may be lengthy as the tool is written in Rust
-and requires quite a few dependencies.
+N.b. the installation may be lengthy as it needs to install `topiary`.
 
 Once this is done, you may start (or reload) the extension and use the
 format document command: `Ctrl-p` and type 'Format Document'.

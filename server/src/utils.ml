@@ -51,19 +51,20 @@ let unclosed_range_of_pos (pos : Pos.t) : Range.t =
   let start, end_ = pos_to_loc pos in
   { Range.start; end_ = { end_ with character = end_.character + 100_000 } }
 
-let check_topiary_availability () =
+let send_notification ?(type_ = MessageType.Warning) ~notify_back message =
+  let message = Format.sprintf "Catala LSP: %s" message in
+  let notif = Lsp.Server_notification.ShowMessage { message; type_ } in
+  notify_back#send_notification notif
+
+let check_catala_format_availability () =
   let open Lwt.Infix in
-  Lwt_process.exec ~stdout:`Dev_null ~stderr:`Dev_null ("", [| "topiary" |])
+  Lwt_process.exec ~stdout:`Dev_null ~stderr:`Dev_null
+    ("", [| "catala-format" |])
   >>= function
   | WEXITED 2 -> Lwt.return true
   | WEXITED 127 (* Not found *) | WEXITED _ -> Lwt.return false
   | WSIGNALED _ -> Lwt.return_false
   | WSTOPPED _ -> Lwt.return_false
-
-let send_notification ?(type_ = MessageType.Warning) ~notify_back message =
-  let message = Format.sprintf "Catala LSP: %s" message in
-  let notif = Lsp.Server_notification.ShowMessage { message; type_ } in
-  notify_back#send_notification notif
 
 let try_format_document ~notify_back ~doc_content ~doc_path :
     TextEdit.t list option Lwt.t =
@@ -82,7 +83,7 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
   let proc =
     Lwt_process.open_process_in ~timeout:5. ~stdin:(`FD_move stdin_r)
       ~stderr:(`FD_move stderr_w)
-      ("", [| "topiary"; "format"; "--language"; language |])
+      ("", [| "catala-format"; "-l"; language |])
   in
   let stderr = Lwt_io.of_fd ~mode:Lwt_io.input stderr_r in
   let read ic =
@@ -121,7 +122,7 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
       let* () =
         Format.kasprintf
           (send_notification ~type_:MessageType.Warning ~notify_back)
-          "Code formatting failed: topiary exited with error code %d" n
+          "Code formatting failed: catala-format exited with error code %d" n
       in
       Lwt.return_none
     else
