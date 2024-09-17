@@ -93,12 +93,12 @@ class catala_lsp_server =
       let open Lwt.Syntax in
       let sync_opts = self#config_sync_opts in
       let* documentFormattingProvider =
-        let* available = Utils.check_topiary_availability () in
+        let* available = Utils.check_catala_format_availability () in
         if available then Lwt.return (`Bool true)
         else
           let* () =
             Utils.send_notification ~type_:MessageType.Warning ~notify_back
-              "Could not find 'topiary', code formatting is unavailable.\n\
+              "Could not find 'catala-format', code formatting is unavailable.\n\
                Follow the instructions in the \
                [README](https://github.com/CatalaLang/catala-language-server?tab=readme-ov-file#code-formatting) \
                to setup code formatting."
