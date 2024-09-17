@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
-import { execFileSync } from 'child_process';
+import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type { DownMessage, UpMessage } from './messages';
 import { assertUnreachable } from './util';
 import type { TestList } from './generated/test_case';
@@ -203,7 +203,9 @@ function parseTestFile(content: string, lang: string): ParseResults {
     );
     return { results: JSON.parse(results.toString()) };
   } catch (error) {
-    return { error };
+    return {
+      error: String((error as SpawnSyncReturns<string | Buffer>).stderr),
+    };
   }
 }
 
