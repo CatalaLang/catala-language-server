@@ -1,13 +1,12 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import {
-  readTestList,
-  writeTestList,
+  type ParseResults,
   type Test,
   type TestList,
+  readDownMessage,
+  writeUpMessage,
 } from './generated/test_case';
 import TestEditor from './TestEditor';
-import type { DownMessage } from './messages';
-import type { ParseResults } from './testCaseEditor';
 import { assertUnreachable } from './util';
 import type { WebviewApi } from 'vscode-webview';
 
@@ -45,10 +44,12 @@ export default function TestFileEditor({
       console.log('new test state');
       console.log(newTestState);
 
-      vscode.postMessage({
-        kind: 'edit',
-        tests: JSON.stringify(writeTestList(newTestState)),
-      });
+      vscode.postMessage(
+        writeUpMessage({
+          kind: 'Edit',
+          value: newTestState,
+        })
+      );
     }
   }
 
@@ -60,21 +61,21 @@ export default function TestFileEditor({
       console.log('Deleting test:', testScope);
       console.log('New test state:', newTestState);
 
-      vscode.postMessage({
-        kind: 'edit',
-        tests: JSON.stringify(writeTestList(newTestState)),
-      });
+      vscode.postMessage(
+        writeUpMessage({
+          kind: 'Edit',
+          value: newTestState,
+        })
+      );
     }
   }
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
-      //XXX we need something better! type coercion because cross-window message exchange is untyped
-      // (or is it? )
-      const message = event.data as DownMessage;
+      const message = readDownMessage(event.data);
       switch (message.kind) {
-        case 'update':
-          setState(parseResultsToUiState(message.parseResults));
+        case 'Update':
+          setState(parseResultsToUiState(message.value));
           break;
       }
     };
@@ -131,11 +132,14 @@ export default function TestFileEditor({
 }
 
 function parseResultsToUiState(tests: ParseResults): UIState {
-  if ('error' in tests) {
-    return { state: 'error', message: tests.error };
-  } else if ('results' in tests) {
-    return { state: 'success', tests: readTestList(tests.results) };
-  } else {
-    assertUnreachable(tests);
+  // XXX we could refactor type UIState for consistency
+  // with ATD-produced types ?
+  switch (tests.kind) {
+    case 'Error':
+      return { state: 'error', message: tests.value };
+    case 'Results':
+      return { state: 'success', tests: tests.value };
+    default:
+      assertUnreachable(tests);
   }
 }

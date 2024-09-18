@@ -88,3 +88,19 @@ type test = {
 }
 
 type test_list = test list
+
+(* Message exchange within extension (shell <-> webview) *)
+
+type parse_results = [
+  | Error of string
+  | Results of test_list
+]
+
+type up_message = [
+  | Ready
+  | Edit of test_list
+]
+
+type down_message = [
+  | Update of parse_results
+]
