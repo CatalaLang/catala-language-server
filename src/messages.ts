@@ -1,11 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Format definitions for message exchanges between the editor 'shell' and
-// the inner webview.
+/* Format definitions for message exchanges between the editor 'shell' and
+   the inner webview.
 
-// Messages should be json-able objects, and conversion to-from
-// other structures (e.g. ATD-defined tests) should happen elsewhere
-// i.e. we just deal with cross-window message exchange here, nothing more
+   Messages should be json-able objects, and conversion to-from
+   other structures (e.g. ATD-defined tests) should happen elsewhere
+   i.e. we just deal with cross-window message exchange here, nothing more
+
+   As much as possible, we would like to exchange 'rich' data structures
+   (e.g. maps, or anything that ATD produces) between the extension shell and
+   the editor webview.
+
+   However, while 'normal' cross-window messaging supports that use
+   case, `vscode.Webview.postMessage` requires "a string or JSON-serializable object".
+
+   Also, when exchanging messages, it means that we lose all type information
+   (received messages have type `any`), which is not great
+   (types are useful for messaging!).
+*/
 
 import type { ParseResults } from './testCaseEditor';
 
