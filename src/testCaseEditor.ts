@@ -68,7 +68,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
     // listen for a 'ready' message from the web view, then send the initial
     // document (in parsed form)
-    webviewPanel.webview.onDidReceiveMessage((message) => {
+    webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
       const typed_msg = readUpMessage(message);
       const lang = getLanguageFromFileName(document.fileName);
       switch (typed_msg.kind) {
