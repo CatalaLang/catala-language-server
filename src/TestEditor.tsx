@@ -51,7 +51,7 @@ export default function TestEditor(props: Props): ReactElement {
           />
         </div>
         <div className="test-section">
-          <h2 className="test-section-title">Outputs/Assertions</h2>
+          <h2 className="test-section-title">Outputs/Expected values</h2>
           <TestOutputsEditor
             test={props.test}
             onTestChange={props.onTestChange}

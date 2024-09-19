@@ -1,10 +1,15 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
-import type { DownMessage, UpMessage } from './messages';
 import { assertUnreachable } from './util';
-import type { TestList } from './generated/test_case';
-import { readTestList, writeTestList } from './generated/test_case';
+import type { ParseResults, TestList } from './generated/test_case';
+import {
+  type DownMessage,
+  readUpMessage,
+  writeDownMessage,
+  readTestList,
+  writeTestList,
+} from './generated/test_case';
 import * as path from 'path';
 
 // This class contains the 'backend' part of the test case editor that
@@ -55,38 +60,33 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
-    // This is just for typechecking purposes, as we want to restrict
-    // cross-window messages to instances of DownMessage
+    // We want to restrict shell -> webview messages to instances
+    // of DownMessage
     function postMessageToWebView(message: DownMessage): void {
-      webviewPanel.webview.postMessage(message);
+      webviewPanel.webview.postMessage(writeDownMessage(message));
     }
 
     // listen for a 'ready' message from the web view, then send the initial
     // document (in parsed form)
-    webviewPanel.webview.onDidReceiveMessage((message) => {
-      // type coercion because cross-window message exchange is untyped
-      // (see if typescript offers something better?)
-      const msg = message as UpMessage;
+    webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
+      const typed_msg = readUpMessage(message);
       const lang = getLanguageFromFileName(document.fileName);
-      switch (msg.kind) {
-        case 'ready': {
+      switch (typed_msg.kind) {
+        case 'Ready': {
           const parseResults = parseTestFile(document.getText(), lang);
           logger.log(
             `Got ready message from webview, sending parsed document: \n ${JSON.stringify(parseResults)}`
           );
           postMessageToWebView({
-            kind: 'update',
-            parseResults,
+            kind: 'Update',
+            value: parseResults,
           });
           break;
         }
-        case 'edit': {
+        case 'Edit': {
           logger.log('Got edit from webview');
-          const jsonTests = JSON.parse(msg.tests);
-          const atdTests = readTestList(jsonTests);
-
           // re-emit catala text file from ATD test definitions
-          const newTextBuffer = atdToCatala(atdTests, lang);
+          const newTextBuffer = atdToCatala(typed_msg.value, lang);
           logger.log(`newTextBuffer:\n ${newTextBuffer}`);
           // produce edit
           const edit = new vscode.WorkspaceEdit();
@@ -97,14 +97,14 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           );
           vscode.workspace.applyEdit(edit).then(() => {
             postMessageToWebView({
-              kind: 'update',
-              parseResults: parseTestFile(document.getText(), lang), //XXX concurrent edits?
+              kind: 'Update',
+              value: parseTestFile(document.getText(), lang), //XXX concurrent edits?
             });
           });
           break;
         }
         default:
-          assertUnreachable(msg);
+          assertUnreachable(typed_msg);
       }
     });
 
@@ -113,8 +113,8 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         if (e.document.uri.toString() === document.uri.toString()) {
           const lang = getLanguageFromFileName(e.document.fileName);
           postMessageToWebView({
-            kind: 'update',
-            parseResults: parseTestFile(e.document.getText(), lang),
+            kind: 'Update',
+            value: parseTestFile(e.document.getText(), lang),
           });
         }
       }
@@ -173,10 +173,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
   }
 }
 
-export type ParseResults =
-  | { results: unknown /* JSON-able equivalent of test file */ }
-  | { error: string };
-
 function parseTestFile(content: string, lang: string): ParseResults {
   // plugin dir should be relative to VS code extension package root obviously
   // -- TODO check
@@ -201,10 +197,14 @@ function parseTestFile(content: string, lang: string): ParseResults {
       ],
       { input: content }
     );
-    return { results: JSON.parse(results.toString()) };
+    return {
+      kind: 'Results',
+      value: readTestList(JSON.parse(results.toString())),
+    };
   } catch (error) {
     return {
-      error: String((error as SpawnSyncReturns<string | Buffer>).stderr),
+      kind: 'Error',
+      value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
     };
   }
 }

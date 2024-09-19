@@ -72,7 +72,7 @@ export default function TestOutputsEditor({
                       onClick={() => onAssertAdd(outputName)}
                     >
                       <span className="codicon codicon-add"></span>
-                      Add assertion
+                      Add expected value
                     </button>
                   )}
                 </td>

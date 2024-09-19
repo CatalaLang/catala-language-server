@@ -100,7 +100,8 @@
     "lint:fix": "eslint . --ext .js,.ts --fix",
     "watch": "webpack --mode development --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
-    "prepare": "husky"
+    "prepare": "husky",
+    "atd:generate_ts": "cd src/generated && atdts ../../test-case-parser/test_case.atd"
   },
   "dependencies": {
     "@types/react": "^18.3.3",
