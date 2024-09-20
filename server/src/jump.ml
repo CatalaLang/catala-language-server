@@ -19,7 +19,7 @@ open Shared_ast
 open Utils
 open Scopelang.Ast
 
-let hash (type a) (module M : Uid.Id with type t = a) (v : a) : int =
+let hash_info (type a) (module M : Uid.Id with type t = a) (v : a) : int =
   Hashtbl.hash (M.get_info v)
 
 module PMap = Map.Make (struct
@@ -92,20 +92,22 @@ let pp_table ppf { declaration; definitions; usages } =
        (fun fmt _ -> fprintf fmt "some"))
     usages
 
-let traverse_expr e m =
+let traverse_expr ctx e m =
   let open Shared_ast in
   let open Catala_utils in
   let rec f e acc =
+    let (Typed { pos; ty = typ }) = Mark.get e in
     match Mark.remove e with
+    | ELit _l ->
+      let value = Usage { name = "lit"; hash = 0; typ } in
+      PMap.add pos value acc
     | ELocation (ScopelangScopeVar { name; _ }) ->
-      let (Typed { pos = _; ty = typ }) = Mark.get e in
       let (scope_var : ScopeVar.t), pos = name in
       let name = ScopeVar.to_string scope_var in
-      let hash = hash (module ScopeVar) scope_var in
+      let hash = hash_info (module ScopeVar) scope_var in
       let var = Usage { name; hash; typ } in
       PMap.add pos var acc
     | ELocation (ToplevelVar { name; _ }) ->
-      let (Typed { pos; ty = typ }) = Mark.get e in
       let (topdef_var : TopdefName.t), _ = name in
       let name = TopdefName.to_string topdef_var in
       let hash = Hashtbl.hash (TopdefName.get_info topdef_var) in
@@ -113,9 +115,9 @@ let traverse_expr e m =
       PMap.add pos var acc
     | EStructAccess { name = _; e = sub_expr; field } ->
       let name = StructField.to_string field in
-      let (Typed { pos = expr_pos; ty = typ }) = Mark.get e in
+      let expr_pos = pos in
       let (Typed { pos = sub_expr_pos; ty = _ }) = Mark.get sub_expr in
-      let hash = hash (module StructField) field in
+      let hash = hash_info (module StructField) field in
       let var = Usage { name; hash; typ } in
       let pos =
         let open Pos in
@@ -128,29 +130,45 @@ let traverse_expr e m =
       in
       let acc = PMap.add pos var acc in
       f sub_expr acc
+    | EStruct { fields; name } ->
+      let struct_decl = StructName.Map.find name ctx.ctx_structs in
+      StructField.Map.fold
+        (fun sfield e acc ->
+          let name = StructField.to_string sfield in
+          let (Typed { ty = typ; _ }) = Mark.get e in
+          let _, pos = StructField.get_info sfield in
+          StructField.Map.find_first_opt (StructField.equal sfield) struct_decl
+          |> function
+          | None -> f e acc
+          | Some (decl_field, _) ->
+            let hash = hash_info (module StructField) decl_field in
+            let var = Definition { name; hash; typ } in
+            let acc = PMap.add pos var acc in
+            f e acc)
+        fields acc
     | _ -> Expr.shallow_fold f e acc
   in
   Expr.shallow_fold f e m
 
-let traverse_scope_decl (rule : typed rule) m : var PMap.t =
+let traverse_scope_decl ctx (rule : typed rule) m : var PMap.t =
   match rule with
   | ScopeVarDefinition { var; typ; io = _; e }
   | SubScopeVarDefinition { var; typ; var_within_origin_scope = _; e } ->
     let var, pos_l = var in
     let _pos = snd (ScopeVar.get_info var) in
     let name = ScopeVar.to_string var in
-    let hash = hash (module ScopeVar) var in
+    let hash = hash_info (module ScopeVar) var in
     let var = Definition { name; hash; typ } in
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
-    traverse_expr e m
-  | Assertion e -> traverse_expr e m
+    traverse_expr ctx e m
+  | Assertion e -> traverse_expr ctx e m
 
 let traverse_scope_sig scope m : var PMap.t =
   ScopeVar.Map.fold
     (fun scope_var var_ty m ->
       let name = ScopeVar.to_string scope_var in
       let pos = snd (ScopeVar.get_info scope_var) in
-      let hash = hash (module ScopeVar) scope_var in
+      let hash = hash_info (module ScopeVar) scope_var in
       let var = Declaration { name; hash; typ = var_ty.svar_out_ty } in
       let var_typ_name = "typ:" ^ name in
       let typ =
@@ -165,18 +183,35 @@ let traverse_scope_sig scope m : var PMap.t =
       PMap.add (Mark.get var_ty.svar_out_ty) typ m)
     scope.scope_sig m
 
-let traverse_scope (scope : typed scope_decl) m : var PMap.t =
+let traverse_scope ctx (scope : typed scope_decl) m : var PMap.t =
   let m = traverse_scope_sig scope m in
-  List.fold_right traverse_scope_decl scope.scope_decl_rules m
+  List.fold_right (traverse_scope_decl ctx) scope.scope_decl_rules m
 
-let traverse_topdef (topdef : TopdefName.t) ((e, typ) : typed expr * typ) m :
-    var PMap.t =
+let traverse_topdef ctx (topdef : TopdefName.t) ((e, typ) : typed expr * typ) m
+    : var PMap.t =
   let name = TopdefName.to_string topdef in
   let topdef_pos = snd (TopdefName.get_info topdef) in
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
   let topdef = Topdef { name; hash; typ } in
   let m = PMap.add topdef_pos topdef m in
-  traverse_expr e m
+  traverse_expr ctx e m
+
+let traverse_ctx (ctx : decl_ctx) m : var PMap.t =
+  let m =
+    StructName.Map.fold
+      (fun _sn fields m ->
+        StructField.Map.fold
+          (fun sf typ m ->
+            let name = StructField.to_string sf in
+            let pos = snd (StructField.get_info sf) in
+            let hash = hash_info (module StructField) sf in
+            let var = Declaration { name; hash; typ } in
+            PMap.add pos var m)
+          fields m)
+      ctx.ctx_structs m
+  in
+  (* TODO: do the rest *)
+  m
 
 let traverse (prog : Shared_ast.typed Scopelang.Ast.program) : var PMap.t =
   let m =
@@ -187,11 +222,16 @@ let traverse (prog : Shared_ast.typed Scopelang.Ast.program) : var PMap.t =
           decl_map acc)
       prog.program_modules PMap.empty
   in
-  let m = TopdefName.Map.fold traverse_topdef prog.program_topdefs m in
+  let m =
+    TopdefName.Map.fold
+      (traverse_topdef prog.program_ctx)
+      prog.program_topdefs m
+  in
   let all_scopes =
     ScopeName.Map.values prog.program_scopes |> List.map Mark.remove
   in
-  List.fold_right traverse_scope all_scopes m
+  let m = List.fold_right (traverse_scope prog.program_ctx) all_scopes m in
+  traverse_ctx prog.program_ctx m
 
 let populate (prog : Shared_ast.typed Scopelang.Ast.program) : t =
   let variables = traverse prog in
