@@ -96,6 +96,11 @@ type parse_results = [
   | Results of test_list
 ]
 
+type test_run_results = [
+  | Error of string
+  | Ok (* at some point this could also hold the scope output? *)
+]
+
 type up_message = [
   | Ready
   | Edit of test_list

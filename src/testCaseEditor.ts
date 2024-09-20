@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { logger } from './logger';
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import { assertUnreachable } from './util';
-import type { ParseResults, TestList } from './generated/test_case';
+import type { ParseResults, TestList, TestRunResults } from './generated/test_case';
 import {
   type DownMessage,
   readUpMessage,
@@ -234,6 +234,37 @@ function atdToCatala(tests: TestList, lang: string): string {
     logger.log(`Error in atdToCatala: ${error}`);
     throw error;
   }
+}
+
+function runTestScope(filename: string, testScope: string): TestRunResults {
+  /*
+   * Notes:
+   * - when parsing / generating tests, we operate on the current text buffer
+   * in the editor through `stdin`. Here, we run the actual file on disk.
+   * Should we produce an error if they are not identical? (i.e. the buffer
+   * is dirty)?
+   * - security: fileName should be provided by the editor, so it should be
+   * trustworthy: check?
+   * - Users should probably have a command that interrupts a running test
+   */
+  try {
+    execFileSync(
+      'clerk',
+      [
+        'run',
+        filename,
+        '--scope',
+        testScope
+      ]
+    )
+
+  } catch (error) {
+    return {
+      kind: 'Error',
+      value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
+    };
+  }
+  return {kind: 'Ok'}
 }
 
 function getLanguageFromFileName(fileName: string): string {
