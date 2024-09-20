@@ -170,17 +170,7 @@ let traverse_scope_sig scope m : var PMap.t =
       let pos = snd (ScopeVar.get_info scope_var) in
       let hash = hash_info (module ScopeVar) scope_var in
       let var = Declaration { name; hash; typ = var_ty.svar_out_ty } in
-      let var_typ_name = "typ:" ^ name in
-      let typ =
-        Declaration
-          {
-            name = var_typ_name;
-            hash = Hashtbl.hash (var_typ_name, Mark.get var_ty.svar_out_ty);
-            typ = var_ty.svar_out_ty;
-          }
-      in
-      let m = PMap.add pos var m in
-      PMap.add (Mark.get var_ty.svar_out_ty) typ m)
+      PMap.add pos var m)
     scope.scope_sig m
 
 let traverse_scope ctx (scope : typed scope_decl) m : var PMap.t =
