@@ -101,11 +101,18 @@ type test_run_results = [
   | Ok (* at some point this could also hold the scope output? *)
 ]
 
+type test_run_request = {
+  scope: string;
+  uid: string;
+}
+
 type up_message = [
   | Ready
   | Edit of test_list
+  | TestRunRequest of test_run_request
 ]
 
 type down_message = [
   | Update of parse_results
+  | TestRunResults of (string * test_run_results) (* UID and results *)
 ]

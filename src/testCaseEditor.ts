@@ -2,7 +2,11 @@ import * as vscode from 'vscode';
 import { logger } from './logger';
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import { assertUnreachable } from './util';
-import type { ParseResults, TestList, TestRunResults } from './generated/test_case';
+import type {
+  ParseResults,
+  TestList,
+  TestRunResults,
+} from './generated/test_case';
 import {
   type DownMessage,
   readUpMessage,
@@ -68,6 +72,25 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
     // listen for a 'ready' message from the web view, then send the initial
     // document (in parsed form)
+    const testRunQueue: Array<{ scope: string; uid: string }> = [];
+    let isRunningTest = false;
+
+    function processTestRunQueue(): void {
+      if (isRunningTest || testRunQueue.length === 0) return;
+
+      isRunningTest = true;
+      const { scope, uid } = testRunQueue.shift()!;
+      const results = runTestScope(document.fileName, scope);
+
+      postMessageToWebView({
+        kind: 'TestRunResults',
+        value: [uid, results],
+      });
+
+      isRunningTest = false;
+      processTestRunQueue();
+    }
+
     webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
       const typed_msg = readUpMessage(message);
       const lang = getLanguageFromFileName(document.fileName);
@@ -101,6 +124,12 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               value: parseTestFile(document.getText(), lang), //XXX concurrent edits?
             });
           });
+          break;
+        }
+        case 'TestRunRequest': {
+          const { scope, uid } = typed_msg.value;
+          testRunQueue.push({ scope, uid });
+          processTestRunQueue();
           break;
         }
         default:
@@ -246,25 +275,17 @@ function runTestScope(filename: string, testScope: string): TestRunResults {
    * - security: fileName should be provided by the editor, so it should be
    * trustworthy: check?
    * - Users should probably have a command that interrupts a running test
+   * - Should tests have (configurable) timeouts? (when running interactively)
    */
   try {
-    execFileSync(
-      'clerk',
-      [
-        'run',
-        filename,
-        '--scope',
-        testScope
-      ]
-    )
-
+    execFileSync('clerk', ['run', filename, '--scope', testScope]);
   } catch (error) {
     return {
       kind: 'Error',
       value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
     };
   }
-  return {kind: 'Ok'}
+  return { kind: 'Ok' };
 }
 
 function getLanguageFromFileName(fileName: string): string {

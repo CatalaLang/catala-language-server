@@ -1,5 +1,5 @@
 import { type ReactElement } from 'react';
-import type { Test, TestInputs } from './generated/test_case';
+import type { Test, TestInputs, TestRunResults } from './generated/test_case';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
 
@@ -7,6 +7,11 @@ type Props = {
   test: Test;
   onTestChange(newValue: Test): void;
   onTestDelete(testScope: string): void;
+  onTestRun(testScope: string): void;
+  runState?: {
+    status: 'running' | 'success' | 'error';
+    results?: TestRunResults;
+  };
 };
 
 // Editor for a single test case (child of TestFileEditor)
@@ -22,18 +27,25 @@ export default function TestEditor(props: Props): ReactElement {
     <div className="test-editor">
       <div className="test-editor-bar">
         <button
-          className="test-editor-run"
+          className={`test-editor-run ${props.runState?.status ?? ''}`}
           title="Run test"
-          onClick={() => {
-            /* TODO: Implement test run logic */
-          }}
+          onClick={() => props.onTestRun(props.test.testing_scope)}
+          disabled={props.runState?.status === 'running'}
         >
-          <span className="codicon codicon-play"></span>
+          <span
+            className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
+          ></span>
         </button>
         <span className="test-editor-scope">
           <b>{props.test.testing_scope}</b> ➛{' '}
           {String(props.test.tested_scope.name)}
         </span>
+        {props.runState?.status === 'success' && (
+          <span className="test-run-success">Test passed</span>
+        )}
+        {props.runState?.status === 'error' && (
+          <span className="test-run-error">Test failed</span>
+        )}
         <button
           className="test-editor-delete"
           title="Delete test"

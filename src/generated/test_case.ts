@@ -106,12 +106,19 @@ export type TestRunResults =
 | { kind: 'Error'; value: string }
 | { kind: 'Ok' }
 
+export type TestRunRequest = {
+  scope: string;
+  uid: string;
+}
+
 export type UpMessage =
 | { kind: 'Ready' }
 | { kind: 'Edit'; value: TestList }
+| { kind: 'TestRunRequest'; value: TestRunRequest }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
+| { kind: 'TestRunResults'; value: [string, TestRunResults] }
 
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
@@ -451,12 +458,28 @@ export function readTestRunResults(x: any, context: any = x): TestRunResults {
   }
 }
 
+export function writeTestRunRequest(x: TestRunRequest, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('TestRunRequest', 'scope', _atd_write_string, x.scope, x),
+    'uid': _atd_write_required_field('TestRunRequest', 'uid', _atd_write_string, x.uid, x),
+  };
+}
+
+export function readTestRunRequest(x: any, context: any = x): TestRunRequest {
+  return {
+    scope: _atd_read_required_field('TestRunRequest', 'scope', _atd_read_string, x['scope'], x),
+    uid: _atd_read_required_field('TestRunRequest', 'uid', _atd_read_string, x['uid'], x),
+  };
+}
+
 export function writeUpMessage(x: UpMessage, context: any = x): any {
   switch (x.kind) {
     case 'Ready':
       return 'Ready'
     case 'Edit':
       return ['Edit', writeTestList(x.value, x)]
+    case 'TestRunRequest':
+      return ['TestRunRequest', writeTestRunRequest(x.value, x)]
   }
 }
 
@@ -475,6 +498,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
     switch (x[0]) {
       case 'Edit':
         return { kind: 'Edit', value: readTestList(x[1], x) }
+      case 'TestRunRequest':
+        return { kind: 'TestRunRequest', value: readTestRunRequest(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')
@@ -486,6 +511,8 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
   switch (x.kind) {
     case 'Update':
       return ['Update', writeParseResults(x.value, x)]
+    case 'TestRunResults':
+      return ['TestRunResults', ((x, context) => [_atd_write_string(x[0], x), writeTestRunResults(x[1], x)])(x.value, x)]
   }
 }
 
@@ -494,6 +521,8 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
   switch (x[0]) {
     case 'Update':
       return { kind: 'Update', value: readParseResults(x[1], x) }
+    case 'TestRunResults':
+      return { kind: 'TestRunResults', value: ((x, context): [string, TestRunResults] => { _atd_check_json_tuple(2, x, context); return [_atd_read_string(x[0], x), readTestRunResults(x[1], x)] })(x[1], x) }
     default:
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')
