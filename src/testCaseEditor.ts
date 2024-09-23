@@ -277,8 +277,14 @@ function runTestScope(filename: string, testScope: string): TestRunResults {
    * - Users should probably have a command that interrupts a running test
    * - Should tests have (configurable) timeouts? (when running interactively)
    */
+  const cmd = 'clerk';
+  filename = path.isAbsolute(filename)
+    ? path.relative(process.cwd(), filename)
+    : filename;
+  const args = ['run', filename, '--scope', testScope];
+  logger.log(`Exec: ${cmd} ${args.join(' ')}`);
   try {
-    execFileSync('clerk', ['run', filename, '--scope', testScope]);
+    execFileSync(cmd, args);
   } catch (error) {
     return {
       kind: 'Error',
