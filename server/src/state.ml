@@ -385,7 +385,7 @@ let process_document ?contents (uri : string) : t =
   let l = ref [] in
   let on_error e = l := e :: !l in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
-  let errors, prg_opt =
+  let errors, prog, jump_table =
     try
       (* Resets the lexing context to a fresh one *)
       Surface.Lexer_common.context := Law;
@@ -417,7 +417,8 @@ let process_document ?contents (uri : string) : t =
           prg.program_ctx.ctx_enums
       in
       let prg = Scopelang.Ast.type_program prg in
-      [], Some prg
+      let jump_table = Jump.populate ctx prg in
+      [], Some prg, Some jump_table
     with e ->
       (match e with
       | Catala_utils.Message.CompilerError er ->
@@ -428,10 +429,9 @@ let process_document ?contents (uri : string) : t =
       Log.info (fun m ->
           m "caught generic exception: %s (%d diagnostics to send)"
             (Printexc.to_string e) (List.length !l));
-      List.rev !l, None
+      List.rev !l, None, None
   in
-  let file = create ?prog:prg_opt uri in
-  let jump_table = Option.map Jump.populate prg_opt in
+  let file = create ?prog uri in
   let file = { file with jump_table } in
   List.fold_left
     (fun f (err : Catala_utils.Message.lsp_error) ->
