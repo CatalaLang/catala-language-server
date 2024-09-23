@@ -15,12 +15,17 @@ import {
   writeTestList,
 } from './generated/test_case';
 import * as path from 'path';
+import PQueue from 'p-queue';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
 // web view whose entry point is in `uiEntryPoint.ts`
 export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  private testQueue: PQueue;
+
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.testQueue = new PQueue({ concurrency: 1 });
+  }
 
   public static register(context: vscode.ExtensionContext): vscode.Disposable {
     const provider = new TestCaseEditorProvider(context);
@@ -72,23 +77,17 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
     // listen for a 'ready' message from the web view, then send the initial
     // document (in parsed form)
-    const testRunQueue: Array<{ scope: string; uid: string }> = [];
-    let isRunningTest = false;
 
-    function processTestRunQueue(): void {
-      if (isRunningTest || testRunQueue.length === 0) return;
-
-      isRunningTest = true;
-      const { scope, uid } = testRunQueue.shift()!;
-      const results = runTestScope(document.fileName, scope);
-
+    async function runTest(
+      fileName: string,
+      scope: string,
+      uid: string
+    ): Promise<void> {
+      const results = runTestScope(fileName, scope);
       postMessageToWebView({
         kind: 'TestRunResults',
         value: [uid, results],
       });
-
-      isRunningTest = false;
-      processTestRunQueue();
     }
 
     webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
@@ -128,8 +127,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         }
         case 'TestRunRequest': {
           const { scope, uid } = typed_msg.value;
-          testRunQueue.push({ scope, uid });
-          processTestRunQueue();
+          this.testQueue.add(() => runTest(document.fileName, scope, uid));
           break;
         }
         default:
@@ -276,6 +274,8 @@ function runTestScope(filename: string, testScope: string): TestRunResults {
    * trustworthy: check?
    * - Users should probably have a command that interrupts a running test
    * - Should tests have (configurable) timeouts? (when running interactively)
+   * (note that not all these questions are related to the `runTestScope` function,
+   * these could be handled externally as well)
    */
   const cmd = 'clerk';
   filename = path.isAbsolute(filename)
