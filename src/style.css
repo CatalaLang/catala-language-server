@@ -81,6 +81,14 @@
   padding: 4px;
 }
 
+.test-run-success {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.test-run-error {
+  color: var(--vscode-testing-iconFailed);
+}
+
 .struct-editor {
   margin-bottom: 15px;
 }

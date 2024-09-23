@@ -41,10 +41,10 @@ export default function TestEditor(props: Props): ReactElement {
           {String(props.test.tested_scope.name)}
         </span>
         {props.runState?.status === 'success' && (
-          <span className="test-run-success">Test passed</span>
+          <span className="test-run-success">Passed</span>
         )}
         {props.runState?.status === 'error' && (
-          <span className="test-run-error">Test failed</span>
+          <span className="test-run-error">Failed</span>
         )}
         <button
           className="test-editor-delete"

@@ -7,4 +7,5 @@ declaration scope A_test:
 scope A_test:
   definition aout.x equals 22
   definition aout.add_meaning_of_life equals true
+  assertion aout.out = 1337
 ```
