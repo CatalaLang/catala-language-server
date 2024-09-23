@@ -16,10 +16,6 @@
   "engines": {
     "vscode": "^1.86.0"
   },
-  "activationEvents": [
-    "onLanguage:catala_en",
-    "onLanguage:catala_fr"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
