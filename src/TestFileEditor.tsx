@@ -7,7 +7,6 @@ import {
   readDownMessage,
   writeUpMessage,
 } from './generated/test_case';
-import { generateRandomId } from './util';
 import TestEditor from './TestEditor';
 import { assertUnreachable } from './util';
 import type { WebviewApi } from 'vscode-webview';
@@ -89,7 +88,6 @@ export default function TestFileEditor({
 
   const onTestRun = useCallback(
     (testScope: string): void => {
-      const uid = generateRandomId();
       setTestRunState((prev) => ({
         ...prev,
         [testScope]: { status: 'running' },
@@ -99,7 +97,6 @@ export default function TestFileEditor({
           kind: 'TestRunRequest',
           value: {
             scope: testScope,
-            uid,
           },
         })
       );
@@ -115,7 +112,7 @@ export default function TestFileEditor({
           setState(parseResultsToUiState(message.value));
           break;
         case 'TestRunResults': {
-          const results = message.value[1]; //XXX rework into a record!
+          const results = message.value;
           setTestRunState((prev) => {
             const updatedScope = Object.keys(prev).find(
               (scope) => prev[scope].status === 'running'

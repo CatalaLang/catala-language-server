@@ -78,15 +78,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
     // listen for a 'ready' message from the web view, then send the initial
     // document (in parsed form)
 
-    async function runTest(
-      fileName: string,
-      scope: string,
-      uid: string
-    ): Promise<void> {
+    async function runTest(fileName: string, scope: string): Promise<void> {
       const results = runTestScope(fileName, scope);
       postMessageToWebView({
         kind: 'TestRunResults',
-        value: [uid, results],
+        value: results,
       });
     }
 
@@ -126,8 +122,8 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           break;
         }
         case 'TestRunRequest': {
-          const { scope, uid } = typed_msg.value;
-          this.testQueue.add(() => runTest(document.fileName, scope, uid));
+          const { scope } = typed_msg.value;
+          this.testQueue.add(() => runTest(document.fileName, scope));
           break;
         }
         default:

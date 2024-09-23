@@ -103,7 +103,6 @@ type test_run_results = [
 
 type test_run_request = {
   scope: string;
-  uid: string;
 }
 
 type up_message = [
@@ -114,5 +113,5 @@ type up_message = [
 
 type down_message = [
   | Update of parse_results
-  | TestRunResults of (string * test_run_results) (* UID and results *)
+  | TestRunResults of test_run_results
 ]

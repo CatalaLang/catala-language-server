@@ -108,7 +108,6 @@ export type TestRunResults =
 
 export type TestRunRequest = {
   scope: string;
-  uid: string;
 }
 
 export type UpMessage =
@@ -118,7 +117,7 @@ export type UpMessage =
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
-| { kind: 'TestRunResults'; value: [string, TestRunResults] }
+| { kind: 'TestRunResults'; value: TestRunResults }
 
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
@@ -461,14 +460,12 @@ export function readTestRunResults(x: any, context: any = x): TestRunResults {
 export function writeTestRunRequest(x: TestRunRequest, context: any = x): any {
   return {
     'scope': _atd_write_required_field('TestRunRequest', 'scope', _atd_write_string, x.scope, x),
-    'uid': _atd_write_required_field('TestRunRequest', 'uid', _atd_write_string, x.uid, x),
   };
 }
 
 export function readTestRunRequest(x: any, context: any = x): TestRunRequest {
   return {
     scope: _atd_read_required_field('TestRunRequest', 'scope', _atd_read_string, x['scope'], x),
-    uid: _atd_read_required_field('TestRunRequest', 'uid', _atd_read_string, x['uid'], x),
   };
 }
 
@@ -512,7 +509,7 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
     case 'Update':
       return ['Update', writeParseResults(x.value, x)]
     case 'TestRunResults':
-      return ['TestRunResults', ((x, context) => [_atd_write_string(x[0], x), writeTestRunResults(x[1], x)])(x.value, x)]
+      return ['TestRunResults', writeTestRunResults(x.value, x)]
   }
 }
 
@@ -522,7 +519,7 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
     case 'Update':
       return { kind: 'Update', value: readParseResults(x[1], x) }
     case 'TestRunResults':
-      return { kind: 'TestRunResults', value: ((x, context): [string, TestRunResults] => { _atd_check_json_tuple(2, x, context); return [_atd_read_string(x[0], x), readTestRunResults(x[1], x)] })(x[1], x) }
+      return { kind: 'TestRunResults', value: readTestRunResults(x[1], x) }
     default:
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')
