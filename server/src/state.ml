@@ -144,8 +144,7 @@ let lookup_document_symbols file =
   | Some variables ->
     List.filter_map
       (fun (p, v) ->
-        if file.uri = Catala_utils.Pos.get_file p then
-          Some (Jump.var_to_symbol p v)
+        if file.uri = Catala_utils.Pos.get_file p then Jump.var_to_symbol p v
         else None)
       (Jump.PMap.bindings variables)
 
@@ -160,7 +159,7 @@ let lookup_project_symbols all_files =
       (Jump.PMap.union (fun _ l _ -> Some l))
       Jump.PMap.empty all_tbls
   in
-  List.map
+  List.filter_map
     (fun (p, v) -> Jump.var_to_symbol p v)
     (Jump.PMap.bindings all_variables)
 

@@ -25,6 +25,7 @@ let hash_info (type a) (module M : Uid.Id with type t = a) (v : a) : int =
 module PMap = Map.Make (struct
   type t = Pos.t
 
+  (* FIXME: only works when there is no collisions *)
   let compare p p' =
     (* Lattice trick for sub-range lookups *)
     if is_included p p' || is_included p' p then 0
@@ -58,6 +59,7 @@ type var =
   | Definition of jump
   | Declaration of jump
   | Usage of jump
+  | Literal of typ
 
 type t = { variables : var PMap.t; lookup_table : lookup_entry LTable.t }
 
@@ -68,6 +70,7 @@ let pp_var ppf =
   | Definition { name; hash; _ } -> fprintf ppf "definition: %s#%d" name hash
   | Declaration { name; hash; _ } -> fprintf ppf "declaration: %s#%d" name hash
   | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
+  | Literal _typ -> fprintf ppf "literal"
 
 let pp ppf variables =
   let open Format in
@@ -99,8 +102,11 @@ let traverse_expr ctx e m =
     let (Typed { pos; ty = typ }) = Mark.get e in
     match Mark.remove e with
     | ELit _l ->
-      let value = Usage { name = "lit"; hash = 0; typ } in
-      PMap.add pos value acc
+      (* FIXME: some literals' positions encapsulate all the expression breaking
+         the PMap's invariant. When a better structure is used, reintroduce
+         this. *)
+      (* PMap.add pos (Literal typ) acc *)
+      acc
     | ELocation (ScopelangScopeVar { name; _ }) ->
       let (scope_var : ScopeVar.t), pos = name in
       let name = ScopeVar.to_string scope_var in
@@ -248,14 +254,17 @@ let populate (prog : Shared_ast.typed Scopelang.Ast.program) : t =
   let lookup_table =
     PMap.fold
       (fun p x tbl ->
-        let add, hash =
+        let res =
           match x with
-          | Topdef jump -> (fun m -> add_def p m |> add_decl p), jump.hash
-          | Definition jump -> add_def p, jump.hash
-          | Declaration jump -> add_decl p, jump.hash
-          | Usage jump -> add_usage p, jump.hash
+          | Topdef jump -> Some ((fun m -> add_def p m |> add_decl p), jump.hash)
+          | Definition jump -> Some (add_def p, jump.hash)
+          | Declaration jump -> Some (add_decl p, jump.hash)
+          | Usage jump -> Some (add_usage p, jump.hash)
+          | Literal _ -> None
         in
-        LTable.update hash add tbl)
+        match res with
+        | Some (add, hash) -> LTable.update hash add tbl
+        | _ -> tbl)
       variables LTable.empty
   in
   { variables; lookup_table }
@@ -265,25 +274,31 @@ let lookup (tables : t) (p : Pos.t) : lookup_entry option =
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j) ->
     LTable.find_opt j.hash tables.lookup_table
-  | None -> None
+  | Some (Literal _) | None -> None
 
 let lookup_type (tables : t) (p : Pos.t) : typ option =
   PMap.find_opt p tables.variables
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j) -> Some j.typ
+  | Some (Literal typ) -> Some typ
   | None -> None
 
-let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t =
+let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
+    =
   let open Linol_lwt in
-  let name, (kind : SymbolKind.t) =
+  let res =
     match var with
-    | Topdef v -> v.name, Constant
-    | Definition v -> v.name, Function
-    | Declaration v -> v.name, Interface
-    | Usage v -> v.name, Variable
+    | Topdef v -> Some (v.name, SymbolKind.Constant)
+    | Definition v -> Some (v.name, Function)
+    | Declaration v -> Some (v.name, Interface)
+    | Usage v -> Some (v.name, Variable)
+    | Literal _ -> None
   in
-  let location =
-    Location.create ~range:(range_of_pos p)
-      ~uri:(DocumentUri.of_path (Pos.get_file p))
-  in
-  Linol_lwt.SymbolInformation.create ~kind ~name ~location ()
+  Option.map
+    (fun (name, (kind : SymbolKind.t)) ->
+      let location =
+        Location.create ~range:(range_of_pos p)
+          ~uri:(DocumentUri.of_path (Pos.get_file p))
+      in
+      Linol_lwt.SymbolInformation.create ~kind ~name ~location ())
+    res
