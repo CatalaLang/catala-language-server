@@ -247,8 +247,6 @@ function atdToCatala(tests: TestList, lang: string): string {
         lang,
         '--scope',
         'XXX',
-        '-I',
-        './test-case-parser/examples',
       ],
       { input: JSON.stringify(writeTestList(tests)) }
     );
