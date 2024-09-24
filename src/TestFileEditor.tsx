@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement, useCallback } from 'react';
 import {
   type ParseResults,
   type Test,
   type TestList,
+  type TestRunResults,
   readDownMessage,
   writeUpMessage,
 } from './generated/test_case';
@@ -22,6 +23,14 @@ type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
   | { state: 'success'; tests: TestList };
+
+type TestRunState = {
+  [scope: string]: {
+    status: 'running' | 'success' | 'error';
+    results?: TestRunResults;
+  };
+};
+
 type Props = { contents: UIState; vscode: WebviewApi<unknown> };
 
 /** Editor for a collection of tests in a single file */
@@ -30,45 +39,70 @@ export default function TestFileEditor({
   vscode,
 }: Props): ReactElement {
   const [state, setState] = useState(contents);
+  const [testRunState, setTestRunState] = useState<TestRunState>({});
 
-  function onTestChange(newValue: Test): void {
-    if (state.state === 'success') {
-      const idx = state.tests.findIndex(
-        (tst) => tst.testing_scope === newValue.testing_scope
-      );
-      console.log(`test changed at index ${idx}`);
-      const newTestState = [...state.tests];
-      newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
-      console.log('old test state');
-      console.log(state.tests);
-      console.log('new test state');
-      console.log(newTestState);
+  const onTestChange = useCallback(
+    (newValue: Test): void => {
+      if (state.state === 'success') {
+        const idx = state.tests.findIndex(
+          (tst) => tst.testing_scope === newValue.testing_scope
+        );
+        console.log(`test changed at index ${idx}`);
+        const newTestState = [...state.tests];
+        newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
+        console.log('old test state');
+        console.log(state.tests);
+        console.log('new test state');
+        console.log(newTestState);
 
+        vscode.postMessage(
+          writeUpMessage({
+            kind: 'Edit',
+            value: newTestState,
+          })
+        );
+      }
+    },
+    [state, vscode]
+  );
+
+  const onTestDelete = useCallback(
+    (testScope: string): void => {
+      if (state.state === 'success') {
+        const newTestState = state.tests.filter(
+          (test) => test.testing_scope !== testScope
+        );
+        console.log('Deleting test:', testScope);
+        console.log('New test state:', newTestState);
+
+        vscode.postMessage(
+          writeUpMessage({
+            kind: 'Edit',
+            value: newTestState,
+          })
+        );
+      }
+    },
+    [state, vscode]
+  );
+
+  const onTestRun = useCallback(
+    (testScope: string): void => {
+      setTestRunState((prev) => ({
+        ...prev,
+        [testScope]: { status: 'running' },
+      }));
       vscode.postMessage(
         writeUpMessage({
-          kind: 'Edit',
-          value: newTestState,
+          kind: 'TestRunRequest',
+          value: {
+            scope: testScope,
+          },
         })
       );
-    }
-  }
-
-  function onTestDelete(testScope: string): void {
-    if (state.state === 'success') {
-      const newTestState = state.tests.filter(
-        (test) => test.testing_scope !== testScope
-      );
-      console.log('Deleting test:', testScope);
-      console.log('New test state:', newTestState);
-
-      vscode.postMessage(
-        writeUpMessage({
-          kind: 'Edit',
-          value: newTestState,
-        })
-      );
-    }
-  }
+    },
+    [vscode]
+  );
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
@@ -77,6 +111,27 @@ export default function TestFileEditor({
         case 'Update':
           setState(parseResultsToUiState(message.value));
           break;
+        case 'TestRunResults': {
+          const results = message.value;
+          setTestRunState((prev) => {
+            const updatedScope = Object.keys(prev).find(
+              (scope) => prev[scope].status === 'running'
+            );
+            if (updatedScope) {
+              return {
+                ...prev,
+                [updatedScope]: {
+                  status: results.kind === 'Ok' ? 'success' : 'error',
+                  results,
+                },
+              };
+            }
+            return prev;
+          });
+          break;
+        }
+        default:
+          assertUnreachable(message);
       }
     };
 
@@ -121,6 +176,8 @@ export default function TestFileEditor({
               key={test.testing_scope}
               onTestChange={onTestChange}
               onTestDelete={onTestDelete}
+              onTestRun={onTestRun}
+              runState={testRunState[test.testing_scope]}
             />
           ))}
         </>

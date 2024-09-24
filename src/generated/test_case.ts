@@ -102,12 +102,22 @@ export type ParseResults =
 | { kind: 'Error'; value: string }
 | { kind: 'Results'; value: TestList }
 
+export type TestRunResults =
+| { kind: 'Error'; value: string }
+| { kind: 'Ok' }
+
+export type TestRunRequest = {
+  scope: string;
+}
+
 export type UpMessage =
 | { kind: 'Ready' }
 | { kind: 'Edit'; value: TestList }
+| { kind: 'TestRunRequest'; value: TestRunRequest }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
+| { kind: 'TestRunResults'; value: TestRunResults }
 
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
@@ -416,12 +426,57 @@ export function readParseResults(x: any, context: any = x): ParseResults {
   }
 }
 
+export function writeTestRunResults(x: TestRunResults, context: any = x): any {
+  switch (x.kind) {
+    case 'Error':
+      return ['Error', _atd_write_string(x.value, x)]
+    case 'Ok':
+      return 'Ok'
+  }
+}
+
+export function readTestRunResults(x: any, context: any = x): TestRunResults {
+  if (typeof x === 'string') {
+    switch (x) {
+      case 'Ok':
+        return { kind: 'Ok' }
+      default:
+        _atd_bad_json('TestRunResults', x, context)
+        throw new Error('impossible')
+    }
+  }
+  else {
+    _atd_check_json_tuple(2, x, context)
+    switch (x[0]) {
+      case 'Error':
+        return { kind: 'Error', value: _atd_read_string(x[1], x) }
+      default:
+        _atd_bad_json('TestRunResults', x, context)
+        throw new Error('impossible')
+    }
+  }
+}
+
+export function writeTestRunRequest(x: TestRunRequest, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('TestRunRequest', 'scope', _atd_write_string, x.scope, x),
+  };
+}
+
+export function readTestRunRequest(x: any, context: any = x): TestRunRequest {
+  return {
+    scope: _atd_read_required_field('TestRunRequest', 'scope', _atd_read_string, x['scope'], x),
+  };
+}
+
 export function writeUpMessage(x: UpMessage, context: any = x): any {
   switch (x.kind) {
     case 'Ready':
       return 'Ready'
     case 'Edit':
       return ['Edit', writeTestList(x.value, x)]
+    case 'TestRunRequest':
+      return ['TestRunRequest', writeTestRunRequest(x.value, x)]
   }
 }
 
@@ -440,6 +495,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
     switch (x[0]) {
       case 'Edit':
         return { kind: 'Edit', value: readTestList(x[1], x) }
+      case 'TestRunRequest':
+        return { kind: 'TestRunRequest', value: readTestRunRequest(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')
@@ -451,6 +508,8 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
   switch (x.kind) {
     case 'Update':
       return ['Update', writeParseResults(x.value, x)]
+    case 'TestRunResults':
+      return ['TestRunResults', writeTestRunResults(x.value, x)]
   }
 }
 
@@ -459,6 +518,8 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
   switch (x[0]) {
     case 'Update':
       return { kind: 'Update', value: readParseResults(x[1], x) }
+    case 'TestRunResults':
+      return { kind: 'TestRunResults', value: readTestRunResults(x[1], x) }
     default:
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')

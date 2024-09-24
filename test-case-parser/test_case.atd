@@ -96,11 +96,22 @@ type parse_results = [
   | Results of test_list
 ]
 
+type test_run_results = [
+  | Error of string
+  | Ok (* at some point this could also hold the scope output? *)
+]
+
+type test_run_request = {
+  scope: string;
+}
+
 type up_message = [
   | Ready
   | Edit of test_list
+  | TestRunRequest of test_run_request
 ]
 
 type down_message = [
   | Update of parse_results
+  | TestRunResults of test_run_results
 ]

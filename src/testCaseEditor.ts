@@ -2,7 +2,11 @@ import * as vscode from 'vscode';
 import { logger } from './logger';
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import { assertUnreachable } from './util';
-import type { ParseResults, TestList } from './generated/test_case';
+import type {
+  ParseResults,
+  TestList,
+  TestRunResults,
+} from './generated/test_case';
 import {
   type DownMessage,
   readUpMessage,
@@ -11,12 +15,17 @@ import {
   writeTestList,
 } from './generated/test_case';
 import * as path from 'path';
+import PQueue from 'p-queue';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
 // web view whose entry point is in `uiEntryPoint.ts`
 export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  private testQueue: PQueue;
+
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.testQueue = new PQueue({ concurrency: 1 });
+  }
 
   public static register(context: vscode.ExtensionContext): vscode.Disposable {
     const provider = new TestCaseEditorProvider(context);
@@ -68,6 +77,15 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
     // listen for a 'ready' message from the web view, then send the initial
     // document (in parsed form)
+
+    async function runTest(fileName: string, scope: string): Promise<void> {
+      const results = runTestScope(fileName, scope);
+      postMessageToWebView({
+        kind: 'TestRunResults',
+        value: results,
+      });
+    }
+
     webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
       const typed_msg = readUpMessage(message);
       const lang = getLanguageFromFileName(document.fileName);
@@ -101,6 +119,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               value: parseTestFile(document.getText(), lang), //XXX concurrent edits?
             });
           });
+          break;
+        }
+        case 'TestRunRequest': {
+          const { scope } = typed_msg.value;
+          this.testQueue.add(() => runTest(document.fileName, scope));
           break;
         }
         default:
@@ -224,8 +247,6 @@ function atdToCatala(tests: TestList, lang: string): string {
         lang,
         '--scope',
         'XXX',
-        '-I',
-        './test-case-parser/examples',
       ],
       { input: JSON.stringify(writeTestList(tests)) }
     );
@@ -234,6 +255,37 @@ function atdToCatala(tests: TestList, lang: string): string {
     logger.log(`Error in atdToCatala: ${error}`);
     throw error;
   }
+}
+
+function runTestScope(filename: string, testScope: string): TestRunResults {
+  /*
+   * Notes:
+   * - when parsing / generating tests, we operate on the current text buffer
+   * in the editor through `stdin`. Here, we run the actual file on disk.
+   * Should we produce an error if they are not identical? (i.e. the buffer
+   * is dirty)?
+   * - security: fileName should be provided by the editor, so it should be
+   * trustworthy: check?
+   * - Users should probably have a command that interrupts a running test
+   * - Should tests have (configurable) timeouts? (when running interactively)
+   * (note that not all these questions are related to the `runTestScope` function,
+   * these could be handled externally as well)
+   */
+  const cmd = 'clerk';
+  filename = path.isAbsolute(filename)
+    ? path.relative(process.cwd(), filename)
+    : filename;
+  const args = ['run', filename, '--scope', testScope];
+  logger.log(`Exec: ${cmd} ${args.join(' ')}`);
+  try {
+    execFileSync(cmd, args);
+  } catch (error) {
+    return {
+      kind: 'Error',
+      value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
+    };
+  }
+  return { kind: 'Ok' };
 }
 
 function getLanguageFromFileName(fileName: string): string {
