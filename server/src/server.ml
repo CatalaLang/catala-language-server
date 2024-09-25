@@ -358,9 +358,7 @@ class catala_lsp_server =
       match State.lookup_type f pos with
       | None -> Lwt.return_none
       | Some typ_s ->
-        let typ_s =
-          Format.asprintf "@[<hov 2>Type:@\n%a@]" Format.pp_print_text typ_s
-        in
+        let typ_s = Format.asprintf "%a" Format.pp_print_text typ_s in
         let mc = MarkupContent.create ~kind:PlainText ~value:typ_s in
         Lwt.return_some (Hover.create ~contents:(`MarkupContent mc) ())
 
