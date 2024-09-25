@@ -1,6 +1,6 @@
 // Editors for a single value type (grouped with a factory function)
 
-import { type ReactElement } from 'react';
+import { type ReactElement, useState, useEffect } from 'react';
 import type {
   TestIo,
   StructDeclaration,
@@ -164,24 +164,58 @@ function DateEditor(props: DateEditorProps): ReactElement {
     return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
   };
 
+  const [internalValue, setInternalValue] = useState(
+    props.value ? formatDate(props.value) : ''
+  );
+
   const parseDate = (
     dateString: string
-  ): { year: number; month: number; day: number } => {
+  ): { year: number; month: number; day: number } | null => {
     const [year, month, day] = dateString.split('-').map(Number);
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return null;
+    }
     return { year, month, day };
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newDate = parseDate(event.target.value);
-    props.onValueChange(newDate);
+    setInternalValue(event.target.value);
   };
+
+  const handleBlur = () => {
+    validateAndUpdate();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      validateAndUpdate();
+    }
+  };
+
+  const validateAndUpdate = () => {
+    const newDate = parseDate(internalValue);
+    if (newDate) {
+      props.onValueChange(newDate);
+    } else {
+      // If invalid, revert to the last valid value
+      setInternalValue(props.value ? formatDate(props.value) : '');
+    }
+  };
+
+  useEffect(() => {
+    if (props.value) {
+      setInternalValue(formatDate(props.value));
+    }
+  }, [props.value]);
 
   return (
     <div className="value-editor">
       <input
         type="date"
-        value={props.value ? formatDate(props.value) : ''}
+        value={internalValue}
         onChange={handleChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
       />
     </div>
   );
