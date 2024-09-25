@@ -410,7 +410,16 @@ class catala_lsp_server =
         Log.warn (fun m ->
             m "cannot find document content of document %s" doc_path);
         Lwt.return_none
-      | Some { content = doc_content; _ } ->
+      | Some { content = doc_content; _ } -> (
         let (_f : State.file) = self#use_or_process_file doc_path in
-        Utils.try_format_document ~notify_back ~doc_content ~doc_path
+        let* r =
+          Utils.try_format_document ~notify_back ~doc_content ~doc_path
+        in
+        match r with
+        | None ->
+          Log.info (fun m -> m "failed to format document");
+          Lwt.return_none
+        | Some r ->
+          Log.info (fun m -> m "document formatting done");
+          Lwt.return_some r)
   end
