@@ -1,0 +1,12 @@
+> Module Kitchensink
+
+```catala-metadata
+declaration scope DateComp:
+  input birthday content date
+  output next_birthday content date
+```
+
+```catala
+scope DateComp:
+  definition next_birthday equals birthday
+```

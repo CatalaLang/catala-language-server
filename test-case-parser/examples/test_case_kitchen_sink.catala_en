@@ -1,0 +1,9 @@
+> Using Kitchensink
+
+```catala
+declaration scope DateComp_test:
+  output dc scope Kitchensink.DateComp
+
+scope DateComp_test:
+  definition dc.birthday equals |1982-07-16|
+```

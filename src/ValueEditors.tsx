@@ -93,6 +93,32 @@ export default function ValueEditor(props: Props): ReactElement {
       );
     case 'TMoney':
     case 'TDate':
+      return (
+        <DateEditor
+          value={
+            props.testIO.value?.value.value as {
+              year: number;
+              month: number;
+              day: number;
+            }
+          }
+          onValueChange={(newValue: {
+            year: number;
+            month: number;
+            day: number;
+          }) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Date',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
     case 'TDuration':
     case 'TTuple':
     case 'TEnum':
@@ -119,6 +145,43 @@ function IntEditor(props: IntEditorProps): ReactElement {
         onChange={(evt) => {
           props.onValueChange(Number(evt.target.value));
         }}
+      />
+    </div>
+  );
+}
+
+type DateEditorProps = {
+  value?: { year: number; month: number; day: number };
+  onValueChange(newValue: { year: number; month: number; day: number }): void;
+};
+
+function DateEditor(props: DateEditorProps): ReactElement {
+  const formatDate = (date: {
+    year: number;
+    month: number;
+    day: number;
+  }): string => {
+    return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
+  };
+
+  const parseDate = (
+    dateString: string
+  ): { year: number; month: number; day: number } => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return { year, month, day };
+  };
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = parseDate(event.target.value);
+    props.onValueChange(newDate);
+  };
+
+  return (
+    <div className="value-editor">
+      <input
+        type="date"
+        value={props.value ? formatDate(props.value) : ''}
+        onChange={handleChange}
       />
     </div>
   );
