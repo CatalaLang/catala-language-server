@@ -142,6 +142,21 @@ let lookup_type f p =
   in
   Some typ_s
 
+let lookup_type_definition f p =
+  let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
+  let ( let* ) = Option.bind in
+  let* jt = f.jump_table in
+  let* typ, _pos = Jump.lookup_type jt p in
+  let open Shared_ast in
+  match typ with
+  | TStruct s ->
+    let _, pos = StructName.get_info s in
+    Some (to_position pos)
+  | TEnum e ->
+    let _, pos = EnumName.get_info e in
+    Some (to_position pos)
+  | _ -> None
+
 let lookup_document_symbols file =
   let variables =
     Option.bind file.jump_table @@ fun tbl -> Some tbl.variables
