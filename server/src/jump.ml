@@ -155,6 +155,10 @@ let populate_enum_inject
   match enum_decl_opt with
   | None -> m
   | Some (enum_decl, (enum_decl_typ, _vis)) -> (
+    let typ =
+      let pos_decl = Mark.get (EnumName.get_info enum_decl) in
+      Mark.add pos_decl (Shared_ast.TEnum enum_decl)
+    in
     (* Add enum reference *)
     let m =
       if enum_decl = enum_name then
@@ -165,10 +169,6 @@ let populate_enum_inject
       else
         let name = EnumName.to_string enum_name in
         let pos = Mark.get (EnumName.get_info enum_name) in
-        let typ =
-          let pos_decl = Mark.get (EnumName.get_info enum_decl) in
-          Mark.add pos_decl (Shared_ast.TEnum enum_decl)
-        in
         let hash = Hashtbl.hash (EnumName.get_info enum_decl) in
         let var = Usage { name; hash; typ } in
         PMap.add pos var m
@@ -178,7 +178,7 @@ let populate_enum_inject
       (EnumConstructor.Map.bindings enum_decl_typ)
     |> function
     | None -> m
-    | Some (enum_constr_decl, typ) ->
+    | Some (enum_constr_decl, _typ) ->
       let name = EnumConstructor.to_string cons in
       let hash = hash_info (module EnumConstructor) enum_constr_decl in
       let var = Usage { name; hash; typ } in
