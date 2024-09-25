@@ -132,7 +132,14 @@ let lookup_type f p =
   let* jt = f.jump_table in
   let* typ = Jump.lookup_type jt p in
   let* prg = f.scopelang_prg in
-  let typ_s = Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ in
+  let typ_s =
+    match Catala_utils.Mark.remove typ with
+    | TStruct struct_name ->
+      Format.asprintf "Struct %s" (Shared_ast.StructName.to_string struct_name)
+    | TEnum enum_name ->
+      Format.asprintf "Enum %s" (Shared_ast.EnumName.to_string enum_name)
+    | _ -> Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ
+  in
   Some typ_s
 
 let lookup_document_symbols file =
