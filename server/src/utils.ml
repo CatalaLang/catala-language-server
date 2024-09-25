@@ -66,6 +66,17 @@ let check_catala_format_availability () =
   | WSIGNALED _ -> Lwt.return_false
   | WSTOPPED _ -> Lwt.return_false
 
+let write_string oc s =
+  let open Lwt.Syntax in
+  let rec inner nb_write pos len =
+    if len = 0 then Lwt.return_unit
+    else
+      let* nb_write' = Lwt_io.write_from_string oc s pos len in
+      if nb_write' = 0 then Lwt.fail End_of_file
+      else inner (nb_write + nb_write') (pos + nb_write') (len - nb_write')
+  in
+  inner 0 0 (String.length s)
+
 let try_format_document ~notify_back ~doc_content ~doc_path :
     TextEdit.t list option Lwt.t =
   let open Lwt.Syntax in
@@ -75,28 +86,28 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
     | "pl" -> "catala_pl"
     | "en" | _ | (exception _) -> "catala_en"
   in
-  let stdin_r, stdin_w = Lwt_unix.pipe_out ~cloexec:true () in
-  let stdin = Lwt_io.of_fd ~mode:Lwt_io.output stdin_w in
-  let* () = Lwt_io.write stdin doc_content in
-  let* () = Lwt_io.close stdin in
-  let stderr_r, stderr_w = Lwt_unix.pipe_in ~cloexec:true () in
-  let proc =
-    Lwt_process.open_process_in ~timeout:5. ~stdin:(`FD_move stdin_r)
-      ~stderr:(`FD_move stderr_w)
-      ("", [| "catala-format"; "-l"; language |])
-  in
-  let stderr = Lwt_io.of_fd ~mode:Lwt_io.input stderr_r in
+  Lwt_process.with_process_full ~timeout:5.
+    ("", [| "catala-format"; "-l"; language |])
+  @@ fun proc ->
   let read ic =
     Lwt.finalize (fun () -> Lwt_io.read ic) (fun () -> Lwt_io.close ic)
   in
+  let writer =
+    Lwt.finalize
+      (fun () -> write_string proc#stdin doc_content)
+      (fun () -> Lwt_io.close proc#stdin)
+  in
+  let stdout_reader = read proc#stdout in
+  let stderr_reader = read proc#stderr in
   let* r = proc#status in
   match r with
   | Unix.WSIGNALED _ -> Lwt.return_none
   | Unix.WSTOPPED _ -> Lwt.return_none
   | Unix.WEXITED 0 ->
+    let* () = writer in
     (* Everything went fine *)
     Log.info (fun m -> m "document formatting successful");
-    let* formatted_content = read proc#stdout in
+    let* formatted_content = stdout_reader in
     if formatted_content = "" then (
       (* Don't do anything if the stdout is empty, it's fishy.. *)
       Log.info (fun m ->
@@ -117,8 +128,8 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
       Lwt.return_some [TextEdit.create ~newText:formatted_content ~range]
   | Unix.WEXITED n ->
     Log.info (fun m -> m "failed to format document '%s'" doc_path);
-    let* err = read stderr in
-    if err = "" then
+    let* error_output = stderr_reader in
+    if error_output = "" then
       let* () =
         Format.kasprintf
           (send_notification ~type_:MessageType.Warning ~notify_back)
@@ -126,7 +137,7 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
       in
       Lwt.return_none
     else
-      let lines = String.split_on_char '\n' err in
+      let lines = String.split_on_char '\n' error_output in
       let take_n l n =
         let rec loop acc = function
           | [], _ | _, 0 -> List.rev acc
@@ -145,3 +156,16 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
           "Code formatting failed.\nReason:\n%s" (String.concat "\n" l)
       in
       Lwt.return_none
+
+let try_format_document ~notify_back ~doc_content ~doc_path =
+  Lwt.catch
+    (fun () -> try_format_document ~notify_back ~doc_content ~doc_path)
+    (fun exn ->
+      let open Lwt.Syntax in
+      let* () =
+        Format.kasprintf
+          (send_notification ~type_:MessageType.Warning ~notify_back)
+          "Code formatting failed.\nUncaught exception:\n%s"
+          (Printexc.to_string exn)
+      in
+      Lwt.return_none)
