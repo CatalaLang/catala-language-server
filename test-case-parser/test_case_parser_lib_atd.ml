@@ -321,8 +321,22 @@ let write_catala_test ppf t =
         fprintf ppf "@,@[<hv 2>definition %s.%s equals@ %a@]"
           sscope_var tvar print_catala_value value;)
     t.test_inputs;
+  List.iter (fun (tvar, t_out) ->
+      match t_out.value with
+      | None -> ()
+      | Some { value; _ } ->
+        fprintf ppf "@,assert (@[<hv>%s.%s =@ %a)@]"
+          sscope_var tvar print_catala_value value;)
+    t.test_outputs;
   fprintf ppf "@]@,```@,"
 
-let write_catala () =
+let write_catala options outfile =
   let tests = Test_case_j.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin) in
-  List.iter (write_catala_test Format.std_formatter) tests
+  let _fname, with_out =
+    File.get_formatter_of_out_channel ()
+      ~source_file:(Global.Stdin "")
+      ~output_file:(Option.map options.Global.path_rewrite outfile)
+  in
+  with_out @@ fun oc -> List.iter (write_catala_test oc) tests
+
+let run_test _include_dirs _options = failwith "TODO"

@@ -19,3 +19,7 @@
  (modules testcase)
  (libraries yojson atdgen-runtime test_case_parser_lib_atd)
  (embed_in_plugin_libraries yojson atdgen-runtime test_case_parser_lib_atd))
+
+(install
+ (files (testcase.cmxs as catala/plugins/testcase.cmxs))
+ (section libexec_root))
