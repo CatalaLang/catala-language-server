@@ -167,3 +167,16 @@
 .identifier {
   color: var(--vscode-symbolIcon-variableForeground);
 }
+.duration-fields {
+  display: flex;
+  gap: 10px;
+}
+
+.duration-fields label {
+  display: flex;
+  flex-direction: column;
+}
+
+.duration-fields input {
+  width: 60px;
+}

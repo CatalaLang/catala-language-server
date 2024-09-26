@@ -2,8 +2,17 @@
 
 ```catala
 declaration scope DateComp_test:
-  output dc scope Kitchensink.DateComp
-
+  output date_comp scope Kitchensink.DateComp
+  
 scope DateComp_test:
-  definition dc.birthday equals |1982-07-16|
+  definition date_comp.birthday equals |1982-07-16|
+```
+> Using Kitchensink
+
+```catala
+declaration scope DurationComp_test:
+  output duration_comp scope Kitchensink.DurationComp
+  
+scope DurationComp_test:
+  definition duration_comp.duration_until_next_vacation equals 2 month
 ```

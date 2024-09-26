@@ -4,9 +4,16 @@
 declaration scope DateComp:
   input birthday content date
   output next_birthday content date
+
+declaration scope DurationComp:
+  input duration_until_next_vacation content duration
+  output happy content boolean
 ```
 
 ```catala
 scope DateComp:
   definition next_birthday equals birthday
+
+scope DurationComp:
+  definition happy equals duration_until_next_vacation < 15 day
 ```

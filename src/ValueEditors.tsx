@@ -5,6 +5,7 @@ import type {
   TestIo,
   StructDeclaration,
   RuntimeValue,
+  Duration,
 } from './generated/test_case';
 import { assertUnreachable } from './util';
 
@@ -91,7 +92,6 @@ export default function ValueEditor(props: Props): ReactElement {
           }}
         />
       );
-    case 'TMoney':
     case 'TDate':
       return (
         <DateEditor
@@ -120,6 +120,23 @@ export default function ValueEditor(props: Props): ReactElement {
         />
       );
     case 'TDuration':
+      return (
+        <DurationEditor
+          value={props.testIO.value?.value.value as Duration}
+          onValueChange={(newValue: Duration) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Duration',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
+    case 'TMoney':
     case 'TTuple':
     case 'TEnum':
     case 'TOption':
@@ -257,6 +274,75 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
         <option value="false">false</option>
         <option value="true">true</option>
       </select>
+    </div>
+  );
+}
+
+type DurationEditorProps = {
+  value?: Duration;
+  onValueChange(newValue: Duration): void;
+};
+
+function DurationEditor(props: DurationEditorProps): ReactElement {
+  const [years, setYears] = useState(props.value?.years ?? 0);
+  const [months, setMonths] = useState(props.value?.months ?? 0);
+  const [days, setDays] = useState(props.value?.days ?? 0);
+
+  useEffect(() => {
+    if (props.value) {
+      setYears(props.value.years);
+      setMonths(props.value.months);
+      setDays(props.value.days);
+    }
+  }, [props.value]);
+
+  const handleChange = (field: 'years' | 'months' | 'days', value: number) => {
+    const newValue = Math.max(0, value); // Ensure non-negative values
+    switch (field) {
+      case 'years':
+        setYears(newValue);
+        break;
+      case 'months':
+        setMonths(newValue);
+        break;
+      case 'days':
+        setDays(newValue);
+        break;
+    }
+    props.onValueChange({ years, months, days, [field]: newValue });
+  };
+
+  return (
+    <div className="value-editor duration-editor">
+      <div className="duration-fields">
+        <label>
+          Years:
+          <input
+            type="number"
+            min="0"
+            value={years}
+            onChange={(e) => handleChange('years', parseInt(e.target.value))}
+          />
+        </label>
+        <label>
+          Months:
+          <input
+            type="number"
+            min="0"
+            value={months}
+            onChange={(e) => handleChange('months', parseInt(e.target.value))}
+          />
+        </label>
+        <label>
+          Days:
+          <input
+            type="number"
+            min="0"
+            value={days}
+            onChange={(e) => handleChange('days', parseInt(e.target.value))}
+          />
+        </label>
+      </div>
     </div>
   );
 }
