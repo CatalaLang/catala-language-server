@@ -16,3 +16,12 @@ declaration scope DurationComp_test:
 scope DurationComp_test:
   definition duration_comp.duration_until_next_vacation equals 2 month
 ```
+
+```catala
+declaration scope MoneyComp_test:
+  output money_comp scope Kitchensink.MoneyComp
+
+scope MoneyComp_test:
+  definition money_comp.gross_price equals $100
+  assertion money_comp.price_including_vat = $120
+```
