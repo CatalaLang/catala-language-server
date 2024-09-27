@@ -126,6 +126,13 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           this.testQueue.add(() => runTest(document.fileName, scope));
           break;
         }
+        case 'OpenInTextEditor':
+          vscode.commands.executeCommand(
+            'vscode.openWith',
+            document.uri,
+            'default'
+          );
+          break;
         default:
           assertUnreachable(typed_msg);
       }

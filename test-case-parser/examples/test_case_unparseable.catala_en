@@ -1,0 +1,9 @@
+# Unparseable test case
+This file purposefully contains a syntax error
+that exercises the case where the parser cannot
+produce a usable result. If so, we display a page
+that permits opening the file with the default text editor.
+
+```catala
+This is not a syntactically correct catala program!
+```

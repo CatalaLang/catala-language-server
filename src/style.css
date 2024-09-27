@@ -193,3 +193,46 @@
 .money-editor input {
   flex: 1;
 }
+.test-editor-error {
+  background-color: var(--vscode-notifications-background);
+  border: 1px solid var(--vscode-notificationsInfoIcon-foreground);
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.test-editor-error h2 {
+  color: var(--vscode-notificationsInfoIcon-foreground);
+  margin-top: 0;
+}
+
+.test-editor-error-message {
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--vscode-editor-foreground);
+}
+
+.test-editor-open-text {
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  padding: 10px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 15px;
+  font-weight: bold;
+}
+
+.test-editor-open-text:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.test-editor-open-text .codicon {
+  margin-right: 5px;
+}

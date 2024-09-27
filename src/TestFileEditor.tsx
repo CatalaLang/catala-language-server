@@ -146,9 +146,18 @@ export default function TestFileEditor({
   switch (state.state) {
     case 'error': {
       return (
-        <div role="alert">
-          <strong>Error: </strong>
-          {state.message}
+        <div role="alert" className="test-editor-error">
+          <h2>Oops! This should not have happened...</h2>
+          <pre className="test-editor-error-message">{state.message}</pre>
+          <button
+            className="test-editor-open-text"
+            onClick={() =>
+              vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+            }
+          >
+            <span className="codicon codicon-edit"></span>
+            Open in Text Editor
+          </button>
         </div>
       );
     }
