@@ -1,10 +1,11 @@
 // Editors for a single value type (grouped with a factory function)
 
-import { type ReactElement } from 'react';
+import { type ReactElement, useState, useEffect } from 'react';
 import type {
   TestIo,
   StructDeclaration,
   RuntimeValue,
+  Duration,
 } from './generated/test_case';
 import { assertUnreachable } from './util';
 
@@ -91,9 +92,67 @@ export default function ValueEditor(props: Props): ReactElement {
           }}
         />
       );
-    case 'TMoney':
     case 'TDate':
+      return (
+        <DateEditor
+          value={
+            props.testIO.value?.value.value as {
+              year: number;
+              month: number;
+              day: number;
+            }
+          }
+          onValueChange={(newValue: {
+            year: number;
+            month: number;
+            day: number;
+          }) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Date',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
     case 'TDuration':
+      return (
+        <DurationEditor
+          value={props.testIO.value?.value.value as Duration}
+          onValueChange={(newValue: Duration) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Duration',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
+    case 'TMoney':
+      return (
+        <MoneyEditor
+          value={props.testIO.value?.value.value as number}
+          onValueChange={(newValue: number) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Money',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
     case 'TTuple':
     case 'TEnum':
     case 'TOption':
@@ -119,6 +178,79 @@ function IntEditor(props: IntEditorProps): ReactElement {
         onChange={(evt) => {
           props.onValueChange(Number(evt.target.value));
         }}
+      />
+    </div>
+  );
+}
+
+type DateEditorProps = {
+  value?: { year: number; month: number; day: number };
+  onValueChange(newValue: { year: number; month: number; day: number }): void;
+};
+
+function DateEditor(props: DateEditorProps): ReactElement {
+  const formatDate = (date: {
+    year: number;
+    month: number;
+    day: number;
+  }): string => {
+    return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
+  };
+
+  const [internalValue, setInternalValue] = useState(
+    props.value ? formatDate(props.value) : ''
+  );
+
+  const parseDate = (
+    dateString: string
+  ): { year: number; month: number; day: number } | null => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return null;
+    }
+    return { year, month, day };
+  };
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    setInternalValue(event.target.value);
+  };
+
+  const handleBlur = (): void => {
+    validateAndUpdate();
+  };
+
+  const handleKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>
+  ): void => {
+    if (event.key === 'Enter') {
+      validateAndUpdate();
+    }
+  };
+
+  const validateAndUpdate = (): void => {
+    const newDate = parseDate(internalValue);
+    if (newDate) {
+      props.onValueChange(newDate);
+    } else {
+      // If invalid, revert to the last valid value
+      setInternalValue(props.value ? formatDate(props.value) : '');
+    }
+  };
+
+  useEffect(() => {
+    if (props.value) {
+      setInternalValue(formatDate(props.value));
+    }
+  }, [props.value]);
+
+  return (
+    <div className="value-editor">
+      <input
+        type="date"
+        value={internalValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
       />
     </div>
   );
@@ -160,6 +292,129 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
         <option value="false">false</option>
         <option value="true">true</option>
       </select>
+    </div>
+  );
+}
+
+type DurationEditorProps = {
+  value?: Duration;
+  onValueChange(newValue: Duration): void;
+};
+
+function DurationEditor(props: DurationEditorProps): ReactElement {
+  const [years, setYears] = useState(props.value?.years ?? 0);
+  const [months, setMonths] = useState(props.value?.months ?? 0);
+  const [days, setDays] = useState(props.value?.days ?? 0);
+
+  useEffect(() => {
+    if (props.value) {
+      setYears(props.value.years);
+      setMonths(props.value.months);
+      setDays(props.value.days);
+    }
+  }, [props.value]);
+
+  const handleChange = (field: 'years' | 'months' | 'days', value: number) => {
+    const newValue = Math.max(0, value); // Ensure non-negative values
+    switch (field) {
+      case 'years':
+        setYears(newValue);
+        break;
+      case 'months':
+        setMonths(newValue);
+        break;
+      case 'days':
+        setDays(newValue);
+        break;
+    }
+    props.onValueChange({ years, months, days, [field]: newValue });
+  };
+
+  return (
+    <div className="value-editor duration-editor">
+      <div className="duration-fields">
+        <label>
+          Years:
+          <input
+            type="number"
+            min="0"
+            value={years}
+            onChange={(e) => handleChange('years', parseInt(e.target.value))}
+          />
+        </label>
+        <label>
+          Months:
+          <input
+            type="number"
+            min="0"
+            value={months}
+            onChange={(e) => handleChange('months', parseInt(e.target.value))}
+          />
+        </label>
+        <label>
+          Days:
+          <input
+            type="number"
+            min="0"
+            value={days}
+            onChange={(e) => handleChange('days', parseInt(e.target.value))}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+type MoneyEditorProps = {
+  value?: number; // initial value in cents, may not exist
+  onValueChange(newValue: number): void;
+};
+
+function MoneyEditor(props: MoneyEditorProps): ReactElement {
+  const centsToDisplayValue = (cents: number | undefined): string =>
+    cents !== undefined ? (cents / 100).toFixed(2) : '';
+
+  const [displayValue, setDisplayValue] = useState(
+    centsToDisplayValue(props.value)
+  );
+
+  useEffect(() => {
+    setDisplayValue(centsToDisplayValue(props.value));
+  }, [props.value]);
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    setDisplayValue(event.target.value);
+  };
+
+  const handleBlur = (): void => {
+    const numericValue = parseFloat(displayValue);
+    if (!isNaN(numericValue)) {
+      const centsValue = Math.round(numericValue * 100);
+      if (centsValue >= 0) {
+        props.onValueChange(centsValue);
+        setDisplayValue(centsToDisplayValue(centsValue));
+      } else {
+        // Reset to the last valid value or empty string
+        setDisplayValue(centsToDisplayValue(props.value));
+      }
+    } else {
+      // Reset to the last valid value or empty string
+      setDisplayValue(centsToDisplayValue(props.value));
+    }
+  };
+
+  return (
+    <div className="value-editor money-editor">
+      <div className="money-input-container">
+        <span className="currency-symbol">💰</span>
+        <input
+          type="text"
+          value={displayValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          placeholder="0.00"
+        />
+      </div>
     </div>
   );
 }

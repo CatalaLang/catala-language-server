@@ -113,6 +113,7 @@ export type TestRunRequest = {
 export type UpMessage =
 | { kind: 'Ready' }
 | { kind: 'Edit'; value: TestList }
+| { kind: 'OpenInTextEditor' }
 | { kind: 'TestRunRequest'; value: TestRunRequest }
 
 export type DownMessage =
@@ -475,6 +476,8 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return 'Ready'
     case 'Edit':
       return ['Edit', writeTestList(x.value, x)]
+    case 'OpenInTextEditor':
+      return 'OpenInTextEditor'
     case 'TestRunRequest':
       return ['TestRunRequest', writeTestRunRequest(x.value, x)]
   }
@@ -485,6 +488,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
     switch (x) {
       case 'Ready':
         return { kind: 'Ready' }
+      case 'OpenInTextEditor':
+        return { kind: 'OpenInTextEditor' }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')

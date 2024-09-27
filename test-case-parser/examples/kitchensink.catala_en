@@ -1,0 +1,26 @@
+> Module Kitchensink
+
+```catala-metadata
+declaration scope DateComp:
+  input birthday content date
+  output next_birthday content date
+
+declaration scope DurationComp:
+  input duration_until_next_vacation content duration
+  output happy content boolean
+
+declaration scope MoneyComp:
+  input gross_price content money
+  output price_including_vat content money
+```
+
+```catala
+scope DateComp:
+  definition next_birthday equals birthday
+
+scope DurationComp:
+  definition happy equals duration_until_next_vacation < 15 day
+
+scope MoneyComp:
+  definition price_including_vat equals gross_price *$ 1.2
+```

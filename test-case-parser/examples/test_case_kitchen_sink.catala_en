@@ -1,0 +1,27 @@
+> Using Kitchensink
+
+```catala
+declaration scope DateComp_test:
+  output date_comp scope Kitchensink.DateComp
+  
+scope DateComp_test:
+  definition date_comp.birthday equals |1982-07-16|
+```
+> Using Kitchensink
+
+```catala
+declaration scope DurationComp_test:
+  output duration_comp scope Kitchensink.DurationComp
+  
+scope DurationComp_test:
+  definition duration_comp.duration_until_next_vacation equals 2 month
+```
+
+```catala
+declaration scope MoneyComp_test:
+  output money_comp scope Kitchensink.MoneyComp
+
+scope MoneyComp_test:
+  definition money_comp.gross_price equals $100
+  assertion money_comp.price_including_vat = $120
+```

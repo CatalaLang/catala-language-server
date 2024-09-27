@@ -126,6 +126,13 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           this.testQueue.add(() => runTest(document.fileName, scope));
           break;
         }
+        case 'OpenInTextEditor':
+          vscode.commands.executeCommand(
+            'vscode.openWith',
+            document.uri,
+            'default'
+          );
+          break;
         default:
           assertUnreachable(typed_msg);
       }
@@ -197,10 +204,8 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 }
 
 function parseTestFile(content: string, lang: string): ParseResults {
-  // plugin dir should be relative to VS code extension package root obviously
-  // -- TODO check
-  // obviously 'examples' is not appropriate here too
-  // --scope XXX should also be removed -- it's a leftover from the current CLI
+  // TODO check behavior when packaging comes into play ('dune install')
+  // TODO we should also delegate includes to clerk (remove 'examples')
   // TODO we could revisit this to make the parsing async
   try {
     const results = execFileSync(
@@ -208,8 +213,6 @@ function parseTestFile(content: string, lang: string): ParseResults {
       [
         'testcase',
         'read',
-        '--plugin-dir',
-        './test-case-parser/_build/default',
         '-l',
         lang,
         '-I',
@@ -233,18 +236,9 @@ function parseTestFile(content: string, lang: string): ParseResults {
 function atdToCatala(tests: TestList, lang: string): string {
   //XXX this probably needs better error handling
   try {
-    const results = execFileSync(
-      'catala',
-      [
-        'testcase',
-        'write',
-        '--plugin-dir',
-        './test-case-parser/_build/default',
-        '-l',
-        lang,
-      ],
-      { input: JSON.stringify(writeTestList(tests)) }
-    );
+    const results = execFileSync('catala', ['testcase', 'write', '-l', lang], {
+      input: JSON.stringify(writeTestList(tests)),
+    });
     return results.toString();
   } catch (error) {
     logger.log(`Error in atdToCatala: ${error}`);

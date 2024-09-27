@@ -108,6 +108,7 @@ type test_run_request = {
 type up_message = [
   | Ready
   | Edit of test_list
+  | OpenInTextEditor
   | TestRunRequest of test_run_request
 ]
 

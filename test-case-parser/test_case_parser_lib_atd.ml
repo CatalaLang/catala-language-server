@@ -268,7 +268,7 @@ let rec print_catala_value ppf =
   let open Format in
   function
   | O.Bool b -> pp_print_bool ppf b
-  | O.Money m -> fprintf ppf "%01d.%02d" (m/100) (m mod 100)
+  | O.Money m -> fprintf ppf "$%01d.%02d" (m/100) (m mod 100)
   | O.Integer i -> pp_print_int ppf i
   | O.Decimal f -> pp_print_float ppf f
   | O.Date { year; month; day } ->
