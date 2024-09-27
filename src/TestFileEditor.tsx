@@ -198,8 +198,6 @@ export default function TestFileEditor({
 }
 
 function parseResultsToUiState(tests: ParseResults): UIState {
-  // XXX we could refactor type UIState for consistency
-  // with ATD-produced types ?
   switch (tests.kind) {
     case 'Error':
       return { state: 'error', message: tests.value };
