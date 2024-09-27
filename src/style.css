@@ -180,3 +180,16 @@
 .duration-fields input {
   width: 60px;
 }
+.money-editor .money-input-container {
+  display: flex;
+  align-items: center;
+}
+
+.money-editor .currency-symbol {
+  margin-right: 5px;
+  font-size: 1.2em;
+}
+
+.money-editor input {
+  flex: 1;
+}

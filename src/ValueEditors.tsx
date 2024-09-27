@@ -137,6 +137,22 @@ export default function ValueEditor(props: Props): ReactElement {
         />
       );
     case 'TMoney':
+      return (
+        <MoneyEditor
+          value={props.testIO.value?.value.value as number}
+          onValueChange={(newValue: number) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Money',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
     case 'TTuple':
     case 'TEnum':
     case 'TOption':
@@ -195,21 +211,23 @@ function DateEditor(props: DateEditorProps): ReactElement {
     return { year, month, day };
   };
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     setInternalValue(event.target.value);
   };
 
-  const handleBlur = () => {
+  const handleBlur = (): void => {
     validateAndUpdate();
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>
+  ): void => {
     if (event.key === 'Enter') {
       validateAndUpdate();
     }
   };
 
-  const validateAndUpdate = () => {
+  const validateAndUpdate = (): void => {
     const newDate = parseDate(internalValue);
     if (newDate) {
       props.onValueChange(newDate);
@@ -342,6 +360,60 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
             onChange={(e) => handleChange('days', parseInt(e.target.value))}
           />
         </label>
+      </div>
+    </div>
+  );
+}
+
+type MoneyEditorProps = {
+  value?: number; // initial value in cents, may not exist
+  onValueChange(newValue: number): void;
+};
+
+function MoneyEditor(props: MoneyEditorProps): ReactElement {
+  const centsToDisplayValue = (cents: number | undefined): string =>
+    cents !== undefined ? (cents / 100).toFixed(2) : '';
+
+  const [displayValue, setDisplayValue] = useState(
+    centsToDisplayValue(props.value)
+  );
+
+  useEffect(() => {
+    setDisplayValue(centsToDisplayValue(props.value));
+  }, [props.value]);
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    setDisplayValue(event.target.value);
+  };
+
+  const handleBlur = (): void => {
+    const numericValue = parseFloat(displayValue);
+    if (!isNaN(numericValue)) {
+      const centsValue = Math.round(numericValue * 100);
+      if (centsValue >= 0) {
+        props.onValueChange(centsValue);
+        setDisplayValue(centsToDisplayValue(centsValue));
+      } else {
+        // Reset to the last valid value or empty string
+        setDisplayValue(centsToDisplayValue(props.value));
+      }
+    } else {
+      // Reset to the last valid value or empty string
+      setDisplayValue(centsToDisplayValue(props.value));
+    }
+  };
+
+  return (
+    <div className="value-editor money-editor">
+      <div className="money-input-container">
+        <span className="currency-symbol">💰</span>
+        <input
+          type="text"
+          value={displayValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          placeholder="0.00"
+        />
       </div>
     </div>
   );
