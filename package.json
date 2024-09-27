@@ -92,8 +92,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "cd server; dune build; cd ..; npm run package",
-    "compile": "cd server; dune build; cd ..; webpack --mode development",
+    "vscode:prepublish": "cd server; dune build; dune install; cd ..; npm run package",
+    "compile": "cd server; dune build; dune install; cd ..; webpack --mode development",
     "test": "tsc && vscode-test",
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.ts",
