@@ -207,16 +207,14 @@ function parseTestFile(content: string, lang: string): ParseResults {
       'catala',
       [
         'testcase',
-        '-',
+        'read',
         '--plugin-dir',
         './test-case-parser/_build/default',
-        '--read',
         '-l',
         lang,
-        '--scope',
-        'XXX',
         '-I',
         './test-case-parser/examples',
+        '-',
       ],
       { input: content }
     );
@@ -239,14 +237,11 @@ function atdToCatala(tests: TestList, lang: string): string {
       'catala',
       [
         'testcase',
-        '-',
+        'write',
         '--plugin-dir',
         './test-case-parser/_build/default',
-        '--write',
         '-l',
         lang,
-        '--scope',
-        'XXX',
       ],
       { input: JSON.stringify(writeTestList(tests)) }
     );
