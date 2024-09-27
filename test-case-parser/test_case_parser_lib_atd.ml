@@ -249,8 +249,60 @@ let import_catala_tests (prg, naming_ctx) =
             var_str, { test_in with O.value })
           base_test.test_inputs
       in
+      let test_outputs =
+        let scope_info = ScopeName.Map.find tested_scope decl_ctx.ctx_scopes in
+        let scope_field_map =
+          ScopeVar.Map.fold (fun var field acc ->
+            StructField.Map.add field var acc)
+            scope_info.out_struct_fields
+            StructField.Map.empty
+        in
+        let assertion_values =
+          I.AssertionName.Map.fold
+            (fun _ e acc ->
+               match Expr.unbox_closed e with
+               | EAppOp {
+                   op = Op.Eq, _;
+                   args = [
+                     EStructAccess {
+                       field;
+                       e =
+                         ELocation
+                           (DesugaredScopeVar { name = svar, pos; _ }), _;
+                       _
+                     }, _;
+                     value];
+                   _ }, _
+                 when svar = subscope_var ->
+                 let scope_var = StructField.Map.find field scope_field_map in
+                 ScopeVar.Map.add scope_var { O.value = get_value decl_ctx value; pos = Some (get_source_position pos)} acc
+               | EAppOp {
+                   op = Op.Eq, _;
+                   args = [
+                      EStructAccess _, _ as e;
+                     _value];
+                   _ }, m ->
+                 Message.error ~pos:(Expr.mark_pos m)
+                   "X Could not read test assertion: %a" Expr.format e
+               | _, m as e ->
+                 Message.error ~pos:(Expr.mark_pos m)
+                   "Could not read test assertion: %a" Expr.format e
+            )
+            testing_scope.scope_assertions
+            ScopeVar.Map.empty
+        in
+        List.map (fun (var_str, test_out) ->
+            let var =
+              Ident.Map.find var_str tested_id_var_map
+            in
+            let value =
+              ScopeVar.Map.find_opt var assertion_values
+            in
+            var_str, { test_out with O.value })
+          base_test.test_outputs
+      in
       { base_test with O.test_inputs;
-                       test_outputs = []; })
+                       test_outputs; })
     scopes
 
 let read_test include_dirs options =
