@@ -82,6 +82,12 @@ let rec get_value decl_ctx = function
   | ELit (LDuration dt), _ ->
     let years, months, days = Dates_calc.Dates.period_to_ymds dt in
     O.Duration { years; months; days }
+  | EAppOp { op = Op.Add, _; args = [e1; e2]; tys = [TLit TDuration, _; TLit TDuration, _] }, _ as e ->
+    (match get_value decl_ctx e1, get_value decl_ctx e2 with
+     | O.Duration { years = y1; months = m1; days = d1 },
+       O.Duration { years = y2; months = m2; days = d2 } ->
+       O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
+     | _ -> Message.error ~pos:(Expr.pos e) "Invalid duration literal.")
   | EArray args, _ ->
     O.Array (Array.of_list (List.map (get_value decl_ctx) args))
   | EStruct { name; fields }, _ ->
@@ -97,8 +103,8 @@ let rec get_value decl_ctx = function
         (EnumConstructor.to_string cons, get_value decl_ctx e)
       )
   | e ->
-    Message.error "This test value is not a literal:@ %a"
-      Expr.format e
+    Message.error ~pos:(Expr.pos e)
+      "This test value is not a literal."
 
 let get_source_position pos = {
   O.filename = Pos.get_file pos;
@@ -328,7 +334,6 @@ let rec print_catala_value ppf =
   | O.Duration { years = 0; months = 0; days = 0 } ->
     pp_print_string ppf "0 day"
   | O.Duration { years; months; days } ->
-    (* Fixme: this is not a literal, and won't reread; but we don't have support for composite duration literals in the parser *)
     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " +@ ")
       (fun ppf t -> t ppf)
       ppf
