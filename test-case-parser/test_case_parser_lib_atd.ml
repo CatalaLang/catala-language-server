@@ -382,7 +382,7 @@ let write_catala_test ppf t =
       match t_out.value with
       | None -> ()
       | Some { value; _ } ->
-        fprintf ppf "@,assert (@[<hv>%s.%s =@ %a)@]"
+        fprintf ppf "@,assertion (@[<hv>%s.%s =@ %a)@]"
           sscope_var tvar print_catala_value value;)
     t.test_outputs;
   fprintf ppf "@]@,```@,"
