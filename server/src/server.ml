@@ -76,6 +76,7 @@ class catala_lsp_server =
     method private config_workspace_symbol = `Bool true
     method private config_declaration = Some (`Bool true)
     method private config_references = Some (`Bool true)
+    method private config_type_definition = Some (`Bool true)
 
     method! config_sync_opts =
       (* configure how sync happens *)
@@ -119,7 +120,8 @@ class catala_lsp_server =
           ?inlayHintProvider:self#config_inlay_hints
           ?documentSymbolProvider:self#config_symbol
           ~textDocumentSync:(`TextDocumentSyncOptions sync_opts)
-          ~workspaceSymbolProvider:self#config_workspace_symbol ()
+          ~workspaceSymbolProvider:self#config_workspace_symbol
+          ?typeDefinitionProvider:self#config_type_definition ()
         |> self#config_modify_capabilities
       in
       Lwt.return (InitializeResult.create ~capabilities ())
@@ -200,6 +202,9 @@ class catala_lsp_server =
             ~pos:params.position ()
         | TextDocumentReferences (params : ReferenceParams.t) ->
           self#on_req_references ~notify_back ~uri:params.textDocument.uri
+            ~pos:params.position ()
+        | TextDocumentTypeDefinition (params : TypeDefinitionParams.t) ->
+          self#on_req_type_definition ~notify_back ~uri:params.textDocument.uri
             ~pos:params.position ()
         | WorkspaceSymbol params ->
           self#on_req_workspace_symbol ~notify_back params
@@ -358,11 +363,23 @@ class catala_lsp_server =
       match State.lookup_type f pos with
       | None -> Lwt.return_none
       | Some typ_s ->
-        let typ_s =
-          Format.asprintf "@[<hov 2>Type:@\n%a@]" Format.pp_print_text typ_s
-        in
+        let typ_s = Format.asprintf "%a" Format.pp_print_text typ_s in
         let mc = MarkupContent.create ~kind:PlainText ~value:typ_s in
         Lwt.return_some (Hover.create ~contents:(`MarkupContent mc) ())
+
+    method private on_req_type_definition
+        ~notify_back:_
+        ~(uri : Lsp.Uri.t)
+        ~(pos : Position.t)
+        ()
+        : Locations.t option Lwt.t =
+      let f = self#use_or_process_file (DocumentUri.to_path uri) in
+      match State.lookup_type_definition f pos with
+      | None -> Lwt.return_none
+      | Some (file, range) ->
+        let uri = DocumentUri.of_path file in
+        let loc = Lsp.Types.Location.create ~range ~uri in
+        Lwt.return_some (`Location [loc])
 
     method! on_req_symbol
         ~notify_back:_

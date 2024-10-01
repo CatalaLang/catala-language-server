@@ -19,12 +19,13 @@ open Shared_ast
 open Utils
 open Scopelang.Ast
 
-let hash (type a) (module M : Uid.Id with type t = a) (v : a) : int =
+let hash_info (type a) (module M : Uid.Id with type t = a) (v : a) : int =
   Hashtbl.hash (M.get_info v)
 
 module PMap = Map.Make (struct
   type t = Pos.t
 
+  (* FIXME: only works when there is no collisions *)
   let compare p p' =
     (* Lattice trick for sub-range lookups *)
     if is_included p p' || is_included p' p then 0
@@ -58,6 +59,7 @@ type var =
   | Definition of jump
   | Declaration of jump
   | Usage of jump
+  | Literal of typ
 
 type t = { variables : var PMap.t; lookup_table : lookup_entry LTable.t }
 
@@ -68,6 +70,7 @@ let pp_var ppf =
   | Definition { name; hash; _ } -> fprintf ppf "definition: %s#%d" name hash
   | Declaration { name; hash; _ } -> fprintf ppf "declaration: %s#%d" name hash
   | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
+  | Literal _typ -> fprintf ppf "literal"
 
 let pp ppf variables =
   let open Format in
@@ -92,20 +95,115 @@ let pp_table ppf { declaration; definitions; usages } =
        (fun fmt _ -> fprintf fmt "some"))
     usages
 
-let traverse_expr e m =
+let find key proj bindings =
+  List.find_opt (fun (k, _) -> proj key = proj k) bindings
+
+let populate_struct_def
+    (ctx : Desugared.Name_resolution.context)
+    name
+    fields
+    m
+    k =
+  match
+    find name StructName.to_string (StructName.Map.bindings ctx.structs)
+  with
+  | None ->
+    (* Structure not found: should not happen *)
+    Log.warn (fun m ->
+        m "struct %a not found in context" StructName.format name);
+    m
+  | Some (struct_decl, (struct_typ, _)) ->
+    (* Add a reference for the structure *)
+    let struct_pos = StructName.get_info name |> Mark.get in
+    let m =
+      let name = StructName.to_string name in
+      let hash = Hashtbl.hash (StructName.get_info struct_decl) in
+      let typ =
+        let pos_decl = Mark.get (StructName.get_info struct_decl) in
+        Mark.add pos_decl (Shared_ast.TStruct struct_decl)
+      in
+      PMap.add struct_pos (Definition { hash; name; typ }) m
+    in
+    (* Add a reference for all fields *)
+    StructField.Map.fold
+      (fun sfield e m ->
+        match
+          find sfield StructField.to_string
+            (StructField.Map.bindings struct_typ)
+        with
+        | None ->
+          Log.warn (fun m ->
+              m "struct %a not found in context" StructName.format name);
+          k e m
+        | Some (decl_field, typ) ->
+          let name = StructField.to_string sfield in
+          let _, pos = StructField.get_info sfield in
+          let hash = hash_info (module StructField) decl_field in
+          let var = Definition { name; hash; typ } in
+          let m = PMap.add pos var m in
+          k e m)
+      fields m
+
+let populate_enum_inject
+    (ctx : Desugared.Name_resolution.context)
+    (enum_name : EnumName.t)
+    (cons : EnumConstructor.t)
+    m =
+  let enum_decl_opt =
+    find enum_name EnumName.to_string (EnumName.Map.bindings ctx.enums)
+  in
+  match enum_decl_opt with
+  | None -> m
+  | Some (enum_decl, (enum_decl_typ, _vis)) -> (
+    let typ =
+      let pos_decl = Mark.get (EnumName.get_info enum_decl) in
+      Mark.add pos_decl (Shared_ast.TEnum enum_decl)
+    in
+    (* Add enum reference *)
+    let m =
+      if enum_decl = enum_name then
+        (* The enum is anonymous: it's replaced with the enum_decl *)
+        (* We want to still add a reference but this would break PMap's no
+           collision invariant *)
+        m
+      else
+        let name = EnumName.to_string enum_name in
+        let pos = Mark.get (EnumName.get_info enum_name) in
+        let hash = Hashtbl.hash (EnumName.get_info enum_decl) in
+        let var = Usage { name; hash; typ } in
+        PMap.add pos var m
+    in
+    (* Add enum's constructor reference *)
+    find cons EnumConstructor.to_string
+      (EnumConstructor.Map.bindings enum_decl_typ)
+    |> function
+    | None -> m
+    | Some (enum_constr_decl, _typ) ->
+      let name = EnumConstructor.to_string cons in
+      let hash = hash_info (module EnumConstructor) enum_constr_decl in
+      let var = Usage { name; hash; typ } in
+      let pos = Mark.get (EnumConstructor.get_info cons) in
+      PMap.add pos var m)
+
+let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
   let open Shared_ast in
   let open Catala_utils in
   let rec f e acc =
+    let (Typed { pos; ty = typ }) = Mark.get e in
     match Mark.remove e with
+    | ELit _l ->
+      (* FIXME: some literals' positions encapsulate all the expression breaking
+         the PMap's invariant. When a better structure is used, reintroduce
+         this. *)
+      (* PMap.add pos (Literal typ) acc *)
+      acc
     | ELocation (ScopelangScopeVar { name; _ }) ->
-      let (Typed { pos = _; ty = typ }) = Mark.get e in
       let (scope_var : ScopeVar.t), pos = name in
       let name = ScopeVar.to_string scope_var in
-      let hash = hash (module ScopeVar) scope_var in
+      let hash = hash_info (module ScopeVar) scope_var in
       let var = Usage { name; hash; typ } in
       PMap.add pos var acc
     | ELocation (ToplevelVar { name; _ }) ->
-      let (Typed { pos; ty = typ }) = Mark.get e in
       let (topdef_var : TopdefName.t), _ = name in
       let name = TopdefName.to_string topdef_var in
       let hash = Hashtbl.hash (TopdefName.get_info topdef_var) in
@@ -113,9 +211,9 @@ let traverse_expr e m =
       PMap.add pos var acc
     | EStructAccess { name = _; e = sub_expr; field } ->
       let name = StructField.to_string field in
-      let (Typed { pos = expr_pos; ty = typ }) = Mark.get e in
+      let expr_pos = pos in
       let (Typed { pos = sub_expr_pos; ty = _ }) = Mark.get sub_expr in
-      let hash = hash (module StructField) field in
+      let hash = hash_info (module StructField) field in
       let var = Usage { name; hash; typ } in
       let pos =
         let open Pos in
@@ -128,73 +226,145 @@ let traverse_expr e m =
       in
       let acc = PMap.add pos var acc in
       f sub_expr acc
+    | EStruct { name; fields } -> populate_struct_def ctx name fields acc f
+    | EInj { name; e; cons } ->
+      let acc = populate_enum_inject ctx name cons acc in
+      if Mark.remove e = ELit LUnit then
+        (* Don't recurse when the next expression is nil *)
+        acc
+      else f e acc
     | _ -> Expr.shallow_fold f e acc
   in
   Expr.shallow_fold f e m
 
-let traverse_scope_decl (rule : typed rule) m : var PMap.t =
+let rec traverse_typ
+    (ctx : Desugared.Name_resolution.context)
+    ((typ, pos) : naked_typ * Pos.t)
+    m : var PMap.t =
+  match typ with
+  | TStruct struct_name ->
+    let name = StructName.to_string struct_name in
+    let hash = Hashtbl.hash (StructName.get_info struct_name) in
+    PMap.add pos (Usage { name; hash; typ = typ, pos }) m
+  | TEnum enum_name ->
+    let name = EnumName.to_string enum_name in
+    let hash = Hashtbl.hash (EnumName.get_info enum_name) in
+    PMap.add pos (Usage { name; hash; typ = typ, pos }) m
+  | TArrow (tl, t) -> List.fold_right (traverse_typ ctx) (t :: tl) m
+  | TTuple tl -> List.fold_right (traverse_typ ctx) tl m
+  | TOption typ | TArray typ | TDefault typ -> traverse_typ ctx typ m
+  | TLit _ | TAny | TClosureEnv -> m
+
+let traverse_scope_def ctx (rule : typed rule) m : var PMap.t =
   match rule with
   | ScopeVarDefinition { var; typ; io = _; e }
   | SubScopeVarDefinition { var; typ; var_within_origin_scope = _; e } ->
     let var, pos_l = var in
-    let _pos = snd (ScopeVar.get_info var) in
     let name = ScopeVar.to_string var in
-    let hash = hash (module ScopeVar) var in
+    let hash = hash_info (module ScopeVar) var in
     let var = Definition { name; hash; typ } in
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
-    traverse_expr e m
-  | Assertion e -> traverse_expr e m
+    let m = traverse_typ ctx typ m in
+    traverse_expr ctx e m
+  | Assertion e -> traverse_expr ctx e m
 
-let traverse_scope_sig scope m : var PMap.t =
+let traverse_scope_sig ctx scope m : var PMap.t =
   ScopeVar.Map.fold
     (fun scope_var var_ty m ->
+      let m = traverse_typ ctx var_ty.svar_out_ty m in
       let name = ScopeVar.to_string scope_var in
       let pos = snd (ScopeVar.get_info scope_var) in
-      let hash = hash (module ScopeVar) scope_var in
+      let hash = hash_info (module ScopeVar) scope_var in
       let var = Declaration { name; hash; typ = var_ty.svar_out_ty } in
-      let var_typ_name = "typ:" ^ name in
-      let typ =
-        Declaration
-          {
-            name = var_typ_name;
-            hash = Hashtbl.hash (var_typ_name, Mark.get var_ty.svar_out_ty);
-            typ = var_ty.svar_out_ty;
-          }
-      in
-      let m = PMap.add pos var m in
-      PMap.add (Mark.get var_ty.svar_out_ty) typ m)
+      PMap.add pos var m)
     scope.scope_sig m
 
-let traverse_scope (scope : typed scope_decl) m : var PMap.t =
-  let m = traverse_scope_sig scope m in
-  List.fold_right traverse_scope_decl scope.scope_decl_rules m
+let traverse_scope ctx (scope : typed scope_decl) m : var PMap.t =
+  let m = traverse_scope_sig ctx scope m in
+  List.fold_right (traverse_scope_def ctx) scope.scope_decl_rules m
 
-let traverse_topdef (topdef : TopdefName.t) ((e, typ) : typed expr * typ) m :
-    var PMap.t =
+let traverse_topdef
+    ctx
+    (topdef : TopdefName.t)
+    ((e, typ, _vis) : typed expr * typ * visibility)
+    m : var PMap.t =
   let name = TopdefName.to_string topdef in
   let topdef_pos = snd (TopdefName.get_info topdef) in
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
   let topdef = Topdef { name; hash; typ } in
   let m = PMap.add topdef_pos topdef m in
-  traverse_expr e m
+  traverse_expr ctx e m
 
-let traverse (prog : Shared_ast.typed Scopelang.Ast.program) : var PMap.t =
+let traverse_ctx (ctx : Desugared.Name_resolution.context) m : var PMap.t =
+  let m =
+    StructName.Map.fold
+      (fun struct_name (fields, _vis) m ->
+        let name = StructName.to_string struct_name in
+        let pos = Mark.get (StructName.get_info struct_name) in
+        let hash = Hashtbl.hash (StructName.get_info struct_name) in
+        let m =
+          PMap.add pos
+            (Declaration { name; hash; typ = TStruct struct_name, pos })
+            m
+        in
+        StructField.Map.fold
+          (fun sf typ m ->
+            let m = traverse_typ ctx typ m in
+            let name = StructField.to_string sf in
+            let pos = Mark.get (StructField.get_info sf) in
+            let hash = hash_info (module StructField) sf in
+            let var = Declaration { name; hash; typ } in
+            PMap.add pos var m)
+          fields m)
+      ctx.structs m
+  in
+  let m =
+    EnumName.Map.fold
+      (fun enum_name (cstrs, _vis) m ->
+        let name = EnumName.to_string enum_name in
+        let pos = Mark.get (EnumName.get_info enum_name) in
+        let hash = Hashtbl.hash (EnumName.get_info enum_name) in
+        let m =
+          PMap.add pos
+            (Declaration { name; hash; typ = TEnum enum_name, pos })
+            m
+        in
+        EnumConstructor.Map.fold
+          (fun ecstr typ m ->
+            let m = traverse_typ ctx typ m in
+            let name = EnumConstructor.to_string ecstr in
+            let pos = Mark.get (EnumConstructor.get_info ecstr) in
+            let hash = hash_info (module EnumConstructor) ecstr in
+            let var = Declaration { name; hash; typ } in
+            PMap.add pos var m)
+          cstrs m)
+      ctx.enums m
+  in
+  m
+
+let traverse
+    (ctx : Desugared.Name_resolution.context)
+    (prog : Shared_ast.typed Scopelang.Ast.program) : var PMap.t =
   let m =
     ModuleName.Map.fold
       (fun _m_name decl_map acc ->
         ScopeName.Map.fold
-          (fun _sname scope acc -> traverse_scope_sig (Mark.remove scope) acc)
+          (fun _sname scope acc ->
+            traverse_scope_sig ctx (Mark.remove scope) acc)
           decl_map acc)
       prog.program_modules PMap.empty
   in
-  let m = TopdefName.Map.fold traverse_topdef prog.program_topdefs m in
+  let m = TopdefName.Map.fold (traverse_topdef ctx) prog.program_topdefs m in
   let all_scopes =
     ScopeName.Map.values prog.program_scopes |> List.map Mark.remove
   in
-  List.fold_right traverse_scope all_scopes m
+  let m = List.fold_right (traverse_scope ctx) all_scopes m in
+  traverse_ctx ctx m
 
-let populate (prog : Shared_ast.typed Scopelang.Ast.program) : t =
-  let variables = traverse prog in
+let populate
+    (ctx : Desugared.Name_resolution.context)
+    (prog : Shared_ast.typed Scopelang.Ast.program) : t =
+  let variables = traverse ctx prog in
   let add f = function None -> Some (f empty_lookup) | Some v -> Some (f v) in
   let add_def p =
     add (fun v ->
@@ -218,14 +388,17 @@ let populate (prog : Shared_ast.typed Scopelang.Ast.program) : t =
   let lookup_table =
     PMap.fold
       (fun p x tbl ->
-        let add, hash =
+        let res =
           match x with
-          | Topdef jump -> (fun m -> add_def p m |> add_decl p), jump.hash
-          | Definition jump -> add_def p, jump.hash
-          | Declaration jump -> add_decl p, jump.hash
-          | Usage jump -> add_usage p, jump.hash
+          | Topdef jump -> Some ((fun m -> add_def p m |> add_decl p), jump.hash)
+          | Definition jump -> Some (add_def p, jump.hash)
+          | Declaration jump -> Some (add_decl p, jump.hash)
+          | Usage jump -> Some (add_usage p, jump.hash)
+          | Literal _ -> None
         in
-        LTable.update hash add tbl)
+        match res with
+        | Some (add, hash) -> LTable.update hash add tbl
+        | _ -> tbl)
       variables LTable.empty
   in
   { variables; lookup_table }
@@ -235,25 +408,31 @@ let lookup (tables : t) (p : Pos.t) : lookup_entry option =
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j) ->
     LTable.find_opt j.hash tables.lookup_table
-  | None -> None
+  | Some (Literal _) | None -> None
 
 let lookup_type (tables : t) (p : Pos.t) : typ option =
   PMap.find_opt p tables.variables
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j) -> Some j.typ
+  | Some (Literal typ) -> Some typ
   | None -> None
 
-let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t =
+let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
+    =
   let open Linol_lwt in
-  let name, (kind : SymbolKind.t) =
+  let res =
     match var with
-    | Topdef v -> v.name, Constant
-    | Definition v -> v.name, Function
-    | Declaration v -> v.name, Interface
-    | Usage v -> v.name, Variable
+    | Topdef v -> Some (v.name, SymbolKind.Constant)
+    | Definition v -> Some (v.name, Function)
+    | Declaration v -> Some (v.name, Interface)
+    | Usage v -> Some (v.name, Variable)
+    | Literal _ -> None
   in
-  let location =
-    Location.create ~range:(range_of_pos p)
-      ~uri:(DocumentUri.of_path (Pos.get_file p))
-  in
-  Linol_lwt.SymbolInformation.create ~kind ~name ~location ()
+  Option.map
+    (fun (name, (kind : SymbolKind.t)) ->
+      let location =
+        Location.create ~range:(range_of_pos p)
+          ~uri:(DocumentUri.of_path (Pos.get_file p))
+      in
+      Linol_lwt.SymbolInformation.create ~kind ~name ~location ())
+    res

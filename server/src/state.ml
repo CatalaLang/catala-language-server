@@ -132,8 +132,30 @@ let lookup_type f p =
   let* jt = f.jump_table in
   let* typ = Jump.lookup_type jt p in
   let* prg = f.scopelang_prg in
-  let typ_s = Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ in
+  let typ_s =
+    match Catala_utils.Mark.remove typ with
+    | TStruct struct_name ->
+      Format.asprintf "Struct %s" (Shared_ast.StructName.to_string struct_name)
+    | TEnum enum_name ->
+      Format.asprintf "Enum %s" (Shared_ast.EnumName.to_string enum_name)
+    | _ -> Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ
+  in
   Some typ_s
+
+let lookup_type_definition f p =
+  let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
+  let ( let* ) = Option.bind in
+  let* jt = f.jump_table in
+  let* typ, _pos = Jump.lookup_type jt p in
+  let open Shared_ast in
+  match typ with
+  | TStruct s ->
+    let _, pos = StructName.get_info s in
+    Some (to_position pos)
+  | TEnum e ->
+    let _, pos = EnumName.get_info e in
+    Some (to_position pos)
+  | _ -> None
 
 let lookup_document_symbols file =
   let variables =
@@ -144,8 +166,7 @@ let lookup_document_symbols file =
   | Some variables ->
     List.filter_map
       (fun (p, v) ->
-        if file.uri = Catala_utils.Pos.get_file p then
-          Some (Jump.var_to_symbol p v)
+        if file.uri = Catala_utils.Pos.get_file p then Jump.var_to_symbol p v
         else None)
       (Jump.PMap.bindings variables)
 
@@ -160,7 +181,7 @@ let lookup_project_symbols all_files =
       (Jump.PMap.union (fun _ l _ -> Some l))
       Jump.PMap.empty all_tbls
   in
-  List.map
+  List.filter_map
     (fun (p, v) -> Jump.var_to_symbol p v)
     (Jump.PMap.bindings all_variables)
 
@@ -386,7 +407,7 @@ let process_document ?contents (uri : string) : t =
   let l = ref [] in
   let on_error e = l := e :: !l in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
-  let errors, prg_opt =
+  let errors, prog, jump_table =
     try
       (* Resets the lexing context to a fresh one *)
       Surface.Lexer_common.context := Law;
@@ -418,7 +439,8 @@ let process_document ?contents (uri : string) : t =
           prg.program_ctx.ctx_enums
       in
       let prg = Scopelang.Ast.type_program prg in
-      [], Some prg
+      let jump_table = Jump.populate ctx prg in
+      [], Some prg, Some jump_table
     with e ->
       (match e with
       | Catala_utils.Message.CompilerError er ->
@@ -429,10 +451,9 @@ let process_document ?contents (uri : string) : t =
       Log.info (fun m ->
           m "caught generic exception: %s (%d diagnostics to send)"
             (Printexc.to_string e) (List.length !l));
-      List.rev !l, None
+      List.rev !l, None, None
   in
-  let file = create ?prog:prg_opt uri in
-  let jump_table = Option.map Jump.populate prg_opt in
+  let file = create ?prog uri in
   let file = { file with jump_table } in
   List.fold_left
     (fun f (err : Catala_utils.Message.lsp_error) ->
