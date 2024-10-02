@@ -127,14 +127,41 @@
   margin-bottom: 10px;
 }
 
+.test-section-header {
+  margin-bottom: 8px;
+}
+
 .test-section-title {
   font-size: 12px;
   font-weight: bold;
-  margin-top: 6px;
-  margin-bottom: 4px;
+  margin: 0;
   padding-bottom: 2px;
-  border-bottom: 1px solid var(--vscode-editor-foreground);
   color: var(--vscode-editor-foreground);
+  display: flex;
+  align-items: center;
+}
+
+.reset-expected-values {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-editor-foreground);
+  padding: 2px 4px;
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.reset-expected-values:hover {
+  opacity: 1;
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.reset-expected-values .codicon {
+  font-size: 12px;
 }
 
 .value-editor input,
