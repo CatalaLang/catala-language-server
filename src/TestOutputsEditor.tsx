@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import type { Test, TestIo } from './generated/test_case';
 import ValueEditor from './ValueEditors';
+import { getDefaultValue } from './defaults';
 
 type Props = {
   test: Test;
@@ -32,11 +33,20 @@ export default function TestOutputsEditor({
   test,
   onTestChange: onTestAssertsChange,
 }: Props): ReactElement {
-  const { test_outputs } = test;
+  const { test_outputs, tested_scope } = test;
 
   function onAssertAdd(outputName: string): void {
-    // TODO: Implement add assertion logic
-    console.log(`Add assertion for ${outputName}`);
+    const outputType = tested_scope.outputs.get(outputName);
+    if (outputType) {
+      const defaultValue = getDefaultValue(outputType);
+      onTestAssertsChange({
+        ...test,
+        test_outputs: new Map(test_outputs).set(outputName, {
+          typ: outputType,
+          value: { value: defaultValue },
+        }),
+      });
+    }
   }
 
   function onAssertValueChange(outputName: string, newValue: TestIo): void {
@@ -50,14 +60,15 @@ export default function TestOutputsEditor({
     <div className="test-outputs-editor">
       <table className="test-outputs-table">
         <tbody>
-          {Array.from(test_outputs, ([outputName, outputData]) => {
+          {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {
+            const outputData = test_outputs.get(outputName);
             return (
               <tr key={outputName}>
                 <td>
                   <strong className="identifier">{outputName}</strong>
                 </td>
                 <td>
-                  {outputData.value ? (
+                  {outputData?.value ? (
                     <ValueEditor
                       testIO={outputData}
                       onValueChange={(newValue) =>
