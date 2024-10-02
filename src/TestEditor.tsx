@@ -63,7 +63,17 @@ export default function TestEditor(props: Props): ReactElement {
           />
         </div>
         <div className="test-section">
-          <h2 className="test-section-title">Outputs/Expected values</h2>
+          <div className="test-section-header">
+            <h2 className="test-section-title">
+              Outputs/Expected values
+              <button
+                className="reset-expected-values"
+                title="Reset Expected Values"
+              >
+                <span className="codicon codicon-refresh"></span>
+              </button>
+            </h2>
+          </div>
           <TestOutputsEditor
             test={props.test}
             onTestChange={props.onTestChange}
