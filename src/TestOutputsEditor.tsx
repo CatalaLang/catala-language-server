@@ -1,7 +1,7 @@
-import type { ReactElement } from 'react';
 import type { Test, TestIo } from './generated/test_case';
-import ValueEditor from './ValueEditors';
+import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
+import type { ReactElement } from 'react';
 
 type Props = {
   test: Test;
@@ -52,7 +52,16 @@ export default function TestOutputsEditor({
   function onAssertValueChange(outputName: string, newValue: TestIo): void {
     onTestAssertsChange({
       ...test,
-      test_outputs: new Map(test_outputs.set(outputName, newValue)),
+      test_outputs: new Map(test_outputs).set(outputName, newValue),
+    });
+  }
+
+  function onAssertDelete(outputName: string): void {
+    const newTestOutputs = new Map(test_outputs);
+    newTestOutputs.delete(outputName);
+    onTestAssertsChange({
+      ...test,
+      test_outputs: newTestOutputs,
     });
   }
 
@@ -69,11 +78,12 @@ export default function TestOutputsEditor({
                 </td>
                 <td>
                   {outputData?.value ? (
-                    <ValueEditor
+                    <AssertionValueEditor
                       testIO={outputData}
                       onValueChange={(newValue) =>
                         onAssertValueChange(outputName, newValue)
                       }
+                      onAssertionDeletion={() => onAssertDelete(outputName)}
                     />
                   ) : (
                     <button
