@@ -32,7 +32,7 @@ export default function TestOutputsEditor({
   test,
   onTestChange: onTestAssertsChange,
 }: Props): ReactElement {
-  const { tested_scope, test_outputs } = test;
+  const { test_outputs } = test;
 
   function onAssertAdd(outputName: string): void {
     // TODO: Implement add assertion logic
@@ -50,18 +50,16 @@ export default function TestOutputsEditor({
     <div className="test-outputs-editor">
       <table className="test-outputs-table">
         <tbody>
-          {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {
-            const existingOutput = test_outputs.get(outputName);
-
+          {Array.from(test_outputs, ([outputName, outputData]) => {
             return (
               <tr key={outputName}>
                 <td>
                   <strong className="identifier">{outputName}</strong>
                 </td>
                 <td>
-                  {existingOutput ? (
+                  {outputData.value ? (
                     <ValueEditor
-                      testIO={existingOutput}
+                      testIO={outputData}
                       onValueChange={(newValue) =>
                         onAssertValueChange(outputName, newValue)
                       }
