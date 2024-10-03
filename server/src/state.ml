@@ -323,22 +323,22 @@ let find_inclusion (config_opt : (Clerk_config.t * string) option) file =
   match config_opt with
   | None -> None
   | Some (config, config_dir) ->
-    String.Map.fold
-      (fun mod_name modul acc ->
+    List.fold_left
+      (fun acc ({ Clerk_config.name = mod_name; includes; _ } as modul) ->
         if acc <> None then acc
         else
           let is_present =
             List.exists
               (fun included_file ->
                 File.equal (Filename.concat config_dir included_file) file)
-              modul.Clerk_config.includes
+              includes
           in
           if is_present then Some (mod_name, modul) else None)
-      config.modules None
+      None config.modules
 
 let convert_meta_module
     ~config_dir
-    (meta_module_name, (modul : Clerk_config.modul)) :
+    (meta_module_name, (modul : Clerk_config.module_)) :
     string Catala_utils.Global.input_src =
   let language =
     (* The language is the same as the included files or module used. *)
@@ -348,15 +348,15 @@ let convert_meta_module
           fun f -> try Some (Catala_utils.Cli.file_lang f) with _ -> None)
         | acc -> fun _ -> acc)
       None
-      (modul.includes @ List.map fst modul.module_uses)
+      (modul.includes
+      @ List.map
+          (function `Simple s | `With_alias (s, _) -> s)
+          modul.module_uses)
     |> Option.value ~default:Catala_utils.Global.En
   in
   let pp_module
       ppf
-      {
-        Clerk_config.module_uses : (string * string option) list;
-        includes : string list;
-      } =
+      { Clerk_config.name = _; module_uses; includes : string list } =
     let open Format in
     let use_kwd, alias_kwd, include_kwd, module_kwd =
       match language with
@@ -364,8 +364,8 @@ let convert_meta_module
       | Fr -> "Usage de", "en tant que", "Inclusion:", "Module"
     in
     let pp_use ppf = function
-      | mod_name, None -> fprintf ppf "> %s %s" use_kwd mod_name
-      | mod_name, Some alias ->
+      | `Simple mod_name -> fprintf ppf "> %s %s" use_kwd mod_name
+      | `With_alias (mod_name, alias) ->
         fprintf ppf "> %s %s %s %s" use_kwd mod_name alias_kwd alias
     in
     let pp_include ppf mod_path = fprintf ppf "> %s %s" include_kwd mod_path in
@@ -422,7 +422,7 @@ let process_document ?contents (uri : string) : t =
           match config_opt with
           | None -> String.Map.empty, Uid.Module.Map.empty
           | Some (config, config_dir) ->
-            load_module_interfaces config_dir config.include_dirs prg
+            load_module_interfaces config_dir config.global.include_dirs prg
         in
         Desugared.Name_resolution.form_context (prg, mod_uses) modules
       in
