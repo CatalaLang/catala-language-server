@@ -10,8 +10,17 @@ export function getDefaultValue(typ: Typ): RuntimeValue {
       return { kind: 'Integer', value: 0 };
     case 'TRat':
       return { kind: 'Decimal', value: 0 };
-    case 'TDate':
-      return { kind: 'Date', value: { year: 1970, month: 1, day: 1 } };
+    case 'TDate': {
+      const today = new Date();
+      return {
+        kind: 'Date',
+        value: {
+          year: today.getFullYear(),
+          month: today.getMonth() + 1,
+          day: today.getDate(),
+        },
+      };
+    }
     case 'TDuration':
       return { kind: 'Duration', value: { years: 0, months: 0, days: 0 } };
     case 'TTuple':
