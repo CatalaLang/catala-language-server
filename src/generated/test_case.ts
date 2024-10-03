@@ -106,8 +106,17 @@ export type TestRunResults =
 | { kind: 'Error'; value: string }
 | { kind: 'Ok' }
 
+export type TestGenerateResults =
+| { kind: 'Error'; value: string }
+| { kind: 'Results'; value: Test }
+
 export type TestRunRequest = {
   scope: string;
+}
+
+export type TestGenerateRequest = {
+  scopeUnderTest: string;
+  filename: string;
 }
 
 export type UpMessage =
@@ -115,6 +124,7 @@ export type UpMessage =
 | { kind: 'Edit'; value: TestList }
 | { kind: 'OpenInTextEditor' }
 | { kind: 'TestRunRequest'; value: TestRunRequest }
+| { kind: 'TestGenerateRequest'; value: TestGenerateRequest }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
@@ -458,6 +468,28 @@ export function readTestRunResults(x: any, context: any = x): TestRunResults {
   }
 }
 
+export function writeTestGenerateResults(x: TestGenerateResults, context: any = x): any {
+  switch (x.kind) {
+    case 'Error':
+      return ['Error', _atd_write_string(x.value, x)]
+    case 'Results':
+      return ['Results', writeTest(x.value, x)]
+  }
+}
+
+export function readTestGenerateResults(x: any, context: any = x): TestGenerateResults {
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'Error':
+      return { kind: 'Error', value: _atd_read_string(x[1], x) }
+    case 'Results':
+      return { kind: 'Results', value: readTest(x[1], x) }
+    default:
+      _atd_bad_json('TestGenerateResults', x, context)
+      throw new Error('impossible')
+  }
+}
+
 export function writeTestRunRequest(x: TestRunRequest, context: any = x): any {
   return {
     'scope': _atd_write_required_field('TestRunRequest', 'scope', _atd_write_string, x.scope, x),
@@ -467,6 +499,20 @@ export function writeTestRunRequest(x: TestRunRequest, context: any = x): any {
 export function readTestRunRequest(x: any, context: any = x): TestRunRequest {
   return {
     scope: _atd_read_required_field('TestRunRequest', 'scope', _atd_read_string, x['scope'], x),
+  };
+}
+
+export function writeTestGenerateRequest(x: TestGenerateRequest, context: any = x): any {
+  return {
+    'scopeUnderTest': _atd_write_required_field('TestGenerateRequest', 'scopeUnderTest', _atd_write_string, x.scopeUnderTest, x),
+    'filename': _atd_write_required_field('TestGenerateRequest', 'filename', _atd_write_string, x.filename, x),
+  };
+}
+
+export function readTestGenerateRequest(x: any, context: any = x): TestGenerateRequest {
+  return {
+    scopeUnderTest: _atd_read_required_field('TestGenerateRequest', 'scopeUnderTest', _atd_read_string, x['scopeUnderTest'], x),
+    filename: _atd_read_required_field('TestGenerateRequest', 'filename', _atd_read_string, x['filename'], x),
   };
 }
 
@@ -480,6 +526,8 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return 'OpenInTextEditor'
     case 'TestRunRequest':
       return ['TestRunRequest', writeTestRunRequest(x.value, x)]
+    case 'TestGenerateRequest':
+      return ['TestGenerateRequest', writeTestGenerateRequest(x.value, x)]
   }
 }
 
@@ -502,6 +550,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'Edit', value: readTestList(x[1], x) }
       case 'TestRunRequest':
         return { kind: 'TestRunRequest', value: readTestRunRequest(x[1], x) }
+      case 'TestGenerateRequest':
+        return { kind: 'TestGenerateRequest', value: readTestGenerateRequest(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')

@@ -13,6 +13,7 @@ import {
   runTestScope,
   parseTestFile,
   atdToCatala,
+  generate,
 } from './testCaseCompilerInterop';
 
 // This class contains the 'backend' part of the test case editor that
@@ -122,6 +123,35 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         case 'TestRunRequest': {
           const { scope } = typed_msg.value;
           this.testQueue.add(() => runTest(document.fileName, scope));
+          break;
+        }
+        case 'TestGenerateRequest': {
+          const { scopeUnderTest, filename } = typed_msg.value;
+          const results = generate(scopeUnderTest, filename);
+          if (results.kind === 'Results') {
+            const newTest = results.value;
+            const currentTests = parseTestFile(document.getText(), lang);
+            if (currentTests.kind === 'Results') {
+              const updatedTests = [...currentTests.value, newTest];
+              const newTextBuffer = atdToCatala(updatedTests, lang);
+              const edit = new vscode.WorkspaceEdit();
+              edit.replace(
+                document.uri,
+                new vscode.Range(0, 0, document.lineCount, 0),
+                newTextBuffer
+              );
+              vscode.workspace.applyEdit(edit).then(() => {
+                postMessageToWebView({
+                  kind: 'Update',
+                  value: parseTestFile(document.getText(), lang),
+                });
+              });
+            }
+          } else {
+            vscode.window.showErrorMessage(
+              `Failed to generate test: ${results.value}`
+            );
+          }
           break;
         }
         case 'OpenInTextEditor':
