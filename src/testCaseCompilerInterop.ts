@@ -1,5 +1,7 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
+import type { TestGenerateResults } from './generated/test_case';
 import {
+  readTest,
   readTestList,
   writeTestList,
   type ParseResults,
@@ -84,4 +86,21 @@ export function runTestScope(
     };
   }
   return { kind: 'Ok' };
+}
+
+export function generate(scope: string, filename: string): TestGenerateResults {
+  const cmd = 'catala';
+  const args = ['testcase', 'generate', '--scope', scope, filename];
+  try {
+    const results = execFileSync(cmd, args);
+    return {
+      kind: 'Results',
+      value: readTest(JSON.parse(results.toString())),
+    };
+  } catch (error) {
+    return {
+      kind: 'Error',
+      value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
+    };
+  }
 }

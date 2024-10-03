@@ -31,6 +31,12 @@ type TestRunState = {
   };
 };
 
+type ModalState = {
+  isOpen: boolean;
+  scopeUnderTest: string;
+  filename: string;
+};
+
 type Props = { contents: UIState; vscode: WebviewApi<unknown> };
 
 /** Editor for a collection of tests in a single file */
@@ -40,6 +46,48 @@ export default function TestFileEditor({
 }: Props): ReactElement {
   const [state, setState] = useState(contents);
   const [testRunState, setTestRunState] = useState<TestRunState>({});
+  const [modalState, setModalState] = useState<ModalState>({
+    isOpen: false,
+    scopeUnderTest: '',
+    filename: '',
+  });
+
+  const renderModal = (): ReactElement | null => {
+    if (!modalState.isOpen) return null;
+    return (
+      <div className="modal">
+        <div className="modal-content">
+          <h2>Add New Test</h2>
+          <input
+            type="text"
+            placeholder="Scope Under Test"
+            value={modalState.scopeUnderTest}
+            onChange={(e) =>
+              setModalState((prev) => ({
+                ...prev,
+                scopeUnderTest: e.target.value,
+              }))
+            }
+          />
+          <input
+            type="text"
+            placeholder="Filename"
+            value={modalState.filename}
+            onChange={(e) =>
+              setModalState((prev) => ({
+                ...prev,
+                filename: e.target.value,
+              }))
+            }
+          />
+          <div className="modal-buttons">
+            <button onClick={handleModalSubmit}>Submit</button>
+            <button onClick={handleModalClose}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const onTestChange = useCallback(
     (newValue: Test): void => {
@@ -104,6 +152,29 @@ export default function TestFileEditor({
     [vscode]
   );
 
+  const onAddNewTest = useCallback((): void => {
+    setModalState({ isOpen: true, scopeUnderTest: '', filename: '' });
+  }, []);
+
+  const handleModalSubmit = useCallback((): void => {
+    if (modalState.scopeUnderTest && modalState.filename) {
+      vscode.postMessage(
+        writeUpMessage({
+          kind: 'TestGenerateRequest',
+          value: {
+            scopeUnderTest: modalState.scopeUnderTest,
+            filename: modalState.filename,
+          },
+        })
+      );
+      setModalState({ isOpen: false, scopeUnderTest: '', filename: '' });
+    }
+  }, [modalState, vscode]);
+
+  const handleModalClose = useCallback((): void => {
+    setModalState({ isOpen: false, scopeUnderTest: '', filename: '' });
+  }, []);
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
       const message = readDownMessage(event.data);
@@ -166,19 +237,28 @@ export default function TestFileEditor({
     case 'success': {
       if (state.tests.length === 0) {
         return (
-          <div className="test-editor-empty">
-            <p className="test-editor-empty-message">
-              No test cases found. Would you like to create your first test?
-            </p>
-            <button className="test-editor-run test-editor-add">
-              <span className="codicon codicon-add"></span>
-              Add a test
-            </button>
-          </div>
+          <>
+            <div className="test-editor-empty">
+              <p className="test-editor-empty-message">
+                No test cases found. Would you like to create your first test?
+              </p>
+              <button className="test-editor-add-button" onClick={onAddNewTest}>
+                <span className="codicon codicon-add"></span>
+                Add new test
+              </button>
+            </div>
+            {renderModal()}
+          </>
         );
       }
       return (
-        <>
+        <div className="test-editor-container">
+          <div className="test-editor-add-button-container">
+            <button className="test-editor-add-button" onClick={onAddNewTest}>
+              <span className="codicon codicon-add"></span>
+              Add new test
+            </button>
+          </div>
           {state.tests.map((test) => (
             <TestEditor
               test={test}
@@ -189,7 +269,8 @@ export default function TestFileEditor({
               runState={testRunState[test.testing_scope]}
             />
           ))}
-        </>
+          {renderModal()}
+        </div>
       );
     }
     default:
