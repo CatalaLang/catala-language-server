@@ -23,8 +23,20 @@ export function getDefaultValue(typ: Typ): RuntimeValue {
     }
     case 'TDuration':
       return { kind: 'Duration', value: { years: 0, months: 0, days: 0 } };
-    case 'TTuple':
     case 'TStruct':
+      return {
+        kind: 'Struct',
+        value: [
+          typ.value,
+          new Map(
+            Array.from(typ.value.fields, ([fieldName, fieldType]) => [
+              fieldName,
+              getDefaultValue(fieldType),
+            ])
+          ),
+        ],
+      };
+    case 'TTuple':
     case 'TEnum':
     case 'TOption':
     case 'TArray':

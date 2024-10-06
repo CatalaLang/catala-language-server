@@ -1,5 +1,5 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
-import type { TestGenerateResults } from './generated/test_case';
+import type { TestGenerateResults, TestInputs } from './generated/test_case';
 import {
   readTest,
   readTestList,
@@ -10,6 +10,7 @@ import {
 } from './generated/test_case';
 import { logger } from './logger';
 import path = require('path');
+import { getDefaultValue } from './defaults';
 
 export function parseTestFile(content: string, lang: string): ParseResults {
   // TODO check behavior when packaging comes into play ('dune install')
@@ -88,14 +89,36 @@ export function runTestScope(
   return { kind: 'Ok' };
 }
 
-export function generate(scope: string, filename: string): TestGenerateResults {
+function withDefaultInputs(outputs: TestInputs): TestInputs {
+  return new Map(
+    Array.from(outputs, ([name, testIo]) => {
+      if (testIo.value !== undefined) {
+        throw Error(`Expected an undefined value: ${name}`);
+      }
+      return [
+        name,
+        { typ: testIo.typ, value: { value: getDefaultValue(testIo.typ) } },
+      ];
+    })
+  );
+}
+
+export function generate(
+  scope: string,
+  filename: string,
+  fillDefaultInputs = true
+): TestGenerateResults {
   const cmd = 'catala';
   const args = ['testcase', 'generate', '--scope', scope, filename];
   try {
     const results = execFileSync(cmd, args);
+    let test = readTest(JSON.parse(results.toString()));
+    if (fillDefaultInputs) {
+      test = { ...test, test_inputs: withDefaultInputs(test.test_inputs) };
+    }
     return {
       kind: 'Results',
-      value: readTest(JSON.parse(results.toString())),
+      value: test,
     };
   } catch (error) {
     return {
