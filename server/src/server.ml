@@ -364,7 +364,7 @@ class catala_lsp_server =
       | None -> Lwt.return_none
       | Some typ_s ->
         let typ_s = Format.asprintf "%a" Format.pp_print_text typ_s in
-        let mc = MarkupContent.create ~kind:PlainText ~value:typ_s in
+        let mc = MarkupContent.create ~kind:Markdown ~value:typ_s in
         Lwt.return_some (Hover.create ~contents:(`MarkupContent mc) ())
 
     method private on_req_type_definition
