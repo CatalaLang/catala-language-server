@@ -97,10 +97,15 @@ let rec get_value decl_ctx = function
           (fun (field, v) ->
             StructField.to_string field, get_value decl_ctx v)
           (StructField.Map.bindings fields) )
+  | EInj { name; e = ELit LUnit, _; cons }, _ ->
+    O.Enum
+      ( get_enum decl_ctx name,
+        (EnumConstructor.to_string cons, None)
+      )
   | EInj { name; e; cons }, _ ->
     O.Enum
       ( get_enum decl_ctx name,
-        (EnumConstructor.to_string cons, get_value decl_ctx e)
+        (EnumConstructor.to_string cons, Some (get_value decl_ctx e))
       )
   | e ->
     Message.error ~pos:(Expr.pos e)
@@ -341,8 +346,10 @@ let rec print_catala_value ppf =
          [ if years > 0 then Some (fun ppf -> fprintf ppf "%d year" years) else None;
            if months > 0 then Some (fun ppf -> fprintf ppf "%d month" months) else None;
            if days > 0 then Some (fun ppf -> fprintf ppf "%d day" days) else None; ])
-  | O.Enum (_, (constr, v)) ->
+  | O.Enum (_, (constr, Some v)) ->
     fprintf ppf "@[<hv 2>%s content %a@]" constr print_catala_value v
+  | O.Enum (_, (constr, None)) ->
+    pp_print_string ppf constr
   | O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list
