@@ -2,10 +2,13 @@
 
 import { type ReactElement, useState, useEffect } from 'react';
 import type {
+  Option,
   TestIo,
   StructDeclaration,
   RuntimeValue,
   Duration,
+  EnumDeclaration,
+  Typ,
 } from './generated/test_case';
 import { assertUnreachable } from './util';
 
@@ -153,8 +156,27 @@ export default function ValueEditor(props: Props): ReactElement {
           }}
         />
       );
-    case 'TTuple':
     case 'TEnum':
+      return (
+        <EnumEditor
+          enumDeclaration={typ.value}
+          onValueChange={(
+            newCtor: string,
+            newValue: Option<RuntimeValue>
+          ): void => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Enum',
+                  value: [typ.value, [newCtor, newValue]],
+                },
+              },
+            });
+          }}
+        />
+      );
+    case 'TTuple':
     case 'TOption':
     case 'TArray':
       return <i>Unimplemented Editor</i>;
@@ -466,6 +488,60 @@ function StructEditor(props: StructEditorProps): ReactElement {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+type EnumEditorProps = {
+  enumDeclaration: EnumDeclaration;
+  value?: [EnumDeclaration, [string, Option<RuntimeValue>]];
+  onValueChange(ctor: string, value: Option<RuntimeValue>): void;
+};
+
+function runtimeValueToTestIo(typ: Typ, value: Option<RuntimeValue>): TestIo {
+  return {
+    typ: typ,
+    ...(value != undefined && {
+      value: value,
+    }),
+  };
+}
+
+function EnumEditor(props: EnumEditorProps): ReactElement {
+  // Note that in Catala, an enum should always have at least 1 constructor
+  // so dereferencing the first array element is valid
+  const [currentCtor, setCurrentCtor] = useState(
+    Array.from(props.enumDeclaration.constructors.keys())[0]
+  );
+
+  return (
+    <div className="value-editor">
+      <select
+        onChange={(evt: React.ChangeEvent<HTMLSelectElement>): void => {
+          const newCtor = evt.target.value;
+          setCurrentCtor(newCtor);
+          if (props.enumDeclaration.constructors.get(newCtor) === null) {
+            props.onValueChange(newCtor, null);
+          }
+        }}
+      >
+        {Array.from(props.enumDeclaration.constructors.keys()).map(
+          (optionName) => (
+            <option>{optionName}</option>
+          )
+        )}
+      </select>
+      {props.enumDeclaration.constructors.get(currentCtor) && (
+        <ValueEditor
+          testIO={runtimeValueToTestIo(
+            props.enumDeclaration.constructors.get(currentCtor)!.value,
+            props.value?.[1][1] ?? null //TODO make this more legible?
+          )}
+          onValueChange={(newValue: TestIo): void => {
+            props.onValueChange(currentCtor, newValue.value ?? null);
+          }}
+        />
+      )}
     </div>
   );
 }
