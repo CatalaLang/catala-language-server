@@ -45,6 +45,8 @@ export function activate(context: vscode.ExtensionContext): void {
         ],
       }
     );
+
+    client.start();
   }
 
   // Always register the custom editor provider
