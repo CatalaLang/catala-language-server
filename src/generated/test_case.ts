@@ -71,7 +71,7 @@ export type RuntimeValue =
 | { kind: 'Decimal'; value: number }
 | { kind: 'Date'; value: Date }
 | { kind: 'Duration'; value: Duration }
-| { kind: 'Enum'; value: [EnumDeclaration, [string, RuntimeValue]] }
+| { kind: 'Enum'; value: [EnumDeclaration, [string, Option<RuntimeValue>]] }
 | { kind: 'Struct'; value: [StructDeclaration, Map<string, RuntimeValue>] }
 | { kind: 'Array'; value: RuntimeValue[] }
 
@@ -300,7 +300,7 @@ export function writeRuntimeValue(x: RuntimeValue, context: any = x): any {
     case 'Duration':
       return ['Duration', writeDuration(x.value, x)]
     case 'Enum':
-      return ['Enum', ((x, context) => [writeEnumDeclaration(x[0], x), ((x, context) => [_atd_write_string(x[0], x), writeRuntimeValue(x[1], x)])(x[1], x)])(x.value, x)]
+      return ['Enum', ((x, context) => [writeEnumDeclaration(x[0], x), ((x, context) => [_atd_write_string(x[0], x), _atd_write_option(writeRuntimeValue)(x[1], x)])(x[1], x)])(x.value, x)]
     case 'Struct':
       return ['Struct', ((x, context) => [writeStructDeclaration(x[0], x), _atd_write_assoc_map_to_object(writeRuntimeValue)(x[1], x)])(x.value, x)]
     case 'Array':
@@ -324,7 +324,7 @@ export function readRuntimeValue(x: any, context: any = x): RuntimeValue {
     case 'Duration':
       return { kind: 'Duration', value: readDuration(x[1], x) }
     case 'Enum':
-      return { kind: 'Enum', value: ((x, context): [EnumDeclaration, [string, RuntimeValue]] => { _atd_check_json_tuple(2, x, context); return [readEnumDeclaration(x[0], x), ((x, context): [string, RuntimeValue] => { _atd_check_json_tuple(2, x, context); return [_atd_read_string(x[0], x), readRuntimeValue(x[1], x)] })(x[1], x)] })(x[1], x) }
+      return { kind: 'Enum', value: ((x, context): [EnumDeclaration, [string, Option<RuntimeValue>]] => { _atd_check_json_tuple(2, x, context); return [readEnumDeclaration(x[0], x), ((x, context): [string, Option<RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [_atd_read_string(x[0], x), _atd_read_option(readRuntimeValue)(x[1], x)] })(x[1], x)] })(x[1], x) }
     case 'Struct':
       return { kind: 'Struct', value: ((x, context): [StructDeclaration, Map<string, RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [readStructDeclaration(x[0], x), _atd_read_assoc_object_into_map(readRuntimeValue)(x[1], x)] })(x[1], x) }
     case 'Array':
