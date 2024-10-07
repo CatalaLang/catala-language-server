@@ -1,4 +1,10 @@
-import { useEffect, useState, type ReactElement, useCallback } from 'react';
+import {
+  useEffect,
+  useState,
+  type ReactElement,
+  useCallback,
+  useRef,
+} from 'react';
 import {
   type ParseResults,
   type Test,
@@ -51,12 +57,33 @@ export default function TestFileEditor({
     scopeUnderTest: '',
     filename: '',
   });
+  const modalContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (modalState.isOpen && modalContentRef.current) {
+      modalContentRef.current.focus();
+    }
+  }, [modalState.isOpen]);
 
   const renderModal = (): ReactElement | null => {
     if (!modalState.isOpen) return null;
+
+    const handleKeyDown = (e: React.KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        handleModalClose();
+      } else if (e.key === 'Enter') {
+        handleModalSubmit();
+      }
+    };
+
     return (
       <div className="modal">
-        <div className="modal-content">
+        <div
+          className="modal-content"
+          ref={modalContentRef}
+          tabIndex={-1}
+          onKeyDown={handleKeyDown}
+        >
           <h2>Add New Test</h2>
           <input
             type="text"
