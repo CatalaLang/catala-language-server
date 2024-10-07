@@ -35,8 +35,8 @@ let () =
   Logs.info (fun m -> m "log file created: '%s'" logfile_path)
 
 let run () =
-  Log.app (fun m ->
-      m "cmd: %a"
+  Log.debug (fun m ->
+      m "Command: %a"
         Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
         (Array.to_list Sys.argv));
   let s = new Server.catala_lsp_server in
