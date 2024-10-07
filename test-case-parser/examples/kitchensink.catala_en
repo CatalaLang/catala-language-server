@@ -12,6 +12,15 @@ declaration scope DurationComp:
 declaration scope MoneyComp:
   input gross_price content money
   output price_including_vat content money
+
+declaration enumeration LunchOption:
+  -- FixedPrice
+  -- Cost content money
+
+declaration scope LunchReimbursement:
+  input option content LunchOption
+  output reimbursement content money
+
 ```
 
 ```catala
@@ -23,4 +32,10 @@ scope DurationComp:
 
 scope MoneyComp:
   definition price_including_vat equals gross_price *$ 1.2
+
+scope LunchReimbursement:
+  definition reimbursement equals
+    match option with pattern
+    -- FixedPrice : $20
+    -- Cost of amount: if (amount < $20) then amount else $20
 ```

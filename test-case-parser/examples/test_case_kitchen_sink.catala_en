@@ -25,3 +25,12 @@ scope MoneyComp_test:
   definition money_comp.gross_price equals $100
   assertion money_comp.price_including_vat = $120
 ```
+
+```catala
+declaration scope LunchReimbursement_test:
+  output out scope Kitchensink.LunchReimbursement
+
+scope LunchReimbursement_test:
+  definition out.option equals FixedPrice
+  assertion out.reimbursement = $20
+```
