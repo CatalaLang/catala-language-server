@@ -22,6 +22,9 @@ let () =
     in
     { Logs.report }
   in
+  let _options =
+    Catala_utils.Global.enforce_options ~message_format:Vscode ()
+  in
   let logfile_path, logfile =
     let logfile_path, oc = Filename.open_temp_file "catala-lsp-logs" "" in
     let fmt = Format.formatter_of_out_channel oc in
