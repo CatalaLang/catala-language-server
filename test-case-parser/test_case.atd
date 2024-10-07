@@ -60,7 +60,7 @@ type runtime_value = [
   | Decimal of float
   | Date of date
   | Duration of duration
-  | Enum of (enum_declaration * (string * runtime_value))
+  | Enum of (enum_declaration * (string * runtime_value option))
   | Struct of (struct_declaration * (string * runtime_value) list <json repr="object"> <ts repr="map">)
   | Array of runtime_value list <ocaml repr="array">
 ] <ocaml repr="classic">
