@@ -527,7 +527,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
       >
         {Array.from(props.enumDeclaration.constructors.keys()).map(
           (optionName) => (
-            <option>{optionName}</option>
+            <option key={optionName}>{optionName}</option>
           )
         )}
       </select>
