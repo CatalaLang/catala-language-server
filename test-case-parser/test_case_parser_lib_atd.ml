@@ -71,7 +71,9 @@ and get_enum decl_ctx enum_name =
     constructors;
   }
 
-let rec get_value decl_ctx = function
+let rec get_value: type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
+  fun decl_ctx e ->
+  match e with
   | ELit (LBool b), _ -> O.Bool b
   | ELit (LInt i), _ -> O.Integer (Z.to_int i)
   | ELit (LRat r), _ -> O.Decimal (Q.to_float r)
@@ -193,145 +195,149 @@ exception InvalidTestingScope of string
 let invalid_testing_scope fmt =
   Format.kasprintf (fun msg -> raise (InvalidTestingScope msg)) fmt
 
-let import_catala_tests (prg, naming_ctx) =
-  let decl_ctx = prg.I.program_ctx in
-  let root_module = prg.I.program_root in
-  let scopes =
-    let re_test = Re.(compile (str "_test")) in
-    root_module.module_scopes
-    |> ScopeName.Map.filter (fun name _ ->
-        Re.execp re_test (ScopeName.base name))
-    |> ScopeName.Map.bindings
+let get_test_scopes prg =
+  let re_test = Re.(compile (str "_test")) in
+  prg.I.program_root.module_scopes
+  |> ScopeName.Map.filter (fun name _ ->
+      Re.execp re_test (ScopeName.base name))
+  |> ScopeName.Map.keys
+
+let get_catala_test (prg, naming_ctx) testing_scope_name =
+  let testing_scope =
+    ScopeName.Map.find testing_scope_name prg.I.program_root.module_scopes
   in
-  List.map
-    (fun (testing_scope_name, testing_scope) ->
-      let subscope_var, tested_scope =
-        let count = ScopeVar.Map.cardinal testing_scope.I.scope_sub_scopes in
-        if count <> 1 then
-          invalid_testing_scope "@{<b>%a@}: testing scopes are expected to have one, and only one subscope, this has %d" ScopeName.format testing_scope_name count
-        else ScopeVar.Map.choose testing_scope.scope_sub_scopes
-      in
-      let tested_id_var_map =
-        Ident.Map.filter_map (fun _ -> function
-          | ScopeVar v -> Some v
-          | SubScope _ -> None)
-          (ScopeName.Map.find tested_scope naming_ctx.Desugared.Name_resolution.scopes).var_idmap
-      in
-      let base_test =
-        get_scope_test prg (ScopeName.to_string testing_scope_name) tested_scope
-      in
-      let test_inputs =
-        List.map (fun (var_str, test_in) ->
-            let var_within_origin_scope =
-              Ident.Map.find var_str tested_id_var_map
-            in
-            let value =
-              let rules =
-                try
-                  let def_key =
-                    (subscope_var, Pos.no_pos),
-                    I.ScopeDef.SubScopeInput {
-                      name = tested_scope;
-                      var_within_origin_scope;
-                    }
-                  in
-                  let def =
-                    I.ScopeDef.Map.find def_key testing_scope.scope_defs
-                  in
-                  RuleName.Map.bindings def.scope_def_rules
-                with Ident.Map.Not_found _ | I.ScopeDef.Map.Not_found _ ->
-                  []
+  let subscope_var, tested_scope =
+    let count = ScopeVar.Map.cardinal testing_scope.I.scope_sub_scopes in
+    if count <> 1 then
+      invalid_testing_scope
+        "@{<b>%a@}: testing scopes are expected to have one, and only one subscope, this has %d"
+        ScopeName.format testing_scope_name count
+    else ScopeVar.Map.choose testing_scope.scope_sub_scopes
+  in
+  let tested_id_var_map =
+    Ident.Map.filter_map (fun _ -> function
+        | ScopeVar v -> Some v
+        | SubScope _ -> None)
+      (ScopeName.Map.find tested_scope naming_ctx.Desugared.Name_resolution.scopes).var_idmap
+  in
+  let base_test =
+    get_scope_test prg (ScopeName.to_string testing_scope_name) tested_scope
+  in
+  let test_inputs =
+    List.map (fun (var_str, test_in) ->
+        let var_within_origin_scope =
+          Ident.Map.find var_str tested_id_var_map
+        in
+        let value =
+          let rules =
+            try
+              let def_key =
+                (subscope_var, Pos.no_pos),
+                I.ScopeDef.SubScopeInput {
+                  name = tested_scope;
+                  var_within_origin_scope;
+                }
               in
-              match rules with
-              | [] -> None
-              | [_, rule] ->
-                let e = Expr.unbox_closed rule.rule_cons in
-                let value = get_value decl_ctx e in
-                Some { O.value; pos = Some (get_source_position (Expr.pos e)) }
-              | rules ->
-                let extra_pos =
-                  List.map (fun (r, _) -> "", Mark.get (RuleName.get_info r))
-                    rules
-                in
-                Message.error ~extra_pos
-                  "Multiple definitions of test input value in test \
-                   scope %a.%a!;@ %d rule(s) found: [%a]"
-                  ScopeName.format testing_scope_name ScopeVar.format
-                  var_within_origin_scope
-                  (List.length rules)
-                  (Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf ";@ ")
-                     (fun ppf (r, _) -> RuleName.format ppf r))
-                  rules
+              let def =
+                I.ScopeDef.Map.find def_key testing_scope.scope_defs
+              in
+              RuleName.Map.bindings def.scope_def_rules
+            with Ident.Map.Not_found _ | I.ScopeDef.Map.Not_found _ ->
+              []
+          in
+          match rules with
+          | [] -> None
+          | [_, rule] ->
+            let e = Expr.unbox_closed rule.rule_cons in
+            let value = get_value prg.program_ctx e in
+            Some { O.value; pos = Some (get_source_position (Expr.pos e)) }
+          | rules ->
+            let extra_pos =
+              List.map (fun (r, _) -> "", Mark.get (RuleName.get_info r))
+                rules
             in
-            var_str, { test_in with O.value })
-          base_test.test_inputs
-      in
-      let test_outputs =
-        let scope_info = ScopeName.Map.find tested_scope decl_ctx.ctx_scopes in
-        let scope_field_map =
-          ScopeVar.Map.fold (fun var field acc ->
-            StructField.Map.add field var acc)
-            scope_info.out_struct_fields
-            StructField.Map.empty
+            Message.error ~extra_pos
+              "Multiple definitions of test input value in test \
+               scope %a.%a!;@ %d rule(s) found: [%a]"
+              ScopeName.format testing_scope_name ScopeVar.format
+              var_within_origin_scope
+              (List.length rules)
+              (Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf ";@ ")
+                 (fun ppf (r, _) -> RuleName.format ppf r))
+              rules
         in
-        let assertion_values =
-          I.AssertionName.Map.fold
-            (fun _ e acc ->
-               match Expr.unbox_closed e with
-               | EAppOp {
-                   op = Op.Eq, _;
-                   args = [
-                     EStructAccess {
-                       field;
-                       e =
-                         ELocation
-                           (DesugaredScopeVar { name = svar, pos; _ }), _;
-                       _
-                     }, _;
-                     value];
-                   _ }, _
-                 when svar = subscope_var ->
-                 let scope_var = StructField.Map.find field scope_field_map in
-                 ScopeVar.Map.add scope_var { O.value = get_value decl_ctx value; pos = Some (get_source_position pos)} acc
-               | EAppOp {
-                   op = Op.Eq, _;
-                   args = [
-                      EStructAccess _, _ as e;
-                     _value];
-                   _ }, m ->
-                 Message.error ~pos:(Expr.mark_pos m)
-                   "X Could not read test assertion: %a" Expr.format e
-               | _, m as e ->
-                 Message.error ~pos:(Expr.mark_pos m)
-                   "Could not read test assertion: %a" Expr.format e
-            )
-            testing_scope.scope_assertions
-            ScopeVar.Map.empty
+        var_str, { test_in with O.value })
+      base_test.test_inputs
+  in
+  let test_outputs =
+    let scope_info =
+      ScopeName.Map.find tested_scope prg.program_ctx.ctx_scopes
+    in
+    let scope_field_map =
+      ScopeVar.Map.fold (fun var field acc ->
+          StructField.Map.add field var acc)
+        scope_info.out_struct_fields
+        StructField.Map.empty
+    in
+    let assertion_values =
+      I.AssertionName.Map.fold
+        (fun _ e acc ->
+           match Expr.unbox_closed e with
+           | EAppOp {
+               op = Op.Eq, _;
+               args = [
+                 EStructAccess {
+                   field;
+                   e =
+                     ELocation
+                       (DesugaredScopeVar { name = svar, pos; _ }), _;
+                   _
+                 }, _;
+                 value];
+               _ }, _
+             when svar = subscope_var ->
+             let scope_var = StructField.Map.find field scope_field_map in
+             ScopeVar.Map.add scope_var
+               { O.value = get_value prg.program_ctx value;
+                 pos = Some (get_source_position pos)}
+               acc
+           | EAppOp {
+               op = Op.Eq, _;
+               args = [
+                 EStructAccess _, _ as e;
+                 _value];
+               _ }, m ->
+             Message.error ~pos:(Expr.mark_pos m)
+               "Could not read test assertion: %a" Expr.format e
+           | _, m as e ->
+             Message.error ~pos:(Expr.mark_pos m)
+               "Could not read test assertion: %a" Expr.format e
+        )
+        testing_scope.scope_assertions
+        ScopeVar.Map.empty
+    in
+    List.map (fun (var_str, test_out) ->
+        let var =
+          Ident.Map.find var_str tested_id_var_map
         in
-        List.map (fun (var_str, test_out) ->
-            let var =
-              Ident.Map.find var_str tested_id_var_map
-            in
-            let value =
-              ScopeVar.Map.find_opt var assertion_values
-            in
-            var_str, { test_out with O.value })
-          base_test.test_outputs
-      in
-      { base_test with O.test_inputs;
-                       test_outputs; })
-    scopes
+        let value =
+          ScopeVar.Map.find_opt var assertion_values
+        in
+        var_str, { test_out with O.value })
+      base_test.test_outputs
+  in
+  { base_test with O.test_inputs;
+                   test_outputs; }
+
+let import_catala_tests (prg, naming_ctx) =
+  List.map
+    (get_catala_test (prg, naming_ctx))
+    (get_test_scopes prg)
 
 let read_test include_dirs options =
   let prg = read_program include_dirs options in
   let tests = import_catala_tests prg in
   write_stdout Test_case_j.write_test_list tests
-
-(* let test_case_parser includes options : unit =
- *   let prg, _type_ordering = 
- *   let test_file = desugared_program_to_test_file prg in
- *   let test_file_json = test_file_to_yojson test_file in
- *   Format.printf "%s\n" (Yojson.Safe.to_string test_file_json) *)
 
 let rec print_catala_value ppf =
   let open Format in
@@ -409,4 +415,51 @@ let write_catala options outfile =
   in
   with_out @@ fun oc -> List.iter (write_catala_test oc) tests
 
-let run_test _include_dirs _options = failwith "TODO"
+let run_test testing_scope include_dirs options =
+  let (desugared_prg, naming_ctx) = read_program include_dirs options in
+  let testing_scope_name =
+    match Ident.Map.find_opt testing_scope Desugared.Name_resolution.(naming_ctx.local.typedefs) with
+    | Some TScope (sname, _) -> sname
+    | _ -> Message.error "No scope %S was found in the program" testing_scope
+  in
+  let test = get_catala_test (desugared_prg, naming_ctx) testing_scope_name in
+  let dcalc_prg =
+    let prg =
+      Scopelang.From_desugared.(translate_program desugared_prg
+                                  (build_exceptions_graph desugared_prg))
+    in
+    let prg = Scopelang.Ast.type_program prg in
+    Dcalc.From_scopelang.translate_program prg
+  in
+  Interpreter.load_runtime_modules
+    ~hashf:Hash.(finalise ~closure_conversion:false ~monomorphize_types:false)
+    dcalc_prg;
+  let program_fun = Expr.unbox (Program.to_expr dcalc_prg testing_scope_name) in
+  let program_fun =
+    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_fun
+  in
+  let _args, program_expr = match program_fun with
+    | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
+    | _ -> assert false
+  in
+  let result_struct =
+    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr
+  in
+  let results, out_struct =
+    match result_struct with
+    | EStruct { fields; name }, _ ->
+      StructField.Map.bindings fields,
+      StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs
+    | _ -> assert false
+  in
+  let test_outputs =
+    List.map (fun (field, value) ->
+        StructField.to_string field,
+        { O.value = Some { value = get_value dcalc_prg.decl_ctx value;
+                           pos = None; };
+          typ = get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
+        })
+      results
+  in
+  let test = { test with test_outputs } in
+  write_stdout Test_case_j.write_test test
