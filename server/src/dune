@@ -1,7 +1,7 @@
 (executable
   (name         main)
   (public_name  catala-lsp)
-  (package      catala_lsp)
+  (package      catala-lsp)
   (libraries
    threads.posix
    lsp
