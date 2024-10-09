@@ -1,9 +1,9 @@
 {
   "name": "catala-vscode-extension",
-  "displayName": "Catala VSCode Extension",
+  "displayName": "Catala",
   "description": "A VSCode extension and LSP server for the Catala language",
   "version": "0.0.1",
-  "publisher": "INRIA",
+  "publisher": "catalalang",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
