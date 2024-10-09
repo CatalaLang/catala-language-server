@@ -1,6 +1,4 @@
 (lang dune 3.0)
 (name catala-lsp)
 (version v0.9)
-(using mdx 0.2)
-(using menhir 2.0)
 (implicit_transitive_deps true)
