@@ -1,0 +1,30 @@
+
+```catala
+declaration scope Exemple1_test:
+  output calcul_aide_personnalisee_logement_locatif scope CalculAidePersonnaliséeLogementLocatif
+  
+scope Exemple1_test:
+  definition calcul_aide_personnalisee_logement_locatif.loyer_principal equals
+    $700.00
+  definition calcul_aide_personnalisee_logement_locatif.ressources_ménage_arrondies equals
+    $15000.00
+  definition calcul_aide_personnalisee_logement_locatif.bénéficiaire_aide_adulte_ou_enfant_handicapés equals
+    false
+  definition calcul_aide_personnalisee_logement_locatif.date_courante equals
+    |2024-09-10|
+  definition calcul_aide_personnalisee_logement_locatif.nombre_personnes_à_charge equals
+    3
+  definition calcul_aide_personnalisee_logement_locatif.situation_familiale_calcul_apl equals
+    Couple
+  definition calcul_aide_personnalisee_logement_locatif.zone equals Zone1
+  definition calcul_aide_personnalisee_logement_locatif.logement_est_chambre equals
+    false
+  definition calcul_aide_personnalisee_logement_locatif.âgées_ou_handicap_adultes_hébergées_onéreux_particuliers equals
+    false
+  definition calcul_aide_personnalisee_logement_locatif.colocation equals
+    false
+  definition calcul_aide_personnalisee_logement_locatif.réduction_loyer_solidarité equals
+    $0.00
+  assertion (calcul_aide_personnalisee_logement_locatif.aide_finale =
+             $463.32)
+```
