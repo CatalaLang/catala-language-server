@@ -16,3 +16,7 @@
    uri
    re)
   (flags (:standard)))
+
+(alias
+ (name lsp)
+ (deps main.exe))
