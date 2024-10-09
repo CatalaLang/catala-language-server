@@ -31,12 +31,12 @@ install:
 ```bash
 # 1. Clone this repository
 git clone https://github.com/CatalaLang/catala-language-server/
-# 2. Go to the directory
+# 2. Enter the freshly created directory
 cd catala-language-server/
 # 3. Install the JS dependencies
 npm install
 # 4. Install the OCaml dependencies
-cd server ; opam install . --deps-only ; cd ..
+opam install . --deps-only
 # 5. Build the extension
 npm run compile
 ```
