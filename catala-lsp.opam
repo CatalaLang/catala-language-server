@@ -15,7 +15,7 @@ depends: [
   "linol-lwt" { = "dev" }
 ]
 pin-depends: [
-  ["catala.dev" "git+https://github.com/CatalaLang/catala#master"]
+  ["catala.dev" "git+https://github.com/CatalaLang/catala#lsp-compat"]
   # TODO: remove linol's pinning once the required changes are
   # published in opam
   ["linol.dev" "git+https://github.com/c-cube/linol#a779942f9592a762d26484d03b1f93110dbaf577"]
