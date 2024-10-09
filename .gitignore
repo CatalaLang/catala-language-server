@@ -5,3 +5,4 @@ node_modules
 .aider*
 .envrc
 
+_build

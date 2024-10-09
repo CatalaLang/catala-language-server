@@ -1,26 +1,23 @@
-version: "0.0.1"
 opam-version: "2.0"
-name: "catala_lsp"
+version: "0.0.1"
+name: "catala-lsp"
 maintainer: "Vincent Botbol"
-authors: "Vincent Botbol"
+authors: [ "Vincent Botbol" ]
 license: "Apache-2.0"
-build: [
-  ["dune" "build"]
-]
+build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
   "ocaml" {>= "4.14.1"}
   "dune" { >= "3.0" }
+  "catala"    { = "dev" }
   "logs"
-  "lsp"
+  "uri"
   "linol"     { = "dev" }
   "linol-lwt" { = "dev" }
-  "uri"
-  "catala"
 ]
 pin-depends: [
-  # TODO: remove this dependency once the LSP required changes are
-  # published in opam
   ["catala.dev" "git+https://github.com/CatalaLang/catala#master"]
+  # TODO: remove linol's pinning once the required changes are
+  # published in opam
   ["linol.dev" "git+https://github.com/c-cube/linol#a779942f9592a762d26484d03b1f93110dbaf577"]
   ["linol-lwt.dev" "git+https://github.com/c-cube/linol#a779942f9592a762d26484d03b1f93110dbaf577"]
 ]
@@ -29,4 +26,4 @@ homepage: "https://github.com/CatalaLang/catala-language-server"
 dev-repo: "git+https://github.com/CatalaLang/catala-language-server.git"
 bug-reports: "https://github.com/CatalaLang/catala-language-server/issues"
 synopsis: "Catala Language Server Protocol (LSP)"
-description:"Implementation of a Language Server Protocol (LSP) for Catala. "
+description:"Implementation of a Language Server Protocol (LSP) for Catala."
