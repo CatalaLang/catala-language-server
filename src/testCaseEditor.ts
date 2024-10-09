@@ -127,9 +127,19 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         }
         case 'TestGenerateRequest': {
           const { scopeUnderTest, filename } = typed_msg.value;
-          const results = generate(scopeUnderTest, filename);
+          // 'generate' currently does not take modules into account,
+          // so we hack around this by removing the module name
+          // here and monkey-patching the generated test's
+          // `tested_scope.name` (see below)
+          // TODO FIX
+          const targetScope = scopeUnderTest.substring(
+            scopeUnderTest.indexOf('.') + 1
+          );
+          const results = generate(targetScope, filename);
           if (results.kind === 'Results') {
             const newTest = results.value;
+            //HACK: prepend scope under test by module name
+            newTest.tested_scope.name = scopeUnderTest; //XXX
             const currentTests = parseTestFile(document.getText(), lang);
             if (currentTests.kind === 'Results') {
               const updatedTests = [...currentTests.value, newTest];
