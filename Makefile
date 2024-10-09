@@ -12,11 +12,11 @@ ${TARGET}: ${SRC}/extension.ts
 
 .PHONY: caml-build
 caml-build: FORCE
-	cd server; dune build
+	dune build @lsp
 
 FORCE: ;
 
 .PHONY: clean
 clean:
 	rm -f ${TARGET}
-	cd server; dune clean
+	dune clean

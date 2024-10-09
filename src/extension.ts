@@ -16,7 +16,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const catala_binary = 'catala-lsp';
 
   const local_path = context.asAbsolutePath(
-    path.join('server', '_build', 'default', 'src', 'main.exe')
+    path.join('_build', 'default', 'server', 'src', 'main.exe')
   );
 
   const is_binary_in_path = cmd_exists.sync(catala_binary);
