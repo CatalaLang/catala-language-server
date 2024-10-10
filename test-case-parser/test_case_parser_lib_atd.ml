@@ -376,15 +376,14 @@ let rec print_catala_value ppf =
 let write_catala_test ppf t =
   let open Format in
   let open O in
-  let tested_module, sscope_var =
-    let modl, sname = match Filename.extension t.tested_scope.name with
-      | "" -> None, t.tested_scope.name
-      | s -> Some (Filename.remove_extension t.tested_scope.name), String.sub s 1 (String.length s - 1)
+  let sscope_var =
+    let sname = match Filename.extension t.tested_scope.name with
+      | "" -> t.tested_scope.name
+      | s -> String.sub s 1 (String.length s - 1)
     in
-    modl, String.to_snake_case sname
+    String.to_snake_case sname
   in
   pp_open_vbox ppf 0;
-  Option.iter (fun m -> fprintf ppf "> Using %s@," m) tested_module;
   fprintf ppf "@,```catala@,";
   fprintf ppf "@[<v 2>declaration scope %s:@," t.testing_scope;
   fprintf ppf "output %s scope %s@," sscope_var t.tested_scope.name;
@@ -413,7 +412,24 @@ let write_catala options outfile =
       ~source_file:(Global.Stdin "")
       ~output_file:(Option.map options.Global.path_rewrite outfile)
   in
-  with_out @@ fun oc -> List.iter (write_catala_test oc) tests
+  with_out @@ fun ppf ->
+  let _opened =
+    List.fold_left (fun opened test ->
+        Format.pp_open_vbox ppf 0;
+        let opened =
+          if Filename.extension test.O.tested_scope.name = "" then opened
+          else
+            let modname = Filename.chop_extension test.O.tested_scope.name in
+            if not (String.Set.mem modname opened) then
+              Format.fprintf ppf "> Using %s@," modname;
+            String.Set.add modname opened
+        in
+        write_catala_test ppf test;
+        Format.pp_close_box ppf ();
+        opened)
+      String.Set.empty tests
+  in
+  ()
 
 let run_test testing_scope include_dirs options =
   let (desugared_prg, naming_ctx) = read_program include_dirs options in
