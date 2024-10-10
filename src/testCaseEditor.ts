@@ -146,8 +146,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
             newTest.tested_scope.name = scopeUnderTest; //XXX
             const currentTests = parseTestFile(document.getText(), lang);
             if (currentTests.kind === 'Results') {
-              // TODO `newTest.testing_scope` renaming to avoid possible clashes
-              newTest = renameIfNeeded(currentTests.value, newTest);
+              newTest = renameIfNeeded(currentTests.value, newTest); //XXX kludge?
               const updatedTests = [...currentTests.value, newTest];
               const newTextBuffer = atdToCatala(updatedTests, lang);
               const edit = new vscode.WorkspaceEdit();

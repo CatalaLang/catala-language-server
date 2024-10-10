@@ -3,6 +3,7 @@ import type { TestGenerateResults, TestInputs } from './generated/test_case';
 import {
   readTest,
   readTestList,
+  readTestOutputs,
   writeTestList,
   type ParseResults,
   type TestList,
@@ -73,14 +74,19 @@ export function runTestScope(
    * (note that not all these questions are related to the `runTestScope` function,
    * these could be handled externally as well)
    */
-  const cmd = 'clerk';
+  const cmd = 'catala';
   filename = path.isAbsolute(filename)
     ? path.relative(process.cwd(), filename)
     : filename;
-  const args = ['run', filename, '--scope', testScope];
+  const args = ['testcase', 'run', '--scope', testScope, filename];
   logger.log(`Exec: ${cmd} ${args.join(' ')}`);
   try {
-    execFileSync(cmd, args);
+    const result = execFileSync(cmd, args);
+    const outputs = readTestOutputs(JSON.parse(result.toString()));
+    return {
+      kind: 'Ok',
+      value: outputs,
+    };
   } catch (error) {
     const errorMsg = String(
       (error as SpawnSyncReturns<string | Buffer>).stderr
@@ -91,7 +97,6 @@ export function runTestScope(
       value: errorMsg,
     };
   }
-  return { kind: 'Ok' };
 }
 
 function withDefaultInputs(outputs: TestInputs): TestInputs {

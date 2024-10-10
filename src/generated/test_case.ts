@@ -104,7 +104,7 @@ export type ParseResults =
 
 export type TestRunResults =
 | { kind: 'Error'; value: string }
-| { kind: 'Ok' }
+| { kind: 'Ok'; value: TestOutputs }
 
 export type TestGenerateResults =
 | { kind: 'Error'; value: string }
@@ -442,29 +442,20 @@ export function writeTestRunResults(x: TestRunResults, context: any = x): any {
     case 'Error':
       return ['Error', _atd_write_string(x.value, x)]
     case 'Ok':
-      return 'Ok'
+      return ['Ok', writeTestOutputs(x.value, x)]
   }
 }
 
 export function readTestRunResults(x: any, context: any = x): TestRunResults {
-  if (typeof x === 'string') {
-    switch (x) {
-      case 'Ok':
-        return { kind: 'Ok' }
-      default:
-        _atd_bad_json('TestRunResults', x, context)
-        throw new Error('impossible')
-    }
-  }
-  else {
-    _atd_check_json_tuple(2, x, context)
-    switch (x[0]) {
-      case 'Error':
-        return { kind: 'Error', value: _atd_read_string(x[1], x) }
-      default:
-        _atd_bad_json('TestRunResults', x, context)
-        throw new Error('impossible')
-    }
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'Error':
+      return { kind: 'Error', value: _atd_read_string(x[1], x) }
+    case 'Ok':
+      return { kind: 'Ok', value: readTestOutputs(x[1], x) }
+    default:
+      _atd_bad_json('TestRunResults', x, context)
+      throw new Error('impossible')
   }
 }
 
