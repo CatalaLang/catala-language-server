@@ -137,7 +137,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           );
           const results = generate(targetScope, filename);
           if (results.kind === 'Results') {
-            const newTest = results.value;
+            let newTest = results.value;
             //HACK: prepend scope under test by module name
             //Note that it is NOT a satisfactory solution -- it will not
             //work for any struct defined in a module that needs to be
@@ -146,6 +146,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
             const currentTests = parseTestFile(document.getText(), lang);
             if (currentTests.kind === 'Results') {
               // TODO `newTest.testing_scope` renaming to avoid possible clashes
+              newTest = renameIfNeeded(currentTests.value, newTest);
               const updatedTests = [...currentTests.value, newTest];
               const newTextBuffer = atdToCatala(updatedTests, lang);
               const edit = new vscode.WorkspaceEdit();
