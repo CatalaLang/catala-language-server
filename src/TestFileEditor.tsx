@@ -85,9 +85,10 @@ export default function TestFileEditor({
           onKeyDown={handleKeyDown}
         >
           <h2>Add New Test</h2>
+          <label htmlFor="scopeUnderTest">Scope Under Test</label>
           <input
+            id="scopeUnderTest"
             type="text"
-            placeholder="Scope Under Test"
             value={modalState.scopeUnderTest}
             onChange={(e) =>
               setModalState((prev) => ({
@@ -96,9 +97,10 @@ export default function TestFileEditor({
               }))
             }
           />
+          <label htmlFor="filename">Filename</label>
           <input
+            id="filename"
             type="text"
-            placeholder="Filename"
             value={modalState.filename}
             onChange={(e) =>
               setModalState((prev) => ({
