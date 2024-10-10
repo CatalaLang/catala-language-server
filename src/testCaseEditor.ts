@@ -13,7 +13,9 @@ import {
   runTestScope,
   parseTestFile,
   atdToCatala,
+  generate,
 } from './testCaseCompilerInterop';
+import { renameIfNeeded } from './testCaseUtils';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
@@ -122,6 +124,50 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         case 'TestRunRequest': {
           const { scope } = typed_msg.value;
           this.testQueue.add(() => runTest(document.fileName, scope));
+          break;
+        }
+        case 'TestGenerateRequest': {
+          const { scopeUnderTest, filename } = typed_msg.value;
+          // 'generate' currently does not take modules into account,
+          // so we hack around this by removing the module name
+          // here and monkey-patching the generated test's
+          // `tested_scope.name` (see below)
+          // TODO FIX
+          const targetScope = scopeUnderTest.substring(
+            scopeUnderTest.indexOf('.') + 1
+          );
+          const results = generate(targetScope, filename);
+          if (results.kind === 'Results') {
+            let newTest = results.value;
+            //HACK: prepend scope under test by module name
+            //Note that it is NOT a satisfactory solution -- it will not
+            //work for any struct defined in a module that needs to be
+            //passed to the scope, for instance -- we need something better
+            newTest.tested_scope.name = scopeUnderTest; //XXX
+            const currentTests = parseTestFile(document.getText(), lang);
+            if (currentTests.kind === 'Results') {
+              // TODO `newTest.testing_scope` renaming to avoid possible clashes
+              newTest = renameIfNeeded(currentTests.value, newTest);
+              const updatedTests = [...currentTests.value, newTest];
+              const newTextBuffer = atdToCatala(updatedTests, lang);
+              const edit = new vscode.WorkspaceEdit();
+              edit.replace(
+                document.uri,
+                new vscode.Range(0, 0, document.lineCount, 0),
+                newTextBuffer
+              );
+              vscode.workspace.applyEdit(edit).then(() => {
+                postMessageToWebView({
+                  kind: 'Update',
+                  value: parseTestFile(document.getText(), lang),
+                });
+              });
+            }
+          } else {
+            vscode.window.showErrorMessage(
+              `Failed to generate test: ${results.value}`
+            );
+          }
           break;
         }
         case 'OpenInTextEditor':

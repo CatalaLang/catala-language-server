@@ -101,8 +101,18 @@ type test_run_results = [
   | Ok (* at some point this could also hold the scope output? *)
 ]
 
+type test_generate_results = [
+  | Error of string
+  | Results of test
+]
+
 type test_run_request = {
   scope: string;
+}
+
+type test_generate_request = {
+  scopeUnderTest: string;
+  filename: string;
 }
 
 type up_message = [
@@ -110,6 +120,7 @@ type up_message = [
   | Edit of test_list
   | OpenInTextEditor
   | TestRunRequest of test_run_request
+  | TestGenerateRequest of test_generate_request
 ]
 
 type down_message = [

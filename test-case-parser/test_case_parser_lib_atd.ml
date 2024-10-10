@@ -196,7 +196,13 @@ let invalid_testing_scope fmt =
 let import_catala_tests (prg, naming_ctx) =
   let decl_ctx = prg.I.program_ctx in
   let root_module = prg.I.program_root in
-  let scopes = ScopeName.Map.bindings root_module.module_scopes in
+  let scopes =
+    let re_test = Re.(compile (str "_test")) in
+    root_module.module_scopes
+    |> ScopeName.Map.filter (fun name _ ->
+        Re.execp re_test (ScopeName.base name))
+    |> ScopeName.Map.bindings
+  in
   List.map
     (fun (testing_scope_name, testing_scope) ->
       let subscope_var, tested_scope =

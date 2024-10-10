@@ -72,11 +72,6 @@
   margin-bottom: 20px;
 }
 
-.test-editor-add {
-  font-size: 14px;
-  padding: 8px 16px;
-}
-
 .test-editor-content {
   padding: 4px;
 }
@@ -294,4 +289,132 @@
 
 .assertion-delete .codicon {
   font-size: 14px;
+}
+.test-editor-container {
+  position: relative;
+  padding-top: 40px; /* Space for the "add new test" button */
+}
+
+.test-editor-add-button-container {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+}
+
+.test-editor-add-button {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.test-editor-add-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.test-editor-add-button .codicon {
+  margin-right: 6px;
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+}
+
+.modal-content {
+  background-color: var(--vscode-editor-background);
+  padding: 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  width: 400px;
+  max-width: 90%;
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.modal-content {
+  padding: 24px;
+}
+
+.modal-content h2 {
+  margin-bottom: 20px;
+}
+
+.modal-content input {
+  width: calc(100% - 16px);
+  padding: 8px;
+  margin-bottom: 16px;
+  border: 1px solid var(--vscode-input-border);
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.modal-content input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+}
+
+.modal-content label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--vscode-foreground);
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.modal-buttons button {
+  margin-left: 8px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.modal-buttons button:first-child {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.modal-buttons button:first-child:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.modal-buttons button:last-child {
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.modal-buttons button:last-child:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
 }
