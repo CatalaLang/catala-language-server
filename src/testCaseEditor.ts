@@ -15,6 +15,7 @@ import {
   atdToCatala,
   generate,
 } from './testCaseCompilerInterop';
+import { renameIfNeeded } from './testCaseUtils';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the

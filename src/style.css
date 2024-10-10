@@ -353,19 +353,36 @@
   color: var(--vscode-foreground);
 }
 
+.modal-content {
+  padding: 24px;
+}
+
+.modal-content h2 {
+  margin-bottom: 20px;
+}
+
 .modal-content input {
-  width: 100%;
-  padding: 6px 8px;
-  margin-bottom: 12px;
+  width: calc(100% - 16px);
+  padding: 8px;
+  margin-bottom: 16px;
   border: 1px solid var(--vscode-input-border);
   background-color: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   font-size: 13px;
+  border-radius: 4px;
 }
 
 .modal-content input:focus {
   outline: none;
   border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+}
+
+.modal-content label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--vscode-foreground);
 }
 
 .modal-buttons {
