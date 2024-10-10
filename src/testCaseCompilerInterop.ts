@@ -11,6 +11,7 @@ import {
 import { logger } from './logger';
 import path = require('path');
 import { getDefaultValue } from './defaults';
+import { window } from 'vscode';
 
 export function parseTestFile(content: string, lang: string): ParseResults {
   // TODO check behavior when packaging comes into play ('dune install')
@@ -81,9 +82,13 @@ export function runTestScope(
   try {
     execFileSync(cmd, args);
   } catch (error) {
+    const errorMsg = String(
+      (error as SpawnSyncReturns<string | Buffer>).stderr
+    );
+    window.showErrorMessage(errorMsg);
     return {
       kind: 'Error',
-      value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
+      value: errorMsg,
     };
   }
   return { kind: 'Ok' };
