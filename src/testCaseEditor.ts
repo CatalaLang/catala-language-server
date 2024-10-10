@@ -139,9 +139,13 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           if (results.kind === 'Results') {
             const newTest = results.value;
             //HACK: prepend scope under test by module name
+            //Note that it is NOT a satisfactory solution -- it will not
+            //work for any struct defined in a module that needs to be
+            //passed to the scope, for instance -- we need something better
             newTest.tested_scope.name = scopeUnderTest; //XXX
             const currentTests = parseTestFile(document.getText(), lang);
             if (currentTests.kind === 'Results') {
+              // TODO `newTest.testing_scope` renaming to avoid possible clashes
               const updatedTests = [...currentTests.value, newTest];
               const newTextBuffer = atdToCatala(updatedTests, lang);
               const edit = new vscode.WorkspaceEdit();
