@@ -282,7 +282,7 @@ let load_module_interfaces config_dir includes program =
         | None ->
           let intf =
             Surface.Parser_driver.load_interface
-              (Global.FileName File.(config_dir / f))
+              (Global.FileName File.(config_dir / Filename.basename f))
           in
           let modname = ModuleName.fresh intf.intf_modname.module_name in
           let seen = File.Map.add f None seen in
