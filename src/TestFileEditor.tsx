@@ -181,6 +181,20 @@ export default function TestFileEditor({
     [vscode]
   );
 
+  const onTestExplain = useCallback(
+    (testScope: string): void => {
+      vscode.postMessage(
+        writeUpMessage({
+          kind: 'TestExplainRequest',
+          value: {
+            scope: testScope,
+          },
+        })
+      );
+    },
+    [vscode]
+  );
+
   const onAddNewTest = useCallback((): void => {
     setModalState({ isOpen: true, scopeUnderTest: '', filename: '' });
   }, []);
@@ -295,6 +309,7 @@ export default function TestFileEditor({
               onTestChange={onTestChange}
               onTestDelete={onTestDelete}
               onTestRun={onTestRun}
+              onTestExplain={onTestExplain}
               runState={testRunState[test.testing_scope]}
             />
           ))}

@@ -125,6 +125,7 @@ export type UpMessage =
 | { kind: 'OpenInTextEditor' }
 | { kind: 'TestRunRequest'; value: TestRunRequest }
 | { kind: 'TestGenerateRequest'; value: TestGenerateRequest }
+| { kind: 'TestExplainRequest'; value: TestRunRequest }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
@@ -519,6 +520,8 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return ['TestRunRequest', writeTestRunRequest(x.value, x)]
     case 'TestGenerateRequest':
       return ['TestGenerateRequest', writeTestGenerateRequest(x.value, x)]
+    case 'TestExplainRequest':
+      return ['TestExplainRequest', writeTestRunRequest(x.value, x)]
   }
 }
 
@@ -543,6 +546,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'TestRunRequest', value: readTestRunRequest(x[1], x) }
       case 'TestGenerateRequest':
         return { kind: 'TestGenerateRequest', value: readTestGenerateRequest(x[1], x) }
+      case 'TestExplainRequest':
+        return { kind: 'TestExplainRequest', value: readTestRunRequest(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')

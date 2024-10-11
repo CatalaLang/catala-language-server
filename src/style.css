@@ -19,7 +19,13 @@
   margin-left: 8px;
 }
 
+.test-editor-actions {
+  display: flex;
+  gap: 5px;
+}
+
 .test-editor-run,
+.test-editor-explain,
 .test-editor-delete {
   background: none;
   border: none;
@@ -33,6 +39,7 @@
 }
 
 .test-editor-run:hover,
+.test-editor-explain:hover,
 .test-editor-delete:hover {
   background: var(--vscode-toolbar-hoverBackground);
 }
@@ -51,6 +58,14 @@
 
 .test-editor-run:hover {
   background-color: var(--vscode-button-hoverBackground);
+}
+
+.test-editor-explain {
+  color: var(--vscode-symbolIcon-questionForeground);
+}
+
+.test-editor-explain:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
 }
 
 .test-editor-empty {
