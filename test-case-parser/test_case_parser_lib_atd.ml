@@ -447,9 +447,12 @@ let run_test testing_scope include_dirs options =
   in
   let results, out_struct =
     match result_struct with
-    | EStruct { fields; name }, _ ->
-      StructField.Map.bindings fields,
-      StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs
+    | EStruct { fields; _ }, _ ->
+      (match StructField.Map.choose fields with
+       | _, (EStruct { fields; name }, _) ->
+         StructField.Map.bindings fields,
+         StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs
+       | _ -> assert false)
     | _ -> assert false
   in
   let test_outputs =
