@@ -7,7 +7,6 @@ declaration scope DateComp_test:
 scope DateComp_test:
   definition date_comp.birthday equals |1982-07-16|
 ```
-> Using Kitchensink
 
 ```catala
 declaration scope DurationComp_test:
