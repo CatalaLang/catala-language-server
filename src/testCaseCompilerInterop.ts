@@ -12,6 +12,9 @@ import { logger } from './logger';
 import path = require('path');
 import { getDefaultValue } from './defaults';
 import { window } from 'vscode';
+import * as fs from 'fs';
+import { fileSync, setGracefulCleanup } from 'tmp';
+import open, { apps } from 'open';
 
 export function parseTestFile(contents: string, lang: string): ParseResults {
   // TODO check behavior when packaging comes into play ('dune install')
@@ -120,12 +123,18 @@ export function runTestScope(
   }
 }
 
-export function explainTestScope(contents: string, scope: string): void {
+export function explainTestScope(uri: string, scope: string): void {
   try {
+    const file = fileSync({
+      tmpdir: '.',
+      prefix: 'explain-',
+      postfix: '.html',
+    }).name;
+    setGracefulCleanup();
     const cmd = 'catala';
     const args = [
       'explain',
-      'filename',
+      uri,
       '-s',
       scope,
       '--html',
@@ -135,7 +144,9 @@ export function explainTestScope(contents: string, scope: string): void {
       ':NN:0',
       '--inline-mod-uses',
     ];
-    execFileSync(cmd, args, { input: contents });
+    const output = execFileSync(cmd, args);
+    fs.writeFileSync(file, output);
+    open(file, { app: { name: apps.browser } });
   } catch (error) {
     logger.log(error);
   }

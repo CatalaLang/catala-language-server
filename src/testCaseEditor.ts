@@ -129,8 +129,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         }
         case 'TestExplainRequest': {
           const { scope } = typed_msg.value;
-          const text = document.getText();
-          explainTestScope(text, scope);
+          explainTestScope(document.uri.path, scope);
           break;
         }
         case 'TestGenerateRequest': {
