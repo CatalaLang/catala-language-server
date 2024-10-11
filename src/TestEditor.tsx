@@ -1,5 +1,10 @@
 import { type ReactElement } from 'react';
-import type { Test, TestInputs, TestRunResults } from './generated/test_case';
+import {
+  writeTestOutputs,
+  type Test,
+  type TestInputs,
+  type TestRunResults,
+} from './generated/test_case';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
 
@@ -78,6 +83,21 @@ export default function TestEditor(props: Props): ReactElement {
             test={props.test}
             onTestChange={props.onTestChange}
           />
+          <div>
+            <b>expected: </b>
+            <pre>
+              {JSON.stringify(writeTestOutputs(props.test.test_outputs))}
+            </pre>
+          </div>
+          <div>
+            <b>actual: </b>
+            <pre>
+              {props.runState?.results?.value &&
+                props.runState.status === 'success' &&
+                props.runState.results?.kind === 'Ok' &&
+                JSON.stringify(writeTestOutputs(props.runState.results.value))}
+            </pre>
+          </div>
         </div>
       </div>
     </div>

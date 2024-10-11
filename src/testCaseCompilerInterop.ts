@@ -3,7 +3,6 @@ import type { TestGenerateResults, TestInputs } from './generated/test_case';
 import {
   readTest,
   readTestList,
-  readTestOutputs,
   writeTestList,
   type ParseResults,
   type TestList,
@@ -78,14 +77,23 @@ export function runTestScope(
   filename = path.isAbsolute(filename)
     ? path.relative(process.cwd(), filename)
     : filename;
-  const args = ['testcase', 'run', '--scope', testScope, filename];
+  const args = [
+    'testcase',
+    'run',
+    '--scope',
+    testScope,
+    filename,
+    '-I',
+    './_build/test-case-parser/examples',
+  ];
   logger.log(`Exec: ${cmd} ${args.join(' ')}`);
   try {
     const result = execFileSync(cmd, args);
-    const outputs = readTestOutputs(JSON.parse(result.toString()));
+    logger.log(result.toString());
+    const test = readTest(JSON.parse(result.toString()));
     return {
       kind: 'Ok',
-      value: outputs,
+      value: test.test_outputs,
     };
   } catch (error) {
     const errorMsg = String(
