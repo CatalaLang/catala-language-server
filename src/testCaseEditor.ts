@@ -14,6 +14,7 @@ import {
   parseTestFile,
   atdToCatala,
   generate,
+  explainTestScope,
 } from './testCaseCompilerInterop';
 import { renameIfNeeded } from './testCaseUtils';
 
@@ -127,6 +128,9 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           break;
         }
         case 'TestExplainRequest': {
+          const { scope } = typed_msg.value;
+          const text = document.getText();
+          explainTestScope(text, scope);
           break;
         }
         case 'TestGenerateRequest': {
