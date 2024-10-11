@@ -126,6 +126,9 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           this.testQueue.add(() => runTest(document.fileName, scope));
           break;
         }
+        case 'TestExplainRequest': {
+          break;
+        }
         case 'TestGenerateRequest': {
           const { scopeUnderTest, filename } = typed_msg.value;
           // 'generate' currently does not take modules into account,

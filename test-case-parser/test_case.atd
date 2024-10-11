@@ -121,6 +121,7 @@ type up_message = [
   | OpenInTextEditor
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request
+  | TestExplainRequest of test_run_request
 ]
 
 type down_message = [
