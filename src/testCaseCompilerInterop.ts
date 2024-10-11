@@ -13,7 +13,7 @@ import path = require('path');
 import { getDefaultValue } from './defaults';
 import { window } from 'vscode';
 
-export function parseTestFile(content: string, lang: string): ParseResults {
+export function parseTestFile(contents: string, lang: string): ParseResults {
   // TODO check behavior when packaging comes into play ('dune install')
   // TODO we should also delegate includes to clerk (remove 'examples')
   // TODO we could revisit this to make the parsing async
@@ -29,7 +29,7 @@ export function parseTestFile(content: string, lang: string): ParseResults {
         './test-case-parser/examples',
         '-',
       ],
-      { input: content }
+      { input: contents }
     );
     return {
       kind: 'Results',
@@ -117,6 +117,27 @@ export function runTestScope(
       kind: 'Error',
       value: errorMsg,
     };
+  }
+}
+
+export function explainTestScope(contents: string, scope: string): void {
+  try {
+    const cmd = 'catala';
+    const args = [
+      'explain',
+      'filename',
+      '-s',
+      scope,
+      '--html',
+      '--url-base',
+      'vscode://file',
+      '--line-format',
+      ':NN:0',
+      '--inline-mod-uses',
+    ];
+    execFileSync(cmd, args, { input: contents });
+  } catch (error) {
+    logger.log(error);
   }
 }
 
