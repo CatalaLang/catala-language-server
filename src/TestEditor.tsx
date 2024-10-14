@@ -7,6 +7,7 @@ import {
 } from './generated/test_case';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
+import { select } from './testCaseUtils';
 
 type Props = {
   test: Test;
@@ -96,6 +97,20 @@ export default function TestEditor(props: Props): ReactElement {
                 props.runState.status === 'success' &&
                 props.runState.results?.kind === 'Ok' &&
                 JSON.stringify(writeTestOutputs(props.runState.results.value))}
+            </pre>
+            <b>filteredActual: </b>
+            <pre>
+              {props.runState?.results?.value &&
+                props.runState.status === 'success' &&
+                props.runState.results?.kind === 'Ok' &&
+                JSON.stringify(
+                  writeTestOutputs(
+                    select(
+                      props.test.test_outputs,
+                      props.runState.results.value
+                    ).actual
+                  )
+                )}
             </pre>
           </div>
         </div>

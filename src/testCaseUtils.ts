@@ -43,6 +43,14 @@ function rename(testNames: Set<string>, newTestName: string): string {
   }
 }
 
+/**
+ * Looks at a list of expected results (assertions) and a superset
+ * list of actual results, and returns the actual results for which
+ * an expectation is defined.
+ * @param expected
+ * @param actual
+ * @returns the actual results for which an expectation is defined
+ */
 export function select(
   expected: TestOutputs,
   actual: TestOutputs
