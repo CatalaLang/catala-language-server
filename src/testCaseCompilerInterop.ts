@@ -73,6 +73,7 @@ export function runTestScope(
    * (note that not all these questions are related to the `runTestScope` function,
    * these could be handled externally as well)
    */
+
   const cmd = 'catala';
   filename = path.isAbsolute(filename)
     ? path.relative(process.cwd(), filename)
@@ -88,6 +89,18 @@ export function runTestScope(
   ];
   logger.log(`Exec: ${cmd} ${args.join(' ')}`);
   try {
+    // HACK: use 'clerk run' as a preamble (does not output test result,
+    // but builds any dependencies as a side-effect which we need currently
+    // for the run plugin!)
+    execFileSync('clerk', [
+      'run',
+      filename,
+      '-s',
+      testScope,
+      '-I',
+      './test-case-parser/examples',
+    ]);
+
     const result = execFileSync(cmd, args);
     logger.log(result.toString());
     const test = readTest(JSON.parse(result.toString()));
