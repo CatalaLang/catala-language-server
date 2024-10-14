@@ -418,3 +418,20 @@
 .modal-buttons button:last-child:hover {
   background-color: var(--vscode-button-secondaryHoverBackground);
 }
+.diff-item {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.diff-path {
+  font-weight: bold;
+}
+
+.diff-value {
+  font-family: monospace;
+  background-color: var(--vscode-textCodeBlock-background);
+  padding: 2px 4px;
+  border-radius: 3px;
+}

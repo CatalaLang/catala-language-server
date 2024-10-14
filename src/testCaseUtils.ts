@@ -43,10 +43,30 @@ function rename(testNames: Set<string>, newTestName: string): string {
   }
 }
 
+export function omitPositionInfo(testOutputs: TestOutputs): TestOutputs {
+  const result: TestOutputs = new Map();
+
+  for (const [key, testIo] of testOutputs.entries()) {
+    const newTestIo: TestIo = { ...testIo };
+
+    if (newTestIo.value) {
+      newTestIo.value = {
+        ...newTestIo.value,
+        pos: undefined, // Remove position information
+      };
+    }
+
+    result.set(key, newTestIo);
+  }
+
+  return result;
+}
+
 /**
  * Looks at a list of expected results (assertions) and a superset
  * list of actual results, and returns the actual results for which
- * an expectation is defined.
+ * an expectation is defined. Position information is omitted from
+ * the diff (revisit later?)
  * @param expected
  * @param actual
  * @returns the actual results for which an expectation is defined
@@ -55,6 +75,9 @@ export function select(
   expected: TestOutputs,
   actual: TestOutputs
 ): { expected: TestOutputs; actual: TestOutputs } {
+  expected = omitPositionInfo(expected);
+  actual = omitPositionInfo(actual);
+
   const selectedActual: TestOutputs = new Map();
 
   for (const [key, expectedValue] of expected.entries()) {

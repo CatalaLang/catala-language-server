@@ -1,12 +1,12 @@
 import { type ReactElement } from 'react';
 import {
-  writeTestOutputs,
   type Test,
   type TestInputs,
   type TestRunResults,
 } from './generated/test_case';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
+import Results from './Results';
 import { select } from './testCaseUtils';
 
 type Props = {
@@ -71,7 +71,7 @@ export default function TestEditor(props: Props): ReactElement {
         <div className="test-section">
           <div className="test-section-header">
             <h2 className="test-section-title">
-              Outputs/Expected values
+              Expected values
               <button
                 className="reset-expected-values"
                 title="Reset Expected Values"
@@ -84,36 +84,22 @@ export default function TestEditor(props: Props): ReactElement {
             test={props.test}
             onTestChange={props.onTestChange}
           />
-          <div>
-            <b>expected: </b>
-            <pre>
-              {JSON.stringify(writeTestOutputs(props.test.test_outputs))}
-            </pre>
-          </div>
-          <div>
-            <b>actual: </b>
-            <pre>
-              {props.runState?.results?.value &&
-                props.runState.status === 'success' &&
-                props.runState.results?.kind === 'Ok' &&
-                JSON.stringify(writeTestOutputs(props.runState.results.value))}
-            </pre>
-            <b>filteredActual: </b>
-            <pre>
-              {props.runState?.results?.value &&
-                props.runState.status === 'success' &&
-                props.runState.results?.kind === 'Ok' &&
-                JSON.stringify(
-                  writeTestOutputs(
-                    select(
-                      props.test.test_outputs,
-                      props.runState.results.value
-                    ).actual
-                  )
-                )}
-            </pre>
-          </div>
         </div>
+        {props.runState?.status === 'success' &&
+          props.runState?.results &&
+          props.runState?.results?.kind === 'Ok' && (
+            <div className="test-section">
+              <div className="test-section-header">
+                <h2 className="test-section-title">Results</h2>
+                <Results
+                  {...select(
+                    props.test.test_outputs,
+                    props.runState.results.value
+                  )}
+                />
+              </div>
+            </div>
+          )}
       </div>
     </div>
   );
