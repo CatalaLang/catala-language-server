@@ -106,7 +106,7 @@
     "@vscode/codicons": "^0.0.36",
     "command-exists": "^1.2.9",
     "microdiff": "^1.4.0",
-    "p-queue": "^8.0.1",
+    "p-queue": "^6.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vscode-languageclient": "^8.0.2"
