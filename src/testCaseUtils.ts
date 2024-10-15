@@ -8,6 +8,7 @@ import type {
   EnumDeclaration,
   Option,
 } from './generated/test_case';
+import { assertUnreachable } from './util';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -177,6 +178,8 @@ function selectRuntimeValue(
         kind: 'Array',
         value: actual.value as RuntimeValue[],
       };
+    default:
+      assertUnreachable(expected);
   }
 }
 
