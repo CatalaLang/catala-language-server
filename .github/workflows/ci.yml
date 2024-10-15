@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up OCaml
+      uses: ocaml/setup-ocaml@v3
+      with:
+        ocaml-compiler: 5.0.x
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: |
+        opam pin add --dev-repo catala
+        opam install dune
+        opam install . --deps-only --with-test
+        npm ci
+
+    - name: Build project
+      run: |
+        opam exec -- dune build
+        opam exec -- dune install
+        npm run compile
+
+    - name: Run tests
+      run: xvfb-run -a npm run test
