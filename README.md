@@ -28,6 +28,26 @@ install:
 
 ### Installation
 
+#### VSCode Marketplace
+
+The simplest way to install this extension is through the [VSCode
+marketplace](https://marketplace.visualstudio.com/items?itemName=catalalang.catala)
+which is directly accessible in VScode. However, the extension still
+requires the Catala LSP server which, for the time being, need to be
+manually installed through OPAM using this command:
+
+```bash
+opam pin catala-lsp git+https://github.com/CatalaLang/catala-language-server.git
+```
+
+-- and, optionally, you may also install the code formatter ([see
+below](#code-formatting)).
+
+#### Build from sources
+
+It is also possible to build the extension from the sources through
+these commands:
+
 ```bash
 # 1. Clone this repository
 git clone https://github.com/CatalaLang/catala-language-server/
@@ -55,7 +75,18 @@ vsce package
 code --install-extension catala-vscode-extension-0.0.1.vsix
 ```
 
-#### Code formatting
+#### Testing
+
+If you wish to test the extension without installing it, you may:
+
+1. Open VSCode at the repository's root (e.g., in a terminal `$ code
+.`)
+2. Go to "Run and Debug" in the VSCode sidebar (invoked by command "View: Show Run and Debug")
+3. Choose "Launch Client" and click on the play button
+4. A new VSCode window should open with the extension running
+   - you can press CTRL+R to reload the extension window to apply changes
+
+### Code formatting
 
 An automated code formatting tool for catala is available. This tool
 is based on [topiary](https://github.com/tweag/topiary/). As of right
@@ -73,15 +104,6 @@ N.b. the installation may be lengthy as it needs to install `topiary`.
 
 Once this is done, you may start (or reload) the extension and use the
 format document command: `Ctrl-p` and type 'Format Document'.
-
-### Testing
-
-1. Open VSCode at the repository's root (e.g., in a terminal `$ code
-.`)
-2. Go to "Run and Debug" in the VSCode sidebar (invoked by command "View: Show Run and Debug")
-3. Choose "Launch Client" and click on the play button
-4. A new VSCode window should open with the extension running
-   - you can press CTRL+R to reload the extension window to apply changes
 
 ### Using the Custom Test Case Editor
 
