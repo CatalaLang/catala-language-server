@@ -32,7 +32,8 @@ let () =
   in
   Logs.set_reporter (combine logfile err_std);
   Logs.set_level (Some Logs.Info);
-  Logs.info (fun m -> m "log file created: '%s'" logfile_path)
+  Logs.info (fun m -> m "log file created: '%s'" logfile_path);
+  Catala_utils.Global.enforce_options ~message_format:Lsp () |> ignore
 
 let run () =
   Log.debug (fun m ->
