@@ -280,9 +280,11 @@ let load_module_interfaces config_dir includes program =
               (err_req_pos (Mark.get use.Surface.Ast.mod_use_name :: req_chain))
             "Circular module dependency"
         | None ->
+          (* Some file paths are absolute, we normalize them wrt to the config
+             directory *)
+          let f_path = Utils.join_paths config_dir f in
           let intf =
-            Surface.Parser_driver.load_interface
-              (Global.FileName File.(config_dir / f))
+            Surface.Parser_driver.load_interface (Global.FileName f_path)
           in
           let modname = ModuleName.fresh intf.intf_modname.module_name in
           let seen = File.Map.add f None seen in

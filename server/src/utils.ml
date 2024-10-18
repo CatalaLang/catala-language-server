@@ -169,3 +169,17 @@ let try_format_document ~notify_back ~doc_content ~doc_path =
           (Printexc.to_string exn)
       in
       Lwt.return_none)
+
+let join_paths ?(abs = true) dir path =
+  let open File in
+  let dir = path_to_list dir in
+  let path = path_to_list path in
+  let rec loop acc = function
+    | [], [] -> acc
+    | r, [] | [], r -> List.rev_append r acc
+    | h :: t, (h' :: t' as r) ->
+      if h <> h' then loop (h :: acc) (t, r) else loop (h :: acc) (t, t')
+  in
+  loop [] (dir, path)
+  |> List.rev
+  |> List.fold_left ( / ) (if abs then "/" else "")
