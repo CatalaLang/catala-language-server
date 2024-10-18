@@ -280,9 +280,11 @@ let load_module_interfaces config_dir includes program =
               (err_req_pos (Mark.get use.Surface.Ast.mod_use_name :: req_chain))
             "Circular module dependency"
         | None ->
+          (* Some file paths are absolute, we normalize them wrt to the config
+             directory *)
+          let f_path = Utils.join_paths config_dir f in
           let intf =
-            Surface.Parser_driver.load_interface
-              (Global.FileName File.(config_dir / f))
+            Surface.Parser_driver.load_interface (Global.FileName f_path)
           in
           let modname = ModuleName.fresh intf.intf_modname.module_name in
           let seen = File.Map.add f None seen in
@@ -415,7 +417,9 @@ let process_document ?contents (uri : string) : t =
         Surface.Parser_driver.parse_top_level_file ?resolve_included_file
           input_src
       in
-      let prg = Surface.Fill_positions.fill_pos_with_legislative_info prg in
+      let (prg as surface) =
+        Surface.Fill_positions.fill_pos_with_legislative_info prg
+      in
       let open Catala_utils in
       let ctx =
         let mod_uses, modules =
@@ -431,23 +435,41 @@ let process_document ?contents (uri : string) : t =
       let exceptions_graphs =
         Scopelang.From_desugared.build_exceptions_graph prg
       in
-      let prg =
-        Scopelang.From_desugared.translate_program prg exceptions_graphs
-      in
-      let _type_ordering =
-        Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
-          prg.program_ctx.ctx_enums
-      in
-      let prg = Scopelang.Ast.type_program prg in
-      let jump_table = Jump.populate ctx prg in
-      [], Some prg, Some jump_table
+      match surface.Surface.Ast.program_module with
+      | Some { module_external = true; _ } ->
+        (* If the module is external, we skip it as the translation from
+           desugared would trigger an error *)
+        Log.info (fun m -> m "skipping external module interface");
+        [], None, None
+      | _ ->
+        let prg =
+          Scopelang.From_desugared.translate_program prg exceptions_graphs
+        in
+        let _type_ordering =
+          Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+            prg.program_ctx.ctx_enums
+        in
+        let prg = Scopelang.Ast.type_program prg in
+        let jump_table = Jump.populate ctx prg in
+        [], Some prg, Some jump_table
     with e ->
       (match e with
       | Catala_utils.Message.CompilerError er ->
         Log.debug (fun m ->
             m "caught (CompilerError %t)" (fun ppf ->
                 Catala_utils.Message.Content.emit ~ppf er Error))
-      | _ -> ());
+      | e ->
+        on_error
+          {
+            Message.kind = Generic;
+            message =
+              (fun fmt ->
+                Format.fprintf fmt
+                  "Generic exception while processing document: %s"
+                  (Printexc.to_string e));
+            pos = None;
+            suggestion = None;
+          });
       Log.info (fun m ->
           m "caught generic exception: %s (%d diagnostics to send)"
             (Printexc.to_string e) (List.length !l));
