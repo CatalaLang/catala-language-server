@@ -447,7 +447,18 @@ let process_document ?contents (uri : string) : t =
         Log.debug (fun m ->
             m "caught (CompilerError %t)" (fun ppf ->
                 Catala_utils.Message.Content.emit ~ppf er Error))
-      | _ -> ());
+      | e ->
+        on_error
+          {
+            Message.kind = Generic;
+            message =
+              (fun fmt ->
+                Format.fprintf fmt
+                  "Generic exception while processing document: %s"
+                  (Printexc.to_string e));
+            pos = None;
+            suggestion = None;
+          });
       Log.info (fun m ->
           m "caught generic exception: %s (%d diagnostics to send)"
             (Printexc.to_string e) (List.length !l));
