@@ -417,7 +417,9 @@ let process_document ?contents (uri : string) : t =
         Surface.Parser_driver.parse_top_level_file ?resolve_included_file
           input_src
       in
-      let prg = Surface.Fill_positions.fill_pos_with_legislative_info prg in
+      let (prg as surface) =
+        Surface.Fill_positions.fill_pos_with_legislative_info prg
+      in
       let open Catala_utils in
       let ctx =
         let mod_uses, modules =
@@ -433,16 +435,23 @@ let process_document ?contents (uri : string) : t =
       let exceptions_graphs =
         Scopelang.From_desugared.build_exceptions_graph prg
       in
-      let prg =
-        Scopelang.From_desugared.translate_program prg exceptions_graphs
-      in
-      let _type_ordering =
-        Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
-          prg.program_ctx.ctx_enums
-      in
-      let prg = Scopelang.Ast.type_program prg in
-      let jump_table = Jump.populate ctx prg in
-      [], Some prg, Some jump_table
+      match surface.Surface.Ast.program_module with
+      | Some { module_external = true; _ } ->
+        (* If the module is external, we skip it as the translation from
+           desugared would trigger an error *)
+        Log.info (fun m -> m "skipping external module interface");
+        [], None, None
+      | _ ->
+        let prg =
+          Scopelang.From_desugared.translate_program prg exceptions_graphs
+        in
+        let _type_ordering =
+          Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+            prg.program_ctx.ctx_enums
+        in
+        let prg = Scopelang.Ast.type_program prg in
+        let jump_table = Jump.populate ctx prg in
+        [], Some prg, Some jump_table
     with e ->
       (match e with
       | Catala_utils.Message.CompilerError er ->
