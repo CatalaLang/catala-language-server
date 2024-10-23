@@ -72,7 +72,7 @@ sudo npm install -g @vscode/vsce
 vsce package
 # 3. Install the generated .vsix extension through the VSCode GUI or
 #    by invoking:
-code --install-extension catala-vscode-extension-0.0.1.vsix
+code --install-extension catala-0.20.0.vsix
 ```
 
 #### Testing
