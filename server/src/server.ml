@@ -81,7 +81,6 @@ class catala_lsp_server =
     method! config_sync_opts =
       (* configure how sync happens *)
       let change = Lsp.Types.TextDocumentSyncKind.Incremental in
-      (* Lsp.Types.TextDocumentSyncKind.Full *)
       Lsp.Types.TextDocumentSyncOptions.create ~openClose:true ~change
         ~save:
           (`SaveOptions (Lsp.Types.SaveOptions.create ~includeText:false ()))
