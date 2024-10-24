@@ -73,7 +73,7 @@ class catala_lsp_server =
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
     method! config_symbol = Some (`Bool true)
-    method private config_workspace_symbol = `Bool true
+    method private config_workspace_symbol = `Bool false
     method private config_declaration = Some (`Bool true)
     method private config_references = Some (`Bool true)
     method private config_type_definition = Some (`Bool true)
@@ -206,8 +206,6 @@ class catala_lsp_server =
         | TextDocumentTypeDefinition (params : TypeDefinitionParams.t) ->
           self#on_req_type_definition ~notify_back ~uri:params.textDocument.uri
             ~pos:params.position ()
-        | WorkspaceSymbol params ->
-          self#on_req_workspace_symbol ~notify_back params
         | TextDocumentFormatting params ->
           self#on_req_document_formatting ~notify_back params
         | _ -> super#on_request_unhandled ~notify_back ~id r
@@ -395,25 +393,6 @@ class catala_lsp_server =
       let f = self#use_or_process_file (DocumentUri.to_path uri) in
       let all_symbols = State.lookup_document_symbols f in
       Lwt.return_some (`SymbolInformation all_symbols)
-
-    method private on_req_workspace_symbol
-        ~notify_back:_
-        { Linol_lwt.WorkspaceSymbolParams.query; _ }
-        : Linol_lwt.SymbolInformation.t list option Lwt.t =
-      let filter (symbol : SymbolInformation.t) =
-        match query with
-        | "" -> true
-        | query ->
-          let re = Re.str query |> Re.compile in
-          Re.execp re symbol.name
-      in
-      let all_symbols =
-        Hashtbl.to_seq_values buffers
-        |> List.of_seq
-        |> State.lookup_project_symbols
-        |> List.filter filter
-      in
-      Lwt.return_some all_symbols
 
     method private on_req_document_formatting
         ~notify_back

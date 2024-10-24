@@ -164,24 +164,10 @@ let lookup_document_symbols file =
   match variables with
   | None -> []
   | Some variables ->
-    List.filter_map
-      (fun (p, v) ->
-        if file.uri = Catala_utils.Pos.get_file p then Jump.var_to_symbol p v
-        else None)
-      (Jump.PMap.elements variables)
-
-let lookup_project_symbols all_files =
-  let all_variables =
-    let all_tbls =
-      List.filter_map
-        (fun f -> Option.bind f.jump_table @@ fun tbl -> Some tbl.variables)
-        all_files
-    in
-    List.fold_left
-      (fun acc pmap -> List.rev_append (Jump.PMap.elements pmap) acc)
-      [] all_tbls
-  in
-  List.filter_map (fun (p, v) -> Jump.var_to_symbol p v) all_variables
+    Jump.PMap.fold_on_file file.uri
+      (fun p v acc ->
+        match Jump.var_to_symbol p v with None -> acc | Some v -> v :: acc)
+      variables []
 
 let lookup_clerk_toml (path : string) =
   let from_dir = Filename.dirname path in
