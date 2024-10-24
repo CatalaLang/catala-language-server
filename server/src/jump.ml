@@ -166,12 +166,7 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
   let rec f e acc =
     let (Typed { pos; ty = typ }) = Mark.get e in
     match Mark.remove e with
-    | ELit _l ->
-      (* FIXME: some literals' positions encapsulate all the expression breaking
-         the PMap's invariant. When a better structure is used, reintroduce
-         this. *)
-      (* add_variable pos (Literal typ) acc *)
-      acc
+    | ELit _l -> PMap.add pos (Literal typ) acc
     | ELocation (ScopelangScopeVar { name; _ }) ->
       let (scope_var : ScopeVar.t), pos = name in
       let name = ScopeVar.to_string scope_var in
@@ -186,19 +181,9 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
       PMap.add pos var acc
     | EStructAccess { name = _; e = sub_expr; field } ->
       let name = StructField.to_string field in
-      let expr_pos = pos in
-      let (Typed { pos = sub_expr_pos; ty = _ }) = Mark.get sub_expr in
+      let (Typed { pos = _; ty = _ }) = Mark.get sub_expr in
       let hash = hash_info (module StructField) field in
       let var = Usage { name; hash; typ } in
-      let pos =
-        let open Pos in
-        (* Hack to extract the field's position as StructField's mark points to
-           the declaration, i.e., compute the disjoint position of expr_pos (the
-           full expression) deprived of sub_expr_pos (structure's name) *)
-        from_info (get_file expr_pos) (get_start_line expr_pos)
-          (get_end_column sub_expr_pos + 1)
-          (get_end_line expr_pos) (get_end_column expr_pos)
-      in
       let acc = PMap.add pos var acc in
       f sub_expr acc
     | EStruct { name; fields } -> populate_struct_def ctx name fields acc f
