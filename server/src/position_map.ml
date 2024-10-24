@@ -14,13 +14,32 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
-module Trie = struct
-  type 'a itv_node =
-    | Node of { itv : int * int; data : 'a; children : 'a trie }
+module type Data = sig
+  type t
 
-  and 'a trie = 'a itv_node list
+  val format : Format.formatter -> t -> unit
+end
 
-  type 'a t = 'a trie
+module Make_trie (D : Data) = struct
+  type itv_node = Node of { itv : int * int; data : D.t; children : trie }
+  and trie = itv_node list
+
+  type t = trie
+
+  let rec pp_node ppf (Node { itv = i, j; data; children }) =
+    let open Format in
+    let pp_d fmt i =
+      if i = max_int then fprintf fmt "EOL" else pp_print_int fmt i
+    in
+    match children with
+    | [] -> fprintf ppf "@[<h>(%a⟷%a): %a@]" pp_d i pp_d j D.format data
+    | _ ->
+      fprintf ppf "@[<v 2>(%a⟷%a): %a@ %a@]" pp_d i pp_d j D.format data pp_trie
+        children
+
+  and pp_trie ppf tries =
+    let open Format in
+    fprintf ppf "@[<v>%a@]" (pp_print_list ~pp_sep:pp_print_cut pp_node) tries
 
   let is_in (i, j) n = i <= n && n <= j
   let ( let*? ) opt f = match opt with None -> None | Some v -> f v
@@ -85,11 +104,19 @@ module Trie = struct
             List.rev (included_node :: acc), disjoint_node :: t
           | _ -> assert false))
     in
-    let rec loop acc itv : 'a trie -> 'a trie = function
+    let rec loop acc itv : trie -> trie = function
       | [] -> Node { itv; data; children = [] } :: acc |> List.rev
       | (Node ({ itv = itv_p; children; _ } as node_r) as node) :: t as l -> (
         match compare_itv itv_p itv with
         | `Equal ->
+          if data <> node_r.data then
+            Log.warn (fun m ->
+                m
+                  "different data present for new node (%a) vs. previous node \
+                   (%a)"
+                  pp_node
+                  (Node { itv; data; children = [] })
+                  pp_node node);
           (* We do not create equivalent nodes *)
           List.rev_append (node :: acc) t
         | `Disjoint_left ->
@@ -128,91 +155,77 @@ module LineMap = Map.Make (struct
   let format = Format.pp_print_int
 end)
 
-type 'a pmap = 'a Trie.t LineMap.t FileMap.t
-type 'a t = 'a pmap
+module Make (D : Data) = struct
+  module Trie = Make_trie (D)
 
-let ( -- ) i j = List.init (j - i + 1) (fun x -> i + x)
+  type pmap = Trie.t LineMap.t FileMap.t
+  type t = pmap
 
-let lines pos v =
-  let s = Pos.get_start_line pos in
-  let e = Pos.get_end_line pos in
-  let s_col = Pos.get_start_column pos in
-  let e_col = Pos.get_end_column pos in
-  if s = e then LineMap.singleton s ((s_col, e_col), v)
-  else
-    let s_itv = (s_col, max_int), v in
-    let e_itv = (0, e_col), v in
-    LineMap.of_list
-      ((s, s_itv)
-      :: (e, e_itv)
-      :: List.map (fun i -> i, ((0, max_int), v)) (s + 1 -- (e - 1)))
+  let pp ppf pmap =
+    let open Format in
+    let pp_lines ppf lmap =
+      fprintf ppf "@[<v 2>lines:@ %a@]"
+        (LineMap.format ~pp_sep:pp_print_cut Trie.pp_trie)
+        lmap
+    in
+    fprintf ppf "@[<v 2>variables:@ @[<v 2>%a@]@]"
+      (FileMap.format ~pp_sep:pp_print_cut pp_lines)
+      pmap
 
-let merge_tries _i trie trie' : 'a Trie.t option =
-  match trie, trie' with
-  | None, None -> None
-  | None, Some (itv, data) -> Some [Node { itv; data; children = [] }]
-  | Some trie, None -> Some trie
-  | Some trie, Some (itv, data) -> Some (Trie.insert itv data trie)
+  let ( -- ) i j = List.init (j - i + 1) (fun x -> i + x)
 
-let add pos data variables =
-  FileMap.update (Pos.get_file pos)
-    (function
-      | None ->
-        Some
-          (lines pos data
-          |> LineMap.map (fun (itv, data) ->
-                 [Trie.Node { itv; data; children = [] }]))
-      | Some im -> Some (LineMap.merge merge_tries im (lines pos data)))
-    variables
+  let lines pos v =
+    let s = Pos.get_start_line pos in
+    let e = Pos.get_end_line pos in
+    let s_col = Pos.get_start_column pos in
+    let e_col = Pos.get_end_column pos in
+    if s = e then LineMap.singleton s ((s_col, e_col), v)
+    else
+      let s_itv = (s_col, max_int), v in
+      let e_itv = (0, e_col), v in
+      LineMap.of_list
+        ((s, s_itv)
+        :: (e, e_itv)
+        :: List.map (fun i -> i, ((0, max_int), v)) (s + 1 -- (e - 1)))
 
-let lookup pos pmap =
-  let ( let* ) = Option.bind in
-  (* we assume that pos's start/end lines, start/end column are equal *)
-  let* lmap = FileMap.find_opt (Pos.get_file pos) pmap in
-  let* trie = LineMap.find_opt (Pos.get_start_line pos) lmap in
-  Trie.lookup (Pos.get_start_column pos) trie
+  let merge_tries _i trie trie' : Trie.t option =
+    match trie, trie' with
+    | None, None -> None
+    | None, Some (itv, data) -> Some [Node { itv; data; children = [] }]
+    | Some trie, None -> Some trie
+    | Some trie, Some (itv, data) -> Some (Trie.insert itv data trie)
 
-let fold f pmap acc =
-  FileMap.fold
-    (fun file lmap acc ->
-      LineMap.fold
-        (fun line trie acc ->
-          let l = List.concat_map Trie.gather_children trie in
-          List.fold_left
-            (fun acc (Trie.Node { itv = i, j; data; _ }) ->
-              f (Pos.from_info file line line i j) data acc)
-            acc l)
-        lmap acc)
-    pmap acc
+  let add pos data variables =
+    FileMap.update (Pos.get_file pos)
+      (function
+        | None ->
+          Some
+            (lines pos data
+            |> LineMap.map (fun (itv, data) ->
+                   [Trie.Node { itv; data; children = [] }]))
+        | Some im -> Some (LineMap.merge merge_tries im (lines pos data)))
+      variables
 
-let elements pmap = fold (fun pos var acc -> (pos, var) :: acc) pmap []
+  let lookup pos pmap =
+    let ( let* ) = Option.bind in
+    (* we assume that pos's start/end lines, start/end column are equal *)
+    let* lmap = FileMap.find_opt (Pos.get_file pos) pmap in
+    let* trie = LineMap.find_opt (Pos.get_start_line pos) lmap in
+    Trie.lookup (Pos.get_start_column pos) trie
 
-let rec pp_node pp_data ppf (Trie.Node { itv = i, j; data; children }) =
-  let open Format in
-  let pp_d fmt i =
-    if i = max_int then fprintf fmt "EOL" else pp_print_int fmt i
-  in
-  match children with
-  | [] -> fprintf ppf "@[<h>(%a⟷%a): %a@]" pp_d i pp_d j pp_data data
-  | _ ->
-    fprintf ppf "@[<v 2>(%a⟷%a): %a@ %a@]" pp_d i pp_d j pp_data data
-      (pp_trie pp_data) children
+  let fold f pmap acc =
+    FileMap.fold
+      (fun file lmap acc ->
+        LineMap.fold
+          (fun line trie acc ->
+            let l = List.concat_map Trie.gather_children trie in
+            List.fold_left
+              (fun acc (Trie.Node { itv = i, j; data; _ }) ->
+                f (Pos.from_info file line line i j) data acc)
+              acc l)
+          lmap acc)
+      pmap acc
 
-and pp_trie pp_data ppf tries =
-  let open Format in
-  fprintf ppf "@[<v>%a@]"
-    (pp_print_list ~pp_sep:pp_print_cut (pp_node pp_data))
-    tries
-
-let pp pp_elt ppf pmap =
-  let open Format in
-  let pp_lines ppf lmap =
-    fprintf ppf "@[<v 2>lines:@ %a@]"
-      (LineMap.format ~pp_sep:pp_print_cut (pp_trie pp_elt))
-      lmap
-  in
-  fprintf ppf "@[<v 2>variables:@ @[<v 2>%a@]@]"
-    (FileMap.format ~pp_sep:pp_print_cut pp_lines)
-    pmap
-
-let empty = FileMap.empty
+  let elements pmap = fold (fun pos var acc -> (pos, var) :: acc) pmap []
+  let empty = FileMap.empty
+end

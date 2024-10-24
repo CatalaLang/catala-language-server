@@ -168,7 +168,7 @@ let lookup_document_symbols file =
       (fun (p, v) ->
         if file.uri = Catala_utils.Pos.get_file p then Jump.var_to_symbol p v
         else None)
-      (Position_map.elements variables)
+      (Jump.PMap.elements variables)
 
 let lookup_project_symbols all_files =
   let all_variables =
@@ -178,7 +178,7 @@ let lookup_project_symbols all_files =
         all_files
     in
     List.fold_left
-      (fun acc pmap -> List.rev_append (Position_map.elements pmap) acc)
+      (fun acc pmap -> List.rev_append (Jump.PMap.elements pmap) acc)
       [] all_tbls
   in
   List.filter_map (fun (p, v) -> Jump.var_to_symbol p v) all_variables
