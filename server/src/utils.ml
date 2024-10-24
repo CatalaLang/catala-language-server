@@ -17,6 +17,10 @@
 open Lsp.Types
 open Catala_utils
 
+let pp_opt pp fmt =
+  let open Format in
+  function None -> fprintf fmt "<none>" | Some v -> fprintf fmt "%a" pp v
+
 let is_included (p : Pos.t) p' =
   (* true if p is included in p' *)
   Pos.get_file p = Pos.get_file p'

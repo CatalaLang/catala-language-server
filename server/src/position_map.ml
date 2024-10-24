@@ -21,26 +21,26 @@ module type Data = sig
 end
 
 module Make_trie (D : Data) = struct
-  type itv_node =
-    | Node of {
-        (* (line,col) x (line, col) *) itv : (int * int) * (int * int);
-        data : D.t;
-        children : trie;
-      }
+  type itv = (int (* line *) * int (* col *)) * (int (* line *) * int (* col *))
 
-  and trie = itv_node list
+  type node = Node of { itv : itv; data : D.t; children : trie }
+  and trie = node list
 
   type t = trie
 
   let pp_itv ppf ((li, i), (lj, j)) =
-    Format.fprintf ppf "((%d:%d)⟷(%d:%d))" li i lj j
+    Format.fprintf ppf "(%d:%d)⟷(%d:%d)" li i lj j
+
+  let itv_to_range ((li, i), (lj, j)) =
+    let pos = Catala_utils.Pos.from_info "" li i lj j in
+    Utils.range_of_pos pos
 
   let rec pp_node ppf (Node { itv; data; children }) =
     let open Format in
     match children with
-    | [] -> fprintf ppf "@[<h>(%a): %a@]" pp_itv itv D.format data
+    | [] -> fprintf ppf "@[<h>%a: %a@]" pp_itv itv D.format data
     | _ ->
-      fprintf ppf "@[<v 2>(%a): %a@ %a@]" pp_itv itv D.format data pp_trie
+      fprintf ppf "@[<v 2>%a: %a@ %a@]" pp_itv itv D.format data pp_trie
         children
 
   and pp_trie ppf tries =
@@ -62,6 +62,16 @@ module Make_trie (D : Data) = struct
     | Some (Node { children = []; data; _ }) -> Some data
     | Some (Node { children; data; _ }) -> (
       match lookup i children with None -> Some data | Some v -> Some v)
+
+  let rec lookup_with_range i trie =
+    List.find_opt (fun (Node { itv; _ }) -> is_in itv i) trie
+    |> function
+    | None -> None
+    | Some (Node { itv; children = []; data }) -> Some (itv_to_range itv, data)
+    | Some (Node { itv; children; data }) -> (
+      match lookup_with_range i children with
+      | None -> Some (itv_to_range itv, data)
+      | Some v -> Some v)
 
   let compare_itv (((li, i), (lj, j)) as itv) (((li', i'), (lj', j')) as itv') =
     if itv = itv' then `Equal
@@ -205,6 +215,14 @@ module Make (D : Data) = struct
     let* trie = FileMap.find_opt (Pos.get_file pos) pmap in
     Trie.lookup (Pos.get_start_line pos, Pos.get_start_column pos) trie
 
+  let lookup_with_range pos pmap =
+    let ( let* ) = Option.bind in
+    (* we assume that pos's start/end lines, start/end column are equal *)
+    let* trie = FileMap.find_opt (Pos.get_file pos) pmap in
+    Trie.lookup_with_range
+      (Pos.get_start_line pos, Pos.get_start_column pos)
+      trie
+
   let fold f pmap acc =
     let rec fold file trie acc =
       List.fold_left
@@ -215,6 +233,11 @@ module Make (D : Data) = struct
     in
     FileMap.fold fold pmap acc
 
-  let elements pmap = fold (fun pos var acc -> (pos, var) :: acc) pmap []
+  let fold_on_file file f pmap acc =
+    FileMap.find_opt file pmap
+    |> function
+    | None -> acc | Some pmap -> fold f (FileMap.singleton file pmap) acc
+
+  let iter f pmap = fold (fun k v () -> f k v) pmap ()
   let empty = FileMap.empty
 end

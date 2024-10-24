@@ -32,6 +32,17 @@ type lookup_entry = {
   usages : Pos.t list option;
 }
 
+let pp_lookup_entry fmt { declaration; definitions; usages } =
+  let open Format in
+  let pp_pos fmt p = pp_print_string fmt @@ Pos.to_string_short p in
+  fprintf fmt
+    "declaration: %a@\n@[<v 2>definitions:@ %a@]@\n@[<v 2>usages:@ %a@]"
+    (pp_opt pp_pos) declaration
+    (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
+    definitions
+    (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
+    usages
+
 let empty_lookup = { declaration = None; definitions = None; usages = None }
 
 type var =
@@ -375,11 +386,12 @@ let lookup (tables : t) (p : Pos.t) : lookup_entry option =
     LTable.find_opt j.hash tables.lookup_table
   | Some (Literal _) | None -> None
 
-let lookup_type (tables : t) (p : Pos.t) : typ option =
-  PMap.lookup p tables.variables
+let lookup_type (tables : t) (p : Pos.t) : (Lsp.Types.Range.t * typ) option =
+  PMap.lookup_with_range p tables.variables
   |> function
-  | Some (Topdef j | Definition j | Declaration j | Usage j) -> Some j.typ
-  | Some (Literal typ) -> Some typ
+  | Some (r, (Topdef j | Definition j | Declaration j | Usage j)) ->
+    Some (r, j.typ)
+  | Some (r, Literal typ) -> Some (r, typ)
   | None -> None
 
 let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
