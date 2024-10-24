@@ -130,7 +130,7 @@ let lookup_type f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* typ = Jump.lookup_type jt p in
+  let* r, typ = Jump.lookup_type jt p in
   let* prg = f.scopelang_prg in
   let typ_s =
     match Catala_utils.Mark.remove typ with
@@ -140,13 +140,13 @@ let lookup_type f p =
       Format.asprintf "Enum %s" (Shared_ast.EnumName.to_string enum_name)
     | _ -> Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ
   in
-  Some typ_s
+  Some (r, typ_s)
 
 let lookup_type_definition f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* typ, _pos = Jump.lookup_type jt p in
+  let* _r, (typ, _pos) = Jump.lookup_type jt p in
   let open Shared_ast in
   match typ with
   | TStruct s ->
