@@ -72,8 +72,8 @@ class catala_lsp_server =
     method! config_completion = Some (CompletionOptions.create ())
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
-    method! config_symbol = Some (`Bool true)
-    method private config_workspace_symbol = `Bool true
+    method! config_symbol = Some (`Bool false)
+    method private config_workspace_symbol = `Bool false
     method private config_declaration = Some (`Bool true)
     method private config_references = Some (`Bool true)
     method private config_type_definition = Some (`Bool true)
@@ -81,7 +81,6 @@ class catala_lsp_server =
     method! config_sync_opts =
       (* configure how sync happens *)
       let change = Lsp.Types.TextDocumentSyncKind.Incremental in
-      (* Lsp.Types.TextDocumentSyncKind.Full *)
       Lsp.Types.TextDocumentSyncOptions.create ~openClose:true ~change
         ~save:
           (`SaveOptions (Lsp.Types.SaveOptions.create ~includeText:false ()))
@@ -362,10 +361,10 @@ class catala_lsp_server =
       let f = self#use_or_process_file (DocumentUri.to_path uri) in
       match State.lookup_type f pos with
       | None -> Lwt.return_none
-      | Some typ_s ->
+      | Some (range, typ_s) ->
         let typ_s = Format.asprintf "%a" Format.pp_print_text typ_s in
         let mc = MarkupContent.create ~kind:PlainText ~value:typ_s in
-        Lwt.return_some (Hover.create ~contents:(`MarkupContent mc) ())
+        Lwt.return_some (Hover.create ~range ~contents:(`MarkupContent mc) ())
 
     method private on_req_type_definition
         ~notify_back:_

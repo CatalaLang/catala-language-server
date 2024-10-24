@@ -130,7 +130,7 @@ let lookup_type f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* typ = Jump.lookup_type jt p in
+  let* r, typ = Jump.lookup_type jt p in
   let* prg = f.scopelang_prg in
   let typ_s =
     match Catala_utils.Mark.remove typ with
@@ -140,13 +140,13 @@ let lookup_type f p =
       Format.asprintf "Enum %s" (Shared_ast.EnumName.to_string enum_name)
     | _ -> Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ
   in
-  Some typ_s
+  Some (r, typ_s)
 
 let lookup_type_definition f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* typ, _pos = Jump.lookup_type jt p in
+  let* _r, (typ, _pos) = Jump.lookup_type jt p in
   let open Shared_ast in
   match typ with
   | TStruct s ->
@@ -168,7 +168,7 @@ let lookup_document_symbols file =
       (fun (p, v) ->
         if file.uri = Catala_utils.Pos.get_file p then Jump.var_to_symbol p v
         else None)
-      (Jump.PMap.bindings variables)
+      (Jump.PMap.elements variables)
 
 let lookup_project_symbols all_files =
   let all_variables =
@@ -178,12 +178,10 @@ let lookup_project_symbols all_files =
         all_files
     in
     List.fold_left
-      (Jump.PMap.union (fun _ l _ -> Some l))
-      Jump.PMap.empty all_tbls
+      (fun acc pmap -> List.rev_append (Jump.PMap.elements pmap) acc)
+      [] all_tbls
   in
-  List.filter_map
-    (fun (p, v) -> Jump.var_to_symbol p v)
-    (Jump.PMap.bindings all_variables)
+  List.filter_map (fun (p, v) -> Jump.var_to_symbol p v) all_variables
 
 let lookup_clerk_toml (path : string) =
   let from_dir = Filename.dirname path in
