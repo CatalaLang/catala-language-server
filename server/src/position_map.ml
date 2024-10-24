@@ -21,28 +21,39 @@ module type Data = sig
 end
 
 module Make_trie (D : Data) = struct
-  type itv_node = Node of { itv : int * int; data : D.t; children : trie }
+  type itv_node =
+    | Node of {
+        (* (line,col) x (line, col) *) itv : (int * int) * (int * int);
+        data : D.t;
+        children : trie;
+      }
+
   and trie = itv_node list
 
   type t = trie
 
-  let rec pp_node ppf (Node { itv = i, j; data; children }) =
+  let pp_itv ppf ((li, i), (lj, j)) =
+    Format.fprintf ppf "((%d:%d)⟷(%d:%d))" li i lj j
+
+  let rec pp_node ppf (Node { itv; data; children }) =
     let open Format in
-    let pp_d fmt i =
-      if i = max_int then fprintf fmt "EOL" else pp_print_int fmt i
-    in
     match children with
-    | [] -> fprintf ppf "@[<h>(%a⟷%a): %a@]" pp_d i pp_d j D.format data
+    | [] -> fprintf ppf "@[<h>(%a): %a@]" pp_itv itv D.format data
     | _ ->
-      fprintf ppf "@[<v 2>(%a⟷%a): %a@ %a@]" pp_d i pp_d j D.format data pp_trie
+      fprintf ppf "@[<v 2>(%a): %a@ %a@]" pp_itv itv D.format data pp_trie
         children
 
   and pp_trie ppf tries =
     let open Format in
     fprintf ppf "@[<v>%a@]" (pp_print_list ~pp_sep:pp_print_cut pp_node) tries
 
-  let is_in (i, j) n = i <= n && n <= j
-  let ( let*? ) opt f = match opt with None -> None | Some v -> f v
+  let is_in ((li, i), (lj, j)) (ln, n) =
+    (ln > li && ln < lj)
+    || (ln = li && ln = lj && i <= n && n <= j)
+    || (ln > li && ln = lj && n <= j)
+    || (ln = li && ln < lj && i <= n)
+
+  let is_included itv (left, right) = is_in itv left && is_in itv right
 
   let rec lookup i trie =
     List.find_opt (fun (Node { itv; _ }) -> is_in itv i) trie
@@ -52,19 +63,22 @@ module Make_trie (D : Data) = struct
     | Some (Node { children; data; _ }) -> (
       match lookup i children with None -> Some data | Some v -> Some v)
 
-  let compare_itv ((i, j) as itv) (i', j') =
-    if i = i' && j = j' then `Equal
-    else if j' < i then `Disjoint_left
-    else if i' > j then `Disjoint_right
-    else if i <= i' && j' <= j then `Subset
-    else if i' < i && j' > j then `Supset
-    else if is_in itv i' && j' > j then
+  let compare_itv (((li, i), (lj, j)) as itv) (((li', i'), (lj', j')) as itv') =
+    if itv = itv' then `Equal
+    else if is_included itv itv' then `Subset
+    else if lj' < li || (lj' = li && j' < i) then `Disjoint_left
+    else if li' > lj || (li' = lj && i' > j) then `Disjoint_right
+    else if (not (is_in itv (li', i'))) && not (is_in itv (lj', j')) then
+      `Supset
+    else if is_in itv (li', i') then
       `Left_inclusion
-        ((i', j) (* included part *), (j + 1, j') (* disjoint part *))
+        ( ((li', i'), (lj, j)) (* included part *),
+          ((lj, j + 1), (lj', j')) (* disjoint part *) )
     else (
-      assert (i > i' && is_in itv j');
+      assert (is_in itv (lj', j'));
       `Right_inclusion
-        ((i', i - 1) (* disjoint part *), (i, j') (* included part *)))
+        ( ((li', i'), (li, i - 1)) (* disjoint part *),
+          ((li, i), (lj', j')) (* included part *) ))
 
   let rec gather_children (Node { children; _ }) =
     let fresh_children =
@@ -90,7 +104,7 @@ module Make_trie (D : Data) = struct
             Node { n with itv = disjoint_part; children = [] }
           in
           let all_children = gather_children h in
-          (* Introduce quadratric behavior but shouldn't be impactful with our
+          (* Introduce quadratric behavior but shouldn't be impactful for our
              use-case *)
           let sub_trie =
             List.fold_left
@@ -117,7 +131,7 @@ module Make_trie (D : Data) = struct
                   pp_node
                   (Node { itv; data; children = [] })
                   pp_node node);
-          (* We do not create equivalent nodes *)
+          (* Do not overwrite nodes *)
           List.rev_append (node :: acc) t
         | `Disjoint_left ->
           List.rev_append (Node { itv; data; children = [] } :: acc) l
@@ -149,44 +163,19 @@ end
 open Catala_utils
 module FileMap = Map.Make (String)
 
-module LineMap = Map.Make (struct
-  include Int
-
-  let format = Format.pp_print_int
-end)
-
 module Make (D : Data) = struct
   module Trie = Make_trie (D)
 
-  type pmap = Trie.t LineMap.t FileMap.t
+  type pmap = Trie.t FileMap.t
   type t = pmap
 
   let pp ppf pmap =
     let open Format in
-    let pp_lines ppf lmap =
-      fprintf ppf "@[<v 2>lines:@ %a@]"
-        (LineMap.format ~pp_sep:pp_print_cut Trie.pp_trie)
-        lmap
-    in
     fprintf ppf "@[<v 2>variables:@ @[<v 2>%a@]@]"
-      (FileMap.format ~pp_sep:pp_print_cut pp_lines)
+      (FileMap.format ~pp_sep:pp_print_cut Trie.pp_trie)
       pmap
 
   let ( -- ) i j = List.init (j - i + 1) (fun x -> i + x)
-
-  let lines pos v =
-    let s = Pos.get_start_line pos in
-    let e = Pos.get_end_line pos in
-    let s_col = Pos.get_start_column pos in
-    let e_col = Pos.get_end_column pos in
-    if s = e then LineMap.singleton s ((s_col, e_col), v)
-    else
-      let s_itv = (s_col, max_int), v in
-      let e_itv = (0, e_col), v in
-      LineMap.of_list
-        ((s, s_itv)
-        :: (e, e_itv)
-        :: List.map (fun i -> i, ((0, max_int), v)) (s + 1 -- (e - 1)))
 
   let merge_tries _i trie trie' : Trie.t option =
     match trie, trie' with
@@ -195,36 +184,36 @@ module Make (D : Data) = struct
     | Some trie, None -> Some trie
     | Some trie, Some (itv, data) -> Some (Trie.insert itv data trie)
 
+  let pos_to_itv pos =
+    let li = Pos.get_start_line pos in
+    let i = Pos.get_start_column pos in
+    let lj = Pos.get_end_line pos in
+    let j = Pos.get_end_column pos in
+    (li, i), (lj, j)
+
   let add pos data variables =
+    let itv = pos_to_itv pos in
     FileMap.update (Pos.get_file pos)
       (function
-        | None ->
-          Some
-            (lines pos data
-            |> LineMap.map (fun (itv, data) ->
-                   [Trie.Node { itv; data; children = [] }]))
-        | Some im -> Some (LineMap.merge merge_tries im (lines pos data)))
+        | None -> Some [Trie.Node { itv; data; children = [] }]
+        | Some trie -> Some (Trie.insert itv data trie))
       variables
 
   let lookup pos pmap =
     let ( let* ) = Option.bind in
     (* we assume that pos's start/end lines, start/end column are equal *)
-    let* lmap = FileMap.find_opt (Pos.get_file pos) pmap in
-    let* trie = LineMap.find_opt (Pos.get_start_line pos) lmap in
-    Trie.lookup (Pos.get_start_column pos) trie
+    let* trie = FileMap.find_opt (Pos.get_file pos) pmap in
+    Trie.lookup (Pos.get_start_line pos, Pos.get_start_column pos) trie
 
   let fold f pmap acc =
-    FileMap.fold
-      (fun file lmap acc ->
-        LineMap.fold
-          (fun line trie acc ->
-            let l = List.concat_map Trie.gather_children trie in
-            List.fold_left
-              (fun acc (Trie.Node { itv = i, j; data; _ }) ->
-                f (Pos.from_info file line line i j) data acc)
-              acc l)
-          lmap acc)
-      pmap acc
+    let rec fold file trie acc =
+      List.fold_left
+        (fun acc (Trie.Node { itv = (li, i), (lj, j); children; data }) ->
+          let acc = f (Pos.from_info file li i lj j) data acc in
+          fold file children acc)
+        acc trie
+    in
+    FileMap.fold fold pmap acc
 
   let elements pmap = fold (fun pos var acc -> (pos, var) :: acc) pmap []
   let empty = FileMap.empty
