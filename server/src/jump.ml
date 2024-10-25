@@ -22,26 +22,6 @@ open Scopelang.Ast
 let hash_info (type a) (module M : Uid.Id with type t = a) (v : a) : int =
   Hashtbl.hash (M.get_info v)
 
-module PMap = Map.Make (struct
-  type t = Pos.t
-
-  (* FIXME: only works when there is no collisions *)
-  let compare p p' =
-    (* Lattice trick for sub-range lookups *)
-    if is_included p p' || is_included p' p then 0
-    else
-      let open Pos in
-      let ( let* ) x f = if x <> 0 then x else f () in
-      let* () = String.compare (get_file p) (get_file p') in
-      let* () = Int.compare (get_start_line p) (get_start_line p') in
-      let* () = Int.compare (get_end_line p) (get_end_line p') in
-      let* () = Int.compare (get_start_column p) (get_start_column p') in
-      let* () = Int.compare (get_end_column p) (get_end_column p') in
-      0
-
-  let format ppf p = Format.pp_print_string ppf (Pos.to_string_short p)
-end)
-
 type jump = { hash : int; name : string; typ : typ }
 
 module LTable = Stdlib.Map.Make (Int)
@@ -52,6 +32,17 @@ type lookup_entry = {
   usages : Pos.t list option;
 }
 
+let pp_lookup_entry fmt { declaration; definitions; usages } =
+  let open Format in
+  let pp_pos fmt p = pp_print_string fmt @@ Pos.to_string_short p in
+  fprintf fmt
+    "declaration: %a@\n@[<v 2>definitions:@ %a@]@\n@[<v 2>usages:@ %a@]"
+    (pp_opt pp_pos) declaration
+    (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
+    definitions
+    (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
+    usages
+
 let empty_lookup = { declaration = None; definitions = None; usages = None }
 
 type var =
@@ -61,8 +52,6 @@ type var =
   | Usage of jump
   | Literal of typ
 
-type t = { variables : var PMap.t; lookup_table : lookup_entry LTable.t }
-
 let pp_var ppf =
   let open Format in
   function
@@ -70,14 +59,16 @@ let pp_var ppf =
   | Definition { name; hash; _ } -> fprintf ppf "definition: %s#%d" name hash
   | Declaration { name; hash; _ } -> fprintf ppf "declaration: %s#%d" name hash
   | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
-  | Literal _typ -> fprintf ppf "literal"
+  | Literal typ -> fprintf ppf "literal: %a" Print.typ_debug typ
 
-let pp ppf variables =
-  let open Format in
-  fprintf ppf "@[<v>@[<v 2>variables:@ %a@]@]"
-    (PMap.format_bindings ~pp_sep:pp_print_cut (fun ppf f v ->
-         fprintf ppf "%a: %t" pp_var v f))
-    variables
+module PMap = Position_map.Make (struct
+  type t = var
+
+  let format = pp_var
+end)
+
+type variables = PMap.pmap
+type t = { variables : variables; lookup_table : lookup_entry LTable.t }
 
 let pp_table ppf { declaration; definitions; usages } =
   let open Format in
@@ -191,12 +182,16 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
   let rec f e acc =
     let (Typed { pos; ty = typ }) = Mark.get e in
     match Mark.remove e with
-    | ELit _l ->
-      (* FIXME: some literals' positions encapsulate all the expression breaking
-         the PMap's invariant. When a better structure is used, reintroduce
-         this. *)
-      (* PMap.add pos (Literal typ) acc *)
-      acc
+    | EDefault { excepts; just; cons } ->
+      let acc =
+        match Mark.remove just with
+        (* ignore boolean conditions *)
+        | ELit (LBool _) -> acc
+        | _ -> f just acc
+      in
+      let lfold x acc = List.fold_left (fun acc x -> f x acc) acc x in
+      acc |> lfold excepts |> f cons
+    | ELit _l -> PMap.add pos (Literal typ) acc
     | ELocation (ScopelangScopeVar { name; _ }) ->
       let (scope_var : ScopeVar.t), pos = name in
       let name = ScopeVar.to_string scope_var in
@@ -211,19 +206,9 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
       PMap.add pos var acc
     | EStructAccess { name = _; e = sub_expr; field } ->
       let name = StructField.to_string field in
-      let expr_pos = pos in
-      let (Typed { pos = sub_expr_pos; ty = _ }) = Mark.get sub_expr in
+      let (Typed { pos = _; ty = _ }) = Mark.get sub_expr in
       let hash = hash_info (module StructField) field in
       let var = Usage { name; hash; typ } in
-      let pos =
-        let open Pos in
-        (* Hack to extract the field's position as StructField's mark points to
-           the declaration, i.e., compute the disjoint position of expr_pos (the
-           full expression) deprived of sub_expr_pos (structure's name) *)
-        from_info (get_file expr_pos) (get_start_line expr_pos)
-          (get_end_column sub_expr_pos + 1)
-          (get_end_line expr_pos) (get_end_column expr_pos)
-      in
       let acc = PMap.add pos var acc in
       f sub_expr acc
     | EStruct { name; fields } -> populate_struct_def ctx name fields acc f
@@ -233,14 +218,22 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
         (* Don't recurse when the next expression is nil *)
         acc
       else f e acc
-    | _ -> Expr.shallow_fold f e acc
+    | _ ->
+      (* TODO: EAbs's binders do not carry a position, we cannot index them as
+         of right now. Possible solutions:
+
+         - Add their position to Bindlib's vars
+
+         - Carry them over from surface and resolve them when we get sufficient
+         informations *)
+      Expr.shallow_fold f e acc
   in
   Expr.shallow_fold f e m
 
 let rec traverse_typ
     (ctx : Desugared.Name_resolution.context)
     ((typ, pos) : naked_typ * Pos.t)
-    m : var PMap.t =
+    m : PMap.pmap =
   match typ with
   | TStruct struct_name ->
     let name = StructName.to_string struct_name in
@@ -255,7 +248,7 @@ let rec traverse_typ
   | TOption typ | TArray typ | TDefault typ -> traverse_typ ctx typ m
   | TLit _ | TAny | TClosureEnv -> m
 
-let traverse_scope_def ctx (rule : typed rule) m : var PMap.t =
+let traverse_scope_def ctx (rule : typed rule) m : PMap.pmap =
   match rule with
   | ScopeVarDefinition { var; typ; io = _; e }
   | SubScopeVarDefinition { var; typ; var_within_origin_scope = _; e } ->
@@ -268,7 +261,7 @@ let traverse_scope_def ctx (rule : typed rule) m : var PMap.t =
     traverse_expr ctx e m
   | Assertion e -> traverse_expr ctx e m
 
-let traverse_scope_sig ctx scope m : var PMap.t =
+let traverse_scope_sig ctx scope m : PMap.pmap =
   ScopeVar.Map.fold
     (fun scope_var var_ty m ->
       let m = traverse_typ ctx var_ty.svar_out_ty m in
@@ -279,7 +272,7 @@ let traverse_scope_sig ctx scope m : var PMap.t =
       PMap.add pos var m)
     scope.scope_sig m
 
-let traverse_scope ctx (scope : typed scope_decl) m : var PMap.t =
+let traverse_scope ctx (scope : typed scope_decl) m : PMap.pmap =
   let m = traverse_scope_sig ctx scope m in
   List.fold_right (traverse_scope_def ctx) scope.scope_decl_rules m
 
@@ -287,7 +280,7 @@ let traverse_topdef
     ctx
     (topdef : TopdefName.t)
     ((e, typ, _vis) : typed expr * typ * visibility)
-    m : var PMap.t =
+    m : PMap.pmap =
   let name = TopdefName.to_string topdef in
   let topdef_pos = snd (TopdefName.get_info topdef) in
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
@@ -295,7 +288,7 @@ let traverse_topdef
   let m = PMap.add topdef_pos topdef m in
   traverse_expr ctx e m
 
-let traverse_ctx (ctx : Desugared.Name_resolution.context) m : var PMap.t =
+let traverse_ctx (ctx : Desugared.Name_resolution.context) m : PMap.pmap =
   let m =
     StructName.Map.fold
       (fun struct_name (fields, _vis) m ->
@@ -344,7 +337,7 @@ let traverse_ctx (ctx : Desugared.Name_resolution.context) m : var PMap.t =
 
 let traverse
     (ctx : Desugared.Name_resolution.context)
-    (prog : Shared_ast.typed Scopelang.Ast.program) : var PMap.t =
+    (prog : Shared_ast.typed Scopelang.Ast.program) : PMap.pmap =
   let m =
     ModuleName.Map.fold
       (fun _m_name decl_map acc ->
@@ -404,17 +397,18 @@ let populate
   { variables; lookup_table }
 
 let lookup (tables : t) (p : Pos.t) : lookup_entry option =
-  PMap.find_opt p tables.variables
+  PMap.lookup p tables.variables
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j) ->
     LTable.find_opt j.hash tables.lookup_table
   | Some (Literal _) | None -> None
 
-let lookup_type (tables : t) (p : Pos.t) : typ option =
-  PMap.find_opt p tables.variables
+let lookup_type (tables : t) (p : Pos.t) : (Lsp.Types.Range.t * typ) option =
+  PMap.lookup_with_range p tables.variables
   |> function
-  | Some (Topdef j | Definition j | Declaration j | Usage j) -> Some j.typ
-  | Some (Literal typ) -> Some typ
+  | Some (r, (Topdef j | Definition j | Declaration j | Usage j)) ->
+    Some (r, j.typ)
+  | Some (r, Literal typ) -> Some (r, typ)
   | None -> None
 
 let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
