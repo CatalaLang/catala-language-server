@@ -218,7 +218,15 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
         (* Don't recurse when the next expression is nil *)
         acc
       else f e acc
-    | _ -> Expr.shallow_fold f e acc
+    | _ ->
+      (* TODO: EAbs's binders do not carry a position, we cannot index them as
+         of right now. Possible solutions:
+
+         - Add their position to Bindlib's vars
+
+         - Carry them over from surface and resolve them when we get sufficient
+         informations *)
+      Expr.shallow_fold f e acc
   in
   Expr.shallow_fold f e m
 
