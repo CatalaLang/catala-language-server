@@ -182,8 +182,13 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
   let rec f e acc =
     let (Typed { pos; ty = typ }) = Mark.get e in
     match Mark.remove e with
-    | EDefault { excepts; just = _; cons } ->
-      (* just have (useless?) conflicting positions *)
+    | EDefault { excepts; just; cons } ->
+      let acc =
+        match Mark.remove just with
+        (* ignore boolean conditions *)
+        | ELit (LBool _) -> acc
+        | _ -> f just acc
+      in
       let lfold x acc = List.fold_left (fun acc x -> f x acc) acc x in
       acc |> lfold excepts |> f cons
     | ELit _l -> PMap.add pos (Literal typ) acc
