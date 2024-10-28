@@ -13,6 +13,8 @@ depends: [
   "uri"
   "linol"     { = "dev" }
   "linol-lwt" { = "dev" }
+  "atdgen" { build }
+  "atdgen-runtime"
 ]
 pin-depends: [
   ["catala.dev" "git+https://github.com/CatalaLang/catala#lsp-compat"]
