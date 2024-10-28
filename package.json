@@ -89,7 +89,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "dune build @lsp; webpack --mode development",
+    "compile": "opam exec -- dune build @lsp; webpack --mode development",
     "test": "tsc && vscode-test",
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.ts",
