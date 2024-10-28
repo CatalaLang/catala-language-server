@@ -176,10 +176,13 @@ let populate_enum_inject
       let pos = Mark.get (EnumConstructor.get_info cons) in
       PMap.add pos var m)
 
-let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
+let traverse_expr
+    (ctx : Desugared.Name_resolution.context)
+    (e : (scopelang, typed) gexpr)
+    m =
   let open Shared_ast in
   let open Catala_utils in
-  let rec f e acc =
+  let rec f (bnd_ctx : Bindlib.ctxt) (e : (scopelang, typed) gexpr) acc =
     let (Typed { pos; ty = typ }) = Mark.get e in
     match Mark.remove e with
     | EDefault { excepts; just; cons } ->
@@ -187,10 +190,10 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
         match Mark.remove just with
         (* ignore boolean conditions *)
         | ELit (LBool _) -> acc
-        | _ -> f just acc
+        | _ -> f bnd_ctx just acc
       in
-      let lfold x acc = List.fold_left (fun acc x -> f x acc) acc x in
-      acc |> lfold excepts |> f cons
+      let lfold x acc = List.fold_left (fun acc x -> f bnd_ctx x acc) acc x in
+      acc |> lfold excepts |> f bnd_ctx cons
     | ELit _l -> PMap.add pos (Literal typ) acc
     | ELocation (ScopelangScopeVar { name; _ }) ->
       let (scope_var : ScopeVar.t), pos = name in
@@ -210,25 +213,52 @@ let traverse_expr (ctx : Desugared.Name_resolution.context) e m =
       let hash = hash_info (module StructField) field in
       let var = Usage { name; hash; typ } in
       let acc = PMap.add pos var acc in
-      f sub_expr acc
-    | EStruct { name; fields } -> populate_struct_def ctx name fields acc f
+      f bnd_ctx sub_expr acc
+    | EStruct { name; fields } ->
+      populate_struct_def ctx name fields acc (f bnd_ctx)
     | EInj { name; e; cons } ->
       let acc = populate_enum_inject ctx name cons acc in
       if Mark.remove e = ELit LUnit then
         (* Don't recurse when the next expression is nil *)
         acc
-      else f e acc
-    | _ ->
-      (* TODO: EAbs's binders do not carry a position, we cannot index them as
-         of right now. Possible solutions:
-
-         - Add their position to Bindlib's vars
-
-         - Carry them over from surface and resolve them when we get sufficient
-         informations *)
-      Expr.shallow_fold f e acc
+      else f bnd_ctx e acc
+    | EAbs { binder; pos; tys } ->
+      let xs, body, bnd_ctx = Bindlib.unmbind_in bnd_ctx binder in
+      let xs_info =
+        List.mapi (fun i (pos, tau) -> xs.(i), pos, tau) (List.combine pos tys)
+      in
+      let acc =
+        List.fold_left
+          (fun acc (var, pos, typ) ->
+            let name =
+              Bindlib.name_of var ^ string_of_int (Bindlib.uid_of var)
+            in
+            let hash = Hashtbl.hash name in
+            let var = Definition { name; hash; typ } in
+            PMap.add pos var acc)
+          acc xs_info
+      in
+      f bnd_ctx body acc
+    | EVar var ->
+      let name = Bindlib.name_of var ^ string_of_int (Bindlib.uid_of var) in
+      let hash = Hashtbl.hash name in
+      let var = Usage { name; hash; typ } in
+      PMap.add pos var acc
+    | EMatch { name = _; e; cases } ->
+      let acc = f bnd_ctx e acc in
+      EnumConstructor.Map.fold
+        (fun constr e acc ->
+          let name = EnumConstructor.to_string constr in
+          let hash = hash_info (module EnumConstructor) constr in
+          let var = Usage { name; hash; typ } in
+          PMap.add pos var acc |> f bnd_ctx e)
+        cases acc
+    | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | EApp _ | ETuple _
+    | ETupleAccess _ | EScopeCall _ | EFatalError _ | EPureDefault _
+    | EErrorOnEmpty _ ->
+      Expr.shallow_fold (f bnd_ctx) e acc
   in
-  Expr.shallow_fold f e m
+  Expr.shallow_fold (f Bindlib.empty_ctxt) e m
 
 let rec traverse_typ
     (ctx : Desugared.Name_resolution.context)
