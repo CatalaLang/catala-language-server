@@ -202,12 +202,14 @@ module Make (D : Data) = struct
     (li, i), (lj, j)
 
   let add pos data variables =
-    let itv = pos_to_itv pos in
-    FileMap.update (Pos.get_file pos)
-      (function
-        | None -> Some [Trie.Node { itv; data; children = [] }]
-        | Some trie -> Some (Trie.insert itv data trie))
-      variables
+    if pos = Pos.no_pos then variables
+    else
+      let itv = pos_to_itv pos in
+      FileMap.update (Pos.get_file pos)
+        (function
+          | None -> Some [Trie.Node { itv; data; children = [] }]
+          | Some trie -> Some (Trie.insert itv data trie))
+        variables
 
   let lookup pos pmap =
     let ( let* ) = Option.bind in
