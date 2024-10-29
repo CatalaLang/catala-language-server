@@ -33,6 +33,7 @@ module UriMap = Map.Make (String)
 
 type file = {
   uri : string;
+  locale : Catala_utils.Global.backend_lang;
   scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
   jump_table : Jump.t option;
   errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t UriMap.t;
@@ -52,7 +53,13 @@ let pp_range fmt { Range.start; end_ } =
   fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
 
 let create ?prog uri =
-  { uri; errors = UriMap.empty; scopelang_prg = prog; jump_table = None }
+  {
+    uri;
+    locale = Catala_utils.Cli.file_lang uri;
+    errors = UriMap.empty;
+    scopelang_prg = prog;
+    jump_table = None;
+  }
 
 let add_suggestions file uri range err =
   let errors =
@@ -131,16 +138,8 @@ let lookup_type f p =
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
   let* r, typ = Jump.lookup_type jt p in
-  let* prg = f.scopelang_prg in
-  let typ_s =
-    match Catala_utils.Mark.remove typ with
-    | TStruct struct_name ->
-      Format.asprintf "Struct %s" (Shared_ast.StructName.to_string struct_name)
-    | TEnum enum_name ->
-      Format.asprintf "Enum %s" (Shared_ast.EnumName.to_string enum_name)
-    | _ -> Format.asprintf "%a" (Shared_ast.Print.typ prg.program_ctx) typ
-  in
-  Some (r, typ_s)
+  let md = Type_printing.typ_to_markdown f.locale typ in
+  Some (r, md)
 
 let lookup_type_definition f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in

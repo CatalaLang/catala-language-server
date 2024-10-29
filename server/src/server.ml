@@ -360,10 +360,8 @@ class catala_lsp_server =
       let f = self#use_or_process_file (DocumentUri.to_path uri) in
       match State.lookup_type f pos with
       | None -> Lwt.return_none
-      | Some (range, typ_s) ->
-        let typ_s = Format.asprintf "%a" Format.pp_print_text typ_s in
-        let mc = MarkupContent.create ~kind:PlainText ~value:typ_s in
-        Lwt.return_some (Hover.create ~range ~contents:(`MarkupContent mc) ())
+      | Some (range, md) ->
+        Lwt.return_some (Hover.create ~range ~contents:(`MarkupContent md) ())
 
     method private on_req_type_definition
         ~notify_back:_
