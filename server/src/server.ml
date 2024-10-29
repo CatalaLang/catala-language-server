@@ -129,7 +129,8 @@ class catala_lsp_server =
     val mutable prelude = []
 
     method private process_and_update_file ?contents uri =
-      let f = State.process_document ?contents uri in
+      let previous_file = Hashtbl.find_opt buffers uri in
+      let f = State.process_document ?previous_file ?contents uri in
       Hashtbl.replace buffers uri f;
       f
 
