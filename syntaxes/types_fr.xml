@@ -1,0 +1,59 @@
+<?xml  version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0" >
+<!-- Generated via Iro -->
+<dict>
+  <key>name</key>
+  <string>catala_type_fr</string>
+  <key>patterns</key>
+  <array>
+    <dict>
+      <key>include</key>
+      <string>#main</string>
+    </dict>
+   </array>
+  <key>scopeName</key>
+  <string>source.catala_type_fr</string>
+  <key>uuid</key>
+  <string></string>
+  <key>repository</key>
+  <dict>
+    <key>main</key>
+    <dict>
+      <key>patterns</key>
+      <array>
+        <dict>
+          <key>match</key>
+          <string>(&lt;struct&gt;|&lt;énum&gt;|&lt;défaut&gt;|&lt;option&gt;|&lt;closure_env&gt;)</string>
+          <key>name</key>
+          <string>keyword.control.catala_type_fr</string>
+        </dict>
+        <dict>
+          <key>match</key>
+          <string>\b(unit|entier|booléen|date|durée|argent|décimal|n\&apos;importe\s+quel|liste\s+de)\b</string>
+          <key>name</key>
+          <string>support.type.catala_type_fr</string>
+        </dict>
+        <dict>
+          <key>match</key>
+          <string>(\,|\(|\)|→|\.)</string>
+          <key>name</key>
+          <string>punctuation.catala_type_fr</string>
+        </dict>
+        <dict>
+          <key>match</key>
+          <string>(\|[0-9]+\-[0-9]+\-[0-9]+\|)</string>
+          <key>name</key>
+          <string>constant.numeric.catala_type_fr</string>
+        </dict>
+        <dict>
+          <key>match</key>
+          <string>\b([A-Z\x{00c9}\x{00c8}\x{00c0}\x{00c2}\x{00d9}\x{00ce}\x{00ca}\x{0152}\x{00c7}][a-z\x{00e9}\x{00e8}\x{00e0}\x{00e2}\x{00f9}\x{00ee}\x{00ea}\x{0153}\x{00e7}A-Z\x{00c9}\x{00c8}\x{00c0}\x{00c2}\x{00d9}\x{00ce}\x{00ca}\x{0152}\x{00c7}0-9_\&apos;]*)\b</string>
+          <key>name</key>
+          <string>storage.type.catala_type_fr</string>
+        </dict>
+       </array>
+    </dict>
+  </dict>
+</dict>
+</plist>
