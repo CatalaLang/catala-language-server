@@ -368,7 +368,7 @@ let convert_meta_module
         (meta_module_name ^ ".catala_" ^ Catala_utils.Cli.language_code language)
     )
 
-let process_document ?contents (uri : string) : t =
+let process_document ?previous_file ?contents (uri : string) : t =
   let open Catala_utils in
   Log.info (fun m -> m "processing document '%s'" uri);
   let uri = Uri.(of_string uri |> path |> pct_decode) in
@@ -460,7 +460,13 @@ let process_document ?contents (uri : string) : t =
       List.rev !l, None, None
   in
   let file = create ?prog uri in
-  let file = { file with jump_table } in
+  let file =
+    match previous_file, jump_table with
+    | Some { jump_table = Some jump_table; scopelang_prg; _ }, None ->
+      { file with jump_table = Some jump_table; scopelang_prg }
+    | _, Some jump_table -> { file with jump_table = Some jump_table }
+    | (None | Some _), None -> file
+  in
   List.fold_left
     (fun f (err : Catala_utils.Message.lsp_error) ->
       let dummy_range =
