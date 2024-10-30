@@ -162,6 +162,18 @@
         </dict>
         <dict>
           <key>match</key>
+          <string>\b(selon|sous\s+forme|mais\s+en\s+remplaçant|fixé|par|décroissant|croissant|varie|avec|on\s+a|soit|dans|tel\s+que|existe|pour|parmi|tout|de|si|alors|sinon|initial)\b</string>
+          <key>name</key>
+          <string>keyword.control.catala_fr</string>
+        </dict>
+        <dict>
+          <key>match</key>
+          <string>\b(champ\s+d&apos;application|dépend\s+de|résultat\s+de|déclaration|inclus|liste\s+de|contenu\s+de|contenu|optionnel|structure|énumération|contexte|entrée|résultat|interne|règle|sous\s+condition|condition|donnée|conséquence|rempli|égal\s+à|assertion|définition|état|étiquette|exception|n'importe\s+quel|liste\s+vide|est\s+maximum|est\s+minimum|minimum\s+de|maximum\s+de|combinaison\s+de|initialement)\b</string>
+          <key>name</key>
+          <string>keyword.other.catala_fr</string>
+        </dict>
+        <dict>
+          <key>match</key>
           <string>(contexte|entrée|résultat|interne)(\s*)(|résultat)(\s+)([a-z\x{00e9}\x{00e8}\x{00e0}\x{00e2}\x{00f9}\x{00ee}\x{00f4}\x{00ea}\x{0153}\x{00e7}][a-z\x{00e9}\x{00e8}\x{00e0}\x{00e2}\x{00f9}\x{00ee}\x{00f4}\x{00ea}\x{0153}\x{00e7}A-Z\x{00c9}\x{00c8}\x{00c0}\x{00c2}\x{00d9}\x{00ce}\x{00d4}\x{00ca}\x{0152}\x{00c7}0-9_\&apos;]*)</string>
           <key>captures</key>
           <dict>
@@ -191,18 +203,6 @@
               <string>entity.name.function.catala_fr</string>
             </dict>
           </dict>
-        </dict>
-        <dict>
-          <key>match</key>
-          <string>\b(selon|sous\s+forme|mais\s+en\s+remplaçant|fixé|par|décroissant|croissant|varie|avec|on\s+a|soit|dans|tel\s+que|existe|pour|parmi|tout|de|si|alors|sinon|initial)\b</string>
-          <key>name</key>
-          <string>keyword.control.catala_fr</string>
-        </dict>
-        <dict>
-          <key>match</key>
-          <string>\b(champ\s+d&apos;application|si\s+et\s+seulement\s+si|dépend\s+de|déclaration|inclus|liste\s+de|contenu\s+de|contenu|optionnel|structure|énumération|contexte|entrée|résultat|interne|règle|sous\s+condition|condition|donnée|conséquence|rempli|égal\s+à|assertion|définition|état|étiquette|exception|n'importe\s+quel|liste\s+vide|est\s+maximum|est\s+minimum|minimum\s+de|maximum\s+de|combinaison\s+de|initialement)\b</string>
-          <key>name</key>
-          <string>keyword.other.catala_fr</string>
         </dict>
         <dict>
           <key>match</key>
