@@ -67,6 +67,14 @@
       {
         "id": "catala_type_fr",
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_code_en",
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_code_fr",
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
@@ -89,6 +97,16 @@
         "language": "catala_type_fr",
         "scopeName": "source.catala_type_fr",
         "path": "./syntaxes/types_fr.xml"
+      },
+      {
+        "language": "catala_code_en",
+        "scopeName": "source.catala_code_en",
+        "path": "./syntaxes/code_en.xml"
+      },
+      {
+        "language": "catala_code_fr",
+        "scopeName": "source.catala_code_fr",
+        "path": "./syntaxes/code_fr.xml"
       }
     ],
     "comments": {
