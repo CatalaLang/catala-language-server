@@ -11,8 +11,6 @@ import * as cmd_exists from 'command-exists';
 let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext): void {
-  logger.show();
-
   const catala_binary = 'catala-lsp';
 
   const local_path = context.asAbsolutePath(
