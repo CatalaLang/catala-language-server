@@ -30,26 +30,33 @@ type lookup_entry = {
   declaration : Pos.t option;
   definitions : Pos.t list option;
   usages : Pos.t list option;
+  types : Pos.t list option;
 }
 
-let pp_lookup_entry fmt { declaration; definitions; usages } =
+let pp_lookup_entry fmt { declaration; definitions; usages; types } =
   let open Format in
   let pp_pos fmt p = pp_print_string fmt @@ Pos.to_string_short p in
   fprintf fmt
-    "declaration: %a@\n@[<v 2>definitions:@ %a@]@\n@[<v 2>usages:@ %a@]"
-    (pp_opt pp_pos) declaration
+    "declaration: %a@\n\
+     @[<v 2>definitions:@ %a@]@\n\
+     @[<v 2>usages:@ %a@]@\n\
+     @[<v 2>types:@ %a@]" (pp_opt pp_pos) declaration
     (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
     definitions
     (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
     usages
+    (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
+    types
 
-let empty_lookup = { declaration = None; definitions = None; usages = None }
+let empty_lookup =
+  { declaration = None; definitions = None; usages = None; types = None }
 
 type var =
   | Topdef of jump
   | Definition of jump
   | Declaration of jump
   | Usage of jump
+  | Type of jump
   | Literal of typ
 
 let pp_var ppf =
@@ -59,6 +66,7 @@ let pp_var ppf =
   | Definition { name; hash; _ } -> fprintf ppf "definition: %s#%d" name hash
   | Declaration { name; hash; _ } -> fprintf ppf "declaration: %s#%d" name hash
   | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
+  | Type { name; hash; _ } -> fprintf ppf "type: %s#%d" name hash
   | Literal typ -> fprintf ppf "literal: %a" Print.typ_debug typ
 
 module PMap = Position_map.Make (struct
@@ -70,9 +78,9 @@ end)
 type variables = PMap.pmap
 type t = { variables : variables; lookup_table : lookup_entry LTable.t }
 
-let pp_table ppf { declaration; definitions; usages } =
+let pp_table ppf { declaration; definitions; usages; types } =
   let open Format in
-  fprintf ppf "decl: %a, def: %a, usage: %a"
+  fprintf ppf "decl: %a, def: %a, usage: %a, types: %a"
     (pp_print_option
        ~none:(fun fmt () -> fprintf fmt "none")
        (fun fmt _ -> fprintf fmt "some"))
@@ -85,6 +93,10 @@ let pp_table ppf { declaration; definitions; usages } =
        ~none:(fun fmt () -> fprintf fmt "none")
        (fun fmt _ -> fprintf fmt "some"))
     usages
+    (pp_print_option
+       ~none:(fun fmt () -> fprintf fmt "none")
+       (fun fmt _ -> fprintf fmt "some"))
+    types
 
 let find key proj bindings =
   List.find_opt (fun (k, _) -> proj key = proj k) bindings
@@ -268,15 +280,16 @@ let rec traverse_typ
   | TStruct struct_name ->
     let name = StructName.to_string struct_name in
     let hash = Hashtbl.hash (StructName.get_info struct_name) in
-    PMap.add pos (Usage { name; hash; typ = typ, pos }) m
+    PMap.add pos (Type { name; hash; typ = typ, pos }) m
   | TEnum enum_name ->
     let name = EnumName.to_string enum_name in
     let hash = Hashtbl.hash (EnumName.get_info enum_name) in
-    PMap.add pos (Usage { name; hash; typ = typ, pos }) m
+    PMap.add pos (Type { name; hash; typ = typ, pos }) m
   | TArrow (tl, t) -> List.fold_right (traverse_typ ctx) (t :: tl) m
   | TTuple tl -> List.fold_right (traverse_typ ctx) tl m
   | TOption typ | TArray typ | TDefault typ -> traverse_typ ctx typ m
-  | TLit _ | TAny | TClosureEnv -> m
+  | TLit _lit -> PMap.add pos (Literal (typ, pos)) m
+  | TAny | TClosureEnv -> m
 
 let traverse_scope_def ctx (rule : typed rule) m : PMap.pmap =
   match rule with
@@ -408,6 +421,14 @@ let populate
             (match v.usages with None -> Some [p] | Some l -> Some (p :: l));
         })
   in
+  let add_type p =
+    add (fun v ->
+        {
+          v with
+          types =
+            (match v.types with None -> Some [p] | Some l -> Some (p :: l));
+        })
+  in
   let lookup_table =
     PMap.fold
       (fun p x tbl ->
@@ -417,6 +438,7 @@ let populate
           | Definition jump -> Some (add_def p, jump.hash)
           | Declaration jump -> Some (add_decl p, jump.hash)
           | Usage jump -> Some (add_usage p, jump.hash)
+          | Type jump -> Some (add_type p, jump.hash)
           | Literal _ -> None
         in
         match res with
@@ -429,16 +451,18 @@ let populate
 let lookup (tables : t) (p : Pos.t) : lookup_entry option =
   PMap.lookup p tables.variables
   |> function
-  | Some (Topdef j | Definition j | Declaration j | Usage j) ->
+  | Some (Topdef j | Definition j | Declaration j | Usage j | Type j) ->
     LTable.find_opt j.hash tables.lookup_table
   | Some (Literal _) | None -> None
 
-let lookup_type (tables : t) (p : Pos.t) : (Lsp.Types.Range.t * typ) option =
+let lookup_type (tables : t) (p : Pos.t) :
+    (Lsp.Types.Range.t * [ `Expr | `Type ] * typ) option =
   PMap.lookup_with_range p tables.variables
   |> function
   | Some (r, (Topdef j | Definition j | Declaration j | Usage j)) ->
-    Some (r, j.typ)
-  | Some (r, Literal typ) -> Some (r, typ)
+    Some (r, `Expr, j.typ)
+  | Some (r, Type j) -> Some (r, `Type, j.typ)
+  | Some (r, Literal typ) -> Some (r, `Expr, typ)
   | None -> None
 
 let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
@@ -450,7 +474,7 @@ let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
     | Definition v -> Some (v.name, Function)
     | Declaration v -> Some (v.name, Interface)
     | Usage v -> Some (v.name, Variable)
-    | Literal _ -> None
+    | Type _ | Literal _ -> None
   in
   Option.map
     (fun (name, (kind : SymbolKind.t)) ->

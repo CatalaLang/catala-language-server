@@ -137,15 +137,16 @@ let lookup_type f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* r, typ = Jump.lookup_type jt p in
-  let md = Type_printing.typ_to_markdown f.locale typ in
+  let prg = f.scopelang_prg in
+  let* r, kind, typ = Jump.lookup_type jt p in
+  let md = Type_printing.typ_to_markdown ?prg f.locale kind typ in
   Some (r, md)
 
 let lookup_type_definition f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* _r, (typ, _pos) = Jump.lookup_type jt p in
+  let* _r, _kind, (typ, _pos) = Jump.lookup_type jt p in
   let open Shared_ast in
   match typ with
   | TStruct s ->
