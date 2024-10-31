@@ -37,6 +37,26 @@ let default = function
 
 let enum = function Global.En -> "enum" | Fr -> "énum" | Pl -> assert false
 
+let struct_header = function
+  | Global.En -> "declaration structure"
+  | Fr -> "déclaration structure"
+  | Pl -> assert false
+
+let struct_data = function
+  | Global.En -> "data"
+  | Fr -> "donnée"
+  | Pl -> assert false
+
+let content = function
+  | Global.En -> "content"
+  | Fr -> "contenu"
+  | Pl -> assert false
+
+let enum_header = function
+  | Global.En -> "declaration enumeration"
+  | Fr -> "déclaration énumération"
+  | Pl -> assert false
+
 let pp_lit locale fmt l =
   fprintf fmt "%s"
   @@ (if locale = Global.En then fst else snd)
@@ -73,7 +93,7 @@ let pp_typ locale fmt (ty : typ) =
   in
   pp_typ fmt ty
 
-let typ_to_markdown locale typ =
+let expr_type locale typ =
   let locale_s =
     match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
   in
@@ -81,3 +101,83 @@ let typ_to_markdown locale typ =
     asprintf "```catala_type_%s@\n%a@\n```" locale_s (pp_typ locale) typ
   in
   MarkupContent.create ~kind:Markdown ~value:typ_s
+
+let pp_struct_field locale fmt ((field_name, typ) : StructField.t * typ) =
+  Format.fprintf fmt "%s %s %s %a" (struct_data locale)
+    (StructField.to_string field_name)
+    (content locale) (pp_typ locale) typ
+
+let pp_struct_code
+    locale
+    fmt
+    ((struct_name : StructName.t), (field_map : typ StructField.Map.t)) =
+  fprintf fmt "@[<v 2>%s %s:@ %a@]" (struct_header locale)
+    (StructName.to_string struct_name)
+    (pp_print_list ~pp_sep:pp_print_cut (pp_struct_field locale))
+    (StructField.Map.bindings field_map)
+
+let struct_code locale field_map =
+  let locale_s =
+    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+  in
+  let typ_s =
+    asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_struct_code locale)
+      field_map
+  in
+  MarkupContent.create ~kind:Markdown ~value:typ_s
+
+let pp_enum_field locale fmt ((field_name, typ) : EnumConstructor.t * typ) =
+  match fst typ with
+  | TLit TUnit ->
+    Format.fprintf fmt "-- %s" (EnumConstructor.to_string field_name)
+  | _ ->
+    Format.fprintf fmt "-- %s %s %a"
+      (EnumConstructor.to_string field_name)
+      (content locale) (pp_typ locale) typ
+
+let pp_enum_code
+    locale
+    fmt
+    ((enum_name : EnumName.t), (field_map : typ EnumConstructor.Map.t)) =
+  fprintf fmt "@[<v 2>%s %s:@ %a@]" (enum_header locale)
+    (EnumName.to_string enum_name)
+    (pp_print_list ~pp_sep:pp_print_cut (pp_enum_field locale))
+    (EnumConstructor.Map.bindings field_map)
+
+let enum_code locale field_map =
+  let locale_s =
+    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+  in
+  let typ_s =
+    asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_enum_code locale)
+      field_map
+  in
+  MarkupContent.create ~kind:Markdown ~value:typ_s
+
+let data_type
+    (prg : Shared_ast.typed Scopelang.Ast.program)
+    locale
+    (typ : naked_typ Mark.pos) =
+  let ctx = prg.program_ctx in
+  match Mark.remove typ with
+  | TLit _
+  | TArrow (_, _)
+  | TTuple _ | TOption _ | TArray _ | TDefault _ | TAny | TClosureEnv ->
+    expr_type locale typ
+  | TStruct sname -> (
+    let struct_ctx = ctx.ctx_structs in
+    StructName.Map.find_opt sname struct_ctx
+    |> function
+    | None -> expr_type locale typ
+    | Some field_map -> struct_code locale (sname, field_map))
+  | TEnum ename -> (
+    let enum_ctx = ctx.ctx_enums in
+    EnumName.Map.find_opt ename enum_ctx
+    |> function
+    | None -> expr_type locale typ
+    | Some field_map -> enum_code locale (ename, field_map))
+
+let typ_to_markdown ?prg locale kind typ =
+  match prg, kind with
+  | Some prg, `Type -> data_type prg locale typ
+  | _ -> expr_type locale typ
