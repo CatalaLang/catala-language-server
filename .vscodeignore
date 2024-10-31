@@ -11,6 +11,7 @@ node_modules/
 .prettierignore
 .vscode-test.mjs
 src/
+syntaxes/*.iro
 
 server/
 _build/
