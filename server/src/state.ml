@@ -44,6 +44,7 @@ type t = file
 let err_severity = function
   | Catala_utils.Message.Lexing | Parsing | Typing | Generic ->
     DiagnosticSeverity.Error
+  | Warning -> Warning
 
 let pp_range fmt { Range.start; end_ } =
   let open Format in
@@ -416,6 +417,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
       in
       let prg = Desugared.From_surface.translate_program ctx prg in
       let prg = Desugared.Disambiguate.program prg in
+      let () = Desugared.Linting.lint_program prg in
       let exceptions_graphs =
         Scopelang.From_desugared.build_exceptions_graph prg
       in
@@ -435,7 +437,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
         in
         let prg = Scopelang.Ast.type_program prg in
         let jump_table = Jump.populate ctx prg in
-        [], Some prg, Some jump_table
+        !l, Some prg, Some jump_table
     with e ->
       (match e with
       | Catala_utils.Message.CompilerError er ->
