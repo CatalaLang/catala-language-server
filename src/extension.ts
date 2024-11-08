@@ -11,14 +11,20 @@ import * as cmd_exists from 'command-exists';
 let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext): void {
-  const catala_binary = 'catala-lsp';
-
   const local_path = context.asAbsolutePath(
     path.join('_build', 'default', 'server', 'src', 'main.exe')
   );
+  const lsp_binary_prefix = 'catala-lsp';
+  let lsp_binary = lsp_binary_prefix;
 
-  const is_binary_in_path = cmd_exists.sync(catala_binary);
   const is_local_binary_present = fs.existsSync(local_path);
+  let is_binary_in_path = false;
+  if (cmd_exists.sync(lsp_binary_prefix)) {
+    is_binary_in_path = true;
+  } else {
+    lsp_binary = lsp_binary_prefix + '.exe';
+    is_binary_in_path = cmd_exists.sync(lsp_binary);
+  }
 
   if (!is_binary_in_path && !is_local_binary_present) {
     const err_msg =
@@ -29,7 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
     if (is_local_binary_present) {
       cmd = local_path;
     } else {
-      cmd = catala_binary;
+      cmd = lsp_binary;
     }
     const run: Executable = { command: cmd };
     client = new LanguageClient(
