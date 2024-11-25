@@ -1,0 +1,14 @@
+> Usage de Francais
+
+```catala
+déclaration champ d'application French_test:
+  résultat test_francais champ d'application Francais.TestFrançais
+  
+champ d'application French_test:
+  définition test_francais.durée_promotion égal à 7 jour
+  définition test_francais.début_promotion égal à |2024-01-07|
+  définition test_francais.jour_achat égal à |2024-01-10|
+  définition test_francais.prix égal à 100,00 €
+  définition test_francais.taux_promo égal à 0,2
+  assertion (test_francais.prix_final = 80,00 €)
+```
