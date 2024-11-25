@@ -1,0 +1,20 @@
+> Module Francais
+
+```catala-metadata
+déclaration champ d'application TestFrançais:
+  entrée durée_promotion contenu durée
+  entrée début_promotion contenu date
+  entrée jour_achat contenu date
+  entrée prix contenu argent
+  entrée taux_promo contenu décimal
+  résultat prix_final contenu argent
+```
+
+```catala
+champ d'application TestFrançais:
+  définition prix_final égal à
+    si jour_achat < début_promotion
+      ou jour_achat > début_promotion + durée_promotion alors
+      prix
+    sinon prix * (1,0 - taux_promo)
+```
