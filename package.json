@@ -25,6 +25,16 @@
           "type": "boolean",
           "default": false,
           "description": "Enable the custom test case editor for Catala test files"
+        },
+        "catala.lspServerPath": {
+          "type": "string",
+          "default": null,
+          "description": "Custom path to the `catala-lsp` executable"
+        },
+        "catala.catalaFormatPath": {
+          "type": "string",
+          "default": null,
+          "description": "Custom path to the `catala-format` executable"
         }
       }
     },
