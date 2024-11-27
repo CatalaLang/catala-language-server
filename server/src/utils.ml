@@ -81,6 +81,27 @@ let write_string oc s =
   in
   inner 0 0 (String.length s)
 
+let lookup_catala_format_config_path
+    (notify_back : Linol_lwt.Jsonrpc2.notify_back) =
+  let open Lwt.Syntax in
+  let r, w = Lwt.task () in
+  let param =
+    ConfigurationParams.create
+      ~items:[ConfigurationItem.create ~section:"catala.catalaFormatPath" ()]
+  in
+  let* _req_id =
+    notify_back#send_request (Lsp.Server_request.WorkspaceConfiguration param)
+      (fun e ->
+        match e with
+        | Ok (`String x :: _) ->
+          Lwt.wakeup w (Some x);
+          Lwt.return_unit
+        | Ok _ | Error _ ->
+          Lwt.wakeup w None;
+          Lwt.return_unit)
+  in
+  r
+
 let try_format_document ~notify_back ~doc_content ~doc_path :
     TextEdit.t list option Lwt.t =
   let open Lwt.Syntax in
@@ -90,8 +111,16 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
     | "pl" -> "catala_pl"
     | "en" | _ | (exception _) -> "catala_en"
   in
-  Lwt_process.with_process_full ~timeout:5.
-    ("", [| "catala-format"; "-l"; language |])
+  let* catala_format_path = lookup_catala_format_config_path notify_back in
+  begin
+    match catala_format_path with
+    | None ->
+      Lwt_process.with_process_full ~timeout:5.
+        ("", [| "catala-format"; "-l"; language |])
+    | Some path ->
+      Lwt_process.with_process_full ~timeout:5.
+        (path, [| "catala-format"; "-l"; language |])
+  end
   @@ fun proc ->
   let read ic =
     Lwt.finalize (fun () -> Lwt_io.read ic) (fun () -> Lwt_io.close ic)
