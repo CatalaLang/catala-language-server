@@ -1,10 +1,9 @@
-
 > Using Apl_locatif
 
 ```catala
 declaration scope Exemple1_test:
   output calcul_aide_personnalisee_logement_locatif scope Apl_locatif.CalculAidePersonnaliséeLogementLocatif
-  
+
 scope Exemple1_test:
   definition calcul_aide_personnalisee_logement_locatif.loyer_principal equals
     $700.00
