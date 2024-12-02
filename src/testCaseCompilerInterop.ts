@@ -12,8 +12,11 @@ import { logger } from './logger';
 import path = require('path');
 import { getDefaultValue } from './defaults';
 import { window } from 'vscode';
+import * as fs from 'fs';
+import { fileSync, setGracefulCleanup } from 'tmp';
+import open, { apps } from 'open';
 
-export function parseTestFile(content: string, lang: string): ParseResults {
+export function parseTestFile(contents: string, lang: string): ParseResults {
   // TODO check behavior when packaging comes into play ('dune install')
   // TODO we should also delegate includes to clerk (remove 'examples')
   // TODO we could revisit this to make the parsing async
@@ -29,7 +32,7 @@ export function parseTestFile(content: string, lang: string): ParseResults {
         './test-case-parser/examples',
         '-',
       ],
-      { input: content }
+      { input: contents }
     );
     return {
       kind: 'Results',
@@ -117,6 +120,35 @@ export function runTestScope(
       kind: 'Error',
       value: errorMsg,
     };
+  }
+}
+
+export function explainTestScope(uri: string, scope: string): void {
+  try {
+    const file = fileSync({
+      tmpdir: '.',
+      prefix: 'explain-',
+      postfix: '.html',
+    }).name;
+    setGracefulCleanup();
+    const cmd = 'catala';
+    const args = [
+      'explain',
+      uri,
+      '-s',
+      scope,
+      '--html',
+      '--url-base',
+      'vscode://file',
+      '--line-format',
+      ':NN:0',
+      '--inline-mod-uses',
+    ];
+    const output = execFileSync(cmd, args);
+    fs.writeFileSync(file, output);
+    open(file, { app: { name: apps.browser } });
+  } catch (error) {
+    logger.log(error);
   }
 }
 

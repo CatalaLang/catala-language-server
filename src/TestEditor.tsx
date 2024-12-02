@@ -14,6 +14,7 @@ type Props = {
   onTestChange(newValue: Test): void;
   onTestDelete(testScope: string): void;
   onTestRun(testScope: string): void;
+  onTestExplain(testScope: string): void;
   runState?: {
     status: 'running' | 'success' | 'error';
     results?: TestRunResults;
@@ -32,16 +33,25 @@ export default function TestEditor(props: Props): ReactElement {
   return (
     <div className="test-editor">
       <div className="test-editor-bar">
-        <button
-          className={`test-editor-run ${props.runState?.status ?? ''}`}
-          title="Run test"
-          onClick={() => props.onTestRun(props.test.testing_scope)}
-          disabled={props.runState?.status === 'running'}
-        >
-          <span
-            className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
-          ></span>
-        </button>
+        <div className="test-editor-actions">
+          <button
+            className={`test-editor-run ${props.runState?.status ?? ''}`}
+            title="Run test"
+            onClick={() => props.onTestRun(props.test.testing_scope)}
+            disabled={props.runState?.status === 'running'}
+          >
+            <span
+              className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
+            ></span>
+          </button>
+          <button
+            className="test-editor-explain"
+            title="Explain test"
+            onClick={() => props.onTestExplain(props.test.testing_scope)}
+          >
+            <span className="codicon codicon-question"></span>
+          </button>
+        </div>
         <span className="test-editor-scope">
           <b>{props.test.testing_scope}</b> ➛{' '}
           {String(props.test.tested_scope.name)}

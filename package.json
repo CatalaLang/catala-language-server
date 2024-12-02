@@ -153,15 +153,18 @@
     "@vscode/codicons": "^0.0.36",
     "command-exists": "^1.2.9",
     "microdiff": "^1.4.0",
+    "open": "^10.1.0",
     "p-queue": "^6.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tmp": "^0.2.3",
     "vscode-languageclient": "^8.0.2"
   },
   "devDependencies": {
     "@types/command-exists": "^1.2.3",
     "@types/mocha": "^10.0.6",
     "@types/node": "^18.11.18",
+    "@types/tmp": "^0.2.6",
     "@types/vscode": "^1.86.0",
     "@typescript-eslint/eslint-plugin": "^7.16.1",
     "@typescript-eslint/parser": "^7.16.1",
