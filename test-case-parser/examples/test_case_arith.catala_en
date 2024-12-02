@@ -10,7 +10,6 @@ scope A_test:
   definition a.c equals Arith.Pair { -- x: 50 -- y: 200. }
   assertion a.w = 42
 ```
-> Using Arith
 
 ```catala
 declaration scope B_test:
