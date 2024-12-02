@@ -10,7 +10,7 @@ node_modules/
 .gitignore
 .prettierignore
 .vscode-test.mjs
-src/
+src/*[!.css]
 syntaxes/*.iro
 
 server/
