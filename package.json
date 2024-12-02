@@ -46,7 +46,8 @@
           {
             "filenamePattern": "*test*.catala_*"
           }
-        ]
+        ],
+        "priority": "option"
       }
     ],
     "languages": [
