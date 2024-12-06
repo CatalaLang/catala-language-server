@@ -6,8 +6,9 @@ export function getDefaultValue(typ: Typ): RuntimeValue {
     case 'TBool':
       return { kind: 'Bool', value: false };
     case 'TInt':
-    case 'TMoney':
       return { kind: 'Integer', value: 0 };
+    case 'TMoney':
+      return { kind: 'Money', value: 0 };
     case 'TRat':
       return { kind: 'Decimal', value: 0 };
     case 'TDate': {

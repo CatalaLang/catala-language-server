@@ -339,43 +339,123 @@ let read_test include_dirs options =
   let tests = import_catala_tests prg in
   write_stdout Test_case_j.write_test_list tests
 
-let rec print_catala_value ppf =
+type lang_strings = {
+  declaration_scope : string;
+  output_scope : string;
+  using_module : string;
+  definition : string;
+  assertion : string;
+  equals : string;
+  content : string;
+  scope : string;
+}
+
+let get_lang_strings = function
+  | Catala_utils.Global.Fr -> {
+      declaration_scope = "déclaration champ d'application";
+      output_scope = "résultat";
+      using_module = "Usage de";
+      definition = "définition";
+      assertion = "assertion";
+      equals = "égal à";
+      content = "contenu";
+      scope = "champ d'application";
+    }
+  | En -> {
+      declaration_scope = "declaration scope";
+      output_scope = "output";
+      using_module = "Using";
+      definition = "definition";
+      assertion = "assertion";
+      equals = "equals";
+      content = "content";
+      scope = "scope";
+    }
+  | _ -> raise (unsupported "unsupported language")
+
+type duration_units = {
+    day: string;
+    month: string;
+    year: string;
+  }
+
+type value_strings = {
+  true_str: string;
+  false_str: string;
+  money_fmt: (int -> int -> unit, Format.formatter, unit) format;
+  decimal_sep: char;
+  content_str: string;
+  duration_units: duration_units;
+}
+
+let get_value_strings = function
+  | Catala_utils.Global.Fr -> {
+      true_str = "vrai";
+      false_str = "faux";
+      money_fmt = format_of_string "%01d,%02d €";
+      decimal_sep = ',';
+      content_str = "contenu";
+      duration_units = {
+        day = "jour";
+        month = "mois";
+        year = "an";
+      };
+    }
+  | En -> {
+      true_str = "true";
+      false_str = "false";
+      money_fmt = format_of_string "$%01d.%02d";
+      decimal_sep = '.';
+      content_str = "content";
+      duration_units = {
+        day = "day";
+        month = "month";
+        year = "year";
+      };
+    }
+  | _ -> raise (unsupported "unsupported language")
+
+let rec print_catala_value ~lang ppf =
   let open Format in
+  let strings = get_value_strings lang in
   function
-  | O.Bool b -> pp_print_bool ppf b
-  | O.Money m -> fprintf ppf "$%01d.%02d" (m/100) (m mod 100)
+  | O.Bool b -> pp_print_string ppf (if b then strings.true_str else strings.false_str)
+  | O.Money m -> fprintf ppf strings.money_fmt (m/100) (m mod 100)
   | O.Integer i -> pp_print_int ppf i
-  | O.Decimal f -> pp_print_float ppf f
+  | O.Decimal f ->
+      let s = sprintf "%g" f in
+      pp_print_string ppf (String.map (function '.' -> strings.decimal_sep | c -> c) s)
   | O.Date { year; month; day } ->
-    fprintf ppf "|%04d-%02d-%02d|" year month day
+      fprintf ppf "|%04d-%02d-%02d|" year month day
   | O.Duration { years = 0; months = 0; days = 0 } ->
-    pp_print_string ppf "0 day"
+      fprintf ppf "0 %s" strings.duration_units.day
   | O.Duration { years; months; days } ->
-    pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " +@ ")
-      (fun ppf t -> t ppf)
-      ppf
-      (List.filter_map Fun.id
-         [ if years > 0 then Some (fun ppf -> fprintf ppf "%d year" years) else None;
-           if months > 0 then Some (fun ppf -> fprintf ppf "%d month" months) else None;
-           if days > 0 then Some (fun ppf -> fprintf ppf "%d day" days) else None; ])
+      pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " +@ ")
+        (fun ppf t -> t ppf)
+        ppf
+        (List.filter_map Fun.id
+           [ if years > 0 then Some (fun ppf -> fprintf ppf "%d %s" years strings.duration_units.year) else None;
+             if months > 0 then Some (fun ppf -> fprintf ppf "%d %s" months strings.duration_units.month) else None;
+             if days > 0 then Some (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day) else None; ])
   | O.Enum (_, (constr, Some v)) ->
-    fprintf ppf "@[<hv 2>%s content %a@]" constr print_catala_value v
+      fprintf ppf "@[<hv 2>%s %s %a@]" constr strings.content_str (print_catala_value ~lang) v
   | O.Enum (_, (constr, None)) ->
-    pp_print_string ppf constr
+      pp_print_string ppf constr
   | O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list
         ~pp_sep:pp_print_space
-         (fun ppf (fld, v) -> fprintf ppf "-- %s: %a@," fld print_catala_value v))
+         (fun ppf (fld, v) -> fprintf ppf "-- %s: %a@," fld (print_catala_value ~lang) v))
       fields
   | O.Array vl ->
     fprintf ppf "@[<hov 1>[%a]@]"
-      (pp_print_seq ~pp_sep:(fun ppf () -> fprintf ppf ";@ ") print_catala_value)
+      (pp_print_seq ~pp_sep:(fun ppf () -> fprintf ppf ";@ ") (print_catala_value ~lang))
       (Array.to_seq vl)
 
-let write_catala_test ppf t =
+let write_catala_test ppf t lang =
   let open Format in
   let open O in
+  let strings = get_lang_strings lang in
   let sscope_var =
     let sname = match Filename.extension t.tested_scope.name with
       | "" -> t.tested_scope.name
@@ -385,28 +465,33 @@ let write_catala_test ppf t =
   in
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala@,";
-  fprintf ppf "@[<v 2>declaration scope %s:@," t.testing_scope;
-  fprintf ppf "output %s scope %s@," sscope_var t.tested_scope.name;
+  fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
+  fprintf ppf "%s %s %s %s@," strings.output_scope sscope_var strings.scope t.tested_scope.name;
   fprintf ppf "@]@,";
-  fprintf ppf "@[<v 2>scope %s:" t.testing_scope;
+  fprintf ppf "@[<v 2>%s %s:" strings.scope t.testing_scope;
   List.iter (fun (tvar, t_in) ->
       match t_in.value with
       | None -> ()
       | Some { value; _ } ->
-        fprintf ppf "@,@[<hv 2>definition %s.%s equals@ %a@]"
-          sscope_var tvar print_catala_value value;)
+        fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]"
+          strings.definition sscope_var tvar strings.equals
+          (print_catala_value ~lang) value;)
     t.test_inputs;
   List.iter (fun (tvar, t_out) ->
       match t_out.value with
       | None -> ()
       | Some { value; _ } ->
-        fprintf ppf "@,assertion (@[<hv>%s.%s =@ %a)@]"
-          sscope_var tvar print_catala_value value;)
+        fprintf ppf "@,%s (@[<hv>%s.%s =@ %a)@]"
+          strings.assertion sscope_var tvar (print_catala_value ~lang) value;)
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
 let write_catala options outfile =
   let tests = Test_case_j.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin) in
+  let lang = Catala_utils.Cli.file_lang (match options.Global.input_src with
+    | Global.FileName f -> f
+    | Global.Contents (_, f) -> f
+    | Global.Stdin _ -> "") in
   let _fname, with_out =
     File.get_formatter_of_out_channel ()
       ~source_file:(Global.Stdin "")
@@ -421,10 +506,10 @@ let write_catala options outfile =
           else
             let modname = Filename.chop_extension test.O.tested_scope.name in
             if not (String.Set.mem modname opened) then
-              Format.fprintf ppf "> Using %s@," modname;
+              Format.fprintf ppf "> %s %s@," (get_lang_strings lang).using_module modname;
             String.Set.add modname opened
         in
-        write_catala_test ppf test;
+        write_catala_test ppf test lang;
         Format.pp_close_box ppf ();
         opened)
       String.Set.empty tests
