@@ -31,7 +31,7 @@ let () =
     Logs.format_reporter ~app:Format.err_formatter ~dst:Format.err_formatter ()
   in
   Logs.set_reporter (combine logfile err_std);
-  Logs.set_level (Some Logs.Info);
+  Logs.set_level (Some Logs.Debug);
   Logs.info (fun m -> m "log file created: '%s'" logfile_path);
   Catala_utils.Global.enforce_options
   (* FIXME: this still prints warnings on stderr due to [Message] hard-wiring
