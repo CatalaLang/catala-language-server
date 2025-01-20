@@ -62,13 +62,16 @@ let send_notification ?(type_ = MessageType.Warning) ~notify_back message =
 
 let check_catala_format_availability () =
   let open Lwt.Infix in
-  Lwt_process.exec ~stdout:`Dev_null ~stderr:`Dev_null
-    ("", [| "catala-format" |])
-  >>= function
-  | WEXITED 2 -> Lwt.return true
-  | WEXITED 127 (* Not found *) | WEXITED _ -> Lwt.return false
-  | WSIGNALED _ -> Lwt.return_false
-  | WSTOPPED _ -> Lwt.return_false
+  Lwt.catch
+    (fun () ->
+      Lwt_process.exec ~stdout:`Dev_null ~stderr:`Dev_null
+        ("", [| "catala-format" |])
+      >>= function
+      | WEXITED 2 -> Lwt.return true
+      | WEXITED 127 (* Not found *) | WEXITED _ -> Lwt.return false
+      | WSIGNALED _ -> Lwt.return_false
+      | WSTOPPED _ -> Lwt.return_false)
+    (fun _ -> Lwt.return_false)
 
 let write_string oc s =
   let open Lwt.Syntax in
@@ -105,90 +108,94 @@ let lookup_catala_format_config_path
 let try_format_document ~notify_back ~doc_content ~doc_path :
     TextEdit.t list option Lwt.t =
   let open Lwt.Syntax in
-  let language =
-    match String.sub doc_path (String.length doc_path - 2) 2 with
-    | "fr" -> "catala_fr"
-    | "pl" -> "catala_pl"
-    | "en" | _ | (exception _) -> "catala_en"
-  in
-  let* catala_format_path = lookup_catala_format_config_path notify_back in
-  begin
-    match catala_format_path with
-    | None ->
-      Lwt_process.with_process_full ~timeout:5.
-        ("", [| "catala-format"; "-l"; language |])
-    | Some path ->
-      Lwt_process.with_process_full ~timeout:5.
-        (path, [| "catala-format"; "-l"; language |])
-  end
-  @@ fun proc ->
-  let read ic =
-    Lwt.finalize (fun () -> Lwt_io.read ic) (fun () -> Lwt_io.close ic)
-  in
-  let writer =
-    Lwt.finalize
-      (fun () -> write_string proc#stdin doc_content)
-      (fun () -> Lwt_io.close proc#stdin)
-  in
-  let stdout_reader = read proc#stdout in
-  let stderr_reader = read proc#stderr in
-  let* r = proc#status in
-  match r with
-  | Unix.WSIGNALED _ -> Lwt.return_none
-  | Unix.WSTOPPED _ -> Lwt.return_none
-  | Unix.WEXITED 0 ->
-    let* () = writer in
-    (* Everything went fine *)
-    Log.info (fun m -> m "document formatting successful");
-    let* formatted_content = stdout_reader in
-    if formatted_content = "" then (
-      (* Don't do anything if the stdout is empty, it's fishy.. *)
-      Log.info (fun m ->
-          m
-            "no formatted output: the document is either empty or something \
-             went wrong");
-      Lwt.return_none)
-    else
-      let eof_range =
-        let l = String.split_on_char '\n' doc_content in
-        let l = List.rev l in
-        let len = List.length l in
-        Position.create ~character:(String.length (List.hd l)) ~line:len
+  Lwt.catch
+    (fun () ->
+      let language =
+        match String.sub doc_path (String.length doc_path - 2) 2 with
+        | "fr" -> "catala_fr"
+        | "pl" -> "catala_pl"
+        | "en" | _ | (exception _) -> "catala_en"
       in
-      let range =
-        Range.create ~start:{ line = 0; character = 0 } ~end_:eof_range
+      let* catala_format_path = lookup_catala_format_config_path notify_back in
+      begin
+        match catala_format_path with
+        | None ->
+          Lwt_process.with_process_full ~timeout:5.
+            ("", [| "catala-format"; "-l"; language |])
+        | Some path ->
+          Lwt_process.with_process_full ~timeout:5.
+            (path, [| "catala-format"; "-l"; language |])
+      end
+      @@ fun proc ->
+      let read ic =
+        Lwt.finalize (fun () -> Lwt_io.read ic) (fun () -> Lwt_io.close ic)
       in
-      Lwt.return_some [TextEdit.create ~newText:formatted_content ~range]
-  | Unix.WEXITED n ->
-    Log.info (fun m -> m "failed to format document '%s'" doc_path);
-    let* error_output = stderr_reader in
-    if error_output = "" then
-      let* () =
-        Format.kasprintf
-          (send_notification ~type_:MessageType.Warning ~notify_back)
-          "Code formatting failed: catala-format exited with error code %d" n
+      let writer =
+        Lwt.finalize
+          (fun () -> write_string proc#stdin doc_content)
+          (fun () -> Lwt_io.close proc#stdin)
       in
-      Lwt.return_none
-    else
-      let lines = String.split_on_char '\n' error_output in
-      let take_n l n =
-        let rec loop acc = function
-          | [], _ | _, 0 -> List.rev acc
-          | h :: t, n -> loop (h :: acc) (t, pred n)
-        in
-        loop [] (l, n)
-      in
-      let l =
-        if List.length lines > 10 then
-          take_n lines 5 @ ["..."] @ (take_n (List.rev lines) 5 |> List.rev)
-        else lines
-      in
-      let* () =
-        Format.kasprintf
-          (send_notification ~type_:MessageType.Warning ~notify_back)
-          "Code formatting failed.\nReason:\n%s" (String.concat "\n" l)
-      in
-      Lwt.return_none
+      let stdout_reader = read proc#stdout in
+      let stderr_reader = read proc#stderr in
+      let* r = proc#status in
+      match r with
+      | Unix.WSIGNALED _ -> Lwt.return_none
+      | Unix.WSTOPPED _ -> Lwt.return_none
+      | Unix.WEXITED 0 ->
+        let* () = writer in
+        (* Everything went fine *)
+        Log.info (fun m -> m "document formatting successful");
+        let* formatted_content = stdout_reader in
+        if formatted_content = "" then (
+          (* Don't do anything if the stdout is empty, it's fishy.. *)
+          Log.info (fun m ->
+              m
+                "no formatted output: the document is either empty or \
+                 something went wrong");
+          Lwt.return_none)
+        else
+          let eof_range =
+            let l = String.split_on_char '\n' doc_content in
+            let l = List.rev l in
+            let len = List.length l in
+            Position.create ~character:(String.length (List.hd l)) ~line:len
+          in
+          let range =
+            Range.create ~start:{ line = 0; character = 0 } ~end_:eof_range
+          in
+          Lwt.return_some [TextEdit.create ~newText:formatted_content ~range]
+      | Unix.WEXITED n ->
+        Log.info (fun m -> m "failed to format document '%s'" doc_path);
+        let* error_output = stderr_reader in
+        if error_output = "" then
+          let* () =
+            Format.kasprintf
+              (send_notification ~type_:MessageType.Warning ~notify_back)
+              "Code formatting failed: catala-format exited with error code %d"
+              n
+          in
+          Lwt.return_none
+        else
+          let lines = String.split_on_char '\n' error_output in
+          let take_n l n =
+            let rec loop acc = function
+              | [], _ | _, 0 -> List.rev acc
+              | h :: t, n -> loop (h :: acc) (t, pred n)
+            in
+            loop [] (l, n)
+          in
+          let l =
+            if List.length lines > 10 then
+              take_n lines 5 @ ["..."] @ (take_n (List.rev lines) 5 |> List.rev)
+            else lines
+          in
+          let* () =
+            Format.kasprintf
+              (send_notification ~type_:MessageType.Warning ~notify_back)
+              "Code formatting failed.\nReason:\n%s" (String.concat "\n" l)
+          in
+          Lwt.return_none)
+    (fun _ -> Lwt.return_none)
 
 let try_format_document ~notify_back ~doc_content ~doc_path =
   Lwt.catch
