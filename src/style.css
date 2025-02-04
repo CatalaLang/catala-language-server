@@ -1,6 +1,7 @@
 .test-editor {
   margin-bottom: 20px;
-  border: 1px solid var(--vscode-editor-foreground);
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
   border-radius: 4px;
 }
 
@@ -8,9 +9,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: var(--vscode-editor-background);
-  padding: 4px;
-  border-bottom: 1px solid var(--vscode-editor-foreground);
+  background-color: var(--vscode-sideBarSectionHeader-background);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-panel-border);
 }
 
 .test-editor-scope {
@@ -73,7 +74,7 @@
 }
 
 .test-editor-content {
-  padding: 4px;
+  padding: 12px;
 }
 
 .test-run-success {
@@ -127,11 +128,11 @@
 }
 
 .test-section-title {
-  font-size: 12px;
-  font-weight: bold;
+  font-size: 14px;
+  font-weight: 600;
   margin: 0;
-  padding-bottom: 2px;
-  color: var(--vscode-editor-foreground);
+  padding: 8px 0;
+  color: var(--vscode-foreground);
   display: flex;
   align-items: center;
 }
@@ -164,11 +165,13 @@
 .struct-editor input,
 .struct-editor select {
   width: 100%;
-  padding: 2px 4px;
+  padding: 4px 8px;
   border: 1px solid var(--vscode-input-border);
   background-color: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   box-sizing: border-box;
+  border-radius: 2px;
+  font-size: 13px;
 }
 
 .value-editor input:focus,
