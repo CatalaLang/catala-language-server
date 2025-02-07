@@ -4,7 +4,10 @@ name: "catala-lsp"
 maintainer: "Vincent Botbol"
 authors: [ "Vincent Botbol" ]
 license: "Apache-2.0"
-build: ["dune" "build" "-p" name "-j" jobs]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+]
 depends: [
   "ocaml" {>= "4.14.1"}
   "dune" { >= "3.0" }
@@ -13,6 +16,7 @@ depends: [
   "uri"
   "linol"     { = "dev" }
   "linol-lwt" { = "dev" }
+  "qcheck" { with-test & >= "0.21.3" }
   "atdgen" { build }
   "atdgen-runtime"
 ]
