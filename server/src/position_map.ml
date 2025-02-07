@@ -103,7 +103,7 @@ module Make_trie (D : Data) = struct
         match compare_itv itv n.itv with
         | `Equal -> assert false
         | `Subset -> find_included_nodes (h :: acc) t
-        | `Disjoint_right -> List.rev acc, t
+        | `Disjoint_right -> List.rev (h :: acc), t
         | `Disjoint_left | `Supset | `Right_inclusion _ ->
           (* by construction *) assert false
         | `Left_inclusion (included_itv, disjoint_part) -> (
@@ -126,6 +126,7 @@ module Make_trie (D : Data) = struct
           match sub_trie with
           | [included_node; disjoint_node] ->
             List.rev (included_node :: acc), disjoint_node :: t
+          | [a; b; c] -> List.rev (a :: acc), b :: c :: t
           | _ -> assert false))
     in
     let rec loop acc itv : trie -> trie = function
