@@ -87,6 +87,44 @@ let lookup_suggestions_by_pos file pos =
   let range = { Range.start = pos; end_ = pos } in
   lookup_suggestions file range
 
+(* This is use for debugging: call this function in all_diagnostics to underline
+   all processed symbols in LSP. Useful to determine which expression wasn't
+   properly handled. *)
+let all_symbols_as_warning file =
+  match file.jump_table with
+  | None -> []
+  | Some { variables; lookup_table } ->
+    [
+      ( file.uri,
+        Jump.LTable.bindings lookup_table
+        |> List.map snd
+        |> List.concat_map
+             (fun { Jump.declaration; definitions; usages; types } ->
+               let build r = diag_r Warning (range_of_pos r) "abc" in
+               let declaration = Option.map (fun x -> [x]) declaration in
+               [declaration; definitions; usages; types]
+               |> List.filter_map (function
+                    | None -> None
+                    | Some r -> (
+                      List.filter
+                        (fun r -> Catala_utils.Pos.get_file r = file.uri)
+                        r
+                      |> function [] -> None | r -> Some r))
+               |> List.concat
+               |> List.map build) );
+    ]
+    @ [
+        ( file.uri,
+          Jump.PMap.fold_on_file file.uri
+            (fun r v acc ->
+              let msg =
+                Format.asprintf "%a : %a" Jump.pp_var v
+                  Catala_utils.Pos.format_loc_text r
+              in
+              diag_r Warning (range_of_pos r) msg :: acc)
+            variables [] );
+      ]
+
 let all_diagnostics file =
   let open Catala_utils.Message in
   let errs = UriMap.bindings file.errors in
