@@ -135,10 +135,10 @@ module Make_trie (D : Data) = struct
         match compare_itv itv_p itv with
         | `Equal ->
           if data <> node_r.data then
-            Log.warn (fun m ->
+            Log.debug (fun m ->
                 m
-                  "different data present for new node (%a) vs. previous node \
-                   (%a)"
+                  "Warning: different data present for new node (%a) vs. \
+                   previous node (%a)"
                   pp_node
                   (Node { itv; data; children = [] })
                   pp_node node);
