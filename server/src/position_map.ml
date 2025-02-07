@@ -182,7 +182,7 @@ module Make (D : Data) = struct
 
   let pp ppf pmap =
     let open Format in
-    fprintf ppf "@[<v 2>variables:@ @[<v 2>%a@]@]"
+    fprintf ppf "@[<v 2>variables:@ %a@]"
       (FileMap.format ~pp_sep:pp_print_cut Trie.pp_trie)
       pmap
 
