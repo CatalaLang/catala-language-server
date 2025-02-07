@@ -397,10 +397,47 @@ let traverse
   let m = List.fold_right (traverse_scope ctx) all_scopes m in
   traverse_ctx ctx m
 
+let add_scope_definitions
+    (ctx : Desugared.Name_resolution.context)
+    (surface : Surface.Ast.program)
+    (variables : PMap.t) =
+  let rec process vars_acc = function
+    | Surface.Ast.CodeBlock (cb, _, _) ->
+      List.fold_left
+        (fun vars item ->
+          match Mark.remove item with
+          | Surface.Ast.ScopeUse s_use ->
+            let pos =
+              Mark.get s_use.scope_use_name
+              |> fun p -> Pos.overwrite_law_info p []
+            in
+            let name = Mark.remove s_use.scope_use_name in
+            let scope_uid =
+              Desugared.Name_resolution.get_scope ctx s_use.scope_use_name
+            in
+            let typ : typ =
+              let ty_pos = ScopeName.get_info scope_uid |> Mark.get in
+              let scope_ctx =
+                Desugared.Name_resolution.get_scope_context ctx scope_uid
+              in
+              TStruct scope_ctx.scope_out_struct, ty_pos
+            in
+            let hash = Hashtbl.hash (ScopeName.get_info scope_uid) in
+            let var = Definition { name; hash; typ } in
+            PMap.add pos var vars
+          | ScopeDecl _ | StructDecl _ | EnumDecl _ | Topdef _ -> vars)
+        vars_acc cb
+    | LawHeading (_, ls) -> List.fold_left process vars_acc ls
+    | LawInclude _ | ModuleDef _ | ModuleUse _ | LawText _ -> vars_acc
+  in
+  List.fold_left process variables surface.program_items
+
 let populate
     (ctx : Desugared.Name_resolution.context)
+    (surface : Surface.Ast.program)
     (prog : Shared_ast.typed Scopelang.Ast.program) : t =
   let variables = traverse ctx prog in
+  let variables = add_scope_definitions ctx surface variables in
   let add f = function None -> Some (f empty_lookup) | Some v -> Some (f v) in
   let add_def p =
     add (fun v ->

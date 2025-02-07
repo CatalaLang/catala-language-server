@@ -436,7 +436,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
             prg.program_ctx.ctx_enums
         in
         let prg = Scopelang.Ast.type_program prg in
-        let jump_table = Jump.populate ctx prg in
+        let jump_table = Jump.populate ctx surface prg in
         !l, Some prg, Some jump_table
     with e ->
       (match e with
