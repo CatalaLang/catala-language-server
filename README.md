@@ -88,22 +88,26 @@ If you wish to test the extension without installing it, you may:
 
 ### Code formatting
 
-An automated code formatting tool for catala is available. This tool
-is based on [topiary](https://github.com/tweag/topiary/). As of right
-now, the Catala language is not officially supported by topiary and
-requires to install
-[catala-format](https://github.com/CatalaLang/catala-format).
-
-To install this tool pin (via opam) `catala-format` using this command:
+[catala-format](https://github.com/CatalaLang/catala-format) is an
+automated code formatting tool based on
+[topiary](https://github.com/tweag/topiary/). To install
+`catala-format`, use this command:
 
 ```
-$ opam pin add catala-format https://github.com/CatalaLang/catala-format.git
+$ opam install catala-format
 ```
 
 N.b. the installation may be lengthy as it needs to install `topiary`.
 
 Once this is done, you may start (or reload) the extension and use the
-format document command: `Ctrl-p` and type 'Format Document'.
+format document command: `Ctrl-p` and type 'Format Document'. You may
+also bind it to a handy keyboard shortcut. Beware: if the catala
+program you are trying to format cannot be properly parsed, the
+formatter call will fail.
+
+`catala-format` can also be used as a standalone tool or plugged in
+your favorite IDE. Type `catala-format --help` in a terminal for more
+details.
 
 ### Using the Custom Test Case Editor
 
