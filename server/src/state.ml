@@ -100,7 +100,7 @@ let all_symbols_as_warning file =
         |> List.map snd
         |> List.concat_map
              (fun { Jump.declaration; definitions; usages; types } ->
-               let build r = diag_r Warning (range_of_pos r) "abc" in
+               let build r = diag_r Warning (range_of_pos r) (`String "abc") in
                let declaration = Option.map (fun x -> [x]) declaration in
                [declaration; definitions; usages; types]
                |> List.filter_map (function
@@ -121,7 +121,7 @@ let all_symbols_as_warning file =
                 Format.asprintf "%a : %a" Jump.pp_var v
                   Catala_utils.Pos.format_loc_text r
               in
-              diag_r Warning (range_of_pos r) msg :: acc)
+              diag_r Warning (range_of_pos r) (`String msg) :: acc)
             variables [] );
       ]
 
@@ -144,7 +144,7 @@ let all_diagnostics file =
                       (Printexc.to_string exn));
                 "Cannot display the error description, save the file first."
             in
-            diag_r severity range message)
+            diag_r severity range (`String message))
           (RangeMap.bindings rmap) ))
     errs
 

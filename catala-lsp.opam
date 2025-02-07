@@ -14,18 +14,14 @@ depends: [
   "catala"    { = "dev" }
   "logs"
   "uri"
-  "linol"     { = "dev" }
-  "linol-lwt" { = "dev" }
+  "linol"     { = "0.8" }
+  "linol-lwt" { = "0.8" }
   "qcheck" { with-test & >= "0.21.3" }
   "atdgen" { build }
   "atdgen-runtime"
 ]
 pin-depends: [
   ["catala.dev" "git+https://github.com/CatalaLang/catala"]
-  # TODO: remove linol's pinning once the required changes are
-  # published in opam
-  ["linol.dev" "git+https://github.com/c-cube/linol#a779942f9592a762d26484d03b1f93110dbaf577"]
-  ["linol-lwt.dev" "git+https://github.com/c-cube/linol#a779942f9592a762d26484d03b1f93110dbaf577"]
 ]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
