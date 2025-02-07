@@ -201,6 +201,10 @@ module Make (D : Data) = struct
     let j = Pos.get_end_column pos in
     (li, i), (lj, j)
 
+  let pp_raw ppf (p, d) =
+    let open Format in
+    fprintf ppf "@[<h>%a: %a@]" Trie.pp_itv (pos_to_itv p) D.format d
+
   let add pos data variables =
     if pos = Pos.no_pos then variables
     else

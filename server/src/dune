@@ -1,8 +1,16 @@
 (executable
-  (name         main)
-  (public_name  catala-lsp)
-  (package      catala-lsp)
-  (libraries
+ (name        main)
+ (package     catala-lsp)
+ (public_name catala-lsp)
+ (libraries lib)
+ (modules Main)
+ (flags (:standard) -open Lib)
+)
+
+(library
+ (name      lib)
+ (package   catala-lsp)
+ (libraries
    threads.posix
    lsp
    linol
@@ -15,7 +23,9 @@
    catala.clerk_config
    uri
    re)
-  (flags (:standard)))
+ (modules (:standard \ Main))
+ (flags (:standard))
+)
 
 (alias
  (name lsp)
