@@ -21,7 +21,7 @@ depends: [
   "atdgen-runtime"
 ]
 pin-depends: [
-  ["catala.dev" "git+https://github.com/CatalaLang/catala"]
+  ["catala.dev" "git+https://github.com/CatalaLang/catala#vbot@fix-gmp-build"]
 ]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
