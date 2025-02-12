@@ -13,14 +13,55 @@
    the License. *)
 open Catala_utils
 open Shared_ast
-
 module I = Desugared.Ast
-
 module O = Test_case_t
 
+let lookup_clerk_toml from_dir =
+  let home = try Sys.getenv "HOME" with Not_found -> "" in
+  let open Catala_utils in
+  let find_in_parents cwd predicate =
+    let rec lookup dir =
+      if predicate dir then Some dir
+      else if dir = home then None
+      else
+        let parent = Filename.dirname dir in
+        if parent = dir then None else lookup parent
+    in
+    match lookup cwd with Some rel -> Some rel | None -> None
+  in
+  try
+    begin
+      match
+        find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
+      with
+      | None -> None
+      | Some dir -> (
+        try
+          let config = Clerk_config.read File.(dir / "clerk.toml") in
+          Some (config, dir)
+        with Message.CompilerError _c -> None)
+    end
+  with _ -> None
+
+let lookup_include_dirs ?(include_dirs = []) ?buffer_path options =
+  let f dir =
+    if include_dirs <> [] then include_dirs
+    else
+      lookup_clerk_toml dir
+      |> function
+      | None -> include_dirs
+      | Some (config, _) -> List.map Global.raw_file config.global.include_dirs
+  in
+  match options.Global.input_src with
+  | FileName file | Contents (_, file) -> f (Filename.dirname file)
+  | Stdin _ -> (
+    match buffer_path with
+    | None -> include_dirs
+    | Some buffer_path -> f (Filename.dirname buffer_path))
+
 exception Unsupported of string
-let unsupported fmt =
-  Format.ksprintf (fun msg -> raise (Unsupported msg)) fmt
+
+let unsupported fmt = Format.ksprintf (fun msg -> raise (Unsupported msg)) fmt
 
 let get_typ_literal = function
   | TBool -> O.TBool
@@ -46,33 +87,27 @@ let rec get_typ decl_ctx = function
 and get_struct decl_ctx struct_name =
   let fields_map = StructName.Map.find struct_name decl_ctx.ctx_structs in
   let fields =
-    List.map (fun (field, typ) ->
-        StructField.to_string field,
-        get_typ decl_ctx typ)
+    List.map
+      (fun (field, typ) -> StructField.to_string field, get_typ decl_ctx typ)
       (StructField.Map.bindings fields_map)
   in
-  {
-    O.struct_name = StructName.to_string struct_name;
-    fields
-  }
+  { O.struct_name = StructName.to_string struct_name; fields }
 
 and get_enum decl_ctx enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
   let constructors =
-    List.map (fun (constr, typ) ->
-        EnumConstructor.to_string constr,
-        match typ with
-        | TLit TUnit, _ -> None
-        | _ -> Some (get_typ decl_ctx typ))
+    List.map
+      (fun (constr, typ) ->
+        ( EnumConstructor.to_string constr,
+          match typ with
+          | TLit TUnit, _ -> None
+          | _ -> Some (get_typ decl_ctx typ) ))
       (EnumConstructor.Map.bindings constr_map)
   in
-  {
-    O.enum_name = EnumName.to_string enum_name;
-    constructors;
-  }
+  { O.enum_name = EnumName.to_string enum_name; constructors }
 
-let rec get_value: type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
-  fun decl_ctx e ->
+let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
+ fun decl_ctx e ->
   match e with
   | ELit (LBool b), _ -> O.Bool b
   | ELit (LInt i), _ -> O.Integer (Z.to_int i)
@@ -84,57 +119,57 @@ let rec get_value: type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
   | ELit (LDuration dt), _ ->
     let years, months, days = Dates_calc.Dates.period_to_ymds dt in
     O.Duration { years; months; days }
-  | EAppOp { op = Op.Add, _; args = [e1; e2]; tys = [TLit TDuration, _; TLit TDuration, _] }, _ as e ->
-    (match get_value decl_ctx e1, get_value decl_ctx e2 with
-     | O.Duration { years = y1; months = m1; days = d1 },
-       O.Duration { years = y2; months = m2; days = d2 } ->
-       O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
-     | _ -> Message.error ~pos:(Expr.pos e) "Invalid duration literal.")
+  | ( EAppOp
+        {
+          op = Op.Add, _;
+          args = [e1; e2];
+          tys = [(TLit TDuration, _); (TLit TDuration, _)];
+        },
+      _ ) as e -> (
+    match get_value decl_ctx e1, get_value decl_ctx e2 with
+    | ( O.Duration { years = y1; months = m1; days = d1 },
+        O.Duration { years = y2; months = m2; days = d2 } ) ->
+      O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
+    | _ -> Message.error ~pos:(Expr.pos e) "Invalid duration literal.")
   | EArray args, _ ->
     O.Array (Array.of_list (List.map (get_value decl_ctx) args))
   | EStruct { name; fields }, _ ->
     O.Struct
       ( get_struct decl_ctx name,
         List.map
-          (fun (field, v) ->
-            StructField.to_string field, get_value decl_ctx v)
+          (fun (field, v) -> StructField.to_string field, get_value decl_ctx v)
           (StructField.Map.bindings fields) )
   | EInj { name; e = ELit LUnit, _; cons }, _ ->
-    O.Enum
-      ( get_enum decl_ctx name,
-        (EnumConstructor.to_string cons, None)
-      )
+    O.Enum (get_enum decl_ctx name, (EnumConstructor.to_string cons, None))
   | EInj { name; e; cons }, _ ->
     O.Enum
       ( get_enum decl_ctx name,
-        (EnumConstructor.to_string cons, Some (get_value decl_ctx e))
-      )
-  | e ->
-    Message.error ~pos:(Expr.pos e)
-      "This test value is not a literal."
+        (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
+  | e -> Message.error ~pos:(Expr.pos e) "This test value is not a literal."
 
-let get_source_position pos = {
-  O.filename = Pos.get_file pos;
-  start_line = Pos.get_start_line pos;
-  start_column = Pos.get_start_column pos;
-  end_line = Pos.get_end_line pos;
-  end_column = Pos.get_end_column pos;
-  law_headings = Pos.get_law_info pos;
-}
+let get_source_position pos =
+  {
+    O.filename = Pos.get_file pos;
+    start_line = Pos.get_start_line pos;
+    start_column = Pos.get_start_column pos;
+    end_line = Pos.get_end_line pos;
+    end_column = Pos.get_end_column pos;
+    law_headings = Pos.get_law_info pos;
+  }
 
 let scope_inputs decl_ctx scope =
-  I.ScopeDef.Map.fold (fun ((v, _pos), _kind) sdef acc ->
+  I.ScopeDef.Map.fold
+    (fun ((v, _pos), _kind) sdef acc ->
       match sdef.I.scope_def_io.I.io_input with
       | Runtime.NoInput, _ -> acc
       | Runtime.OnlyInput, _ ->
         (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc
       | Runtime.Reentrant, _ ->
-        (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc
-    )
+        (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc)
     scope.I.scope_defs []
   |> List.rev
 
-let get_scope_def decl_ctx (sc: I.scope): O.scope_def =
+let get_scope_def decl_ctx (sc : I.scope) : O.scope_def =
   let info = ScopeName.Map.find sc.scope_uid decl_ctx.ctx_scopes in
   {
     O.name = ScopeName.to_string sc.scope_uid;
@@ -142,7 +177,10 @@ let get_scope_def decl_ctx (sc: I.scope): O.scope_def =
     outputs = (get_struct decl_ctx info.out_struct_name).fields;
   }
 
-let get_scope_test (prg : I.program) (testing_scope: string) (tested_scope: ScopeName.t): O.test =
+let get_scope_test
+    (prg : I.program)
+    (testing_scope : string)
+    (tested_scope : ScopeName.t) : O.test =
   let tested_scope =
     let modul =
       List.fold_left
@@ -154,21 +192,12 @@ let get_scope_test (prg : I.program) (testing_scope: string) (tested_scope: Scop
       (ScopeName.Map.find tested_scope modul.module_scopes)
   in
   let test_inputs =
-    List.map
-      (fun (v, typ) -> v, { O.typ; value = None })
-      tested_scope.inputs
+    List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.inputs
   in
   let test_outputs =
-    List.map
-      (fun (v, typ) -> v, { O.typ; value = None })
-      tested_scope.outputs
+    List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.outputs
   in
-  {
-    O.testing_scope;
-    tested_scope;
-    test_outputs;
-    test_inputs;
-  }
+  { O.testing_scope; tested_scope; test_outputs; test_inputs }
 
 (* --- *)
 
@@ -177,13 +206,15 @@ let write_stdout f arg =
   f buf arg;
   Buffer.output_buffer stdout buf
 
-let print_test test =
-  write_stdout Test_case_j.write_test test
+let print_test test = write_stdout Test_case_j.write_test test
+let read_program includes options = Driver.Passes.desugared options ~includes
 
-let read_program includes options =
-  Driver.Passes.desugared options ~includes
-
-let generate_test tested_scope ?(testing_scope=tested_scope^"_test") include_dirs options =
+let generate_test
+    tested_scope
+    ?(testing_scope = tested_scope ^ "_test")
+    include_dirs
+    options =
+  let include_dirs = lookup_include_dirs ~include_dirs options in
   let prg, _ = read_program include_dirs options in
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
@@ -192,14 +223,14 @@ let generate_test tested_scope ?(testing_scope=tested_scope^"_test") include_dir
   print_test test
 
 exception InvalidTestingScope of string
+
 let invalid_testing_scope fmt =
   Format.kasprintf (fun msg -> raise (InvalidTestingScope msg)) fmt
 
 let get_test_scopes prg =
   let re_test = Re.(compile (str "_test")) in
   prg.I.program_root.module_scopes
-  |> ScopeName.Map.filter (fun name _ ->
-      Re.execp re_test (ScopeName.base name))
+  |> ScopeName.Map.filter (fun name _ -> Re.execp re_test (ScopeName.base name))
   |> ScopeName.Map.keys
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
@@ -210,21 +241,24 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
     let count = ScopeVar.Map.cardinal testing_scope.I.scope_sub_scopes in
     if count <> 1 then
       invalid_testing_scope
-        "@{<b>%a@}: testing scopes are expected to have one, and only one subscope, this has %d"
+        "@{<b>%a@}: testing scopes are expected to have one, and only one \
+         subscope, this has %d"
         ScopeName.format testing_scope_name count
     else ScopeVar.Map.choose testing_scope.scope_sub_scopes
   in
   let tested_id_var_map =
-    Ident.Map.filter_map (fun _ -> function
-        | ScopeVar v -> Some v
-        | SubScope _ -> None)
-      (ScopeName.Map.find tested_scope naming_ctx.Desugared.Name_resolution.scopes).var_idmap
+    Ident.Map.filter_map
+      (fun _ -> function ScopeVar v -> Some v | SubScope _ -> None)
+      (ScopeName.Map.find tested_scope
+         naming_ctx.Desugared.Name_resolution.scopes)
+        .var_idmap
   in
   let base_test =
     get_scope_test prg (ScopeName.to_string testing_scope_name) tested_scope
   in
   let test_inputs =
-    List.map (fun (var_str, test_in) ->
+    List.map
+      (fun (var_str, test_in) ->
         let var_within_origin_scope =
           Ident.Map.find var_str tested_id_var_map
         in
@@ -232,37 +266,31 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
           let rules =
             try
               let def_key =
-                (subscope_var, Pos.no_pos),
-                I.ScopeDef.SubScopeInput {
-                  name = tested_scope;
-                  var_within_origin_scope;
-                }
+                ( (subscope_var, Pos.no_pos),
+                  I.ScopeDef.SubScopeInput
+                    { name = tested_scope; var_within_origin_scope } )
               in
-              let def =
-                I.ScopeDef.Map.find def_key testing_scope.scope_defs
-              in
+              let def = I.ScopeDef.Map.find def_key testing_scope.scope_defs in
               RuleName.Map.bindings def.scope_def_rules
-            with Ident.Map.Not_found _ | I.ScopeDef.Map.Not_found _ ->
-              []
+            with Ident.Map.Not_found _ | I.ScopeDef.Map.Not_found _ -> []
           in
           match rules with
           | [] -> None
-          | [_, rule] ->
+          | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
             let value = get_value prg.program_ctx e in
             Some { O.value; pos = Some (get_source_position (Expr.pos e)) }
           | rules ->
             let extra_pos =
-              List.map (fun (r, _) -> "", Mark.get (RuleName.get_info r))
-                rules
+              List.map (fun (r, _) -> "", Mark.get (RuleName.get_info r)) rules
             in
             Message.error ~extra_pos
-              "Multiple definitions of test input value in test \
-               scope %a.%a!;@ %d rule(s) found: [%a]"
+              "Multiple definitions of test input value in test scope %a.%a!;@ \
+               %d rule(s) found: [%a]"
               ScopeName.format testing_scope_name ScopeVar.format
-              var_within_origin_scope
-              (List.length rules)
-              (Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf ";@ ")
+              var_within_origin_scope (List.length rules)
+              (Format.pp_print_list
+                 ~pp_sep:(fun ppf () -> Format.fprintf ppf ";@ ")
                  (fun ppf (r, _) -> RuleName.format ppf r))
               rules
         in
@@ -274,67 +302,70 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
       ScopeName.Map.find tested_scope prg.program_ctx.ctx_scopes
     in
     let scope_field_map =
-      ScopeVar.Map.fold (fun var field acc ->
-          StructField.Map.add field var acc)
-        scope_info.out_struct_fields
-        StructField.Map.empty
+      ScopeVar.Map.fold
+        (fun var field acc -> StructField.Map.add field var acc)
+        scope_info.out_struct_fields StructField.Map.empty
     in
     let assertion_values =
       I.AssertionName.Map.fold
         (fun _ e acc ->
-           match Expr.unbox_closed e with
-           | EAppOp {
-               op = Op.Eq, _;
-               args = [
-                 EStructAccess {
-                   field;
-                   e =
-                     ELocation
-                       (DesugaredScopeVar { name = svar, pos; _ }), _;
-                   _
-                 }, _;
-                 value];
-               _ }, _
-             when svar = subscope_var ->
-             let scope_var = StructField.Map.find field scope_field_map in
-             ScopeVar.Map.add scope_var
-               { O.value = get_value prg.program_ctx value;
-                 pos = Some (get_source_position pos)}
-               acc
-           | EAppOp {
-               op = Op.Eq, _;
-               args = [
-                 EStructAccess _, _ as e;
-                 _value];
-               _ }, m ->
-             Message.error ~pos:(Expr.mark_pos m)
-               "Could not read test assertion: %a" Expr.format e
-           | _, m as e ->
-             Message.error ~pos:(Expr.mark_pos m)
-               "Could not read test assertion: %a" Expr.format e
-        )
-        testing_scope.scope_assertions
-        ScopeVar.Map.empty
+          match Expr.unbox_closed e with
+          | ( EAppOp
+                {
+                  op = Op.Eq, _;
+                  args =
+                    [
+                      ( EStructAccess
+                          {
+                            field;
+                            e =
+                              ( ELocation
+                                  (DesugaredScopeVar { name = svar, pos; _ }),
+                                _ );
+                            _;
+                          },
+                        _ );
+                      value;
+                    ];
+                  _;
+                },
+              _ )
+            when svar = subscope_var ->
+            let scope_var = StructField.Map.find field scope_field_map in
+            ScopeVar.Map.add scope_var
+              {
+                O.value = get_value prg.program_ctx value;
+                pos = Some (get_source_position pos);
+              }
+              acc
+          | ( EAppOp
+                {
+                  op = Op.Eq, _;
+                  args = [((EStructAccess _, _) as e); _value];
+                  _;
+                },
+              m ) ->
+            Message.error ~pos:(Expr.mark_pos m)
+              "Could not read test assertion: %a" Expr.format e
+          | (_, m) as e ->
+            Message.error ~pos:(Expr.mark_pos m)
+              "Could not read test assertion: %a" Expr.format e)
+        testing_scope.scope_assertions ScopeVar.Map.empty
     in
-    List.map (fun (var_str, test_out) ->
-        let var =
-          Ident.Map.find var_str tested_id_var_map
-        in
-        let value =
-          ScopeVar.Map.find_opt var assertion_values
-        in
+    List.map
+      (fun (var_str, test_out) ->
+        let var = Ident.Map.find var_str tested_id_var_map in
+        let value = ScopeVar.Map.find_opt var assertion_values in
         var_str, { test_out with O.value })
       base_test.test_outputs
   in
-  { base_test with O.test_inputs;
-                   test_outputs; }
+  { base_test with O.test_inputs; test_outputs }
 
 let import_catala_tests (prg, naming_ctx) =
-  List.map
-    (get_catala_test (prg, naming_ctx))
-    (get_test_scopes prg)
+  List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
-let read_test include_dirs options =
+let read_test include_dirs (options : Global.options) buffer_path =
+  let include_dirs = lookup_include_dirs ~include_dirs ?buffer_path options in
   let prg = read_program include_dirs options in
   let tests = import_catala_tests prg in
   write_stdout Test_case_j.write_test_list tests
@@ -351,7 +382,8 @@ type lang_strings = {
 }
 
 let get_lang_strings = function
-  | Catala_utils.Global.Fr -> {
+  | Catala_utils.Global.Fr ->
+    {
       declaration_scope = "déclaration champ d'application";
       output_scope = "résultat";
       using_module = "Usage de";
@@ -361,7 +393,8 @@ let get_lang_strings = function
       content = "contenu";
       scope = "champ d'application";
     }
-  | En -> {
+  | En ->
+    {
       declaration_scope = "declaration scope";
       output_scope = "output";
       using_module = "Using";
@@ -373,45 +406,35 @@ let get_lang_strings = function
     }
   | _ -> raise (unsupported "unsupported language")
 
-type duration_units = {
-    day: string;
-    month: string;
-    year: string;
-  }
+type duration_units = { day : string; month : string; year : string }
 
 type value_strings = {
-  true_str: string;
-  false_str: string;
-  money_fmt: (int -> int -> unit, Format.formatter, unit) format;
-  decimal_sep: char;
-  content_str: string;
-  duration_units: duration_units;
+  true_str : string;
+  false_str : string;
+  money_fmt : (int -> int -> unit, Format.formatter, unit) format;
+  decimal_sep : char;
+  content_str : string;
+  duration_units : duration_units;
 }
 
 let get_value_strings = function
-  | Catala_utils.Global.Fr -> {
+  | Catala_utils.Global.Fr ->
+    {
       true_str = "vrai";
       false_str = "faux";
       money_fmt = format_of_string "%01d,%02d €";
       decimal_sep = ',';
       content_str = "contenu";
-      duration_units = {
-        day = "jour";
-        month = "mois";
-        year = "an";
-      };
+      duration_units = { day = "jour"; month = "mois"; year = "an" };
     }
-  | En -> {
+  | En ->
+    {
       true_str = "true";
       false_str = "false";
       money_fmt = format_of_string "$%01d.%02d";
       decimal_sep = '.';
       content_str = "content";
-      duration_units = {
-        day = "day";
-        month = "month";
-        year = "year";
-      };
+      duration_units = { day = "day"; month = "month"; year = "year" };
     }
   | _ -> raise (unsupported "unsupported language")
 
@@ -419,37 +442,53 @@ let rec print_catala_value ~lang ppf =
   let open Format in
   let strings = get_value_strings lang in
   function
-  | O.Bool b -> pp_print_string ppf (if b then strings.true_str else strings.false_str)
-  | O.Money m -> fprintf ppf strings.money_fmt (m/100) (m mod 100)
+  | O.Bool b ->
+    pp_print_string ppf (if b then strings.true_str else strings.false_str)
+  | O.Money m -> fprintf ppf strings.money_fmt (m / 100) (m mod 100)
   | O.Integer i -> pp_print_int ppf i
   | O.Decimal f ->
-      let s = sprintf "%g" f in
-      pp_print_string ppf (String.map (function '.' -> strings.decimal_sep | c -> c) s)
-  | O.Date { year; month; day } ->
-      fprintf ppf "|%04d-%02d-%02d|" year month day
+    let s = sprintf "%g" f in
+    pp_print_string ppf
+      (String.map (function '.' -> strings.decimal_sep | c -> c) s)
+  | O.Date { year; month; day } -> fprintf ppf "|%04d-%02d-%02d|" year month day
   | O.Duration { years = 0; months = 0; days = 0 } ->
-      fprintf ppf "0 %s" strings.duration_units.day
+    fprintf ppf "0 %s" strings.duration_units.day
   | O.Duration { years; months; days } ->
-      pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " +@ ")
-        (fun ppf t -> t ppf)
-        ppf
-        (List.filter_map Fun.id
-           [ if years > 0 then Some (fun ppf -> fprintf ppf "%d %s" years strings.duration_units.year) else None;
-             if months > 0 then Some (fun ppf -> fprintf ppf "%d %s" months strings.duration_units.month) else None;
-             if days > 0 then Some (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day) else None; ])
+    pp_print_list
+      ~pp_sep:(fun ppf () -> fprintf ppf " +@ ")
+      (fun ppf t -> t ppf)
+      ppf
+      (List.filter_map Fun.id
+         [
+           (if years > 0 then
+              Some
+                (fun ppf ->
+                  fprintf ppf "%d %s" years strings.duration_units.year)
+            else None);
+           (if months > 0 then
+              Some
+                (fun ppf ->
+                  fprintf ppf "%d %s" months strings.duration_units.month)
+            else None);
+           (if days > 0 then
+              Some
+                (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day)
+            else None);
+         ])
   | O.Enum (_, (constr, Some v)) ->
-      fprintf ppf "@[<hv 2>%s %s %a@]" constr strings.content_str (print_catala_value ~lang) v
-  | O.Enum (_, (constr, None)) ->
-      pp_print_string ppf constr
+    fprintf ppf "@[<hv 2>%s %s %a@]" constr strings.content_str
+      (print_catala_value ~lang) v
+  | O.Enum (_, (constr, None)) -> pp_print_string ppf constr
   | O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
-      (pp_print_list
-        ~pp_sep:pp_print_space
-         (fun ppf (fld, v) -> fprintf ppf "-- %s: %a@," fld (print_catala_value ~lang) v))
+      (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
+           fprintf ppf "-- %s: %a@," fld (print_catala_value ~lang) v))
       fields
   | O.Array vl ->
     fprintf ppf "@[<hov 1>[%a]@]"
-      (pp_print_seq ~pp_sep:(fun ppf () -> fprintf ppf ";@ ") (print_catala_value ~lang))
+      (pp_print_seq
+         ~pp_sep:(fun ppf () -> fprintf ppf ";@ ")
+         (print_catala_value ~lang))
       (Array.to_seq vl)
 
 let write_catala_test ppf t lang =
@@ -457,7 +496,8 @@ let write_catala_test ppf t lang =
   let open O in
   let strings = get_lang_strings lang in
   let sscope_var =
-    let sname = match Filename.extension t.tested_scope.name with
+    let sname =
+      match Filename.extension t.tested_scope.name with
       | "" -> t.tested_scope.name
       | s -> String.sub s 1 (String.length s - 1)
     in
@@ -466,47 +506,57 @@ let write_catala_test ppf t lang =
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala@,";
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
-  fprintf ppf "%s %s %s %s@," strings.output_scope sscope_var strings.scope t.tested_scope.name;
+  fprintf ppf "%s %s %s %s@," strings.output_scope sscope_var strings.scope
+    t.tested_scope.name;
   fprintf ppf "@]@,";
   fprintf ppf "@[<v 2>%s %s:" strings.scope t.testing_scope;
-  List.iter (fun (tvar, t_in) ->
+  List.iter
+    (fun (tvar, t_in) ->
       match t_in.value with
       | None -> ()
       | Some { value; _ } ->
-        fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]"
-          strings.definition sscope_var tvar strings.equals
-          (print_catala_value ~lang) value;)
+        fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition sscope_var
+          tvar strings.equals (print_catala_value ~lang) value)
     t.test_inputs;
-  List.iter (fun (tvar, t_out) ->
+  List.iter
+    (fun (tvar, t_out) ->
       match t_out.value with
       | None -> ()
       | Some { value; _ } ->
-        fprintf ppf "@,%s (@[<hv>%s.%s =@ %a)@]"
-          strings.assertion sscope_var tvar (print_catala_value ~lang) value;)
+        fprintf ppf "@,%s (@[<hv>%s.%s =@ %a)@]" strings.assertion sscope_var
+          tvar (print_catala_value ~lang) value)
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
 let write_catala options outfile =
-  let tests = Test_case_j.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin) in
-  let lang = Catala_utils.Cli.file_lang (match options.Global.input_src with
-    | Global.FileName f -> f
-    | Global.Contents (_, f) -> f
-    | Global.Stdin _ -> "") in
+  let tests =
+    Test_case_j.read_test_list (Yojson.init_lexer ())
+      (Lexing.from_channel stdin)
+  in
+  let lang =
+    Catala_utils.Cli.file_lang
+      (match options.Global.input_src with
+      | Global.FileName f -> f
+      | Global.Contents (_, f) -> f
+      | Global.Stdin _ -> "")
+  in
   let _fname, with_out =
-    File.get_formatter_of_out_channel ()
-      ~source_file:(Global.Stdin "")
+    File.get_formatter_of_out_channel () ~source_file:(Global.Stdin "")
       ~output_file:(Option.map options.Global.path_rewrite outfile)
   in
-  with_out @@ fun ppf ->
+  with_out
+  @@ fun ppf ->
   let _opened =
-    List.fold_left (fun opened test ->
+    List.fold_left
+      (fun opened test ->
         Format.pp_open_vbox ppf 0;
         let opened =
           if Filename.extension test.O.tested_scope.name = "" then opened
           else
             let modname = Filename.chop_extension test.O.tested_scope.name in
             if not (String.Set.mem modname opened) then
-              Format.fprintf ppf "> %s %s@," (get_lang_strings lang).using_module modname;
+              Format.fprintf ppf "> %s %s@,"
+                (get_lang_strings lang).using_module modname;
             String.Set.add modname opened
         in
         write_catala_test ppf test lang;
@@ -517,17 +567,29 @@ let write_catala options outfile =
   ()
 
 let run_test testing_scope include_dirs options =
-  let (desugared_prg, naming_ctx) = read_program include_dirs options in
+  let include_dirs = lookup_include_dirs ~include_dirs options in
+  let include_dirs : Global.raw_file list =
+    List.map
+      (fun (s : Global.raw_file) ->
+        let open File in
+        Global.raw_file ("_build" / (s :> string)))
+      include_dirs
+    @ include_dirs
+  in
+  let desugared_prg, naming_ctx = read_program include_dirs options in
   let testing_scope_name =
-    match Ident.Map.find_opt testing_scope Desugared.Name_resolution.(naming_ctx.local.typedefs) with
-    | Some TScope (sname, _) -> sname
+    match
+      Ident.Map.find_opt testing_scope
+        Desugared.Name_resolution.(naming_ctx.local.typedefs)
+    with
+    | Some (TScope (sname, _)) -> sname
     | _ -> Message.error "No scope %S was found in the program" testing_scope
   in
   let test = get_catala_test (desugared_prg, naming_ctx) testing_scope_name in
   let dcalc_prg =
     let prg =
-      Scopelang.From_desugared.(translate_program desugared_prg
-                                  (build_exceptions_graph desugared_prg))
+      Scopelang.From_desugared.(
+        translate_program desugared_prg (build_exceptions_graph desugared_prg))
     in
     let prg = Scopelang.Ast.type_program prg in
     Dcalc.From_scopelang.translate_program prg
@@ -539,7 +601,8 @@ let run_test testing_scope include_dirs options =
   let program_fun =
     Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_fun
   in
-  let _args, program_expr = match program_fun with
+  let _args, program_expr =
+    match program_fun with
     | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
     | _ -> assert false
   in
@@ -548,21 +611,24 @@ let run_test testing_scope include_dirs options =
   in
   let results, out_struct =
     match result_struct with
-    | EStruct { fields; _ }, _ ->
-      (match StructField.Map.choose fields with
-       | _, (EStruct { fields; name }, _) ->
-         StructField.Map.bindings fields,
-         StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs
-       | _ -> assert false)
+    | EStruct { fields; _ }, _ -> (
+      match StructField.Map.choose fields with
+      | _, (EStruct { fields; name }, _) ->
+        ( StructField.Map.bindings fields,
+          StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
+      | _ -> assert false)
     | _ -> assert false
   in
   let test_outputs =
-    List.map (fun (field, value) ->
-        StructField.to_string field,
-        { O.value = Some { value = get_value dcalc_prg.decl_ctx value;
-                           pos = None; };
-          typ = get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
-        })
+    List.map
+      (fun (field, value) ->
+        ( StructField.to_string field,
+          {
+            O.value =
+              Some { value = get_value dcalc_prg.decl_ctx value; pos = None };
+            typ =
+              get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
+          } ))
       results
   in
   let test = { test with test_outputs } in
