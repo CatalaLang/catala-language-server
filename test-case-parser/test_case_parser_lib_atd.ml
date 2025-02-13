@@ -588,13 +588,15 @@ let write_catala options outfile =
       (fun opened test ->
         Format.pp_open_vbox ppf 0;
         let opened =
-          if Filename.extension test.O.tested_scope.name = "" then opened
-          else
-            let modname = Filename.chop_extension test.O.tested_scope.name in
-            if not (String.Set.mem modname opened) then
+          let modules_to_open =
+            Ident.Set.(diff (of_list test.O.tested_scope.module_deps) opened)
+          in
+          Ident.Set.iter
+            (fun modname ->
               Format.fprintf ppf "> %s %s@,"
-                (get_lang_strings lang).using_module modname;
-            String.Set.add modname opened
+                (get_lang_strings lang).using_module modname)
+            modules_to_open;
+          String.Set.union modules_to_open opened
         in
         write_catala_test ppf test lang;
         Format.pp_close_box ppf ();
