@@ -1,0 +1,7 @@
+> Module Enums
+
+```catala-metadata
+declaration enumeration E:
+  -- Ci content integer
+  -- Cu
+```

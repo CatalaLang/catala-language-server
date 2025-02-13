@@ -1,6 +1,7 @@
 > Module Scope
 
 > Using Structs
+> Using Enums
 
 ```catala-metadata
 declaration scope S:
@@ -10,5 +11,7 @@ declaration scope S:
 
 ```catala
 scope S:
-  definition y equals Structs.B { -- y: i.x  }
+  definition y equals Structs.B { -- y: match i.x with pattern
+   -- Enums.E.Ci of x : Enums.E.Ci content x
+   -- Enums.E.Cu : Enums.E.Ci content 3  }
 ```
