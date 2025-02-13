@@ -28,6 +28,7 @@ type scope_def = {
   name: string;
   inputs: (string * typ) list <json repr="object"> <ts repr="map">;
   outputs: (string * typ) list <json repr="object"> <ts repr="map">;
+  module_deps : string list;
 }
 
 (* Runtime values *)
