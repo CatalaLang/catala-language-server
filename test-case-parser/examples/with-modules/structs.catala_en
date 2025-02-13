@@ -1,0 +1,9 @@
+> Module Structs
+
+```catala-metadata
+declaration structure A:
+  data x content integer
+
+declaration structure B:
+  data y content integer
+```
