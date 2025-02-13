@@ -1,9 +1,11 @@
 > Module Structs
 
+> Using Enums
+
 ```catala-metadata
 declaration structure A:
-  data x content integer
+  data x content Enums.E
 
 declaration structure B:
-  data y content integer
+  data y content Enums.E
 ```
