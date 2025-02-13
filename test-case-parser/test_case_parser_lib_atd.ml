@@ -169,13 +169,50 @@ let scope_inputs decl_ctx scope =
     scope.I.scope_defs []
   |> List.rev
 
-let get_scope_def decl_ctx (sc : I.scope) : O.scope_def =
+let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
+  let input_typs : typ list =
+    I.ScopeDef.Map.fold
+      (fun _ sdef acc ->
+        match sdef.I.scope_def_io.I.io_input with
+        | Runtime.NoInput, _ -> acc
+        | Runtime.OnlyInput, _ | Runtime.Reentrant, _ ->
+          sdef.I.scope_def_typ :: acc)
+      scope.I.scope_defs []
+    |> List.rev
+  in
+  let rec process_typ (acc : ModuleName.Set.t) = function
+    | TLit _, _ -> acc
+    | TTuple tl, _ -> List.fold_left process_typ acc tl
+    | TStruct sname, _ ->
+      let p = StructName.path sname in
+      ModuleName.Set.add_seq (List.to_seq p) acc
+    | TEnum ename, _ ->
+      let p = EnumName.path ename in
+      ModuleName.Set.add_seq (List.to_seq p) acc
+    | TOption ty, _ -> process_typ acc ty
+    | TArray ty, _ -> process_typ acc ty
+    | TArrow _, _ -> raise (Unsupported "function type")
+    | TDefault _, _ -> raise (Unsupported "default type")
+    | TAny, _ -> raise (Unsupported "wildcard type")
+    | TClosureEnv, _ -> raise (Unsupported "closure type")
+  in
+  let s =
+    match prg.program_module_name with
+    | Some (mname, _) -> ModuleName.Set.singleton mname
+    | None -> ModuleName.Set.empty
+  in
+  List.fold_left process_typ s input_typs
+  |> ModuleName.Set.elements
+  |> List.map ModuleName.to_string
+
+let get_scope_def (prg : I.program) (sc : I.scope) : O.scope_def =
+  let decl_ctx = prg.program_ctx in
   let info = ScopeName.Map.find sc.scope_uid decl_ctx.ctx_scopes in
   {
     O.name = ScopeName.to_string sc.scope_uid;
     inputs = scope_inputs decl_ctx sc;
     outputs = (get_struct decl_ctx info.out_struct_name).fields;
-    module_deps = [];
+    module_deps = retrieve_scope_module_deps prg sc;
   }
 
 let get_scope_test
@@ -189,8 +226,7 @@ let get_scope_test
         prg.program_root
         (ScopeName.path tested_scope)
     in
-    get_scope_def prg.program_ctx
-      (ScopeName.Map.find tested_scope modul.module_scopes)
+    get_scope_def prg (ScopeName.Map.find tested_scope modul.module_scopes)
   in
   let test_inputs =
     List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.inputs
