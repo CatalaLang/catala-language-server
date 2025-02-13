@@ -528,6 +528,37 @@ let rec print_catala_value ~lang ppf =
          (print_catala_value ~lang))
       (Array.to_seq vl)
 
+let rec generate_default_value (typ : O.typ) : O.runtime_value =
+  match typ with
+  | TBool -> Bool false
+  | TInt -> Integer 0
+  | TRat -> Decimal 0.
+  | TMoney -> Money 0
+  | TDate -> Date { year = 1970; month = 1; day = 1 }
+  | TDuration -> Duration { years = 0; months = 0; days = 0 }
+  | TTuple l -> Array (List.map generate_default_value l |> Array.of_list)
+  | TStruct decl ->
+    Struct
+      (decl, List.map (fun (s, t) -> s, generate_default_value t) decl.fields)
+  | TEnum decl ->
+    let elt =
+      let cn, ty =
+        List.find_opt
+          (function _, None -> true | _ -> false)
+          decl.constructors
+        |> function Some s -> s | None -> List.hd decl.constructors
+      in
+      cn, Option.map generate_default_value ty
+    in
+    Enum (decl, elt)
+  | TOption typ -> generate_default_value typ
+  | TArray _ -> Array [||]
+
+let print_catala_value_opt ~lang ppf (t_in : O.test_io) =
+  match t_in.O.value with
+  | None -> generate_default_value t_in.typ |> print_catala_value ~lang ppf
+  | Some { value; _ } -> print_catala_value ~lang ppf value
+
 let write_catala_test ppf t lang =
   let open Format in
   let open O in
@@ -549,11 +580,10 @@ let write_catala_test ppf t lang =
   fprintf ppf "@[<v 2>%s %s:" strings.scope t.testing_scope;
   List.iter
     (fun (tvar, t_in) ->
-      match t_in.value with
-      | None -> ()
-      | Some { value; _ } ->
-        fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition sscope_var
-          tvar strings.equals (print_catala_value ~lang) value)
+      fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition sscope_var
+        tvar strings.equals
+        (print_catala_value_opt ~lang)
+        t_in)
     t.test_inputs;
   List.iter
     (fun (tvar, t_out) ->
