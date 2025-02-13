@@ -170,6 +170,7 @@ let scope_inputs decl_ctx scope =
   |> List.rev
 
 let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
+  let decl_ctx = prg.program_ctx in
   let input_typs : typ list =
     I.ScopeDef.Map.fold
       (fun _ sdef acc ->
@@ -196,20 +197,23 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
     | TAny, _ -> raise (Unsupported "wildcard type")
     | TClosureEnv, _ -> raise (Unsupported "closure type")
   in
-  let s =
-    match prg.program_module_name with
-    | Some (mname, _) -> ModuleName.Set.singleton mname
-    | None -> ModuleName.Set.empty
-  in
-  List.fold_left process_typ s input_typs
+  List.fold_left process_typ ModuleName.Set.empty input_typs
   |> ModuleName.Set.elements
   |> List.map ModuleName.to_string
 
 let get_scope_def (prg : I.program) (sc : I.scope) : O.scope_def =
   let decl_ctx = prg.program_ctx in
+  let module_name =
+    match prg.program_module_name with
+    | Some (mname, _) -> ModuleName.to_string mname
+    | None ->
+      Format.ksprintf failwith "scope %s is not in a module"
+        (ScopeName.to_string sc.scope_uid)
+  in
   let info = ScopeName.Map.find sc.scope_uid decl_ctx.ctx_scopes in
   {
     O.name = ScopeName.to_string sc.scope_uid;
+    module_name;
     inputs = scope_inputs decl_ctx sc;
     outputs = (get_struct decl_ctx info.out_struct_name).fields;
     module_deps = retrieve_scope_module_deps prg sc;
@@ -619,7 +623,12 @@ let write_catala options outfile =
         Format.pp_open_vbox ppf 0;
         let opened =
           let modules_to_open =
-            Ident.Set.(diff (of_list test.O.tested_scope.module_deps) opened)
+            Ident.Set.(
+              diff
+                (of_list
+                   (test.O.tested_scope.module_name
+                   :: test.O.tested_scope.module_deps))
+                opened)
           in
           Ident.Set.iter
             (fun modname ->
