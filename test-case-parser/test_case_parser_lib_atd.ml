@@ -11,52 +11,69 @@
    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
    License for the specific language governing permissions and limitations under
    the License. *)
+
 open Catala_utils
 open Shared_ast
 module I = Desugared.Ast
 module O = Test_case_t
 
 let lookup_clerk_toml from_dir =
-  let home = try Sys.getenv "HOME" with Not_found -> "" in
   let open Catala_utils in
-  let find_in_parents cwd predicate =
-    let rec lookup dir =
-      if predicate dir then Some dir
-      else if dir = home then None
-      else
-        let parent = Filename.dirname dir in
-        if parent = dir then None else lookup parent
-    in
-    match lookup cwd with Some rel -> Some rel | None -> None
-  in
   try
     begin
       match
-        find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
+        File.(
+          find_in_parents ~cwd:from_dir (fun dir -> exists (dir / "clerk.toml")))
       with
       | None -> None
-      | Some dir -> (
-        try
-          let config = Clerk_config.read File.(dir / "clerk.toml") in
-          Some (config, dir)
-        with Message.CompilerError _c -> None)
+      | Some (abs_dir, rel) ->
+        let clerk_toml_path = File.(abs_dir / "clerk.toml") in
+        Message.debug "Found config file: %s" clerk_toml_path;
+        let config = Clerk_config.read clerk_toml_path in
+        Some (config, rel)
     end
   with _ -> None
 
-let lookup_include_dirs ?(include_dirs = []) ?buffer_path options =
+let lookup_config current_dir =
+  (* Otherwise, lookup for the toml *)
+  let dir =
+    if Filename.is_relative current_dir then
+      if current_dir = "." then Sys.getcwd ()
+      else File.(Sys.getcwd () / current_dir)
+    else current_dir
+  in
+  lookup_clerk_toml dir
+
+let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
+  (* Otherwise, lookup for the toml *)
   let f dir =
-    if include_dirs <> [] then include_dirs
-    else
-      lookup_clerk_toml dir
-      |> function
-      | None -> include_dirs
-      | Some (config, _) -> List.map Global.raw_file config.global.include_dirs
+    let dir =
+      if Filename.is_relative dir then
+        if dir = "." then Sys.getcwd () else File.(Sys.getcwd () / dir)
+      else dir
+    in
+    lookup_clerk_toml dir
+    |> function
+    | None -> []
+    | Some (config, rel) ->
+      let include_dirs =
+        if prefix_build then
+          List.map
+            (fun p -> File.(rel / "_build" / p))
+            config.global.include_dirs
+        else List.map (File.( / ) rel) config.global.include_dirs
+      in
+      Message.debug "@[<h>Found %s dirs:@ %a@]"
+        (if prefix_build then "build" else "include")
+        Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
+        include_dirs;
+      List.map Global.raw_file include_dirs
   in
   match options.Global.input_src with
   | FileName file | Contents (_, file) -> f (Filename.dirname file)
   | Stdin _ -> (
     match buffer_path with
-    | None -> include_dirs
+    | None -> f (Sys.getcwd ())
     | Some buffer_path -> f (Filename.dirname buffer_path))
 
 exception Unsupported of string
@@ -211,9 +228,7 @@ let get_scope_def (prg : I.program) (sc : I.scope) : O.scope_def =
   let module_name =
     match prg.program_module_name with
     | Some (mname, _) -> ModuleName.to_string mname
-    | None ->
-      Format.ksprintf failwith "scope %s is not in a module"
-        (ScopeName.to_string sc.scope_uid)
+    | None -> ""
   in
   let info = ScopeName.Map.find sc.scope_uid decl_ctx.ctx_scopes in
   {
@@ -260,7 +275,9 @@ let generate_test
     ?(testing_scope = tested_scope ^ "_test")
     include_dirs
     options =
-  let include_dirs = lookup_include_dirs ~include_dirs options in
+  let include_dirs =
+    if include_dirs = [] then lookup_include_dirs options else include_dirs
+  in
   let prg, _ = read_program include_dirs options in
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
@@ -411,7 +428,10 @@ let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
 let read_test include_dirs (options : Global.options) buffer_path =
-  let include_dirs = lookup_include_dirs ~include_dirs ?buffer_path options in
+  let include_dirs =
+    if include_dirs = [] then lookup_include_dirs ?buffer_path options
+    else include_dirs
+  in
   let prg = read_program include_dirs options in
   let tests = import_catala_tests prg in
   write_stdout Test_case_j.write_test_list tests
@@ -604,10 +624,18 @@ let write_catala_test ppf t lang =
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
-let write_catala options outfile =
+let write_catala options outfile mod_name =
   let tests =
     Test_case_j.read_test_list (Yojson.init_lexer ())
       (Lexing.from_channel stdin)
+  in
+  let mod_name =
+    match outfile with
+    | None when mod_name = None ->
+      failwith "A module name or an output file is required"
+    | None -> Option.get mod_name
+    | Some (f : Global.raw_file) ->
+      Filename.chop_extension (f :> string) |> String.capitalize_ascii
   in
   let lang =
     Catala_utils.Cli.file_lang
@@ -622,6 +650,7 @@ let write_catala options outfile =
   in
   with_out
   @@ fun ppf ->
+  Format.fprintf ppf "> Module %s@\n@\n" mod_name;
   let _opened =
     List.fold_left
       (fun opened test ->
@@ -649,15 +678,19 @@ let write_catala options outfile =
   in
   ()
 
+let retry_on_exn ~f ~on_exn =
+  try f ()
+  with _ ->
+    on_exn ();
+    f ()
+
 let run_test testing_scope include_dirs options =
-  let include_dirs = lookup_include_dirs ~include_dirs options in
-  let include_dirs : Global.raw_file list =
-    List.map
-      (fun (s : Global.raw_file) ->
-        let open File in
-        Global.raw_file ("_build" / (s :> string)))
-      include_dirs
-    @ include_dirs
+  let include_dirs =
+    if include_dirs = [] then
+      let include_dirs = lookup_include_dirs options in
+      let build_include_dirs = lookup_include_dirs ~prefix_build:true options in
+      build_include_dirs @ include_dirs
+    else []
   in
   let desugared_prg, naming_ctx = read_program include_dirs options in
   let testing_scope_name =
@@ -716,3 +749,16 @@ let run_test testing_scope include_dirs options =
   in
   let test = { test with test_outputs } in
   write_stdout Test_case_j.write_test test
+
+let run_test testing_scope include_dirs options =
+  let file_name =
+    match options.Global.input_src with
+    | FileName f | Contents (_, f) -> f
+    | Stdin _ -> assert false
+  in
+  retry_on_exn
+    ~f:(fun () -> run_test testing_scope include_dirs options)
+    ~on_exn:(fun () ->
+      let cmd, args = "clerk", ["build"; file_name] in
+      Message.debug "Running '%s %s'" cmd (String.concat " " args);
+      File.process_out cmd args |> ignore)

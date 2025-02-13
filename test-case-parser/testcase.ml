@@ -13,6 +13,17 @@ let buffer_path =
   in
   arg
 
+let mod_name =
+  let arg =
+    Arg.(
+      value
+      & opt (some string) None
+      & info ["m"; "module-name"] ~docv:"MODULENAME"
+          ~env:(Cmd.Env.info "TESTCASE_MODULE_NAME")
+          ~doc:"TBD")
+  in
+  arg
+
 let cmd_generate =
   Cmd.v
     Cmd.(
@@ -61,7 +72,11 @@ let cmd_write =
         ~doc:
           "Read a test structure in JSON from stdin, and output a \
            corresponding Catala file.")
-    Term.(const Lib.write_catala $ Cli.Flags.Global.flags $ Cli.Flags.output)
+    Term.(
+      const Lib.write_catala
+      $ Cli.Flags.Global.flags
+      $ Cli.Flags.output
+      $ mod_name)
 
 let man =
   [
