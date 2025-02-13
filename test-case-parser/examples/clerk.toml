@@ -1,0 +1,2 @@
+[project]
+include_dirs = ["with-modules", "with-modules/subdir"]
