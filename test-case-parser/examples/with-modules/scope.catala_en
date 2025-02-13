@@ -1,0 +1,14 @@
+> Module Scope
+
+> Using Structs
+
+```catala-metadata
+declaration scope S:
+  input i content Structs.A
+  output y content Structs.B
+```
+
+```catala
+scope S:
+  definition y equals Structs.B { -- y: i.x  }
+```
