@@ -228,10 +228,10 @@ let lookup_clerk_toml (path : string) =
         find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
       with
       | None ->
-        Log.info (fun m -> m "no 'clerk.toml' config file found");
+        Log.debug (fun m -> m "no 'clerk.toml' config file found");
         None
       | Some dir -> (
-        Log.info (fun m ->
+        Log.debug (fun m ->
             m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
         try
           let config = Clerk_config.read File.(dir / "clerk.toml") in
@@ -463,7 +463,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
       | Some { module_external = true; _ } ->
         (* If the module is external, we skip it as the translation from
            desugared would trigger an error *)
-        Log.info (fun m -> m "skipping external module interface");
+        Log.debug (fun m -> m "skipping external module interface");
         [], None, None
       | _ ->
         let prg =
@@ -477,26 +477,39 @@ let process_document ?previous_file ?contents (uri : string) : t =
         let jump_table = Jump.populate ctx surface prg in
         !l, Some prg, Some jump_table
     with e ->
-      (match e with
-      | Catala_utils.Message.CompilerError er ->
-        Log.debug (fun m ->
-            m "caught (CompilerError %t)" (fun ppf ->
-                Catala_utils.Message.Content.emit ~ppf er Error))
-      | e ->
-        on_error
-          {
-            Message.kind = Generic;
-            message =
-              (fun fmt ->
-                Format.fprintf fmt
-                  "Generic exception while processing document: %s"
-                  (Printexc.to_string e));
-            pos = None;
-            suggestion = None;
-          });
-      Log.info (fun m ->
-          m "caught generic exception: %s (%d diagnostics to send)"
-            (Printexc.to_string e) (List.length !l));
+      let errors =
+        match e with
+        | Catala_utils.Message.CompilerError er -> [er]
+        | Catala_utils.Message.CompilerErrors er_l -> er_l
+        | e ->
+          on_error
+            {
+              Message.kind = Generic;
+              message =
+                (fun fmt ->
+                  Format.fprintf fmt
+                    "generic exception while processing document: %s"
+                    (Printexc.to_string e));
+              pos = None;
+              suggestion = None;
+            };
+          [
+            Format.ksprintf Message.Content.of_string "generic exception: %s"
+              (Printexc.to_string e);
+          ]
+      in
+      let err_len = List.length errors in
+      Log.debug (fun m ->
+          m "%d error(s) while processing document and %d diagnostics to send"
+            err_len (List.length !l));
+      List.iteri
+        (fun i er ->
+          let pp_err ppf = Message.Content.emit ~ppf er Error in
+          if err_len > 1 then
+            Log.debug (fun m -> m "error (%d/%d): %t" (succ i) err_len pp_err)
+          else Log.debug (fun m -> m "error: %t" pp_err))
+        errors;
+
       List.rev !l, None, None
   in
   let file = create ?prog uri in
