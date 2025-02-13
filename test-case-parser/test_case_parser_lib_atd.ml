@@ -181,21 +181,26 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
       scope.I.scope_defs []
     |> List.rev
   in
-  let rec process_typ (acc : ModuleName.Set.t) = function
-    | TLit _, _ -> acc
-    | TTuple tl, _ -> List.fold_left process_typ acc tl
-    | TStruct sname, _ ->
+  let rec process_typ (acc : ModuleName.Set.t) ty =
+    match Mark.remove ty with
+    | TLit _ -> acc
+    | TTuple tl -> List.fold_left process_typ acc tl
+    | TStruct sname ->
       let p = StructName.path sname in
-      ModuleName.Set.add_seq (List.to_seq p) acc
-    | TEnum ename, _ ->
+      let acc = ModuleName.Set.add_seq (List.to_seq p) acc in
+      let sfields = StructName.Map.find sname decl_ctx.ctx_structs in
+      StructField.Map.fold (fun _ ty acc -> process_typ acc ty) sfields acc
+    | TEnum ename ->
       let p = EnumName.path ename in
-      ModuleName.Set.add_seq (List.to_seq p) acc
-    | TOption ty, _ -> process_typ acc ty
-    | TArray ty, _ -> process_typ acc ty
-    | TArrow _, _ -> raise (Unsupported "function type")
-    | TDefault _, _ -> raise (Unsupported "default type")
-    | TAny, _ -> raise (Unsupported "wildcard type")
-    | TClosureEnv, _ -> raise (Unsupported "closure type")
+      let acc = ModuleName.Set.add_seq (List.to_seq p) acc in
+      let scases = EnumName.Map.find ename decl_ctx.ctx_enums in
+      EnumConstructor.Map.fold (fun _ ty acc -> process_typ acc ty) scases acc
+    | TOption ty -> process_typ acc ty
+    | TArray ty -> process_typ acc ty
+    | TArrow _ -> raise (Unsupported "function type")
+    | TDefault _ -> raise (Unsupported "default type")
+    | TAny -> raise (Unsupported "wildcard type")
+    | TClosureEnv -> raise (Unsupported "closure type")
   in
   List.fold_left process_typ ModuleName.Set.empty input_typs
   |> ModuleName.Set.elements
@@ -516,10 +521,10 @@ let rec print_catala_value ~lang ppf =
                 (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day)
             else None);
          ])
-  | O.Enum (_, (constr, Some v)) ->
-    fprintf ppf "@[<hv 2>%s %s %a@]" constr strings.content_str
+  | O.Enum (en, (constr, Some v)) ->
+    fprintf ppf "@[<hv 2>%s.%s %s %a@]" en.enum_name constr strings.content_str
       (print_catala_value ~lang) v
-  | O.Enum (_, (constr, None)) -> pp_print_string ppf constr
+  | O.Enum (en, (constr, None)) -> fprintf ppf "%s.%s" en.enum_name constr
   | O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
@@ -578,8 +583,8 @@ let write_catala_test ppf t lang =
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala@,";
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
-  fprintf ppf "%s %s %s %s@," strings.output_scope sscope_var strings.scope
-    t.tested_scope.name;
+  fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
+    t.tested_scope.module_name t.tested_scope.name;
   fprintf ppf "@]@,";
   fprintf ppf "@[<v 2>%s %s:" strings.scope t.testing_scope;
   List.iter
