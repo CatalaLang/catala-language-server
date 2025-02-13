@@ -175,6 +175,7 @@ let get_scope_def decl_ctx (sc : I.scope) : O.scope_def =
     O.name = ScopeName.to_string sc.scope_uid;
     inputs = scope_inputs decl_ctx sc;
     outputs = (get_struct decl_ctx info.out_struct_name).fields;
+    module_deps = [];
   }
 
 let get_scope_test
