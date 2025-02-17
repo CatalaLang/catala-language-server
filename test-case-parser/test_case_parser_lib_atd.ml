@@ -625,18 +625,10 @@ let write_catala_test ppf t lang =
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
-let write_catala options outfile mod_name =
+let write_catala options outfile =
   let tests =
     Test_case_j.read_test_list (Yojson.init_lexer ())
       (Lexing.from_channel stdin)
-  in
-  let mod_name =
-    match outfile with
-    | None when mod_name = None ->
-      failwith "A module name or an output file is required"
-    | None -> Option.get mod_name
-    | Some (f : Global.raw_file) ->
-      Filename.chop_extension (f :> string) |> String.capitalize_ascii
   in
   let lang =
     Catala_utils.Cli.file_lang
@@ -651,7 +643,6 @@ let write_catala options outfile mod_name =
   in
   with_out
   @@ fun ppf ->
-  Format.fprintf ppf "> Module %s@\n@\n" mod_name;
   let _opened =
     List.fold_left
       (fun opened test ->
