@@ -17,6 +17,20 @@ open Shared_ast
 module I = Desugared.Ast
 module O = Test_case_t
 
+let fix_path (p : File.t) =
+  Message.debug "cwd: %s" (Sys.getcwd ());
+  Message.debug "p: %s" p;
+  let cwd = File.path_to_list (Sys.getcwd ()) in
+  let pl = File.path_to_list p in
+
+  let rec loop = function
+    | [], [] -> ["."]
+    | h :: t, (h' :: t' as r) -> if h = h' then loop (t, t') else r
+    | [], r -> r
+    | l, [] -> List.map (fun _ -> Filename.parent_dir_name) l
+  in
+  loop (cwd, pl) |> String.concat Filename.dir_sep
+
 let lookup_clerk_toml from_dir =
   let open Catala_utils in
   try
@@ -27,7 +41,10 @@ let lookup_clerk_toml from_dir =
       with
       | None -> None
       | Some (abs_dir, rel) ->
-        let clerk_toml_path = File.(abs_dir / "clerk.toml") in
+        ignore abs_dir;
+        (* let clerk_toml_path = File.(abs_dir / "clerk.toml") in *)
+        let clerk_toml_path = File.(rel / "clerk.toml") in
+        Message.debug "clerk_toml_path = %s" clerk_toml_path;
         Message.debug "Found config file: %s" clerk_toml_path;
         let config = Clerk_config.read clerk_toml_path in
         Some (config, rel)
@@ -52,16 +69,22 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
         if dir = "." then Sys.getcwd () else File.(Sys.getcwd () / dir)
       else dir
     in
+    (* FIXME: bug when given path points to parents *)
     lookup_clerk_toml dir
     |> function
     | None -> []
     | Some (config, rel) ->
+      Message.debug "rel: %s" rel;
+      let path_to_build = fix_path File.(File.clean_path (dir / rel)) in
+      Message.debug "fixed path to build: %s" path_to_build;
+      let path_to_dir = fix_path (File.clean_path dir) in
+      Message.debug "fixed path to dir: %s" path_to_dir;
       let include_dirs =
         if prefix_build then
           List.map
-            (fun p -> File.(rel / "_build" / p))
+            (fun p -> File.(path_to_build / "_build" / p))
             config.global.include_dirs
-        else List.map (File.( / ) rel) config.global.include_dirs
+        else List.map (File.( / ) path_to_dir) config.global.include_dirs
       in
       Message.debug "@[<h>Found %s dirs:@ %a@]"
         (if prefix_build then "build" else "include")
