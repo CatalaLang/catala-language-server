@@ -17,34 +17,33 @@ open Shared_ast
 module I = Desugared.Ast
 module O = Test_case_t
 
-let fix_path (p : File.t) =
-  Message.debug "cwd: %s" (Sys.getcwd ());
-  Message.debug "p: %s" p;
+let to_relative (p : File.t) =
   let cwd = File.path_to_list (Sys.getcwd ()) in
   let pl = File.path_to_list p in
-
   let rec loop = function
     | [], [] -> ["."]
     | h :: t, (h' :: t' as r) -> if h = h' then loop (t, t') else r
     | [], r -> r
-    | l, [] -> List.map (fun _ -> Filename.parent_dir_name) l
+    | _, [] -> ["."]
   in
-  loop (cwd, pl) |> String.concat Filename.dir_sep
+  File.clean_path (loop (cwd, pl) |> String.concat Filename.dir_sep)
 
 let lookup_clerk_toml from_dir =
   let open Catala_utils in
   try
     begin
+      let from_dir =
+        if Filename.is_relative from_dir then
+          (File.(Sys.getcwd () / from_dir) :> string)
+        else from_dir
+      in
       match
         File.(
           find_in_parents ~cwd:from_dir (fun dir -> exists (dir / "clerk.toml")))
       with
       | None -> None
       | Some (abs_dir, rel) ->
-        ignore abs_dir;
-        (* let clerk_toml_path = File.(abs_dir / "clerk.toml") in *)
-        let clerk_toml_path = File.(rel / "clerk.toml") in
-        Message.debug "clerk_toml_path = %s" clerk_toml_path;
+        let clerk_toml_path = File.(abs_dir / "clerk.toml") in
         Message.debug "Found config file: %s" clerk_toml_path;
         let config = Clerk_config.read clerk_toml_path in
         Some (config, rel)
@@ -67,24 +66,19 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
     let dir =
       if Filename.is_relative dir then
         if dir = "." then Sys.getcwd () else File.(Sys.getcwd () / dir)
-      else dir
+      else to_relative dir
     in
-    (* FIXME: bug when given path points to parents *)
     lookup_clerk_toml dir
     |> function
     | None -> []
     | Some (config, rel) ->
-      Message.debug "rel: %s" rel;
-      let path_to_build = fix_path File.(File.clean_path (dir / rel)) in
-      Message.debug "fixed path to build: %s" path_to_build;
-      let path_to_dir = fix_path (File.clean_path dir) in
-      Message.debug "fixed path to dir: %s" path_to_dir;
+      let path_to_build = to_relative File.(dir / rel) in
       let include_dirs =
         if prefix_build then
           List.map
             (fun p -> File.(path_to_build / "_build" / p))
             config.global.include_dirs
-        else List.map (File.( / ) path_to_dir) config.global.include_dirs
+        else List.map (File.( / ) path_to_build) config.global.include_dirs
       in
       Message.debug "@[<h>Found %s dirs:@ %a@]"
         (if prefix_build then "build" else "include")
@@ -246,16 +240,13 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
   |> ModuleName.Set.elements
   |> List.map ModuleName.to_string
 
-let get_scope_def (prg : I.program) (sc : I.scope) : O.scope_def =
+let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
+    =
   let decl_ctx = prg.program_ctx in
-  let module_name =
-    match prg.program_module_name with
-    | Some (mname, _) -> ModuleName.to_string mname
-    | None -> ""
-  in
+  let module_name = ModuleName.to_string tested_module in
   let info = ScopeName.Map.find sc.scope_uid decl_ctx.ctx_scopes in
   {
-    O.name = ScopeName.to_string sc.scope_uid;
+    O.name = ScopeName.base sc.scope_uid;
     module_name;
     inputs = scope_inputs decl_ctx sc;
     outputs = (get_struct decl_ctx info.out_struct_name).fields;
@@ -265,7 +256,15 @@ let get_scope_def (prg : I.program) (sc : I.scope) : O.scope_def =
 let get_scope_test
     (prg : I.program)
     (testing_scope : string)
-    (tested_scope : ScopeName.t) : O.test =
+    (tested_scope : ScopeName.t)
+    ~tested_module : O.test =
+  let tested_module =
+    match tested_module with
+    | None ->
+      Format.ksprintf failwith "Tested scope %s is not part of a Catala module"
+        (ScopeName.to_string tested_scope)
+    | Some x -> x
+  in
   let tested_scope =
     let modul =
       List.fold_left
@@ -273,7 +272,9 @@ let get_scope_test
         prg.program_root
         (ScopeName.path tested_scope)
     in
-    get_scope_def prg (ScopeName.Map.find tested_scope modul.module_scopes)
+    get_scope_def prg
+      (ScopeName.Map.find tested_scope modul.module_scopes)
+      ~tested_module
   in
   let test_inputs =
     List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.inputs
@@ -306,7 +307,10 @@ let generate_test
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
   in
-  let test = get_scope_test prg testing_scope tested_scope in
+  let test =
+    get_scope_test prg testing_scope tested_scope
+      ~tested_module:(Option.map fst prg.I.program_module_name)
+  in
   print_tests [test]
 
 exception InvalidTestingScope of string
@@ -340,8 +344,11 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
          naming_ctx.Desugared.Name_resolution.scopes)
         .var_idmap
   in
+  let tested_module = ScopeName.path tested_scope |> List.hd |> Option.some in
   let base_test =
-    get_scope_test prg (ScopeName.to_string testing_scope_name) tested_scope
+    get_scope_test ~tested_module prg
+      (ScopeName.to_string testing_scope_name)
+      tested_scope
   in
   let test_inputs =
     List.map
@@ -774,6 +781,6 @@ let run_test testing_scope include_dirs options =
   retry_on_exn
     ~f:(fun () -> run_test testing_scope include_dirs options)
     ~on_exn:(fun () ->
-      let cmd, args = "clerk", ["build"; file_name] in
+      let cmd, args = "clerk", ["build"; File.(file_name -.- "ml")] in
       Message.debug "Running '%s %s'" cmd (String.concat " " args);
       File.process_out cmd args |> ignore)
