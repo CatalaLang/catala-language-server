@@ -13,22 +13,17 @@ import path = require('path');
 import { getDefaultValue } from './defaults';
 import { window } from 'vscode';
 
-export function parseTestFile(content: string, lang: string): ParseResults {
-  // TODO check behavior when packaging comes into play ('dune install')
-  // TODO we should also delegate includes to clerk (remove 'examples')
+export function parseTestFile(
+  content: string,
+  lang: string,
+  bufferPath: string
+): ParseResults {
   // TODO we could revisit this to make the parsing async
+  logger.log(`bufferPath: ${bufferPath}`);
   try {
     const results = execFileSync(
       'catala',
-      [
-        'testcase',
-        'read',
-        '-l',
-        lang,
-        '-I',
-        './test-case-parser/examples',
-        '-',
-      ],
+      ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
       { input: content }
     );
     return {
