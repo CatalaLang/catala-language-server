@@ -91,7 +91,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       const lang = getLanguageFromFileName(document.fileName);
       switch (typed_msg.kind) {
         case 'Ready': {
-          const parseResults = parseTestFile(document.getText(), lang);
+          const parseResults = parseTestFile(
+            document.getText(),
+            lang,
+            document.uri.fsPath
+          );
           logger.log(
             `Got ready message from webview, sending parsed document: \n ${JSON.stringify(parseResults)}`
           );
@@ -116,7 +120,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           vscode.workspace.applyEdit(edit).then(() => {
             postMessageToWebView({
               kind: 'Update',
-              value: parseTestFile(document.getText(), lang), //XXX concurrent edits?
+              value: parseTestFile(
+                document.getText(),
+                lang,
+                document.uri.fsPath
+              ), //XXX concurrent edits?
             });
           });
           break;
@@ -136,7 +144,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
             //work for any struct defined in a module that needs to be
             //passed to the scope, for instance -- we need something better
             newTest.tested_scope.name = scopeUnderTest; //XXX
-            const currentTests = parseTestFile(document.getText(), lang);
+            const currentTests = parseTestFile(
+              document.getText(),
+              lang,
+              document.uri.fsPath
+            );
             if (currentTests.kind === 'Results') {
               newTest = renameIfNeeded(currentTests.value, newTest); //XXX kludge?
               const updatedTests = [...currentTests.value, newTest];
@@ -150,7 +162,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               vscode.workspace.applyEdit(edit).then(() => {
                 postMessageToWebView({
                   kind: 'Update',
-                  value: parseTestFile(document.getText(), lang),
+                  value: parseTestFile(
+                    document.getText(),
+                    lang,
+                    document.uri.fsPath
+                  ),
                 });
               });
             }
@@ -179,7 +195,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           const lang = getLanguageFromFileName(e.document.fileName);
           postMessageToWebView({
             kind: 'Update',
-            value: parseTestFile(e.document.getText(), lang),
+            value: parseTestFile(
+              e.document.getText(),
+              lang,
+              document.uri.fsPath
+            ),
           });
         }
       }
