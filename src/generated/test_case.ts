@@ -39,8 +39,10 @@ export type StructDeclaration = {
 
 export type ScopeDef = {
   name: string;
+  module_name: string;
   inputs: Map<string, Typ>;
   outputs: Map<string, Typ>;
+  module_deps: string[];
 }
 
 export type SourcePosition = {
@@ -228,16 +230,20 @@ export function readStructDeclaration(x: any, context: any = x): StructDeclarati
 export function writeScopeDef(x: ScopeDef, context: any = x): any {
   return {
     'name': _atd_write_required_field('ScopeDef', 'name', _atd_write_string, x.name, x),
+    'module_name': _atd_write_required_field('ScopeDef', 'module_name', _atd_write_string, x.module_name, x),
     'inputs': _atd_write_required_field('ScopeDef', 'inputs', _atd_write_assoc_map_to_object(writeTyp), x.inputs, x),
     'outputs': _atd_write_required_field('ScopeDef', 'outputs', _atd_write_assoc_map_to_object(writeTyp), x.outputs, x),
+    'module_deps': _atd_write_required_field('ScopeDef', 'module_deps', _atd_write_array(_atd_write_string), x.module_deps, x),
   };
 }
 
 export function readScopeDef(x: any, context: any = x): ScopeDef {
   return {
     name: _atd_read_required_field('ScopeDef', 'name', _atd_read_string, x['name'], x),
+    module_name: _atd_read_required_field('ScopeDef', 'module_name', _atd_read_string, x['module_name'], x),
     inputs: _atd_read_required_field('ScopeDef', 'inputs', _atd_read_assoc_object_into_map(readTyp), x['inputs'], x),
     outputs: _atd_read_required_field('ScopeDef', 'outputs', _atd_read_assoc_object_into_map(readTyp), x['outputs'], x),
+    module_deps: _atd_read_required_field('ScopeDef', 'module_deps', _atd_read_array(_atd_read_string), x['module_deps'], x),
   };
 }
 

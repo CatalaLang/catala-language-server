@@ -19,7 +19,6 @@ export function parseTestFile(
   bufferPath: string
 ): ParseResults {
   // TODO we could revisit this to make the parsing async
-  logger.log(`bufferPath: ${bufferPath}`);
   try {
     const results = execFileSync(
       'catala',
