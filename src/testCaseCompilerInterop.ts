@@ -78,15 +78,7 @@ export function runTestScope(
   filename = path.isAbsolute(filename)
     ? path.relative(process.cwd(), filename)
     : filename;
-  const args = [
-    'testcase',
-    'run',
-    '--scope',
-    testScope,
-    filename,
-    '-I',
-    './_build/test-case-parser/examples',
-  ];
+  const args = ['testcase', 'run', '--scope', testScope, filename];
   logger.log(`Exec: ${cmd} ${args.join(' ')}`);
   try {
     // HACK: use 'clerk run' as a preamble (does not output test result,

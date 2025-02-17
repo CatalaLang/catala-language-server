@@ -1,0 +1,2 @@
+[project]
+include_dirs = ["test-case-parser/examples", "test-case-parser/examples/with-modules", "test-case-parser/examples/with-modules/subdir"]
