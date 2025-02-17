@@ -268,6 +268,7 @@ let write_stdout f arg =
   Buffer.output_buffer stdout buf
 
 let print_test test = write_stdout Test_case_j.write_test test
+let print_tests test = write_stdout Test_case_j.write_test_list test
 let read_program includes options = Driver.Passes.desugared options ~includes
 
 let generate_test
@@ -283,7 +284,7 @@ let generate_test
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
   in
   let test = get_scope_test prg testing_scope tested_scope in
-  print_test test
+  print_tests [test]
 
 exception InvalidTestingScope of string
 
