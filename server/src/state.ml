@@ -235,6 +235,15 @@ let lookup_clerk_toml (path : string) =
             m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
         try
           let config = Clerk_config.read File.(dir / "clerk.toml") in
+          let include_dirs =
+            let cwd = Sys.getcwd () in
+            List.map
+              (fun p -> Utils.join_paths cwd p)
+              config.global.include_dirs
+          in
+          let config =
+            { config with global = { config.global with include_dirs } }
+          in
           Some (config, dir)
         with Message.CompilerError c ->
           Log.err (fun m ->
