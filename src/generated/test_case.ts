@@ -100,6 +100,8 @@ export type Test = {
 
 export type TestList = Test[]
 
+export type ScopeDefList = ScopeDef[]
+
 export type ParseResults =
 | { kind: 'Error'; value: string }
 | { kind: 'Results'; value: TestList }
@@ -419,6 +421,14 @@ export function writeTestList(x: TestList, context: any = x): any {
 
 export function readTestList(x: any, context: any = x): TestList {
   return _atd_read_array(readTest)(x, context);
+}
+
+export function writeScopeDefList(x: ScopeDefList, context: any = x): any {
+  return _atd_write_array(writeScopeDef)(x, context);
+}
+
+export function readScopeDefList(x: any, context: any = x): ScopeDefList {
+  return _atd_read_array(readScopeDef)(x, context);
 }
 
 export function writeParseResults(x: ParseResults, context: any = x): any {

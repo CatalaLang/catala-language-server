@@ -91,6 +91,8 @@ type test = {
 
 type test_list = test list
 
+type scope_def_list = scope_def list
+
 (* Message exchange within extension (shell <-> webview) *)
 
 type parse_results = [

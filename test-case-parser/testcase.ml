@@ -63,6 +63,14 @@ let cmd_write =
            corresponding Catala file.")
     Term.(const Lib.write_catala $ Cli.Flags.Global.flags $ Cli.Flags.output)
 
+let cmd_list_scopes =
+  Cmd.v
+    Cmd.(
+      info "list-scopes"
+        ~doc:"List the scopes exposed of a module for a given Catala file.")
+    Term.(
+      const Lib.list_scopes $ Cli.Flags.include_dirs $ Cli.Flags.Global.options)
+
 let man =
   [
     `S Manpage.s_description;
@@ -75,7 +83,7 @@ let man =
 let register () =
   Driver.Plugin.register_subcommands "testcase"
     ~doc:"Catala plugin for the handling of scope test cases" ~man
-    [cmd_generate; cmd_read; cmd_run; cmd_write]
+    [cmd_generate; cmd_read; cmd_run; cmd_write; cmd_list_scopes]
 
 (* For now, can be invoked through `catala test-case-parser --plugin-dir
    _build/default/ <FILE>` but we need to figure out distribution through vscode
