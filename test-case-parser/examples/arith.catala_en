@@ -13,6 +13,9 @@ declaration scope A:
   output x content integer
   output y content integer
   output z content decimal
+
+declaration scope B:
+  output z content integer
 ```
 
 ```catala
@@ -21,4 +24,7 @@ scope A:
   definition x equals a - (b - b)
   definition y equals a - b - -b
   definition z equals c.x / a * c.y - 50. / - (5. - 20 / 2)
+
+scope B:
+  definition z equals 10
 ```
