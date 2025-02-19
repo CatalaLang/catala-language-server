@@ -22,21 +22,6 @@ export function parseTestFile(
 
   // TODO we could revisit this to make the parsing async
   try {
-    logger.log(execFileSync('pwd').toString());
-    logger.log('before read');
-    logger.log(
-      [
-        'catala',
-        'testcase',
-        'read',
-        '-l',
-        lang,
-        '--buffer-path',
-        bufferPath,
-        '-',
-      ].join(' ')
-    );
-    logger.log(`${cwd}`);
     const results = execFileSync(
       'catala',
       [
@@ -51,7 +36,6 @@ export function parseTestFile(
       ],
       { input: content, ...(cwd && { cwd }) }
     );
-    logger.log('after read');
     return {
       kind: 'Results',
       value: readTestList(JSON.parse(results.toString())),
