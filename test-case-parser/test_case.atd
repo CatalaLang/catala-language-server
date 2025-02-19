@@ -121,7 +121,7 @@ type test_generate_request = {
 
 type file_selection = {
   filename: string;
-  available_scopes: string list;
+  available_scopes: scope_def_list;
 }
 
 type up_message = [

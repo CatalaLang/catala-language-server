@@ -5,6 +5,8 @@ import {
   useCallback,
   useRef,
 } from 'react';
+import type {
+  ScopeDefList} from './generated/test_case';
 import {
   type ParseResults,
   type Test,
@@ -42,7 +44,7 @@ type ModalState = {
   step: 'selectFile' | 'selectScope';
   scopeUnderTest?: string;
   filename?: string;
-  availableScopes?: string[];
+  availableScopes?: ScopeDefList;
 };
 
 type Props = { contents: UIState; vscode: WebviewApi<unknown> };
@@ -111,8 +113,8 @@ export default function TestFileEditor({
               >
                 <option value="">Select a scope</option>
                 {modalState.availableScopes?.map((scope) => (
-                  <option key={scope} value={scope}>
-                    {scope}
+                  <option key={scope.name} value={scope.name}>
+                    {scope.name}
                   </option>
                 ))}
               </select>
