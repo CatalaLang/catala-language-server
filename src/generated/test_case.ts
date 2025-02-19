@@ -119,7 +119,7 @@ export type TestRunRequest = {
 }
 
 export type TestGenerateRequest = {
-  scopeUnderTest: string;
+  scope_under_test: string;
   filename: string;
 }
 
@@ -518,14 +518,14 @@ export function readTestRunRequest(x: any, context: any = x): TestRunRequest {
 
 export function writeTestGenerateRequest(x: TestGenerateRequest, context: any = x): any {
   return {
-    'scopeUnderTest': _atd_write_required_field('TestGenerateRequest', 'scopeUnderTest', _atd_write_string, x.scopeUnderTest, x),
+    'scope_under_test': _atd_write_required_field('TestGenerateRequest', 'scope_under_test', _atd_write_string, x.scope_under_test, x),
     'filename': _atd_write_required_field('TestGenerateRequest', 'filename', _atd_write_string, x.filename, x),
   };
 }
 
 export function readTestGenerateRequest(x: any, context: any = x): TestGenerateRequest {
   return {
-    scopeUnderTest: _atd_read_required_field('TestGenerateRequest', 'scopeUnderTest', _atd_read_string, x['scopeUnderTest'], x),
+    scope_under_test: _atd_read_required_field('TestGenerateRequest', 'scope_under_test', _atd_read_string, x['scope_under_test'], x),
     filename: _atd_read_required_field('TestGenerateRequest', 'filename', _atd_read_string, x['filename'], x),
   };
 }
