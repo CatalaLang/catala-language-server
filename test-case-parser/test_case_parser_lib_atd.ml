@@ -106,28 +106,37 @@ let get_typ_literal = function
   | TDate -> O.TDate
   | TDuration -> O.TDuration
 
-let rec get_typ decl_ctx = function
+let rec get_typ ?module_name decl_ctx = function
   | TLit tlit, _ -> get_typ_literal tlit
-  | TTuple tl, _ -> O.TTuple (List.map (get_typ decl_ctx) tl)
-  | TStruct name, _ -> O.TStruct (get_struct decl_ctx name)
-  | TEnum name, _ -> O.TEnum (get_enum decl_ctx name)
-  | TOption ty, _ -> O.TOption (get_typ decl_ctx ty)
-  | TArray ty, _ -> O.TArray (get_typ decl_ctx ty)
+  | TTuple tl, _ -> O.TTuple (List.map (get_typ ?module_name decl_ctx) tl)
+  | TStruct name, _ -> O.TStruct (get_struct ?module_name decl_ctx name)
+  | TEnum name, _ -> O.TEnum (get_enum ?module_name decl_ctx name)
+  | TOption ty, _ -> O.TOption (get_typ ?module_name decl_ctx ty)
+  | TArray ty, _ -> O.TArray (get_typ ?module_name decl_ctx ty)
   | TArrow _, _ -> raise (Unsupported "function type")
   | TDefault _, _ -> raise (Unsupported "default type")
   | TAny, _ -> raise (Unsupported "wildcard type")
   | TClosureEnv, _ -> raise (Unsupported "closure type")
 
-and get_struct decl_ctx struct_name =
+and get_struct ?module_name decl_ctx struct_name =
   let fields_map = StructName.Map.find struct_name decl_ctx.ctx_structs in
   let fields =
     List.map
-      (fun (field, typ) -> StructField.to_string field, get_typ decl_ctx typ)
+      (fun (field, typ) ->
+        StructField.to_string field, get_typ ?module_name decl_ctx typ)
       (StructField.Map.bindings fields_map)
   in
-  { O.struct_name = StructName.to_string struct_name; fields }
+  let struct_name =
+    match module_name with
+    | None -> StructName.to_string struct_name
+    | Some s ->
+      if StructName.path struct_name = [] then
+        Format.sprintf "%s.%s" s (StructName.to_string struct_name)
+      else StructName.to_string struct_name
+  in
+  { O.struct_name; fields }
 
-and get_enum decl_ctx enum_name =
+and get_enum ?module_name decl_ctx enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
   let constructors =
     List.map
@@ -135,10 +144,18 @@ and get_enum decl_ctx enum_name =
         ( EnumConstructor.to_string constr,
           match typ with
           | TLit TUnit, _ -> None
-          | _ -> Some (get_typ decl_ctx typ) ))
+          | _ -> Some (get_typ ?module_name decl_ctx typ) ))
       (EnumConstructor.Map.bindings constr_map)
   in
-  { O.enum_name = EnumName.to_string enum_name; constructors }
+  let enum_name =
+    match module_name with
+    | None -> EnumName.to_string enum_name
+    | Some s ->
+      if EnumName.path enum_name = [] then
+        Format.sprintf "%s.%s" s (EnumName.to_string enum_name)
+      else EnumName.to_string enum_name
+  in
+  { O.enum_name; constructors }
 
 let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun decl_ctx e ->
@@ -191,15 +208,19 @@ let get_source_position pos =
     law_headings = Pos.get_law_info pos;
   }
 
-let scope_inputs decl_ctx scope =
+let scope_inputs ?module_name decl_ctx scope =
   I.ScopeDef.Map.fold
     (fun ((v, _pos), _kind) sdef acc ->
       match sdef.I.scope_def_io.I.io_input with
       | Runtime.NoInput, _ -> acc
       | Runtime.OnlyInput, _ ->
-        (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc
+        ( ScopeVar.to_string v,
+          get_typ ?module_name decl_ctx sdef.I.scope_def_typ )
+        :: acc
       | Runtime.Reentrant, _ ->
-        (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc)
+        ( ScopeVar.to_string v,
+          get_typ ?module_name decl_ctx sdef.I.scope_def_typ )
+        :: acc)
     scope.I.scope_defs []
   |> List.rev
 
@@ -248,8 +269,8 @@ let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
   {
     O.name = ScopeName.base sc.scope_uid;
     module_name;
-    inputs = scope_inputs decl_ctx sc;
-    outputs = (get_struct decl_ctx info.out_struct_name).fields;
+    inputs = scope_inputs ~module_name decl_ctx sc;
+    outputs = (get_struct ~module_name decl_ctx info.out_struct_name).fields;
     module_deps = retrieve_scope_module_deps prg sc;
   }
 
