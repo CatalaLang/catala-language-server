@@ -14,6 +14,7 @@ import {
   parseTestFile,
   atdToCatala,
   generate,
+  getAvailableScopes,
 } from './testCaseCompilerInterop';
 import { renameIfNeeded } from './testCaseUtils';
 
@@ -86,7 +87,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
-    webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
+    webviewPanel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
       const lang = getLanguageFromFileName(document.fileName);
       switch (typed_msg.kind) {
@@ -184,6 +185,27 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
             'default'
           );
           break;
+        case 'SelectFileForNewTest': {
+          const fileUri = await vscode.window.showOpenDialog({
+            filters: {
+              'Catala Files': ['catala_fr', 'catala_en', 'catala_pl'],
+            },
+          });
+
+          if (fileUri?.[0]) {
+            const selectedFile = fileUri[0].fsPath;
+            const scopes = await getAvailableScopes(selectedFile);
+
+            postMessageToWebView({
+              kind: 'FileSelectedForNewTest',
+              value: {
+                filename: selectedFile,
+                available_scopes: scopes,
+              },
+            });
+          }
+          break;
+        }
         default:
           assertUnreachable(typed_msg);
       }

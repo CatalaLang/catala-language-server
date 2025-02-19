@@ -39,8 +39,10 @@ type TestRunState = {
 
 type ModalState = {
   isOpen: boolean;
-  scopeUnderTest: string;
-  filename: string;
+  step: 'selectFile' | 'selectScope';
+  scopeUnderTest?: string;
+  filename?: string;
+  availableScopes?: string[];
 };
 
 type Props = { contents: UIState; vscode: WebviewApi<unknown> };
@@ -56,6 +58,7 @@ export default function TestFileEditor({
     isOpen: false,
     scopeUnderTest: '',
     filename: '',
+    step: 'selectFile',
   });
   const modalContentRef = useRef<HTMLDivElement>(null);
 
@@ -71,8 +74,6 @@ export default function TestFileEditor({
     const handleKeyDown = (e: React.KeyboardEvent): void => {
       if (e.key === 'Escape') {
         handleModalClose();
-      } else if (e.key === 'Enter') {
-        handleModalSubmit();
       }
     };
 
@@ -85,32 +86,48 @@ export default function TestFileEditor({
           onKeyDown={handleKeyDown}
         >
           <h2>Add New Test</h2>
-          <label htmlFor="scopeUnderTest">Scope Under Test</label>
-          <input
-            id="scopeUnderTest"
-            type="text"
-            value={modalState.scopeUnderTest}
-            onChange={(e) =>
-              setModalState((prev) => ({
-                ...prev,
-                scopeUnderTest: e.target.value,
-              }))
-            }
-          />
-          <label htmlFor="filename">Filename</label>
-          <input
-            id="filename"
-            type="text"
-            value={modalState.filename}
-            onChange={(e) =>
-              setModalState((prev) => ({
-                ...prev,
-                filename: e.target.value,
-              }))
-            }
-          />
+
+          {modalState.step === 'selectFile' && (
+            <>
+              <p>Select a Catala file to test:</p>
+              <button className="file-select-button" onClick={handleFileSelect}>
+                <span className="codicon codicon-file"></span>
+                Select File...
+              </button>
+            </>
+          )}
+
+          {modalState.step === 'selectScope' && modalState.filename && (
+            <>
+              <p>Select a scope from {modalState.filename}:</p>
+              <select
+                value={modalState.scopeUnderTest || ''}
+                onChange={(e) =>
+                  setModalState((prev) => ({
+                    ...prev,
+                    scopeUnderTest: e.target.value,
+                  }))
+                }
+              >
+                <option value="">Select a scope</option>
+                {modalState.availableScopes?.map((scope) => (
+                  <option key={scope} value={scope}>
+                    {scope}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+
           <div className="modal-buttons">
-            <button onClick={handleModalSubmit}>Submit</button>
+            {modalState.step === 'selectScope' && (
+              <button
+                onClick={handleModalSubmit}
+                disabled={!modalState.scopeUnderTest}
+              >
+                Create Test
+              </button>
+            )}
             <button onClick={handleModalClose}>Cancel</button>
           </div>
         </div>
@@ -182,8 +199,22 @@ export default function TestFileEditor({
   );
 
   const onAddNewTest = useCallback((): void => {
-    setModalState({ isOpen: true, scopeUnderTest: '', filename: '' });
+    setModalState({
+      isOpen: true,
+      step: 'selectFile',
+      scopeUnderTest: undefined,
+      filename: undefined,
+      availableScopes: undefined,
+    });
   }, []);
+
+  const handleFileSelect = useCallback(() => {
+    vscode.postMessage(
+      writeUpMessage({
+        kind: 'SelectFileForNewTest',
+      })
+    );
+  }, [vscode]);
 
   const handleModalSubmit = useCallback((): void => {
     if (modalState.scopeUnderTest && modalState.filename) {
@@ -196,23 +227,29 @@ export default function TestFileEditor({
           },
         })
       );
-      setModalState({ isOpen: false, scopeUnderTest: '', filename: '' });
+      setModalState((prev) => ({
+        ...prev,
+        isOpen: false,
+      }));
     }
   }, [modalState, vscode]);
 
   const handleModalClose = useCallback((): void => {
-    setModalState({ isOpen: false, scopeUnderTest: '', filename: '' });
+    setModalState((prev) => ({
+      ...prev,
+      isOpen: false,
+    }));
   }, []);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
-      const message = readDownMessage(event.data);
-      switch (message.kind) {
+      const msg = readDownMessage(event.data);
+      switch (msg.kind) {
         case 'Update':
-          setState(parseResultsToUiState(message.value));
+          setState(parseResultsToUiState(msg.value));
           break;
         case 'TestRunResults': {
-          const results = message.value;
+          const results = msg.value;
           setTestRunState((prev) => {
             const updatedScope = Object.keys(prev).find(
               (scope) => prev[scope].status === 'running'
@@ -230,8 +267,16 @@ export default function TestFileEditor({
           });
           break;
         }
+        case 'FileSelectedForNewTest':
+          setModalState((prev) => ({
+            ...prev,
+            step: 'selectScope',
+            filename: msg.value.filename,
+            availableScopes: msg.value.available_scopes,
+          }));
+          break;
         default:
-          assertUnreachable(message);
+          assertUnreachable(msg);
       }
     };
 

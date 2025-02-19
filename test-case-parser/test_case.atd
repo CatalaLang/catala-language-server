@@ -119,15 +119,22 @@ type test_generate_request = {
   filename: string;
 }
 
+type file_selection = {
+  filename: string;
+  available_scopes: string list;
+}
+
 type up_message = [
   | Ready
   | Edit of test_list
   | OpenInTextEditor
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request
+  | SelectFileForNewTest
 ]
 
 type down_message = [
   | Update of parse_results
   | TestRunResults of test_run_results
+  | FileSelectedForNewTest of file_selection
 ]
