@@ -722,12 +722,6 @@ let write_catala options outfile =
   in
   ()
 
-let retry_on_exn ~f ~on_exn =
-  try f ()
-  with _ ->
-    on_exn ();
-    f ()
-
 let run_test testing_scope include_dirs options =
   let include_dirs =
     if include_dirs = [] then
@@ -736,6 +730,14 @@ let run_test testing_scope include_dirs options =
       build_include_dirs @ include_dirs
     else []
   in
+  let file_name =
+    match options.Global.input_src with
+    | FileName f | Contents (_, f) -> f
+    | Stdin _ -> failwith "Error: run command must be given a file."
+  in
+  let cmd, args = "clerk", ["build"; File.(file_name -.- "ml")] in
+  Message.debug "Running '%s %s'" cmd (String.concat " " args);
+  File.process_out cmd args |> ignore;
   let desugared_prg, naming_ctx = read_program include_dirs options in
   let testing_scope_name =
     match
@@ -793,19 +795,6 @@ let run_test testing_scope include_dirs options =
   in
   let test = { test with test_outputs } in
   write_stdout Test_case_j.write_test test
-
-let run_test testing_scope include_dirs options =
-  let file_name =
-    match options.Global.input_src with
-    | FileName f | Contents (_, f) -> f
-    | Stdin _ -> assert false
-  in
-  retry_on_exn
-    ~f:(fun () -> run_test testing_scope include_dirs options)
-    ~on_exn:(fun () ->
-      let cmd, args = "clerk", ["build"; File.(file_name -.- "ml")] in
-      Message.debug "Running '%s %s'" cmd (String.concat " " args);
-      File.process_out cmd args |> ignore)
 
 let print_scopes scopes = write_stdout Test_case_j.write_scope_def_list scopes
 
