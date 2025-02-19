@@ -112,7 +112,7 @@ export type TestRunResults =
 
 export type TestGenerateResults =
 | { kind: 'Error'; value: string }
-| { kind: 'Results'; value: Test }
+| { kind: 'Results'; value: TestList }
 
 export type TestRunRequest = {
   scope: string;
@@ -487,7 +487,7 @@ export function writeTestGenerateResults(x: TestGenerateResults, context: any = 
     case 'Error':
       return ['Error', _atd_write_string(x.value, x)]
     case 'Results':
-      return ['Results', writeTest(x.value, x)]
+      return ['Results', writeTestList(x.value, x)]
   }
 }
 
@@ -497,7 +497,7 @@ export function readTestGenerateResults(x: any, context: any = x): TestGenerateR
     case 'Error':
       return { kind: 'Error', value: _atd_read_string(x[1], x) }
     case 'Results':
-      return { kind: 'Results', value: readTest(x[1], x) }
+      return { kind: 'Results', value: readTestList(x[1], x) }
     default:
       _atd_bad_json('TestGenerateResults', x, context)
       throw new Error('impossible')

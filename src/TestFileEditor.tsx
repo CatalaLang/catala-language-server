@@ -5,9 +5,9 @@ import {
   useCallback,
   useRef,
 } from 'react';
-import type { ScopeDefList } from './generated/test_case';
 import {
   type ParseResults,
+  ScopeDefList,
   type Test,
   type TestList,
   type TestRunResults,

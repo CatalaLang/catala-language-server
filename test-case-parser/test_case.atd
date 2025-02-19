@@ -107,7 +107,7 @@ type test_run_results = [
 
 type test_generate_results = [
   | Error of string
-  | Results of test
+  | Results of test_list
 ]
 
 type test_run_request = {
