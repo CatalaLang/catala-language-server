@@ -13,12 +13,16 @@ import { logger } from './logger';
 import path = require('path');
 import { Uri, window, workspace } from 'vscode';
 
+function getCwd(bufferPath: string): string | undefined {
+  return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
+}
+
 export function parseTestFile(
   content: string,
   lang: string,
   bufferPath: string
 ): ParseResults {
-  const cwd = workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
+  const cwd = getCwd(bufferPath);
 
   // TODO we could revisit this to make the parsing async
   try {
