@@ -16,20 +16,28 @@ import {
 import { logger } from './logger';
 import path = require('path');
 import { getDefaultValue } from './defaults';
-import { window } from 'vscode';
+import { Uri, window, workspace } from 'vscode';
 
 export function parseTestFile(
   content: string,
   lang: string,
   bufferPath: string
 ): ParseResults {
+
+  const cwd  = workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri;
+
   // TODO we could revisit this to make the parsing async
-  try {
+    try {
+        logger.log(execFileSync("pwd").toString());
+        logger.log("before read");
+        logger.log(['catala', 'testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'].join(" "));
+        logger.log(`${cwd}`)
     const results = execFileSync(
       'catala',
-      ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
-      { input: content }
+        ['testcase', 'read', '-l', lang, '--debug', '--buffer-path',  bufferPath, '-'],
+      { input: content, cwd: cwd?.fsPath }
     );
+                logger.log("after read");
     return {
       kind: 'Results',
       value: readTestList(JSON.parse(results.toString())),
@@ -45,8 +53,8 @@ export function parseTestFile(
 export function atdToCatala(tests: TestList, lang: string): string {
   //XXX this probably needs better error handling
   try {
-    const results = execFileSync('catala', ['testcase', 'write', '-l', lang], {
-      input: JSON.stringify(writeTestList(tests)),
+      const results = execFileSync('catala', ['testcase', 'write', '-l', lang], {
+            input: JSON.stringify(writeTestList(tests), {cwd: cwd?.fsPath}),
     });
     return results.toString();
   } catch (error) {
@@ -77,22 +85,23 @@ export function runTestScope(
   filename = path.isAbsolute(filename)
     ? path.relative(process.cwd(), filename)
     : filename;
-  const args = ['testcase', 'run', '--scope', testScope, filename];
+
+    const args = ['testcase', 'run', '--scope', testScope, filename];
   logger.log(`Exec: ${cmd} ${args.join(' ')}`);
   try {
     // HACK: use 'clerk run' as a preamble (does not output test result,
     // but builds any dependencies as a side-effect which we need currently
     // for the run plugin!)
-    execFileSync('clerk', [
+      logger.log("before clerk run");
+      execFileSync('clerk', [
       'run',
       filename,
       '-s',
       testScope,
       '-I',
       './test-case-parser/examples',
-    ]);
-
-    const result = execFileSync(cmd, args);
+      ]);
+    const result = execFileSync(cmd, args, { cwd: cwd?.fsPath });
     logger.log(result.toString());
     const test = readTest(JSON.parse(result.toString()));
     return {
@@ -127,11 +136,11 @@ function withDefaultInputs(outputs: TestInputs): TestInputs {
 
 export function getAvailableScopes(filename: string): ScopeDefList {
   try {
-    const results = execFileSync('catala', [
+      const results = execFileSync('catala', [
       'testcase',
       'list-scopes',
       filename,
-    ]);
+      ], { cwd: cwd?.fsPath });
     return readScopeDefList(JSON.parse(results.toString()));
   } catch (error) {
     logger.log(`Error getting available scopes: ${error}`);
@@ -147,8 +156,8 @@ export function generate(
   const cmd = 'catala';
   const args = ['testcase', 'generate', '--scope', scope, filename];
   logger.log(`${cmd} ${args}`)
-  try {
-    const results = execFileSync(cmd, args);
+    try {
+    const results = execFileSync(cmd, args, { cwd: cwd?.fsPath });
     const test = readTestList(JSON.parse(results.toString()));
     //if (fillDefaultInputs) {
     //  test = { ...test, test_inputs: withDefaultInputs(test.test_inputs) };
