@@ -428,7 +428,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
   return (
     <div className="value-editor money-editor">
       <div className="money-input-container">
-        <span className="currency-symbol">💰</span>
         <input
           type="text"
           value={displayValue}
