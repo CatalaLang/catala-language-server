@@ -115,7 +115,7 @@ type test_run_request = {
 }
 
 type test_generate_request = {
-  scopeUnderTest: string;
+  scope_under_test: string;
   filename: string;
 }
 

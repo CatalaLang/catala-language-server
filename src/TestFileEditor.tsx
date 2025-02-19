@@ -5,8 +5,7 @@ import {
   useCallback,
   useRef,
 } from 'react';
-import type {
-  ScopeDefList} from './generated/test_case';
+import type { ScopeDefList } from './generated/test_case';
 import {
   type ParseResults,
   type Test,
@@ -224,7 +223,7 @@ export default function TestFileEditor({
         writeUpMessage({
           kind: 'TestGenerateRequest',
           value: {
-            scopeUnderTest: modalState.scopeUnderTest,
+            scope_under_test: modalState.scopeUnderTest,
             filename: modalState.filename,
           },
         })
