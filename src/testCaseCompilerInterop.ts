@@ -120,6 +120,20 @@ function withDefaultInputs(outputs: TestInputs): TestInputs {
   );
 }
 
+export function getAvailableScopes(filename: string): string[] {
+  try {
+    const results = execFileSync('catala', [
+      'testcase',
+      'list-scopes',
+      filename,
+    ]);
+    return JSON.parse(results.toString());
+  } catch (error) {
+    logger.log(`Error getting available scopes: ${error}`);
+    return [];
+  }
+}
+
 export function generate(
   scope: string,
   filename: string,
