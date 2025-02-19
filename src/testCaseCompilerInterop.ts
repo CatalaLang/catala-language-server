@@ -146,12 +146,13 @@ export function generate(
 ): TestGenerateResults {
   const cmd = 'catala';
   const args = ['testcase', 'generate', '--scope', scope, filename];
+  logger.log(`${cmd} ${args}`)
   try {
     const results = execFileSync(cmd, args);
-    let test = readTest(JSON.parse(results.toString()));
-    if (fillDefaultInputs) {
-      test = { ...test, test_inputs: withDefaultInputs(test.test_inputs) };
-    }
+    const test = readTestList(JSON.parse(results.toString()));
+    //if (fillDefaultInputs) {
+    //  test = { ...test, test_inputs: withDefaultInputs(test.test_inputs) };
+    //}
     return {
       kind: 'Results',
       value: test,
