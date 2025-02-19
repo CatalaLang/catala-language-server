@@ -1,6 +1,11 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
-import type { TestGenerateResults, TestInputs } from './generated/test_case';
+import type {
+  ScopeDefList,
+  TestGenerateResults,
+  TestInputs,
+} from './generated/test_case';
 import {
+  readScopeDefList,
   readTest,
   readTestList,
   writeTestList,
@@ -120,14 +125,14 @@ function withDefaultInputs(outputs: TestInputs): TestInputs {
   );
 }
 
-export function getAvailableScopes(filename: string): string[] {
+export function getAvailableScopes(filename: string): ScopeDefList {
   try {
     const results = execFileSync('catala', [
       'testcase',
       'list-scopes',
       filename,
     ]);
-    return JSON.parse(results.toString());
+    return readScopeDefList(JSON.parse(results.toString()));
   } catch (error) {
     logger.log(`Error getting available scopes: ${error}`);
     return [];

@@ -125,7 +125,7 @@ export type TestGenerateRequest = {
 
 export type FileSelection = {
   filename: string;
-  available_scopes: string[];
+  available_scopes: ScopeDefList;
 }
 
 export type UpMessage =
@@ -533,14 +533,14 @@ export function readTestGenerateRequest(x: any, context: any = x): TestGenerateR
 export function writeFileSelection(x: FileSelection, context: any = x): any {
   return {
     'filename': _atd_write_required_field('FileSelection', 'filename', _atd_write_string, x.filename, x),
-    'available_scopes': _atd_write_required_field('FileSelection', 'available_scopes', _atd_write_array(_atd_write_string), x.available_scopes, x),
+    'available_scopes': _atd_write_required_field('FileSelection', 'available_scopes', writeScopeDefList, x.available_scopes, x),
   };
 }
 
 export function readFileSelection(x: any, context: any = x): FileSelection {
   return {
     filename: _atd_read_required_field('FileSelection', 'filename', _atd_read_string, x['filename'], x),
-    available_scopes: _atd_read_required_field('FileSelection', 'available_scopes', _atd_read_array(_atd_read_string), x['available_scopes'], x),
+    available_scopes: _atd_read_required_field('FileSelection', 'available_scopes', readScopeDefList, x['available_scopes'], x),
   };
 }
 
