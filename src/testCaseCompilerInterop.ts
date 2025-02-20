@@ -28,16 +28,7 @@ export function parseTestFile(
   try {
     const results = execFileSync(
       'catala',
-      [
-        'testcase',
-        'read',
-        '-l',
-        lang,
-        '--debug',
-        '--buffer-path',
-        bufferPath,
-        '-',
-      ],
+      ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
       { input: content, ...(cwd && { cwd }) }
     );
     return {
