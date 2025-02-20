@@ -94,7 +94,6 @@ export function runTestScope(
     // HACK: use 'clerk run' as a preamble (does not output test result,
     // but builds any dependencies as a side-effect which we need currently
     // for the run plugin!)
-    logger.log('before clerk run');
     execFileSync('clerk', [
       'run',
       filename,
@@ -104,7 +103,6 @@ export function runTestScope(
       './test-case-parser/examples',
     ]);
     const result = execFileSync(cmd, args);
-    logger.log(result.toString());
     const test = readTest(JSON.parse(result.toString()));
     return {
       kind: 'Ok',
