@@ -317,29 +317,36 @@
 .assertion-delete .codicon {
   font-size: 14px;
 }
-.test-editor-container {
-  position: relative;
-  padding-top: 40px; /* Space for the "add new test" button */
+.test-editor-top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--vscode-editor-background);
+  padding: 0.25rem 1rem;
+  border-bottom: 1px solid var(--vscode-editorWidget-border);
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  height: 2rem;
 }
 
-.test-editor-add-button-container {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1000;
+.test-editor-container {
+  padding-top: 2.5rem; /* Make space for the fixed bar */
 }
 
 .test-editor-add-button {
   background-color: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
   border: none;
-  padding: 6px 12px;
+  padding: 4px 24px;
   cursor: pointer;
   display: flex;
   align-items: center;
   font-size: 13px;
   border-radius: 2px;
   font-weight: 500;
+  min-width: 120px;
 }
 
 .test-editor-add-button:hover {
