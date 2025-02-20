@@ -5,8 +5,7 @@ import {
   useCallback,
   useRef,
 } from 'react';
-import type {
-  ScopeDefList} from './generated/test_case';
+import type { ScopeDefList } from './generated/test_case';
 import {
   type ParseResults,
   type Test,
@@ -329,7 +328,7 @@ export default function TestFileEditor({
       }
       return (
         <div className="test-editor-container">
-          <div className="test-editor-add-button-container">
+          <div className="test-editor-top-bar">
             <button className="test-editor-add-button" onClick={onAddNewTest}>
               <span className="codicon codicon-add"></span>
               Add new test
