@@ -5,9 +5,10 @@ import {
   useCallback,
   useRef,
 } from 'react';
+import type {
+  ScopeDefList} from './generated/test_case';
 import {
   type ParseResults,
-  ScopeDefList,
   type Test,
   type TestList,
   type TestRunResults,
@@ -244,13 +245,13 @@ export default function TestFileEditor({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
-      const msg = readDownMessage(event.data);
-      switch (msg.kind) {
+      const message = readDownMessage(event.data);
+      switch (message.kind) {
         case 'Update':
-          setState(parseResultsToUiState(msg.value));
+          setState(parseResultsToUiState(message.value));
           break;
         case 'TestRunResults': {
-          const results = msg.value;
+          const results = message.value;
           setTestRunState((prev) => {
             const updatedScope = Object.keys(prev).find(
               (scope) => prev[scope].status === 'running'
@@ -272,12 +273,12 @@ export default function TestFileEditor({
           setModalState((prev) => ({
             ...prev,
             step: 'selectScope',
-            filename: msg.value.filename,
-            availableScopes: msg.value.available_scopes,
+            filename: message.value.filename,
+            availableScopes: message.value.available_scopes,
           }));
           break;
         default:
-          assertUnreachable(msg);
+          assertUnreachable(message);
       }
     };
 
