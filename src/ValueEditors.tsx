@@ -176,9 +176,26 @@ export default function ValueEditor(props: Props): ReactElement {
           }}
         />
       );
+    case 'TArray':
+      return (
+        <ArrayEditor
+          elementType={typ.value}
+          value={props.testIO.value?.value.value as RuntimeValue[]}
+          onValueChange={(newValue: RuntimeValue[]) => {
+            props.onValueChange({
+              typ,
+              value: {
+                value: {
+                  kind: 'Array',
+                  value: newValue,
+                },
+              },
+            });
+          }}
+        />
+      );
     case 'TTuple':
     case 'TOption':
-    case 'TArray':
       return <i>Unimplemented Editor</i>;
     default:
       assertUnreachable(typ);
@@ -336,7 +353,10 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
     }
   }, [props.value]);
 
-  const handleChange = (field: 'years' | 'months' | 'days', value: number) => {
+  const handleChange = (
+    field: 'years' | 'months' | 'days',
+    value: number
+  ): void => {
     const newValue = Math.max(0, value); // Ensure non-negative values
     switch (field) {
       case 'years':
@@ -450,7 +470,10 @@ function StructEditor(props: StructEditorProps): ReactElement {
   const { structDeclaration, value, onValueChange } = props;
   const fields = structDeclaration.fields;
 
-  const handleFieldChange = (fieldName: string, fieldValue: RuntimeValue) => {
+  const handleFieldChange = (
+    fieldName: string,
+    fieldValue: RuntimeValue
+  ): void => {
     const newMap = new Map(value?.[1] || []);
     newMap.set(fieldName, fieldValue);
     onValueChange([structDeclaration, newMap]);
@@ -496,6 +519,130 @@ type EnumEditorProps = {
   value?: [EnumDeclaration, [string, Option<RuntimeValue>]];
   onValueChange(ctor: string, value: Option<RuntimeValue>): void;
 };
+
+type ArrayEditorProps = {
+  elementType: Typ;
+  value?: RuntimeValue[];
+  onValueChange(newValue: RuntimeValue[]): void;
+};
+
+function ArrayEditor(props: ArrayEditorProps): ReactElement {
+  const { elementType, value = [], onValueChange } = props;
+
+  const handleAdd = (): void => {
+    const newValue = createDefaultValue(elementType);
+    onValueChange([...value, newValue]);
+  };
+
+  const handleUpdate = (index: number, newValue: RuntimeValue) => {
+    const updatedArray = [...value];
+    updatedArray[index] = newValue;
+    onValueChange(updatedArray);
+  };
+
+  const handleDelete = (index: number): void => {
+    const newArray = value.filter((_, i) => i !== index);
+    onValueChange(newArray);
+  };
+
+  const handleMove = (fromIndex: number, toIndex: number): void => {
+    const newArray = [...value];
+    const [movedItem] = newArray.splice(fromIndex, 1);
+    newArray.splice(toIndex, 0, movedItem);
+    onValueChange(newArray);
+  };
+
+  return (
+    <div className="array-editor">
+      <div className="array-items">
+        {value.map((item, index) => (
+          <div key={index} className="array-item">
+            <div className="array-item-controls">
+              <button
+                className="array-move-up"
+                onClick={() => handleMove(index, index - 1)}
+                disabled={index === 0}
+              >
+                ↑
+              </button>
+              <button
+                className="array-move-down"
+                onClick={() => handleMove(index, index + 1)}
+                disabled={index === value.length - 1}
+              >
+                ↓
+              </button>
+              <button
+                className="array-delete"
+                onClick={() => handleDelete(index)}
+              >
+                ×
+              </button>
+            </div>
+            <ValueEditor
+              testIO={{
+                typ: elementType,
+                value: { value: item },
+              }}
+              onValueChange={(newValue) =>
+                handleUpdate(index, newValue.value!.value)
+              }
+            />
+          </div>
+        ))}
+      </div>
+      <button className="array-add" onClick={handleAdd}>
+        <span className="codicon codicon-add"></span>
+        Add Item
+      </button>
+    </div>
+  );
+}
+
+function createDefaultValue(typ: Typ): RuntimeValue {
+  switch (typ.kind) {
+    case 'TBool':
+      return { kind: 'Bool', value: false };
+    case 'TInt':
+      return { kind: 'Integer', value: 0 };
+    case 'TRat':
+      return { kind: 'Decimal', value: 0.0 };
+    case 'TMoney':
+      return { kind: 'Money', value: 0 };
+    case 'TDate':
+      return { kind: 'Date', value: { year: 2023, month: 1, day: 1 } };
+    case 'TDuration':
+      return { kind: 'Duration', value: { years: 0, months: 0, days: 0 } };
+    case 'TStruct': {
+      const fieldValues = new Map<string, RuntimeValue>();
+      for (const [fieldName, fieldType] of typ.value.fields.entries()) {
+        fieldValues.set(fieldName, createDefaultValue(fieldType));
+      }
+      return {
+        kind: 'Struct',
+        value: [typ.value, fieldValues],
+      };
+    }
+    case 'TEnum':
+      return {
+        kind: 'Enum',
+        value: [
+          typ.value,
+          [Array.from(typ.value.constructors.keys())[0], null],
+        ],
+      };
+    case 'TArray':
+      return { kind: 'Array', value: [] };
+    case 'TTuple':
+      // For now, treat tuples as arrays since RuntimeValue doesn't have a tuple variant
+      return { kind: 'Array', value: [] };
+    case 'TOption':
+      // For now, treat options as null values since RuntimeValue doesn't have an option variant
+      return { kind: 'Array', value: [] };
+    default:
+      assertUnreachable(typ);
+  }
+}
 
 function runtimeValueToTestIo(typ: Typ, value: Option<RuntimeValue>): TestIo {
   return {
