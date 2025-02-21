@@ -177,23 +177,24 @@ let lookup_type f p =
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
   let prg = f.scopelang_prg in
-  let* r, kind, typ = Jump.lookup_type jt p in
-  let md = Type_printing.typ_to_markdown ?prg f.locale kind typ in
+  let* r, kind = Jump.lookup_type jt p in
+  let md = Type_printing.typ_to_markdown ?prg f.locale kind in
   Some (r, md)
 
 let lookup_type_definition f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* _r, _kind, (typ, _pos) = Jump.lookup_type jt p in
+  let* _r, kind = Jump.lookup_type jt p in
   let open Shared_ast in
-  match typ with
-  | TStruct s ->
+  match (kind : Jump.type_lookup) with
+  | Expr (TStruct s, _) | Type (TStruct s, _) ->
     let _, pos = StructName.get_info s in
     Some (to_position pos)
-  | TEnum e ->
+  | Expr (TEnum e, _) | Type (TEnum e, _) ->
     let _, pos = EnumName.get_info e in
     Some (to_position pos)
+  | Module _ -> Stdlib.failwith "TODO"
   | _ -> None
 
 let lookup_document_symbols file =
@@ -453,14 +454,20 @@ let process_document ?previous_file ?contents (uri : string) : t =
         Surface.Fill_positions.fill_pos_with_legislative_info prg
       in
       let open Catala_utils in
-      let ctx =
+      let ctx, modules_itf =
         let mod_uses, modules =
           match config_opt with
           | None -> String.Map.empty, Uid.Module.Map.empty
           | Some (config, config_dir) ->
             load_module_interfaces config_dir config.global.include_dirs prg
         in
-        Desugared.Name_resolution.form_context (prg, mod_uses) modules
+        let ctx =
+          Desugared.Name_resolution.form_context (prg, mod_uses) modules
+        in
+        let modules_itf : Surface.Ast.interface Uid.Module.Map.t =
+          Uid.Module.Map.map (fun elt -> fst elt) modules
+        in
+        ctx, modules_itf
       in
       let prg = Desugared.From_surface.translate_program ctx prg in
       let prg = Desugared.Disambiguate.program prg in
@@ -483,7 +490,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
             prg.program_ctx.ctx_enums
         in
         let prg = Scopelang.Ast.type_program prg in
-        let jump_table = Jump.populate ctx surface prg in
+        let jump_table = Jump.populate ctx modules_itf surface prg in
         !l, Some prg, Some jump_table
     with e ->
       let errors =
