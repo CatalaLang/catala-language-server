@@ -177,7 +177,8 @@ let data_type
     | None -> expr_type locale typ
     | Some field_map -> enum_code locale (ename, field_map))
 
-let typ_to_markdown ?prg locale kind typ =
+let typ_to_markdown ?prg locale (kind : Jump.type_lookup) =
   match prg, kind with
-  | Some prg, `Type -> data_type prg locale typ
-  | _ -> expr_type locale typ
+  | Some prg, Type typ -> data_type prg locale typ
+  | _, (Type typ | Expr typ) -> expr_type locale typ
+  | _, Module _ -> failwith "todo"

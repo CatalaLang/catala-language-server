@@ -22,8 +22,6 @@ open Scopelang.Ast
 let hash_info (type a) (module M : Uid.Id with type t = a) (v : a) : int =
   Hashtbl.hash (M.get_info v)
 
-type jump = { hash : int; name : string; typ : typ }
-
 module LTable = Stdlib.Map.Make (Int)
 
 type lookup_entry = {
@@ -51,6 +49,9 @@ let pp_lookup_entry fmt { declaration; definitions; usages; types } =
 let empty_lookup =
   { declaration = None; definitions = None; usages = None; types = None }
 
+type jump = { hash : int; name : string; typ : typ }
+type mjump = { hash : int; name : string; interface : Surface.Ast.interface }
+
 type var =
   | Topdef of jump
   | Definition of jump
@@ -58,6 +59,8 @@ type var =
   | Usage of jump
   | Type of jump
   | Literal of typ
+  | Module_use of mjump
+  | Module_decl of mjump
 
 let pp_var ppf =
   let open Format in
@@ -68,6 +71,10 @@ let pp_var ppf =
   | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
   | Type { name; hash; _ } -> fprintf ppf "type: %s#%d" name hash
   | Literal typ -> fprintf ppf "literal: %a" Print.typ_debug typ
+  | Module_use { interface; _ } ->
+    fprintf ppf "moduse: %s" (Mark.remove interface.intf_modname.module_name)
+  | Module_decl { interface; _ } ->
+    fprintf ppf "moddecl: %s" (Mark.remove interface.intf_modname.module_name)
 
 module PMap = Position_map.Make (struct
   type t = var
@@ -123,7 +130,7 @@ let populate_struct_def
       let hash = Hashtbl.hash (StructName.get_info struct_decl) in
       let typ =
         let pos_decl = Mark.get (StructName.get_info struct_decl) in
-        Mark.add pos_decl (Shared_ast.TStruct struct_decl)
+        Mark.add pos_decl (TStruct struct_decl)
       in
       PMap.add struct_pos (Definition { hash; name; typ }) m
     in
@@ -160,7 +167,7 @@ let populate_enum_inject
   | Some (enum_decl, (enum_decl_typ, _vis)) -> (
     let typ =
       let pos_decl = Mark.get (EnumName.get_info enum_decl) in
-      Mark.add pos_decl (Shared_ast.TEnum enum_decl)
+      Mark.add pos_decl (TEnum enum_decl)
     in
     (* Add enum reference *)
     let m =
@@ -402,9 +409,8 @@ let traverse_ctx (ctx : Desugared.Name_resolution.context) m : PMap.pmap =
   in
   m
 
-let traverse
-    (ctx : Desugared.Name_resolution.context)
-    (prog : Shared_ast.typed Scopelang.Ast.program) : PMap.pmap =
+let traverse (ctx : Desugared.Name_resolution.context) (prog : typed program) :
+    PMap.pmap =
   let m =
     ModuleName.Map.fold
       (fun _m_name decl_map acc ->
@@ -456,12 +462,25 @@ let add_scope_definitions
   in
   List.fold_left process variables surface.program_items
 
+let populate_modules
+    (ctx : Desugared.Name_resolution.context)
+    (modules_itf : Surface.Ast.interface Uid.Module.Map.t)
+    (prog : typed program)
+    (surface : Surface.Ast.program)
+    (variables : PMap.t) =
+  ignore modules_itf;
+  ignore (ctx, prog, surface, variables);
+  variables
+
 let populate
     (ctx : Desugared.Name_resolution.context)
+    (modules_itf : Surface.Ast.interface Uid.Module.Map.t)
     (surface : Surface.Ast.program)
-    (prog : Shared_ast.typed Scopelang.Ast.program) : t =
+    (prog : typed program) : t =
+  ignore modules_itf;
   let variables = traverse ctx prog in
   let variables = add_scope_definitions ctx surface variables in
+  let variables = populate_modules ctx modules_itf prog surface variables in
   let add f = function None -> Some (f empty_lookup) | Some v -> Some (f v) in
   let add_def p =
     add (fun v ->
@@ -500,8 +519,11 @@ let populate
           | Declaration jump -> Some (add_decl p, jump.hash)
           | Usage jump -> Some (add_usage p, jump.hash)
           | Type jump -> Some (add_type p, jump.hash)
+          | Module_use { hash; _ } | Module_decl { hash; _ } ->
+            Some (add_usage p, hash)
           | Literal _ -> None
         in
+
         match res with
         | Some (add, hash) -> LTable.update hash add tbl
         | _ -> tbl)
@@ -514,16 +536,22 @@ let lookup (tables : t) (p : Pos.t) : lookup_entry option =
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j | Type j) ->
     LTable.find_opt j.hash tables.lookup_table
+  | Some (Module_use { hash; _ } | Module_decl { hash; _ }) ->
+    LTable.find_opt hash tables.lookup_table
   | Some (Literal _) | None -> None
 
+type type_lookup = Expr of typ | Type of typ | Module of Surface.Ast.interface
+
 let lookup_type (tables : t) (p : Pos.t) :
-    (Lsp.Types.Range.t * [ `Expr | `Type ] * typ) option =
+    (Lsp.Types.Range.t * type_lookup) option =
   PMap.lookup_with_range p tables.variables
   |> function
   | Some (r, (Topdef j | Definition j | Declaration j | Usage j)) ->
-    Some (r, `Expr, j.typ)
-  | Some (r, Type j) -> Some (r, `Type, j.typ)
-  | Some (r, Literal typ) -> Some (r, `Expr, typ)
+    Some (r, Expr j.typ)
+  | Some (r, Type j) -> Some (r, Type j.typ)
+  | Some (r, Literal typ) -> Some (r, Expr typ)
+  | Some (r, (Module_use { interface; _ } | Module_decl { interface; _ })) ->
+    Some (r, Module interface)
   | None -> None
 
 let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
@@ -535,6 +563,7 @@ let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
     | Definition v -> Some (v.name, Function)
     | Declaration v -> Some (v.name, Interface)
     | Usage v -> Some (v.name, Variable)
+    | Module_use v | Module_decl v -> Some (v.name, Module)
     | Type _ | Literal _ -> None
   in
   Option.map
