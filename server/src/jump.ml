@@ -50,7 +50,13 @@ let empty_lookup =
   { declaration = None; definitions = None; usages = None; types = None }
 
 type jump = { hash : int; name : string; typ : typ }
-type mjump = { hash : int; name : string; interface : Surface.Ast.interface }
+
+type mjump = {
+  hash : int;
+  name : string;
+  alias : string option;
+  interface : Surface.Ast.interface;
+}
 
 type var =
   | Topdef of jump
@@ -59,8 +65,31 @@ type var =
   | Usage of jump
   | Type of jump
   | Literal of typ
+  | Module_def of mjump
   | Module_use of mjump
   | Module_decl of mjump
+
+let pp_module_jump fmt { interface; alias; hash; _ } =
+  let open Format in
+  fprintf fmt "%s#%d %a"
+    (Mark.remove interface.intf_modname.module_name)
+    hash
+    (pp_opt (fun fmt alias -> fprintf fmt "(alias:%s)" alias))
+    alias
+
+let make_mjump
+    (mname : ModuleName.t)
+    (interface : Surface.Ast.interface)
+    ?alias
+    k =
+  let mjump : mjump =
+    let hash = Hashtbl.hash (Mark.get interface.intf_modname.module_name) in
+    { hash; name = ModuleName.to_string mname; alias; interface }
+  in
+  match k with
+  | `Def -> Module_def mjump
+  | `Use -> Module_use mjump
+  | `Decl -> Module_decl mjump
 
 let pp_var ppf =
   let open Format in
@@ -71,10 +100,9 @@ let pp_var ppf =
   | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
   | Type { name; hash; _ } -> fprintf ppf "type: %s#%d" name hash
   | Literal typ -> fprintf ppf "literal: %a" Print.typ_debug typ
-  | Module_use { interface; _ } ->
-    fprintf ppf "moduse: %s" (Mark.remove interface.intf_modname.module_name)
-  | Module_decl { interface; _ } ->
-    fprintf ppf "moddecl: %s" (Mark.remove interface.intf_modname.module_name)
+  | Module_use mjump -> fprintf ppf "mod_usage: %a" pp_module_jump mjump
+  | Module_decl mjump -> fprintf ppf "mod_decl: %a" pp_module_jump mjump
+  | Module_def mjump -> fprintf ppf "mod_def: %a" pp_module_jump mjump
 
 module PMap = Position_map.Make (struct
   type t = var
@@ -110,10 +138,22 @@ let find key proj bindings =
 
 let populate_struct_def
     (ctx : Desugared.Name_resolution.context)
+    (module_lookup : ModuleName.t -> Surface.Ast.interface * string option)
     name
     fields
     m
     k =
+  let m =
+    (* Populate struct's path components *)
+    List.fold_left
+      (fun acc mname ->
+        let interface, alias = module_lookup mname in
+        Format.eprintf "mod use: %s@." (ModuleName.to_string mname);
+        let mjump = make_mjump mname interface ?alias `Use in
+        let pos = Mark.get (ModuleName.get_info mname) in
+        PMap.add pos mjump acc)
+      m (StructName.path name)
+  in
   match
     find name StructName.to_string (StructName.Map.bindings ctx.structs)
   with
@@ -156,9 +196,20 @@ let populate_struct_def
 
 let populate_enum_inject
     (ctx : Desugared.Name_resolution.context)
+    (module_lookup : ModuleName.t -> Surface.Ast.interface * string option)
     (enum_name : EnumName.t)
     (cons : EnumConstructor.t)
     m =
+  let m =
+    (* Populate enum's path components *)
+    List.fold_left
+      (fun acc mname ->
+        let interface, alias = module_lookup mname in
+        let mjump = make_mjump mname interface ?alias `Use in
+        let pos = Mark.get (ModuleName.get_info mname) in
+        PMap.add pos mjump acc)
+      m (EnumName.path enum_name)
+  in
   let enum_decl_opt =
     find enum_name EnumName.to_string (EnumName.Map.bindings ctx.enums)
   in
@@ -195,8 +246,45 @@ let populate_enum_inject
       let pos = Mark.get (EnumConstructor.get_info cons) in
       PMap.add pos var m)
 
+let populate_scopecall ctx module_lookup pos scope args acc f =
+  let ((name, decl_pos) as scope_info) = ScopeName.get_info scope in
+  let acc =
+    (* Populate scope's path components *)
+    List.fold_left
+      (fun acc mname ->
+        let interface, alias = module_lookup mname in
+        let mjump = make_mjump mname interface ?alias `Use in
+        let pos = Mark.get (ModuleName.get_info mname) in
+        PMap.add pos mjump acc)
+      acc (ScopeName.path scope)
+  in
+  let typ : typ =
+    let scope_ctx = Desugared.Name_resolution.get_scope_context ctx scope in
+    TStruct scope_ctx.scope_out_struct, decl_pos
+  in
+  let hash = Hashtbl.hash scope_info in
+  let var = Usage { name; hash; typ } in
+  let acc = PMap.add pos var acc in
+  ScopeVar.Map.fold
+    (fun scope_var (def_pos, e) acc ->
+      let name = ScopeVar.to_string scope_var in
+      let typ =
+        (* FIXME: [var_sig_typ] map doesn't contain valid var ids *)
+        (ScopeVar.Map.to_seq ctx.var_typs
+        |> Seq.find (fun (sv', _) -> ScopeVar.to_string sv' = name)
+        |> Option.get
+        |> snd)
+          .Desugared.Name_resolution.var_sig_typ
+      in
+      let hash = hash_info (module ScopeVar) scope_var in
+      let var = Usage { name; hash; typ } in
+      let acc = PMap.add def_pos var acc in
+      f e acc)
+    args acc
+
 let traverse_expr
     (ctx : Desugared.Name_resolution.context)
+    (module_lookup : ModuleName.t -> Surface.Ast.interface * string option)
     (e : (scopelang, typed) gexpr)
     m =
   let open Shared_ast in
@@ -234,9 +322,10 @@ let traverse_expr
       let acc = PMap.add pos var acc in
       f bnd_ctx sub_expr acc
     | EStruct { name; fields } ->
-      populate_struct_def ctx name fields acc (f bnd_ctx)
+      Format.eprintf "struct expr pos: %s@." (Pos.to_string_short pos);
+      populate_struct_def ctx module_lookup name fields acc (f bnd_ctx)
     | EInj { name; e; cons } ->
-      let acc = populate_enum_inject ctx name cons acc in
+      let acc = populate_enum_inject ctx module_lookup name cons acc in
       if Mark.remove e = ELit LUnit then
         (* Don't recurse when the next expression is nil *)
         acc
@@ -273,30 +362,7 @@ let traverse_expr
           PMap.add pos var acc |> f bnd_ctx e)
         cases acc
     | EScopeCall { scope; args } ->
-      let ((name, decl_pos) as scope_info) = ScopeName.get_info scope in
-      let typ : typ =
-        let scope_ctx = Desugared.Name_resolution.get_scope_context ctx scope in
-        TStruct scope_ctx.scope_out_struct, decl_pos
-      in
-      let hash = Hashtbl.hash scope_info in
-      let var = Usage { name; hash; typ } in
-      let acc = PMap.add pos var acc in
-      ScopeVar.Map.fold
-        (fun scope_var (def_pos, e) acc ->
-          let name = ScopeVar.to_string scope_var in
-          let typ =
-            (* FIXME: [var_sig_typ] map doesn't contain valid var ids *)
-            (ScopeVar.Map.to_seq ctx.var_typs
-            |> Seq.find (fun (sv', _) -> ScopeVar.to_string sv' = name)
-            |> Option.get
-            |> snd)
-              .Desugared.Name_resolution.var_sig_typ
-          in
-          let hash = hash_info (module ScopeVar) scope_var in
-          let var = Usage { name; hash; typ } in
-          let acc = PMap.add def_pos var acc in
-          f bnd_ctx e acc)
-        args acc
+      populate_scopecall ctx module_lookup pos scope args acc (f bnd_ctx)
     | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | EApp _ | ETuple _
     | ETupleAccess _ | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ ->
       Expr.shallow_fold (f bnd_ctx) e acc
@@ -322,7 +388,11 @@ let rec traverse_typ
   | TLit _lit -> PMap.add pos (Literal (typ, pos)) m
   | TAny | TClosureEnv -> m
 
-let traverse_scope_def ctx (rule : typed rule) m : PMap.pmap =
+let traverse_scope_def
+    ctx
+    (module_lookup : ModuleName.t -> Surface.Ast.interface * string option)
+    (rule : typed rule)
+    m : PMap.pmap =
   match rule with
   | ScopeVarDefinition { var; typ; io = _; e }
   | SubScopeVarDefinition { var; typ; var_within_origin_scope = _; e } ->
@@ -332,8 +402,8 @@ let traverse_scope_def ctx (rule : typed rule) m : PMap.pmap =
     let var = Definition { name; hash; typ } in
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
     let m = traverse_typ ctx typ m in
-    traverse_expr ctx e m
-  | Assertion e -> traverse_expr ctx e m
+    traverse_expr ctx module_lookup e m
+  | Assertion e -> traverse_expr ctx module_lookup e m
 
 let traverse_scope_sig ctx scope m : PMap.pmap =
   ScopeVar.Map.fold
@@ -346,12 +416,19 @@ let traverse_scope_sig ctx scope m : PMap.pmap =
       PMap.add pos var m)
     scope.scope_sig m
 
-let traverse_scope ctx (scope : typed scope_decl) m : PMap.pmap =
+let traverse_scope
+    ctx
+    (module_lookup : ModuleName.t -> Surface.Ast.interface * string option)
+    (scope : typed scope_decl)
+    m : PMap.pmap =
   let m = traverse_scope_sig ctx scope m in
-  List.fold_right (traverse_scope_def ctx) scope.scope_decl_rules m
+  List.fold_right
+    (traverse_scope_def ctx module_lookup)
+    scope.scope_decl_rules m
 
 let traverse_topdef
     ctx
+    (module_lookup : ModuleName.t -> Surface.Ast.interface * string option)
     (topdef : TopdefName.t)
     ((e, typ, _vis) : typed expr * typ * visibility)
     m : PMap.pmap =
@@ -360,7 +437,7 @@ let traverse_topdef
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
   let topdef = Topdef { name; hash; typ } in
   let m = PMap.add topdef_pos topdef m in
-  traverse_expr ctx e m
+  traverse_expr ctx module_lookup e m
 
 let traverse_ctx (ctx : Desugared.Name_resolution.context) m : PMap.pmap =
   let m =
@@ -406,8 +483,11 @@ let traverse_ctx (ctx : Desugared.Name_resolution.context) m : PMap.pmap =
   in
   m
 
-let traverse (ctx : Desugared.Name_resolution.context) (prog : typed program) :
-    PMap.pmap =
+let traverse
+    (ctx : Desugared.Name_resolution.context)
+    (module_lookup : ModuleName.t -> Surface.Ast.interface * string option)
+    (prog : typed program)
+    (variables : PMap.pmap) =
   let m =
     ModuleName.Map.fold
       (fun _m_name decl_map acc ->
@@ -415,13 +495,17 @@ let traverse (ctx : Desugared.Name_resolution.context) (prog : typed program) :
           (fun _sname scope acc ->
             traverse_scope_sig ctx (Mark.remove scope) acc)
           decl_map acc)
-      prog.program_modules PMap.empty
+      prog.program_modules variables
   in
-  let m = TopdefName.Map.fold (traverse_topdef ctx) prog.program_topdefs m in
+  let m =
+    TopdefName.Map.fold
+      (traverse_topdef ctx module_lookup)
+      prog.program_topdefs m
+  in
   let all_scopes =
     ScopeName.Map.values prog.program_scopes |> List.map Mark.remove
   in
-  let m = List.fold_right (traverse_scope ctx) all_scopes m in
+  let m = List.fold_right (traverse_scope ctx module_lookup) all_scopes m in
   traverse_ctx ctx m
 
 let add_scope_definitions
@@ -460,24 +544,93 @@ let add_scope_definitions
   List.fold_left process variables surface.program_items
 
 let populate_modules
-    (ctx : Desugared.Name_resolution.context)
-    (modules_itf : Surface.Ast.interface Uid.Module.Map.t)
+    input_src
+    (modules_itf : Surface.Ast.interface ModuleName.Map.t)
     (prog : typed program)
     (surface : Surface.Ast.program)
-    (variables : PMap.t) =
-  ignore modules_itf;
-  ignore (ctx, prog, surface, variables);
-  variables
+    (acc : PMap.t) :
+    PMap.t * (ModuleName.t -> Surface.Ast.interface * string option) =
+  let module C = Map.Make (String) in
+  let convert_map =
+    ModuleName.Map.fold
+      (fun mname _ acc -> C.add (ModuleName.to_string mname) mname acc)
+      prog.program_modules C.empty
+  in
+  let process_module_use
+      acc
+      { Surface.Ast.mod_use_name = name, pname; mod_use_alias = alias, palias }
+      =
+    try
+      let mname = C.find name convert_map in
+      let mname_pos = Mark.get (ModuleName.get_info mname) in
+      let interface = ModuleName.Map.find mname modules_itf in
+      Format.eprintf "%s(%s), alias: %s(%s), mnamepos:%s@." name
+        (Pos.to_string_shorter pname)
+        alias
+        (Pos.to_string_shorter palias)
+        (Pos.to_string_shorter mname_pos);
+      let alias = if alias <> name then Some alias else None in
+      let decl_mjump = make_mjump mname interface ?alias `Decl in
+      let def_mjump = make_mjump mname interface ?alias `Def in
+      let acc =
+        if Option.is_some alias then PMap.add palias decl_mjump acc else acc
+      in
+      let acc = PMap.add pname decl_mjump acc in
+      PMap.add mname_pos def_mjump acc
+    with exn ->
+      Log.warn (fun m ->
+          m "exception %s while processing module use" (Printexc.to_string exn));
+      acc
+  in
+  let itf_lookup =
+    let itf_map =
+      ModuleName.Map.mapi
+        (fun mname itf ->
+          let alias =
+            List.find_map
+              (fun { Surface.Ast.mod_use_name; mod_use_alias } ->
+                if
+                  ModuleName.to_string mname = fst mod_use_name
+                  && mod_use_name <> mod_use_alias
+                then Some (fst mod_use_alias)
+                else None)
+              surface.program_used_modules
+          in
+          itf, alias)
+        modules_itf
+    in
+    fun mname -> ModuleName.Map.find mname itf_map
+  in
+  let acc =
+    match surface.program_module with
+    | None -> acc
+    | Some { module_name; module_external = _ } -> (
+      try
+        let interface = Surface.Parser_driver.load_interface input_src in
+        let pos = Mark.get module_name in
+        let mname = ModuleName.fresh module_name in
+        let def_mjump = make_mjump mname interface `Def in
+        PMap.add pos def_mjump acc
+      with exn ->
+        (* Ignore errors, the current file might be *)
+        Log.warn (fun m ->
+            m "exception %s while loading current file's module signature"
+              (Printexc.to_string exn));
+        acc)
+  in
+  List.fold_left process_module_use acc surface.program_used_modules, itf_lookup
 
 let populate
+    input_src
     (ctx : Desugared.Name_resolution.context)
-    (modules_itf : Surface.Ast.interface Uid.Module.Map.t)
+    (modules_itf : Surface.Ast.interface ModuleName.Map.t)
     (surface : Surface.Ast.program)
     (prog : typed program) : t =
-  ignore modules_itf;
-  let variables = traverse ctx prog in
+  let variables, mod_lookup =
+    populate_modules input_src modules_itf prog surface PMap.empty
+  in
+  let variables = traverse ctx mod_lookup prog variables in
   let variables = add_scope_definitions ctx surface variables in
-  let variables = populate_modules ctx modules_itf prog surface variables in
   let add f = function None -> Some (f empty_lookup) | Some v -> Some (f v) in
   let add_def p =
     add (fun v ->
@@ -516,11 +669,12 @@ let populate
           | Declaration jump -> Some (add_decl p, jump.hash)
           | Usage jump -> Some (add_usage p, jump.hash)
           | Type jump -> Some (add_type p, jump.hash)
-          | Module_use { hash; _ } | Module_decl { hash; _ } ->
+          | Module_use { hash; _ }
+          | Module_decl { hash; _ }
+          | Module_def { hash; _ } ->
             Some (add_usage p, hash)
           | Literal _ -> None
         in
-
         match res with
         | Some (add, hash) -> LTable.update hash add tbl
         | _ -> tbl)
@@ -533,7 +687,9 @@ let lookup (tables : t) (p : Pos.t) : lookup_entry option =
   |> function
   | Some (Topdef j | Definition j | Declaration j | Usage j | Type j) ->
     LTable.find_opt j.hash tables.lookup_table
-  | Some (Module_use { hash; _ } | Module_decl { hash; _ }) ->
+  | Some
+      (Module_use { hash; _ } | Module_decl { hash; _ } | Module_def { hash; _ })
+    ->
     LTable.find_opt hash tables.lookup_table
   | Some (Literal _) | None -> None
 
@@ -547,7 +703,11 @@ let lookup_type (tables : t) (p : Pos.t) :
     Some (r, Expr j.typ)
   | Some (r, Type j) -> Some (r, Type j.typ)
   | Some (r, Literal typ) -> Some (r, Expr typ)
-  | Some (r, (Module_use { interface; _ } | Module_decl { interface; _ })) ->
+  | Some
+      ( r,
+        ( Module_use { interface; _ }
+        | Module_decl { interface; _ }
+        | Module_def { interface; _ } ) ) ->
     Some (r, Module interface)
   | None -> None
 
@@ -560,7 +720,7 @@ let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
     | Definition v -> Some (v.name, Function)
     | Declaration v -> Some (v.name, Interface)
     | Usage v -> Some (v.name, Variable)
-    | Module_use v | Module_decl v -> Some (v.name, Module)
+    | Module_use v | Module_decl v | Module_def v -> Some (v.name, Module)
     | Type _ | Literal _ -> None
   in
   Option.map
