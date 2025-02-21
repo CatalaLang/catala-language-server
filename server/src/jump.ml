@@ -207,7 +207,7 @@ let traverse_expr
       let lfold x acc = List.fold_left (fun acc x -> f bnd_ctx x acc) acc x in
       acc |> lfold excepts |> f bnd_ctx cons
     | ELit _l -> PMap.add pos (Literal typ) acc
-    | ELocation (ScopelangScopeVar { name; _ }) ->
+    | ELocation (ScopelangScopeVar { name }) ->
       let (scope_var : ScopeVar.t), pos = name in
       let name = ScopeVar.to_string scope_var in
       let hash = hash_info (module ScopeVar) scope_var in
@@ -265,9 +265,33 @@ let traverse_expr
           let var = Usage { name; hash; typ } in
           PMap.add pos var acc |> f bnd_ctx e)
         cases acc
+    | EScopeCall { scope; args } ->
+      let ((name, decl_pos) as scope_info) = ScopeName.get_info scope in
+      let typ : typ =
+        let scope_ctx = Desugared.Name_resolution.get_scope_context ctx scope in
+        TStruct scope_ctx.scope_out_struct, decl_pos
+      in
+      let hash = Hashtbl.hash scope_info in
+      let var = Usage { name; hash; typ } in
+      let acc = PMap.add pos var acc in
+      ScopeVar.Map.fold
+        (fun scope_var (def_pos, e) acc ->
+          let name = ScopeVar.to_string scope_var in
+          let typ =
+            (* FIXME: [var_sig_typ] map doesn't contain valid var ids *)
+            (ScopeVar.Map.to_seq ctx.var_typs
+            |> Seq.find (fun (sv', _) -> ScopeVar.to_string sv' = name)
+            |> Option.get
+            |> snd)
+              .Desugared.Name_resolution.var_sig_typ
+          in
+          let hash = hash_info (module ScopeVar) scope_var in
+          let var = Usage { name; hash; typ } in
+          let acc = PMap.add def_pos var acc in
+          f bnd_ctx e acc)
+        args acc
     | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | EApp _ | ETuple _
-    | ETupleAccess _ | EScopeCall _ | EFatalError _ | EPureDefault _
-    | EErrorOnEmpty _ ->
+    | ETupleAccess _ | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ ->
       Expr.shallow_fold (f bnd_ctx) e acc
   in
   Expr.shallow_fold (f Bindlib.empty_ctxt) e m
