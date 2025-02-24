@@ -391,18 +391,15 @@ let traverse_ctx (ctx : Desugared.Name_resolution.context) m : PMap.pmap =
         let name = EnumName.to_string enum_name in
         let pos = Mark.get (EnumName.get_info enum_name) in
         let hash = Hashtbl.hash (EnumName.get_info enum_name) in
-        let m =
-          PMap.add pos
-            (Declaration { name; hash; typ = TEnum enum_name, pos })
-            m
-        in
+        let enum_type = TEnum enum_name, pos in
+        let m = PMap.add pos (Declaration { name; hash; typ = enum_type }) m in
         EnumConstructor.Map.fold
           (fun ecstr typ m ->
-            let m = traverse_typ ctx typ m in
+            let m = traverse_typ ctx module_lookup typ m in
             let name = EnumConstructor.to_string ecstr in
             let pos = Mark.get (EnumConstructor.get_info ecstr) in
             let hash = hash_info (module EnumConstructor) ecstr in
-            let var = Declaration { name; hash; typ } in
+            let var = Declaration { name; hash; typ = enum_type } in
             PMap.add pos var m)
           cstrs m)
       ctx.enums m
