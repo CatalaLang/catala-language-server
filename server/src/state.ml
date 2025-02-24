@@ -17,8 +17,9 @@
 open Utils
 open Diagnostic
 open Linol_lwt
+open Catala_utils
 
-module RangeMap = Map.Make (struct
+module RangeMap = Stdlib.Map.Make (struct
   type t = Range.t
 
   let compare
@@ -148,7 +149,7 @@ let all_diagnostics file =
           (RangeMap.bindings rmap) ))
     errs
 
-let to_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
+let of_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
 
 let generic_lookup ?uri { uri = file_uri; jump_table; _ } (p : Position.t) f =
   let open Option in
@@ -162,15 +163,15 @@ let generic_lookup ?uri { uri = file_uri; jump_table; _ } (p : Position.t) f =
 
 let lookup_def ?uri f p =
   generic_lookup ?uri f p (fun { definitions; _ } -> definitions)
-  |> Option.map (List.map to_position)
+  |> Option.map (List.map of_position)
 
 let lookup_declaration ?uri f p =
   generic_lookup ?uri f p (fun { declaration; _ } -> declaration)
-  |> Option.map to_position
+  |> Option.map of_position
 
 let lookup_usages ?uri f p =
   generic_lookup ?uri f p (fun { usages; _ } -> usages)
-  |> Option.map (List.map to_position)
+  |> Option.map (List.map of_position)
 
 let lookup_type f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
@@ -190,11 +191,12 @@ let lookup_type_definition f p =
   match (kind : Jump.type_lookup) with
   | Expr (TStruct s, _) | Type (TStruct s, _) ->
     let _, pos = StructName.get_info s in
-    Some (to_position pos)
+    Some (of_position pos)
   | Expr (TEnum e, _) | Type (TEnum e, _) ->
     let _, pos = EnumName.get_info e in
-    Some (to_position pos)
-  | Module _ -> Stdlib.failwith "TODO"
+    Some (of_position pos)
+  | Module ({ Surface.Ast.intf_modname = itf; _ }, _) ->
+    Some (of_position @@ Mark.get itf.module_name)
   | _ -> None
 
 let lookup_document_symbols file =
@@ -490,7 +492,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
             prg.program_ctx.ctx_enums
         in
         let prg = Scopelang.Ast.type_program prg in
-        let jump_table = Jump.populate ctx modules_itf surface prg in
+        let jump_table = Jump.populate input_src ctx modules_itf surface prg in
         !l, Some prg, Some jump_table
     with e ->
       let errors =

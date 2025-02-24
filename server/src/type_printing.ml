@@ -36,10 +36,11 @@ let default = function
   | Pl -> assert false
 
 let enum = function Global.En -> "enum" | Fr -> "énum" | Pl -> assert false
+let struct_s = function Global.Pl -> assert false | _ -> "structure"
 
 let struct_header = function
-  | Global.En -> "declaration structure"
-  | Fr -> "déclaration structure"
+  | Global.En -> "declaration " ^ struct_s En
+  | Fr -> "déclaration " ^ struct_s Fr
   | Pl -> assert false
 
 let struct_data = function
@@ -52,9 +53,29 @@ let content = function
   | Fr -> "contenu"
   | Pl -> assert false
 
+let enum_s = function
+  | Global.En -> "enumeration"
+  | Fr -> "énumération"
+  | Pl -> assert false
+
 let enum_header = function
-  | Global.En -> "declaration enumeration"
-  | Fr -> "déclaration énumération"
+  | Global.En -> "declaration " ^ enum_s En
+  | Fr -> "déclaration " ^ enum_s Fr
+  | Pl -> assert false
+
+let scope_s = function
+  | Global.En -> "scope"
+  | Fr -> "champ d'application"
+  | Pl -> assert false
+
+let topdef_s = function
+  | Global.En -> "declaration"
+  | Fr -> "déclaration"
+  | Pl -> assert false
+
+let alias_s = function
+  | Global.En -> "as"
+  | Fr -> "en tant que"
   | Pl -> assert false
 
 let pp_lit locale fmt l =
@@ -177,8 +198,44 @@ let data_type
     | None -> expr_type locale typ
     | Some field_map -> enum_code locale (ename, field_map))
 
+let pp_module locale fmt (itf : Surface.Ast.interface) =
+  let open Format in
+  let open Surface.Ast in
+  (* From Surface.Ast :
+
+     > Invariant: an interface shall only contain [*Decl] elements, or [Topdef]
+     > elements with [topdef_expr = None] *)
+  let pp_code_block fmt code_item =
+    match Mark.remove code_item with
+    | ScopeDecl sdecl ->
+      fprintf fmt "%s %s" (scope_s locale) (Mark.remove sdecl.scope_decl_name)
+    | StructDecl sdecl ->
+      fprintf fmt "%s %s" (struct_s locale) (Mark.remove sdecl.struct_decl_name)
+    | EnumDecl edecl ->
+      fprintf fmt "%s %s" (enum_s locale) (Mark.remove edecl.enum_decl_name)
+    | Topdef top_def ->
+      fprintf fmt "%s %s" (topdef_s locale) (Mark.remove top_def.topdef_name)
+    | ScopeUse _ -> ()
+  in
+  fprintf fmt "@[<v>%a@]"
+    (pp_print_list ~pp_sep:pp_print_space pp_code_block)
+    itf.intf_code
+
+let module_type locale ?alias (module_itf : Surface.Ast.interface) =
+  let locale_s =
+    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+  in
+  let typ_s =
+    asprintf "**Module %s%a**@\n```catala_code_%s@\n%a@\n```"
+      (fst module_itf.intf_modname.module_name)
+      (Utils.pp_opt (fun fmt alias ->
+           Format.fprintf fmt " (%s %s)" (alias_s locale) alias))
+      alias locale_s (pp_module locale) module_itf
+  in
+  MarkupContent.create ~kind:Markdown ~value:typ_s
+
 let typ_to_markdown ?prg locale (kind : Jump.type_lookup) =
   match prg, kind with
   | Some prg, Type typ -> data_type prg locale typ
   | _, (Type typ | Expr typ) -> expr_type locale typ
-  | _, Module _ -> failwith "todo"
+  | _, Module (itf, alias) -> module_type locale ?alias itf
