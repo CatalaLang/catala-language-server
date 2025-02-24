@@ -76,10 +76,9 @@ module Make_trie (D : Data) = struct
   let compare_itv (((li, i), (lj, j)) as itv) (((li', i'), (lj', j')) as itv') =
     if itv = itv' then `Equal
     else if is_included itv itv' then `Subset
+    else if is_included itv' itv then `Supset
     else if lj' < li || (lj' = li && j' < i) then `Disjoint_left
     else if li' > lj || (li' = lj && i' > j) then `Disjoint_right
-    else if (not (is_in itv (li', i'))) && not (is_in itv (lj', j')) then
-      `Supset
     else if is_in itv (li', i') then
       `Left_inclusion
         ( ((li', i'), (lj, j)) (* included part *),

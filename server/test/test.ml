@@ -93,4 +93,19 @@ let test =
   QCheck.Test.make ~name:"insertion" ~long_factor:1000 ~count:100_000
     ~max_fail:0 gen_arb insertion_prop
 
-let () = exit @@ QCheck_runner.run_tests ~long:false [test]
+let mk_pos ?lines sc ec =
+  let el, ol = match lines with Some (a, b) -> a, b | None -> 1, 1 in
+  Pos.from_info "dummy" el sc ol ec
+
+let test_order () =
+  let map = PMap.empty in
+  let inner = PMap.add (mk_pos 1 2) "inner" in
+  let outter = PMap.add (mk_pos 1 3) "outter" in
+  let before = outter (inner map) in
+  let after = inner (outter map) in
+  assert (before = after)
+
+let () =
+  test_order ();
+  let ret = QCheck_runner.run_tests ~long:false [test] in
+  exit ret
