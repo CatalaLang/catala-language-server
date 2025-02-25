@@ -86,7 +86,7 @@ let gen_arb =
          S.diff l r |> S.elements))
     gen_pair
 
-let test =
+let pbt_test =
   let insertion_prop (t, (p, d)) =
     S.equal (S.add d (elements t)) (elements (PMap.add p d t))
     || Option.is_some (PMap.lookup p t)
@@ -98,7 +98,7 @@ let mk_pos ?lines sc ec =
   let el, ol = match lines with Some (a, b) -> a, b | None -> 1, 1 in
   Pos.from_info "dummy" el sc ol ec
 
-let test_order () =
+let test_commute () =
   let map = PMap.empty in
   let inner = PMap.add (mk_pos 1 2) "inner" in
   let outter = PMap.add (mk_pos 1 3) "outter" in
@@ -107,6 +107,11 @@ let test_order () =
   assert (before = after)
 
 let () =
-  test_order ();
-  let ret = QCheck_runner.run_tests ~long:false [test] in
-  exit ret
+  let open Tezt.Test in
+  register ~__FILE__ ~title:"commutativity" ~tags:["unit"; "ordering"]
+    (fun () -> Lwt.return @@ test_commute ());
+  register ~__FILE__ ~title:"PBT w/ qcheck" ~tags:["pbt"; "qcheck"] (fun () ->
+      let (Test cell) = pbt_test in
+      Lwt.return @@ QCheck.Test.check_cell_exn cell)
+
+let () = Tezt.Test.run ()

@@ -1,8 +1,6 @@
 (test
- (name    test)
+ (name test)
  (package catala-lsp)
- (libraries lib
-            qcheck)
+ (libraries lib tezt qcheck)
  (modules Test)
- (flags (:standard) -open Lib)
-)
+ (flags (:standard) -open Lib))
