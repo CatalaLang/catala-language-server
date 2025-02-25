@@ -17,13 +17,16 @@
 module type Data = sig
   type t
 
+  val compare : t -> t -> int
   val format : Format.formatter -> t -> unit
 end
 
 module Make_trie (D : Data) = struct
+  module DS = Set.Make (D)
+
   type itv = (int (* line *) * int (* col *)) * (int (* line *) * int (* col *))
 
-  type node = Node of { itv : itv; data : D.t; children : trie }
+  type node = Node of { itv : itv; data : DS.t; children : trie }
   and trie = node list
 
   type t = trie
@@ -38,10 +41,14 @@ module Make_trie (D : Data) = struct
   let rec pp_node ppf (Node { itv; data; children }) =
     let open Format in
     match children with
-    | [] -> fprintf ppf "@[<h>%a: %a@]" pp_itv itv D.format data
+    | [] ->
+      fprintf ppf "@[<h>%a: [ @[<h>%a@] ]@]" pp_itv itv
+        (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt " ; ") D.format)
+        (DS.elements data)
     | _ ->
-      fprintf ppf "@[<v 2>%a: %a@ %a@]" pp_itv itv D.format data pp_trie
-        children
+      fprintf ppf "@[<v 2>%a: [ @[<h>%a@] ]@ %a@]" pp_itv itv
+        (pp_print_list ~pp_sep:pp_print_space D.format)
+        (DS.elements data) pp_trie children
 
   and pp_trie ppf tries =
     let open Format in
@@ -95,7 +102,7 @@ module Make_trie (D : Data) = struct
     in
     fresh_children @ List.concat_map gather_children children
 
-  let rec insert itv data trie =
+  let rec insert_all itv (data : DS.t) trie =
     let rec find_included_nodes acc = function
       | [] -> List.rev acc, []
       | (Node n as h) :: t -> (
@@ -118,7 +125,7 @@ module Make_trie (D : Data) = struct
           let sub_trie =
             List.fold_left
               (fun trie (Node children) ->
-                insert children.itv children.data trie)
+                insert_all children.itv children.data trie)
               [included_node; disjoint_node]
               all_children
           in
@@ -133,21 +140,13 @@ module Make_trie (D : Data) = struct
       | (Node ({ itv = itv_p; children; _ } as node_r) as node) :: t as l -> (
         match compare_itv itv_p itv with
         | `Equal ->
-          if data <> node_r.data then
-            Log.debug (fun m ->
-                m
-                  "Warning: different data present for new node (%a) vs. \
-                   previous node (%a)"
-                  pp_node
-                  (Node { itv; data; children = [] })
-                  pp_node node);
-          (* Do not overwrite nodes *)
+          let node = Node { node_r with data = DS.union data node_r.data } in
           List.rev_append (node :: acc) t
         | `Disjoint_left ->
           List.rev_append (Node { itv; data; children = [] } :: acc) l
         | `Disjoint_right -> loop (node :: acc) itv t
         | `Subset ->
-          let new_children = insert itv data children in
+          let new_children = insert_all itv data children in
           List.rev_append
             (Node { node_r with children = new_children } :: acc)
             t
@@ -156,13 +155,13 @@ module Make_trie (D : Data) = struct
           let node = Node { itv; data; children = all_included_nodes } in
           List.rev_append (node :: acc) disjoint_nodes
         | `Left_inclusion (included_itv, disjoint_part) ->
-          let new_children = insert included_itv data children in
+          let new_children = insert_all included_itv data children in
           loop
             (Node { node_r with children = new_children } :: acc)
             disjoint_part t
         | `Right_inclusion (disjoint_part, included_itv) ->
           let acc = Node { itv = disjoint_part; data; children = [] } :: acc in
-          let new_children = insert included_itv data children in
+          let new_children = insert_all included_itv data children in
           List.rev_append
             (Node { node_r with children = new_children } :: acc)
             t)
@@ -175,6 +174,7 @@ module FileMap = Map.Make (String)
 
 module Make (D : Data) = struct
   module Trie = Make_trie (D)
+  module DS = Trie.DS
 
   type pmap = Trie.t FileMap.t
   type t = pmap
@@ -192,7 +192,7 @@ module Make (D : Data) = struct
     | None, None -> None
     | None, Some (itv, data) -> Some [Node { itv; data; children = [] }]
     | Some trie, None -> Some trie
-    | Some trie, Some (itv, data) -> Some (Trie.insert itv data trie)
+    | Some trie, Some (itv, data) -> Some (Trie.insert_all itv data trie)
 
   let pos_to_itv pos =
     let li = Pos.get_start_line pos in
@@ -209,10 +209,11 @@ module Make (D : Data) = struct
     if pos = Pos.no_pos then variables
     else
       let itv = pos_to_itv pos in
+      let data = Trie.DS.singleton data in
       FileMap.update (Pos.get_file pos)
         (function
           | None -> Some [Trie.Node { itv; data; children = [] }]
-          | Some trie -> Some (Trie.insert itv data trie))
+          | Some trie -> Some (Trie.insert_all itv data trie))
         variables
 
   let lookup pos pmap =

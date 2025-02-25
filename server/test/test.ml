@@ -63,7 +63,8 @@ module S = Set.Make (struct
   let compare = compare
 end)
 
-let elements t = PMap.fold (fun _ d acc -> S.add d acc) t S.empty
+let elements t =
+  PMap.fold (fun _ d acc -> S.add_seq (PMap.DS.to_seq d) acc) t S.empty
 
 let gen_arb =
   make
