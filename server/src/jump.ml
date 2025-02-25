@@ -272,7 +272,7 @@ let populate_scopecall ctx module_lookup pos scope args acc f =
           .Desugared.Name_resolution.var_sig_typ
       in
       let hash = hash_info (module ScopeVar) scope_var in
-      let var = Usage { name; hash; typ } in
+      let var = Definition { name; hash; typ } in
       let acc = PMap.add def_pos var acc in
       f e acc)
     args acc
