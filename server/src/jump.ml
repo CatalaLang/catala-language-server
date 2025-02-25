@@ -107,6 +107,7 @@ let pp_var ppf =
 module PMap = Position_map.Make (struct
   type t = var
 
+  let compare = compare
   let format = pp_var
 end)
 
@@ -686,36 +687,41 @@ let populate
   in
   let lookup_table =
     PMap.fold
-      (fun p x tbl ->
-        let res =
-          match x with
-          | Topdef jump -> Some ((fun m -> add_def p m |> add_decl p), jump.hash)
-          | Definition jump -> Some (add_def p, jump.hash)
-          | Declaration jump -> Some (add_decl p, jump.hash)
-          | Usage jump -> Some (add_usage p, jump.hash)
-          | Type jump -> Some (add_type p, jump.hash)
-          | Module_use { hash; _ } -> Some (add_usage p, hash)
-          | Module_decl { hash; _ } -> Some (add_decl p, hash)
-          | Module_def { hash; _ } -> Some (add_def p, hash)
-          | Literal _ -> None
-        in
-        match res with
-        | Some (add, hash) -> LTable.update hash add tbl
-        | _ -> tbl)
+      (fun p data tbl ->
+        PMap.DS.fold
+          (fun x tbl ->
+            let res =
+              match x with
+              | Topdef jump ->
+                Some ((fun m -> add_def p m |> add_decl p), jump.hash)
+              | Definition jump -> Some (add_def p, jump.hash)
+              | Declaration jump -> Some (add_decl p, jump.hash)
+              | Usage jump -> Some (add_usage p, jump.hash)
+              | Type jump -> Some (add_type p, jump.hash)
+              | Module_use { hash; _ } -> Some (add_usage p, hash)
+              | Module_decl { hash; _ } -> Some (add_decl p, hash)
+              | Module_def { hash; _ } -> Some (add_def p, hash)
+              | Literal _ -> None
+            in
+            match res with
+            | Some (add, hash) -> LTable.update hash add tbl
+            | _ -> tbl)
+          data tbl)
       variables LTable.empty
   in
   { variables; lookup_table }
 
-let lookup (tables : t) (p : Pos.t) : lookup_entry option =
+let lookup (tables : t) (p : Pos.t) : lookup_entry list =
+  let proj = function
+    | Topdef j | Definition j | Declaration j | Usage j | Type j ->
+      LTable.find_opt j.hash tables.lookup_table
+    | Module_use { hash; _ } | Module_decl { hash; _ } | Module_def { hash; _ }
+      ->
+      LTable.find_opt hash tables.lookup_table
+    | Literal _ -> None
+  in
   PMap.lookup p tables.variables
-  |> function
-  | Some (Topdef j | Definition j | Declaration j | Usage j | Type j) ->
-    LTable.find_opt j.hash tables.lookup_table
-  | Some
-      (Module_use { hash; _ } | Module_decl { hash; _ } | Module_def { hash; _ })
-    ->
-    LTable.find_opt hash tables.lookup_table
-  | Some (Literal _) | None -> None
+  |> function None -> [] | Some s -> List.filter_map proj (PMap.DS.elements s)
 
 type type_lookup =
   | Expr of typ
@@ -723,20 +729,19 @@ type type_lookup =
   | Module of (Surface.Ast.interface * string option)
 
 let lookup_type (tables : t) (p : Pos.t) :
-    (Lsp.Types.Range.t * type_lookup) option =
+    (Lsp.Types.Range.t * type_lookup list) option =
+  let proj = function
+    | Topdef j | Definition j | Declaration j | Usage j -> Expr j.typ
+    | Type j -> Type j.typ
+    | Literal typ -> Expr typ
+    | Module_use { interface; alias; _ }
+    | Module_decl { interface; alias; _ }
+    | Module_def { interface; alias; _ } ->
+      Module (interface, alias)
+  in
   PMap.lookup_with_range p tables.variables
   |> function
-  | Some (r, (Topdef j | Definition j | Declaration j | Usage j)) ->
-    Some (r, Expr j.typ)
-  | Some (r, Type j) -> Some (r, Type j.typ)
-  | Some (r, Literal typ) -> Some (r, Expr typ)
-  | Some
-      ( r,
-        ( Module_use { interface; alias; _ }
-        | Module_decl { interface; alias; _ }
-        | Module_def { interface; alias; _ } ) ) ->
-    Some (r, Module (interface, alias))
-  | None -> None
+  | None -> None | Some (r, d) -> Some (r, List.map proj (PMap.DS.elements d))
 
 let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
     =

@@ -119,8 +119,9 @@ let all_symbols_as_warning file =
           Jump.PMap.fold_on_file file.uri
             (fun r v acc ->
               let msg =
-                Format.asprintf "%a : %a" Jump.pp_var v
-                  Catala_utils.Pos.format_loc_text r
+                Format.asprintf "%a : @[<h>%a@]"
+                  Format.(pp_print_list ~pp_sep:pp_print_space Jump.pp_var)
+                  (Jump.PMap.DS.elements v) Catala_utils.Pos.format_loc_text r
               in
               diag_r Warning (range_of_pos r) (`String msg) :: acc)
             variables [] );
@@ -158,16 +159,16 @@ let generic_lookup ?uri { uri = file_uri; jump_table; _ } (p : Position.t) f =
   let open Jump in
   let ( let* ) = Option.bind in
   let* jump_table = jump_table in
-  let* v = map f (lookup jump_table p) |> join in
-  Some v
+  Some (lookup jump_table p |> List.filter_map f |> List.concat)
 
 let lookup_def ?uri f p =
   generic_lookup ?uri f p (fun { definitions; _ } -> definitions)
   |> Option.map (List.map of_position)
 
 let lookup_declaration ?uri f p =
-  generic_lookup ?uri f p (fun { declaration; _ } -> declaration)
-  |> Option.map of_position
+  generic_lookup ?uri f p (fun { declaration; _ } ->
+      Option.map (fun x -> [x]) declaration)
+  |> Option.map (List.map of_position)
 
 let lookup_usages ?uri f p =
   generic_lookup ?uri f p (fun { usages; _ } -> usages)
@@ -178,7 +179,8 @@ let lookup_type f p =
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
   let prg = f.scopelang_prg in
-  let* r, kind = Jump.lookup_type jt p in
+  let* r, kindl = Jump.lookup_type jt p in
+  let* kind = match kindl with [] -> None | h :: _ -> Some h in
   let md = Type_printing.typ_to_markdown ?prg f.locale kind in
   Some (r, md)
 
@@ -186,9 +188,9 @@ let lookup_type_definition f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* _r, kind = Jump.lookup_type jt p in
+  let* _r, kindl = Jump.lookup_type jt p in
   let open Shared_ast in
-  match (kind : Jump.type_lookup) with
+  match (List.hd kindl : Jump.type_lookup) with
   | Expr (TStruct s, _) | Type (TStruct s, _) ->
     let _, pos = StructName.get_info s in
     Some (of_position pos)
@@ -207,8 +209,11 @@ let lookup_document_symbols file =
   | None -> []
   | Some variables ->
     Jump.PMap.fold_on_file file.uri
-      (fun p v acc ->
-        match Jump.var_to_symbol p v with None -> acc | Some v -> v :: acc)
+      (fun p vl acc ->
+        Jump.PMap.DS.fold
+          (fun v acc ->
+            match Jump.var_to_symbol p v with None -> acc | Some v -> v :: acc)
+          vl acc)
       variables []
 
 let lookup_clerk_toml (path : string) =
