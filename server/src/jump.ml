@@ -172,7 +172,8 @@ let populate_struct_def
         let pos_decl = Mark.get (StructName.get_info struct_decl) in
         Mark.add pos_decl (TStruct struct_decl)
       in
-      PMap.add struct_pos (Definition { hash; name; typ }) m
+      let jump = { hash; name; typ } in
+      PMap.(add struct_pos (Usage jump) m |> add struct_pos (Type jump))
     in
     (* Add a reference for all fields *)
     StructField.Map.fold
@@ -222,17 +223,11 @@ let populate_enum_inject
     in
     (* Add enum reference *)
     let m =
-      if enum_decl = enum_name then
-        (* The enum is anonymous: it's replaced with the enum_decl *)
-        (* We want to still add a reference but this would break PMap's no
-           collision invariant *)
-        m
-      else
-        let name = EnumName.to_string enum_name in
-        let pos = Mark.get (EnumName.get_info enum_name) in
-        let hash = Hashtbl.hash (EnumName.get_info enum_decl) in
-        let var = Usage { name; hash; typ } in
-        PMap.add pos var m
+      let name = EnumName.to_string enum_name in
+      let pos = Mark.get (EnumName.get_info enum_name) in
+      let hash = Hashtbl.hash (EnumName.get_info enum_decl) in
+      let jump = { name; hash; typ } in
+      PMap.(add pos (Usage jump) m |> add pos (Type jump))
     in
     (* Add enum's constructor reference *)
     find cons EnumConstructor.to_string
