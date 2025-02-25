@@ -1,31 +1,30 @@
 (executable
- (name        main)
- (package     catala-lsp)
+ (name main)
+ (package catala-lsp)
  (public_name catala-lsp)
  (libraries lib)
  (modules Main)
- (flags (:standard) -open Lib)
-)
+ (flags (:standard) -open Lib))
 
 (library
- (name      lib)
- (package   catala-lsp)
+ (name lib)
+ (package catala-lsp)
  (libraries
-   threads.posix
-   lsp
-   linol
-   linol-lwt
-   gen
-   logs
-   logs.fmt
-   catala.driver
-   catala.surface
-   catala.clerk_config
-   uri
-   re)
- (modules (:standard \ Main))
- (flags (:standard))
-)
+  threads.posix
+  lsp
+  linol
+  linol-lwt
+  gen
+  logs
+  logs.fmt
+  catala.driver
+  catala.surface
+  catala.clerk_config
+  uri
+  re)
+ (modules
+  (:standard \ Main))
+ (flags (:standard)))
 
 (alias
  (name lsp)

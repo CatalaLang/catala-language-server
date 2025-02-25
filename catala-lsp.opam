@@ -17,6 +17,7 @@ depends: [
   "linol"     { = "0.8" }
   "linol-lwt" { = "0.8" }
   "qcheck" { with-test & >= "0.21.3" }
+  "tezt" { with-test }
   "atdgen" { build }
   "atdgen-runtime"
 ]
