@@ -95,6 +95,9 @@ let all_symbols_as_warning file =
   match file.jump_table with
   | None -> []
   | Some { variables; lookup_table } ->
+    (* Displays the full position map in logs *)
+    (* Log.info (fun m -> m "%a@." Jump.PMap.pp variables); *)
+    (* Generates warning diagnostic for each symbol *)
     [
       ( file.uri,
         Jump.LTable.bindings lookup_table
@@ -159,16 +162,23 @@ let generic_lookup ?uri { uri = file_uri; jump_table; _ } (p : Position.t) f =
   let open Jump in
   let ( let* ) = Option.bind in
   let* jump_table = jump_table in
-  Some (lookup jump_table p |> List.filter_map f |> List.concat)
-
-let lookup_def ?uri f p =
-  generic_lookup ?uri f p (fun { definitions; _ } -> definitions)
-  |> Option.map (List.map of_position)
+  let l = lookup jump_table p in
+  List.filter_map f l |> List.concat |> function [] -> None | l -> Some l
 
 let lookup_declaration ?uri f p =
   generic_lookup ?uri f p (fun { declaration; _ } ->
       Option.map (fun x -> [x]) declaration)
   |> Option.map (List.map of_position)
+
+let lookup_def ?uri f p =
+  generic_lookup ?uri f p (fun { definitions; _ } -> definitions)
+  |> Option.map (List.map of_position)
+  |> function
+  | Some l -> Some l
+  | None ->
+    (* If no definition is found, we default to referencing the declaration. In
+       most case, it is relevant hence a better UX. *)
+    lookup_declaration ?uri f p
 
 let lookup_usages ?uri f p =
   generic_lookup ?uri f p (fun { usages; _ } -> usages)
