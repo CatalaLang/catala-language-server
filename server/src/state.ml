@@ -180,7 +180,15 @@ let lookup_type f p =
   let* jt = f.jump_table in
   let prg = f.scopelang_prg in
   let* r, kindl = Jump.lookup_type jt p in
-  let* kind = match kindl with [] -> None | h :: _ -> Some h in
+  let* kind =
+    match kindl with
+    | [] -> None
+    | l ->
+      let is_type = function Jump.Type _ -> true | _ -> false in
+      List.find_opt is_type l
+      |> Option.value ~default:(List.hd l)
+      |> Option.some
+  in
   let md = Type_printing.typ_to_markdown ?prg f.locale kind in
   Some (r, md)
 
