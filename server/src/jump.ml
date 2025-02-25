@@ -387,7 +387,9 @@ let rec traverse_typ
     in
     let name = StructName.to_string struct_name in
     let hash = Hashtbl.hash (StructName.get_info struct_name) in
-    PMap.add pos (Type { name; hash; typ = typ, pos }) m
+    let jump = { name; hash; typ = typ, pos } in
+    let m = PMap.add pos (Type jump) m in
+    PMap.add pos (Usage jump) m
   | TEnum enum_name ->
     let m =
       (* Populate enum's path components *)
@@ -401,7 +403,9 @@ let rec traverse_typ
     in
     let name = EnumName.to_string enum_name in
     let hash = Hashtbl.hash (EnumName.get_info enum_name) in
-    PMap.add pos (Type { name; hash; typ = typ, pos }) m
+    let jump = { name; hash; typ = typ, pos } in
+    let m = PMap.add pos (Type jump) m in
+    PMap.add pos (Usage jump) m
   | TArrow (tl, t) ->
     List.fold_right (traverse_typ ctx module_lookup) (t :: tl) m
   | TTuple tl -> List.fold_right (traverse_typ ctx module_lookup) tl m
