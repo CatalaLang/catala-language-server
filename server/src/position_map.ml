@@ -104,36 +104,16 @@ module Make_trie (D : Data) = struct
 
   let rec insert_all itv (data : DS.t) trie =
     let rec find_included_nodes acc = function
-      | [] -> List.rev acc, []
-      | (Node n as h) :: t -> (
+      | [] -> List.rev acc, `Disjoint []
+      | (Node n as h) :: t as l -> (
         match compare_itv itv n.itv with
         | `Equal -> assert false
         | `Subset -> find_included_nodes (h :: acc) t
-        | `Disjoint_right -> List.rev (h :: acc), t
+        | `Disjoint_right -> List.rev acc, `Disjoint l
         | `Disjoint_left | `Supset | `Right_inclusion _ ->
           (* by construction *) assert false
-        | `Left_inclusion (included_itv, disjoint_part) -> (
-          let included_node =
-            Node { n with itv = included_itv; children = [] }
-          in
-          let disjoint_node =
-            Node { n with itv = disjoint_part; children = [] }
-          in
-          let all_children = gather_children h in
-          (* Introduce quadratric behavior but shouldn't be impactful for our
-             use-case *)
-          let sub_trie =
-            List.fold_left
-              (fun trie (Node children) ->
-                insert_all children.itv children.data trie)
-              [included_node; disjoint_node]
-              all_children
-          in
-          match sub_trie with
-          | [included_node; disjoint_node] ->
-            List.rev (included_node :: acc), disjoint_node :: t
-          | [a; b; c] -> List.rev (a :: acc), b :: c :: t
-          | _ -> assert false))
+        | `Left_inclusion (included_itv, _disjoint_part) ->
+          acc, `Joint (included_itv, l))
     in
     let rec loop acc itv : trie -> trie = function
       | [] -> Node { itv; data; children = [] } :: acc |> List.rev
@@ -150,10 +130,24 @@ module Make_trie (D : Data) = struct
           List.rev_append
             (Node { node_r with children = new_children } :: acc)
             t
-        | `Supset ->
-          let all_included_nodes, disjoint_nodes = find_included_nodes [] l in
-          let node = Node { itv; data; children = all_included_nodes } in
-          List.rev_append (node :: acc) disjoint_nodes
+        | `Supset -> (
+          let all_included_nodes, r = find_included_nodes [] l in
+          match r with
+          | `Disjoint l ->
+            let node = Node { itv; data; children = all_included_nodes } in
+            List.rev_append (node :: acc) l
+          | `Joint (included_itv, r) ->
+            let (_, i'), _ = included_itv in
+            let (li, i), (lj, _) = itv in
+            let node =
+              Node
+                {
+                  itv = (li, i), (lj, i' - 1);
+                  data;
+                  children = all_included_nodes;
+                }
+            in
+            List.rev_append (node :: acc) (loop [] included_itv r))
         | `Left_inclusion (included_itv, disjoint_part) ->
           let new_children = insert_all included_itv data children in
           loop

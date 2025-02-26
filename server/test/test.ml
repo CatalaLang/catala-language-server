@@ -50,9 +50,13 @@ let data_gen =
 
 let insert_all = List.fold_right (fun (p, v) -> PMap.add p v)
 
+let list_gen =
+  let open Gen in
+  list_size (10 -- 15) (pair pos_gen data_gen)
+
 let map_gen =
   let open Gen in
-  let* l = list_size (10 -- 15) (pair pos_gen data_gen) in
+  let* l = list_gen in
   return (insert_all l PMap.empty)
 
 let gen_pair = Gen.(pair map_gen (pair pos_gen data_gen))
@@ -66,7 +70,7 @@ end)
 let elements t =
   PMap.fold (fun _ d acc -> S.add_seq (PMap.DS.to_seq d) acc) t S.empty
 
-let gen_arb =
+let gen_preserv_arb =
   make
     ~print:(fun (map, (p, d)) ->
       let add = PMap.add p d map in
@@ -86,13 +90,47 @@ let gen_arb =
          S.diff l r |> S.elements))
     gen_pair
 
-let pbt_test =
+let pbt_preservation_test =
   let insertion_prop (t, (p, d)) =
     S.equal (S.add d (elements t)) (elements (PMap.add p d t))
     || Option.is_some (PMap.lookup p t)
   in
   QCheck.Test.make ~name:"insertion" ~long_factor:1000 ~count:100_000
-    ~max_fail:0 gen_arb insertion_prop
+    ~max_fail:0 gen_preserv_arb insertion_prop
+
+let gen_hierarchy_arb =
+  make ~shrink:Shrink.list_spine
+    ~print:(fun l ->
+      List.fold_right
+        (fun (p, d) (m, s) ->
+          let after = PMap.add p d m in
+          after, Format.asprintf "trie: %a@\n@\n" PMap.pp after :: s)
+        l (PMap.empty, [])
+      |> fun (_, sl) -> String.concat "" (List.rev sl))
+    list_gen
+
+let pbt_hierarchy_test =
+  let hierarchy_prop l =
+    let t = insert_all l PMap.empty in
+    let open Position_map in
+    let rec check (PMap.Trie.Node { itv = (li, i), (lj, j); children; _ }) :
+        bool =
+      let inner (PMap.Trie.Node { itv = (li', i'), (lj', j'); _ } as node) =
+        (* child node's itv is subset of parent's itv *)
+        let b =
+          if li < li' && lj > lj' then true
+          else if li = li' then i <= i' && (lj' < lj || (lj = lj' && j' <= j))
+          else if li < li' && lj = lj' then j' <= j
+          else false
+        in
+        b && check node
+      in
+      List.for_all inner children
+    in
+    FileMap.for_all (fun _ nodes -> List.for_all check nodes) t
+  in
+  QCheck.Test.make ~name:"hierarchy" ~long_factor:1000 ~count:100_000
+    ~max_fail:0 gen_hierarchy_arb hierarchy_prop
 
 let mk_pos ?lines sc ec =
   let el, ol = match lines with Some (a, b) -> a, b | None -> 1, 1 in
@@ -110,8 +148,13 @@ let () =
   let open Tezt.Test in
   register ~__FILE__ ~title:"commutativity" ~tags:["unit"; "ordering"]
     (fun () -> Lwt.return @@ test_commute ());
-  register ~__FILE__ ~title:"PBT w/ qcheck" ~tags:["pbt"; "qcheck"] (fun () ->
-      let (Test cell) = pbt_test in
+  register ~__FILE__ ~title:"PBT: element preservation property"
+    ~tags:["pbt"; "qcheck"; "preserve"] (fun () ->
+      let (Test cell) = pbt_preservation_test in
+      Lwt.return @@ QCheck.Test.check_cell_exn cell);
+  register ~__FILE__ ~title:"PBT: hierarchy property"
+    ~tags:["pbt"; "qcheck"; "hierarchy"] (fun () ->
+      let (Test cell) = pbt_hierarchy_test in
       Lwt.return @@ QCheck.Test.check_cell_exn cell)
 
 let () = Tezt.Test.run ()
