@@ -199,16 +199,18 @@ module Make (D : Data) = struct
     let open Format in
     fprintf ppf "@[<h>%a: %a@]" Trie.pp_itv (pos_to_itv p) D.format d
 
-  let add pos data variables =
+  let add_all pos data variables =
     if pos = Pos.no_pos then variables
     else
       let itv = pos_to_itv pos in
-      let data = Trie.DS.singleton data in
+      let data = DS.of_list data in
       FileMap.update (Pos.get_file pos)
         (function
           | None -> Some [Trie.Node { itv; data; children = [] }]
           | Some trie -> Some (Trie.insert_all itv data trie))
         variables
+
+  let add pos data variables = add_all pos [data] variables
 
   let lookup pos pmap =
     let ( let* ) = Option.bind in
