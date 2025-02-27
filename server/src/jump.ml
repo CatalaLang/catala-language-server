@@ -298,6 +298,51 @@ let populate_scopecall
       f e acc)
     args acc
 
+let rec traverse_typ
+    (ctx : Desugared.Name_resolution.context)
+    (module_lookup : ModuleName.t -> mjump)
+    ((typ, pos) : naked_typ * Pos.t)
+    m : PMap.pmap =
+  match typ with
+  | TStruct struct_name ->
+    let m =
+      (* Populate struct's path components *)
+      List.fold_left
+        (fun acc mname ->
+          let mjump = module_lookup mname in
+          let pos = Mark.get (ModuleName.get_info mname) in
+          PMap.add pos (Module_use mjump) acc)
+        m
+        (StructName.path struct_name)
+    in
+    let name = StructName.to_string struct_name in
+    let hash = Hashtbl.hash (StructName.get_info struct_name) in
+    let jump = { name; hash; typ = typ, pos } in
+    let m = PMap.add pos (Type jump) m in
+    PMap.add pos (Usage jump) m
+  | TEnum enum_name ->
+    let m =
+      (* Populate enum's path components *)
+      List.fold_left
+        (fun acc mname ->
+          let mjump = module_lookup mname in
+          let pos = Mark.get (ModuleName.get_info mname) in
+          PMap.add pos (Module_use mjump) acc)
+        m (EnumName.path enum_name)
+    in
+    let name = EnumName.to_string enum_name in
+    let hash = Hashtbl.hash (EnumName.get_info enum_name) in
+    let jump = { name; hash; typ = typ, pos } in
+    let m = PMap.add pos (Type jump) m in
+    PMap.add pos (Usage jump) m
+  | TArrow (tl, t) ->
+    List.fold_right (traverse_typ ctx module_lookup) (t :: tl) m
+  | TTuple tl -> List.fold_right (traverse_typ ctx module_lookup) tl m
+  | TOption typ | TArray typ | TDefault typ ->
+    traverse_typ ctx module_lookup typ m
+  | TLit _lit -> PMap.add pos (Literal (typ, pos)) m
+  | TAny | TClosureEnv -> m
+
 let traverse_expr
     (ctx : Desugared.Name_resolution.context)
     (module_lookup : ModuleName.t -> mjump)
@@ -384,52 +429,7 @@ let traverse_expr
     | ETupleAccess _ | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ ->
       Expr.shallow_fold (f bnd_ctx) e acc
   in
-  Expr.shallow_fold (f Bindlib.empty_ctxt) e m
-
-let rec traverse_typ
-    (ctx : Desugared.Name_resolution.context)
-    (module_lookup : ModuleName.t -> mjump)
-    ((typ, pos) : naked_typ * Pos.t)
-    m : PMap.pmap =
-  match typ with
-  | TStruct struct_name ->
-    let m =
-      (* Populate struct's path components *)
-      List.fold_left
-        (fun acc mname ->
-          let mjump = module_lookup mname in
-          let pos = Mark.get (ModuleName.get_info mname) in
-          PMap.add pos (Module_use mjump) acc)
-        m
-        (StructName.path struct_name)
-    in
-    let name = StructName.to_string struct_name in
-    let hash = Hashtbl.hash (StructName.get_info struct_name) in
-    let jump = { name; hash; typ = typ, pos } in
-    let m = PMap.add pos (Type jump) m in
-    PMap.add pos (Usage jump) m
-  | TEnum enum_name ->
-    let m =
-      (* Populate enum's path components *)
-      List.fold_left
-        (fun acc mname ->
-          let mjump = module_lookup mname in
-          let pos = Mark.get (ModuleName.get_info mname) in
-          PMap.add pos (Module_use mjump) acc)
-        m (EnumName.path enum_name)
-    in
-    let name = EnumName.to_string enum_name in
-    let hash = Hashtbl.hash (EnumName.get_info enum_name) in
-    let jump = { name; hash; typ = typ, pos } in
-    let m = PMap.add pos (Type jump) m in
-    PMap.add pos (Usage jump) m
-  | TArrow (tl, t) ->
-    List.fold_right (traverse_typ ctx module_lookup) (t :: tl) m
-  | TTuple tl -> List.fold_right (traverse_typ ctx module_lookup) tl m
-  | TOption typ | TArray typ | TDefault typ ->
-    traverse_typ ctx module_lookup typ m
-  | TLit _lit -> PMap.add pos (Literal (typ, pos)) m
-  | TAny | TClosureEnv -> m
+  f Bindlib.empty_ctxt e m
 
 let traverse_scope_def
     ctx
@@ -484,6 +484,7 @@ let traverse_topdef
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
   let topdef = Topdef { name; hash; typ } in
   let m = PMap.add topdef_pos topdef m in
+  let m = traverse_typ ctx module_lookup typ m in
   traverse_expr ctx module_lookup scope_lookup e m
 
 let traverse_ctx
