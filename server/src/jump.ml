@@ -46,6 +46,26 @@ let pp_lookup_entry fmt { declaration; definitions; usages; types } =
     (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
     types
 
+let pp_gname
+    (type a b)
+    ~name
+    (module M : Uid.Id with type t = a and type info = b * Pos.t)
+    fmt
+    (v : a) : unit =
+  Format.fprintf fmt "%s: (%s) at %s" (M.to_string v)
+    (M.get_info v |> snd |> Pos.to_string_short)
+    name
+
+let pp_qname
+    (type a)
+    ~name
+    (module M : Uid.Qualified with type t = a)
+    fmt
+    (v : a) : unit =
+  Format.fprintf fmt "%s (%s) at %s" (M.to_string v)
+    (M.get_info v |> snd |> Pos.to_string_short)
+    name
+
 let empty_lookup =
   { declaration = None; definitions = None; usages = None; types = None }
 
