@@ -575,3 +575,104 @@
     transform: translateY(0);
   }
 }
+
+/* File and scope selection wizard styling */
+.file-select-button {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 12px 0;
+  width: 100%;
+  justify-content: center;
+}
+
+.file-select-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.file-select-button .codicon {
+  font-size: 16px;
+}
+
+.modal-content p {
+  margin-bottom: 12px;
+  color: var(--vscode-foreground);
+}
+
+.modal-content select {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 20px;
+  border: 1px solid var(--vscode-input-border);
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.modal-content select:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+}
+
+.modal-content select option {
+  padding: 8px;
+}
+
+.modal-content .selected-file {
+  background-color: var(--vscode-editor-inactiveSelectionBackground);
+  border-radius: 3px;
+  padding: 6px 10px;
+  margin-bottom: 16px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  position: relative;
+  word-break: break-all;
+}
+
+.modal-content .selected-file .codicon-file {
+  margin-right: 6px;
+  color: var(--vscode-symbolIcon-fileForeground);
+}
+
+.modal-step-indicator {
+  display: flex;
+  margin-bottom: 20px;
+  gap: 2px;
+}
+
+.modal-step {
+  flex: 1;
+  height: 4px;
+  background-color: var(--vscode-button-secondaryBackground);
+  opacity: 0.5;
+  border-radius: 2px;
+}
+
+.modal-step.active {
+  background-color: var(--vscode-button-background);
+  opacity: 1;
+}
+
+.modal-title-with-step {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.modal-step-count {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
