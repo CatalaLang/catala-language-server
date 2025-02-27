@@ -743,8 +743,21 @@ type type_lookup =
   | Type of typ
   | Module of (Surface.Ast.interface * string option)
 
+module Ord_lookup = Set.Make (struct
+  type t = type_lookup
+
+  let rec compare l r =
+    match l, r with
+    | Module _, Module _ -> 0
+    | Module _, _ -> 1
+    | Type _, Type _ -> 0
+    | Type _, _ -> 1
+    | Expr _, Expr _ -> 0
+    | l, r -> -1 * compare r l
+end)
+
 let lookup_type (tables : t) (p : Pos.t) :
-    (Lsp.Types.Range.t * type_lookup list) option =
+    (Lsp.Types.Range.t * Ord_lookup.t) option =
   let proj = function
     | Topdef j | Definition j | Declaration j | Usage j -> Expr j.typ
     | Type j -> Type j.typ
@@ -756,7 +769,13 @@ let lookup_type (tables : t) (p : Pos.t) :
   in
   PMap.lookup_with_range p tables.variables
   |> function
-  | None -> None | Some (r, d) -> Some (r, List.map proj (PMap.DS.elements d))
+  | None -> None
+  | Some (r, d) ->
+    Some
+      ( r,
+        List.fold_left
+          (fun acc v -> Ord_lookup.add (proj v) acc)
+          Ord_lookup.empty (PMap.DS.elements d) )
 
 let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
     =
