@@ -96,8 +96,9 @@ type scope_def_list = scope_def list
 (* Message exchange within extension (shell <-> webview) *)
 
 type parse_results = [
-  | Error of string
-  | Results of test_list
+  | ParseError of string (* compiler signals a parsing error *)
+  | EmptyTestListMismatch (* buffer is non-empty, but empty test list returned *)
+  | Results of test_list (* may be empty, that's fine as long as the buffer is empty too *)
 ]
 
 type test_run_results = [

@@ -103,7 +103,8 @@ export type TestList = Test[]
 export type ScopeDefList = ScopeDef[]
 
 export type ParseResults =
-| { kind: 'Error'; value: string }
+| { kind: 'ParseError'; value: string }
+| { kind: 'EmptyTestListMismatch' }
 | { kind: 'Results'; value: TestList }
 
 export type TestRunResults =
@@ -440,23 +441,36 @@ export function readScopeDefList(x: any, context: any = x): ScopeDefList {
 
 export function writeParseResults(x: ParseResults, context: any = x): any {
   switch (x.kind) {
-    case 'Error':
-      return ['Error', _atd_write_string(x.value, x)]
+    case 'ParseError':
+      return ['ParseError', _atd_write_string(x.value, x)]
+    case 'EmptyTestListMismatch':
+      return 'EmptyTestListMismatch'
     case 'Results':
       return ['Results', writeTestList(x.value, x)]
   }
 }
 
 export function readParseResults(x: any, context: any = x): ParseResults {
-  _atd_check_json_tuple(2, x, context)
-  switch (x[0]) {
-    case 'Error':
-      return { kind: 'Error', value: _atd_read_string(x[1], x) }
-    case 'Results':
-      return { kind: 'Results', value: readTestList(x[1], x) }
-    default:
-      _atd_bad_json('ParseResults', x, context)
-      throw new Error('impossible')
+  if (typeof x === 'string') {
+    switch (x) {
+      case 'EmptyTestListMismatch':
+        return { kind: 'EmptyTestListMismatch' }
+      default:
+        _atd_bad_json('ParseResults', x, context)
+        throw new Error('impossible')
+    }
+  }
+  else {
+    _atd_check_json_tuple(2, x, context)
+    switch (x[0]) {
+      case 'ParseError':
+        return { kind: 'ParseError', value: _atd_read_string(x[1], x) }
+      case 'Results':
+        return { kind: 'Results', value: readTestList(x[1], x) }
+      default:
+        _atd_bad_json('ParseResults', x, context)
+        throw new Error('impossible')
+    }
   }
 }
 

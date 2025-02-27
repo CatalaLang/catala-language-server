@@ -355,8 +355,14 @@ export default function TestFileEditor({
 
 function parseResultsToUiState(tests: ParseResults): UIState {
   switch (tests.kind) {
-    case 'Error':
+    case 'ParseError':
       return { state: 'error', message: tests.value };
+    case 'EmptyTestListMismatch':
+      //XXX make into its own UI section
+      return {
+        state: 'error',
+        message: 'Found empty test list but nonempty buffer',
+      };
     case 'Results':
       return { state: 'success', tests: tests.value };
     default:

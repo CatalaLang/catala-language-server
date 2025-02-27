@@ -31,13 +31,19 @@ export function parseTestFile(
       ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
       { input: content, ...(cwd && { cwd }) }
     );
+    const testList = readTestList(JSON.parse(results.toString()));
+    if (content.trim() !== '' && testList.length == 0) {
+      return {
+        kind: 'EmptyTestListMismatch',
+      };
+    }
     return {
       kind: 'Results',
-      value: readTestList(JSON.parse(results.toString())),
+      value: testList,
     };
   } catch (error) {
     return {
-      kind: 'Error',
+      kind: 'ParseError',
       value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
     };
   }
