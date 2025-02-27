@@ -375,7 +375,7 @@ class catala_lsp_server =
         ()
         : Locations.t option Lwt.t =
       let f = self#use_or_process_file (DocumentUri.to_path uri) in
-      match State.lookup_type_definition f pos with
+      match State.lookup_type_declaration f pos with
       | None -> Lwt.return_none
       | Some (file, range) ->
         let uri = DocumentUri.of_path file in

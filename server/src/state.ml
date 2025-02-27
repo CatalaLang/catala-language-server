@@ -189,26 +189,19 @@ let lookup_type f p =
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
   let prg = f.scopelang_prg in
-  let* r, kindl = Jump.lookup_type jt p in
-  let* kind =
-    match kindl with
-    | [] -> None
-    | l ->
-      let is_type = function Jump.Type _ -> true | _ -> false in
-      List.find_opt is_type l
-      |> Option.value ~default:(List.hd l)
-      |> Option.some
-  in
+  let* r, lookup_s = Jump.lookup_type jt p in
+  let kind = try Jump.Ord_lookup.max_elt lookup_s with _ -> assert false in
   let md = Type_printing.typ_to_markdown ?prg f.locale kind in
   Some (r, md)
 
-let lookup_type_definition f p =
+let lookup_type_declaration f p =
   let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* _r, kindl = Jump.lookup_type jt p in
+  let* _r, lookup_s = Jump.lookup_type jt p in
   let open Shared_ast in
-  match (List.hd kindl : Jump.type_lookup) with
+  let elt = try Jump.Ord_lookup.max_elt lookup_s with _ -> assert false in
+  match (elt : Jump.type_lookup) with
   | Expr (TStruct s, _) | Type (TStruct s, _) ->
     let _, pos = StructName.get_info s in
     Some (of_position pos)
