@@ -95,9 +95,9 @@ let pp_typ locale fmt (ty : typ) =
     match Mark.remove ty with
     | TLit l -> pp_lit locale fmt l
     | TAny -> fprintf fmt "%s" (any locale)
-    | TArrow ([t1], t2) -> fprintf fmt "@[<hov>%a → %a@]" pp_typ t1 pp_typ t2
+    | TArrow ([t1], t2) -> fprintf fmt "@[<hov>%a@ →@ %a@]" pp_typ t1 pp_typ t2
     | TArrow (t1, t2) ->
-      fprintf fmt "@[<hov>(%a) → %a@]"
+      fprintf fmt "@[<hov>(%a)@ →@ %a@]"
         (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp_typ)
         t1 pp_typ t2
     | TTuple tys ->
@@ -114,6 +114,29 @@ let pp_typ locale fmt (ty : typ) =
   in
   pp_typ fmt ty
 
+let pp_typ_no_box locale fmt (ty : typ) =
+  let rec pp_typ fmt ty =
+    match Mark.remove ty with
+    | TLit l -> pp_lit locale fmt l
+    | TAny -> fprintf fmt "%s" (any locale)
+    | TArrow ([t1], t2) -> fprintf fmt "%a@ →@ %a" pp_typ t1 pp_typ t2
+    | TArrow (t1, t2) ->
+      fprintf fmt "(%a)@ →@ %a"
+        (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp_typ)
+        t1 pp_typ t2
+    | TTuple tys ->
+      fprintf fmt "(%a)"
+        (pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt ",@ ") pp_typ)
+        tys
+    | TStruct s -> fprintf fmt "%a <struct>" StructName.format s
+    | TEnum e -> fprintf fmt "%a <%s>" EnumName.format e (enum locale)
+    | TOption o -> fprintf fmt "%a@ <option>" pp_typ o
+    | TArray a -> fprintf fmt "%s@ %a" (list_of locale) pp_typ a
+    | TDefault d -> fprintf fmt "%a@ <%s>" pp_typ d (default locale)
+    | TClosureEnv -> fprintf fmt "<closure_env>"
+  in
+  pp_typ fmt ty
+
 let expr_type locale typ =
   let locale_s =
     match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
@@ -124,9 +147,9 @@ let expr_type locale typ =
   MarkupContent.create ~kind:Markdown ~value:typ_s
 
 let pp_struct_field locale fmt ((field_name, typ) : StructField.t * typ) =
-  Format.fprintf fmt "%s %s %s %a" (struct_data locale)
+  Format.fprintf fmt "@[<hov 2>%s %s %s@ %a@]" (struct_data locale)
     (StructField.to_string field_name)
-    (content locale) (pp_typ locale) typ
+    (content locale) (pp_typ_no_box locale) typ
 
 let pp_struct_code
     locale
@@ -154,7 +177,7 @@ let pp_enum_field locale fmt ((field_name, typ) : EnumConstructor.t * typ) =
   | _ ->
     Format.fprintf fmt "-- %s %s %a"
       (EnumConstructor.to_string field_name)
-      (content locale) (pp_typ locale) typ
+      (content locale) (pp_typ_no_box locale) typ
 
 let pp_enum_code
     locale
@@ -198,6 +221,74 @@ let data_type
     | None -> expr_type locale typ
     | Some field_map -> enum_code locale (ename, field_map))
 
+let svar_input_s_opt locale =
+  let context_s = function
+    | Global.En -> "context"
+    | Fr -> "contexte"
+    | Pl -> assert false
+  in
+  let input_s = function
+    | Global.En -> "input"
+    | Fr -> "entrée"
+    | Pl -> assert false
+  in
+  function
+  | Runtime.NoInput -> None
+  | OnlyInput -> Some (input_s locale)
+  | Reentrant -> Some (context_s locale)
+
+let svar_output_s_opt locale b =
+  let output_s = function
+    | Global.En -> "output"
+    | Fr -> "résultat"
+    | Pl -> assert false
+  in
+  if b then Some (output_s locale) else None
+
+let svar_io_s locale (var_io : Desugared.Ast.io) =
+  let { Desugared.Ast.io_output = out, _; io_input = input, _ } = var_io in
+  match svar_input_s_opt locale input, svar_output_s_opt locale out with
+  | Some s, Some s' -> Some (sprintf "%s %s" s s')
+  | None, Some s | Some s, None -> Some s
+  | None, None -> None (* internal *)
+
+let pp_scope_var
+    locale
+    fmt
+    ((scope_var : ScopeVar.t), (scope_ty : Scopelang.Ast.scope_var_ty)) =
+  let open Format in
+  let var_name = ScopeVar.to_string scope_var in
+  match svar_io_s locale scope_ty.svar_io with
+  | None -> (* internal *) ()
+  | Some io_s ->
+    fprintf fmt "@[<hov 2>%s %s %s %a@]" io_s var_name (content locale)
+      (pp_typ_no_box locale) scope_ty.svar_out_ty
+
+let is_svar_internal (scope_ty : Scopelang.Ast.scope_var_ty) =
+  (not (Mark.remove scope_ty.svar_io.io_output))
+  && Mark.remove scope_ty.svar_io.io_input = Runtime.NoInput
+
+let pp_scope locale fmt (scope_name, scope_vars) =
+  let open Format in
+  let short_scope_name = ScopeName.get_info scope_name |> fst in
+  fprintf fmt "@[<v 2>%s %s:@ %a@]" (scope_s locale) short_scope_name
+    (pp_print_list ~pp_sep:pp_print_space (pp_scope_var locale))
+    (ScopeVar.Map.bindings scope_vars
+    |> List.filter (fun (_, v) -> not (is_svar_internal v)))
+
+let sig_type
+    locale
+    scope_name
+    (scope_vars : Scopelang.Ast.scope_var_ty ScopeVar.Map.t) =
+  let locale_s =
+    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+  in
+  let typ_s =
+    asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_scope locale)
+      (scope_name, scope_vars)
+  in
+  MarkupContent.create ~kind:Markdown ~value:typ_s
+
 let pp_module locale fmt (itf : Surface.Ast.interface) =
   let open Format in
   let open Surface.Ast in
@@ -238,4 +329,5 @@ let typ_to_markdown ?prg locale (kind : Jump.type_lookup) =
   match prg, kind with
   | Some prg, Type typ -> data_type prg locale typ
   | _, (Type typ | Expr typ) -> expr_type locale typ
+  | _, Scope (sn, scope_var_map) -> sig_type locale sn scope_var_map
   | _, Module (itf, alias) -> module_type locale ?alias itf

@@ -210,7 +210,9 @@ let lookup_type_declaration f p =
     Some (of_position pos)
   | Module ({ Surface.Ast.intf_modname = itf; _ }, _) ->
     Some (of_position @@ Mark.get itf.module_name)
-  | _ -> None
+  | Scope (scope_decl_name, _) ->
+    Some (of_position @@ Mark.get (ScopeName.get_info scope_decl_name))
+  | Expr _ | Type _ -> None
 
 let lookup_document_symbols file =
   let variables =
