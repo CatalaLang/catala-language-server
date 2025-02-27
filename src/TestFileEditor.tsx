@@ -29,6 +29,7 @@ import type { WebviewApi } from 'vscode-webview';
 type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
+  | { state: 'emptyTestListMismatch' }
   | { state: 'success'; tests: TestList };
 
 type TestRunState = {
@@ -291,21 +292,10 @@ export default function TestFileEditor({
 
   switch (state.state) {
     case 'error': {
-      return (
-        <div role="alert" className="test-editor-error">
-          <h2>Oops! This should not have happened...</h2>
-          <pre className="test-editor-error-message">{state.message}</pre>
-          <button
-            className="test-editor-open-text"
-            onClick={() =>
-              vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
-            }
-          >
-            <span className="codicon codicon-edit"></span>
-            Open in Text Editor
-          </button>
-        </div>
-      );
+      return <ParsingErrorWarning message={state.message} vscode={vscode} />;
+    }
+    case 'emptyTestListMismatch': {
+      return <EmptyTestListMismatchWarning vscode={vscode} />;
     }
     case 'initializing':
       return <strong>Initializing...</strong>;
@@ -353,16 +343,64 @@ export default function TestFileEditor({
   }
 }
 
+function ParsingErrorWarning({
+  message,
+  vscode,
+}: {
+  message: string;
+  vscode: WebviewApi<unknown>;
+}): ReactElement {
+  return (
+    <div role="alert" className="test-editor-error">
+      <h2>Oops! This should not have happened...</h2>
+      <pre className="test-editor-error-message">{message}</pre>
+      <button
+        className="test-editor-open-text"
+        onClick={() =>
+          vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+        }
+      >
+        <span className="codicon codicon-edit"></span>
+        Open in Text Editor
+      </button>
+    </div>
+  );
+}
+
+function EmptyTestListMismatchWarning({
+  vscode,
+}: {
+  vscode: WebviewApi<unknown>;
+}): ReactElement {
+  return (
+    <div className="test-editor-warning">
+      <h2>Test File Format Issue</h2>
+      <p>
+        The test file contains content, but it doesn't match the expected test
+        case format.
+      </p>
+      <p>Please edit the file manually in the text editor to fix the format.</p>
+      <div className="test-editor-warning-actions">
+        <button
+          className="test-editor-open-text"
+          onClick={() =>
+            vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+          }
+        >
+          <span className="codicon codicon-edit"></span>
+          Open in Text Editor
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function parseResultsToUiState(tests: ParseResults): UIState {
   switch (tests.kind) {
     case 'ParseError':
       return { state: 'error', message: tests.value };
     case 'EmptyTestListMismatch':
-      //XXX make into its own UI section
-      return {
-        state: 'error',
-        message: 'Found empty test list but nonempty buffer',
-      };
+      return { state: 'emptyTestListMismatch' };
     case 'Results':
       return { state: 'success', tests: tests.value };
     default:
