@@ -20,3 +20,8 @@ FORCE: ;
 clean:
 	rm -f ${TARGET}
 	dune clean
+
+.PHONY: test
+test:
+	dune runtest
+	npm run test
