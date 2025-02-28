@@ -10,7 +10,6 @@ import {
   type TestRunResults,
 } from './generated/test_case';
 import { logger } from './logger';
-import path = require('path');
 import { Uri, window, workspace } from 'vscode';
 
 function getCwd(bufferPath: string): string | undefined {
@@ -81,9 +80,6 @@ export function runTestScope(
    */
 
   const cmd = 'catala';
-  filename = path.isAbsolute(filename)
-    ? path.relative(process.cwd(), filename)
-    : filename;
 
   const args = ['testcase', 'run', '--scope', testScope, filename];
   logger.log(`Exec: ${cmd} ${args.join(' ')}`);
