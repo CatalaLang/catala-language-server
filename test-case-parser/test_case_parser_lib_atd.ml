@@ -93,6 +93,25 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
     | None -> f (Sys.getcwd ())
     | Some buffer_path -> f (Filename.dirname buffer_path))
 
+let build_dir_rel ?buffer_path options =
+  (* Otherwise, lookup for the toml *)
+  let f dir =
+    let dir =
+      if Filename.is_relative dir then
+        if dir = "." then Sys.getcwd () else File.(Sys.getcwd () / dir)
+      else to_relative dir
+    in
+    lookup_clerk_toml dir
+    |> function
+    | None -> None | Some (_config, rel) -> Some (to_relative File.(dir / rel))
+  in
+  match options.Global.input_src with
+  | FileName file | Contents (_, file) -> f (Filename.dirname file)
+  | Stdin _ -> (
+    match buffer_path with
+    | None -> f (Sys.getcwd ())
+    | Some buffer_path -> f (Filename.dirname buffer_path))
+
 exception Unsupported of string
 
 let unsupported fmt = Format.ksprintf (fun msg -> raise (Unsupported msg)) fmt
@@ -722,6 +741,31 @@ let write_catala options outfile =
   in
   ()
 
+let find_cmo_target file_name =
+  let cmo_name = File.(file_name -.- "cmo") in
+  Message.debug "Looking for %s clerk target" cmo_name;
+  try
+    let out =
+      let ((ic, _oc, _stderr) as p) =
+        Unix.open_process_full "clerk build" (Unix.environment ())
+      in
+      let out = In_channel.input_all ic in
+      let _status = Unix.close_process_full p in
+      out
+    in
+    let re =
+      Re.(compile (seq [bol; str "_build"; rep notnl; str cmo_name; eol]))
+    in
+    let l = Re.matches re out in
+    match l with
+    | target :: _ ->
+      Message.debug "Found clerk target: %s" target;
+      Some target
+    | [] -> None
+  with exn ->
+    Message.debug "Failed to run 'clerk build': %s" (Printexc.to_string exn);
+    None
+
 let run_test testing_scope include_dirs options =
   let include_dirs =
     if include_dirs = [] then
@@ -735,9 +779,23 @@ let run_test testing_scope include_dirs options =
     | FileName f | Contents (_, f) -> f
     | Stdin _ -> failwith "Error: run command must be given a file."
   in
-  let cmd, args = "clerk", ["build"; File.(file_name -.- "ml")] in
-  Message.debug "Running '%s %s'" cmd (String.concat " " args);
-  File.process_out cmd args |> ignore;
+  (* Try calling clerk build *)
+  let () =
+    find_cmo_target file_name
+    |> function
+    | None ->
+      Message.debug "Cannot find cmo target for %s in clerk build output"
+        file_name
+    | Some cmo_target -> (
+      build_dir_rel options
+      |> function
+      | None -> Message.debug "Did not find the _build/ relative dir path"
+      | Some build_dir_rel ->
+        Message.debug "Found the _build/ relative dir path: %s" build_dir_rel;
+        let cmd, args = "clerk", ["build"; File.(build_dir_rel / cmo_target)] in
+        Message.debug "Running '%s %s'" cmd (String.concat " " args);
+        File.process_out cmd args |> ignore)
+  in
   let desugared_prg, naming_ctx = read_program include_dirs options in
   let testing_scope_name =
     match
