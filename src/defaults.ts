@@ -38,12 +38,26 @@ export function getDefaultValue(typ: Typ): RuntimeValue {
         ],
       };
     case 'TTuple':
-    case 'TEnum':
     case 'TOption':
     case 'TArray':
       throw new Error(
         `Default value not implemented for compound type: ${typ.kind}`
       );
+    case 'TEnum': {
+      // Get first constructor (enums must have at least one)
+      const firstCtor = Array.from(typ.value.constructors.keys())[0];
+      const ctorType = typ.value.constructors.get(firstCtor);
+      return {
+        kind: 'Enum',
+        value: [
+          typ.value,
+          [
+            firstCtor,
+            ctorType ? { value: getDefaultValue(ctorType.value) } : null,
+          ],
+        ],
+      };
+    }
     default:
       assertUnreachable(typ);
   }
