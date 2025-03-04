@@ -140,11 +140,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           const results = generate(scope_under_test, filename);
           if (results.kind === 'Results') {
             const newTest = results.value;
-            //HACK: prepend scope under test by module name
-            //Note that it is NOT a satisfactory solution -- it will not
-            //work for any struct defined in a module that needs to be
-            //passed to the scope, for instance -- we need something better
-            //newTest.tested_scope.name = scope_under_test; //XXX
+
             const currentTests = parseTestFile(
               document.getText(),
               lang,
