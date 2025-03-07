@@ -37,9 +37,10 @@ export function getDefaultValue(typ: Typ): RuntimeValue {
           ),
         ],
       };
+    case 'TArray':
+      return { kind: 'Array', value: [] };
     case 'TTuple':
     case 'TOption':
-    case 'TArray':
       throw new Error(
         `Default value not implemented for compound type: ${typ.kind}`
       );
