@@ -11,6 +11,7 @@ import type {
   Typ,
 } from './generated/test_case';
 import { assertUnreachable } from './util';
+import { getDefaultValue } from './defaults';
 
 type Props = {
   testIO: TestIo;
@@ -530,7 +531,7 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
   const { elementType, value = [], onValueChange } = props;
 
   const handleAdd = (): void => {
-    const newValue = createDefaultValue(elementType);
+    const newValue: RuntimeValue = getDefaultValue(elementType);
     onValueChange([...value, newValue]);
   };
 
@@ -597,51 +598,6 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
       </button>
     </div>
   );
-}
-
-function createDefaultValue(typ: Typ): RuntimeValue {
-  switch (typ.kind) {
-    case 'TBool':
-      return { kind: 'Bool', value: false };
-    case 'TInt':
-      return { kind: 'Integer', value: 0 };
-    case 'TRat':
-      return { kind: 'Decimal', value: 0.0 };
-    case 'TMoney':
-      return { kind: 'Money', value: 0 };
-    case 'TDate':
-      return { kind: 'Date', value: { year: 2023, month: 1, day: 1 } };
-    case 'TDuration':
-      return { kind: 'Duration', value: { years: 0, months: 0, days: 0 } };
-    case 'TStruct': {
-      const fieldValues = new Map<string, RuntimeValue>();
-      for (const [fieldName, fieldType] of typ.value.fields.entries()) {
-        fieldValues.set(fieldName, createDefaultValue(fieldType));
-      }
-      return {
-        kind: 'Struct',
-        value: [typ.value, fieldValues],
-      };
-    }
-    case 'TEnum':
-      return {
-        kind: 'Enum',
-        value: [
-          typ.value,
-          [Array.from(typ.value.constructors.keys())[0], null],
-        ],
-      };
-    case 'TArray':
-      return { kind: 'Array', value: [] };
-    case 'TTuple':
-      // For now, treat tuples as arrays since RuntimeValue doesn't have a tuple variant
-      return { kind: 'Array', value: [] };
-    case 'TOption':
-      // For now, treat options as null values since RuntimeValue doesn't have an option variant
-      return { kind: 'Array', value: [] };
-    default:
-      assertUnreachable(typ);
-  }
 }
 
 function runtimeValueToTestIo(typ: Typ, value: Option<RuntimeValue>): TestIo {
