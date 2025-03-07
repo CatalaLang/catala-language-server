@@ -139,6 +139,10 @@ let rec get_typ ?module_name decl_ctx = function
 
 and get_struct ?module_name decl_ctx struct_name =
   let fields_map = StructName.Map.find struct_name decl_ctx.ctx_structs in
+  let module_name =
+    if StructName.path struct_name = [] then module_name
+    else Some (Uid.Path.to_string (StructName.path struct_name))
+  in
   let fields =
     List.map
       (fun (field, typ) ->
@@ -157,6 +161,10 @@ and get_struct ?module_name decl_ctx struct_name =
 
 and get_enum ?module_name decl_ctx enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
+  let module_name =
+    if EnumName.path enum_name = [] then module_name
+    else Some (Uid.Path.to_string (EnumName.path enum_name))
+  in
   let constructors =
     List.map
       (fun (constr, typ) ->
