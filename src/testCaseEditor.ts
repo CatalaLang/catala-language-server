@@ -106,7 +106,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           });
           break;
         }
-        case 'Edit': {
+        case 'GuiEdit': {
           logger.log('Got edit from webview');
           // re-emit catala text file from ATD test definitions
           const newTextBuffer = atdToCatala(typed_msg.value, lang);
