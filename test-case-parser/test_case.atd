@@ -127,7 +127,7 @@ type file_selection = {
 
 type up_message = [
   | Ready
-  | Edit of test_list
+  | GuiEdit of test_list
   | OpenInTextEditor
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request
