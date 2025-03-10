@@ -153,7 +153,7 @@ export default function TestFileEditor({
 
         vscode.postMessage(
           writeUpMessage({
-            kind: 'Edit',
+            kind: 'GuiEdit',
             value: newTestState,
           })
         );
@@ -173,7 +173,7 @@ export default function TestFileEditor({
 
         vscode.postMessage(
           writeUpMessage({
-            kind: 'Edit',
+            kind: 'GuiEdit',
             value: newTestState,
           })
         );
