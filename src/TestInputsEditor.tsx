@@ -1,6 +1,7 @@
-import type { ReactElement } from 'react';
+import { type ReactElement, useEffect } from 'react';
 import type { TestInputs, TestIo } from './generated/test_case';
 import ValueEditor from './ValueEditors';
+import { clearValidationErrors } from './validation';
 
 type Props = {
   test_inputs: TestInputs;
@@ -12,6 +13,15 @@ type Props = {
 //
 // This component aggregates all inputs for a single test.
 export default function TestInputsEditor(props: Props): ReactElement {
+  // Clear validation errors when component unmounts
+  useEffect(() => {
+    return (): void => {
+      // Clean up validation errors for this component
+      Array.from(props.test_inputs.keys()).forEach((inputName) => {
+        clearValidationErrors(`input_${inputName}`);
+      });
+    };
+  }, []);
   // TODO: discuss behavior w.r.t mandatory and optional inputs
   // and implement an UI that reflects those (e.g. reset an optional
   // input to its default value and mark it as unedited, provide user
@@ -37,6 +47,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
                   <ValueEditor
                     testIO={testIo}
                     onValueChange={onTestInputChange}
+                    validationId={`input_${inputName}`}
                   />
                 </td>
               </tr>

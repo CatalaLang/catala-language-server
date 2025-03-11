@@ -5,17 +5,23 @@ type Props = {
   testIO: TestIo;
   onValueChange: (newValue: TestIo) => void;
   onAssertionDeletion: () => void;
+  validationId?: string;
 };
 
 export default function AssertionValueEditor({
   testIO,
   onValueChange,
   onAssertionDeletion,
+  validationId,
 }: Props): React.ReactElement {
   return (
     <div className="assertion-value-editor">
       <div className="assertion-value-content">
-        <ValueEditor testIO={testIO} onValueChange={onValueChange} />
+        <ValueEditor
+          testIO={testIO}
+          onValueChange={onValueChange}
+          validationId={validationId}
+        />
       </div>
       <button
         className="assertion-delete"

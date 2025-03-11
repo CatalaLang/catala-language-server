@@ -676,3 +676,23 @@
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
 }
+/* Validation styles */
+.has-validation-error {
+  border: 1px solid #f44336 !important;
+  background-color: rgba(244, 67, 54, 0.05);
+}
+
+.validation-errors {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.validation-error {
+  color: #f44336;
+  margin-bottom: 2px;
+}
+
+.validation-warning {
+  color: #ff9800;
+  margin-bottom: 2px;
+}

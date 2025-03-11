@@ -1,7 +1,8 @@
 import type { Test, TestIo } from './generated/test_case';
 import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
-import type { ReactElement } from 'react';
+import { type ReactElement, useEffect } from 'react';
+import { clearValidationErrors } from './validation';
 
 type Props = {
   test: Test;
@@ -33,6 +34,16 @@ export default function TestOutputsEditor({
   onTestChange: onTestAssertsChange,
 }: Props): ReactElement {
   const { test_outputs, tested_scope } = test;
+
+  // Clear validation errors when component unmounts
+  useEffect(() => {
+    return (): void => {
+      // Clean up validation errors for this component
+      Array.from(test_outputs.keys()).forEach((outputName) => {
+        clearValidationErrors(`output_${outputName}`);
+      });
+    };
+  }, [test_outputs]);
 
   function onAssertAdd(outputName: string): void {
     const outputType = tested_scope.outputs.get(outputName);
@@ -83,6 +94,7 @@ export default function TestOutputsEditor({
                         onAssertValueChange(outputName, newValue)
                       }
                       onAssertionDeletion={() => onAssertDelete(outputName)}
+                      validationId={`output_${outputName}`}
                     />
                   ) : (
                     <button
