@@ -18,7 +18,6 @@ import {
   registerValidationErrors,
   clearValidationErrors,
   validateNumeric,
-  validateDate,
   validateMoney,
 } from './validation';
 
@@ -300,8 +299,9 @@ function IntEditor(props: IntEditorProps): ReactElement {
     <div className="value-editor">
       <input
         ref={inputRef}
-        type="text"
-        inputMode="numeric"
+        type="number"
+        step="1"
+        min={0}
         value={inputValue}
         onChange={handleChange}
         onBlur={handleBlur}
@@ -349,11 +349,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
     return { year, month, day };
   };
 
-  const validate = (value: string): ValidationError[] => {
-    const result = validateDate(value);
-    return result.errors;
-  };
-
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     setInternalValue(event.target.value);
 
@@ -362,15 +357,23 @@ function DateEditor(props: DateEditorProps): ReactElement {
       setErrors([]);
       clearValidationErrors(validationId);
     }
+
+    // HTML5 date input provides valid dates, so we can update immediately
+    const newDate = parseDate(event.target.value);
+    if (newDate) {
+      props.onValueChange(newDate);
+    }
   };
 
   const handleBlur = (): void => {
-    const validationErrors = validate(internalValue);
-    setErrors(validationErrors);
-    registerValidationErrors(validationId, validationErrors);
-
-    if (validationErrors.length === 0) {
-      validateAndUpdate();
+    // Just check if the value is empty
+    if (internalValue.trim() === '') {
+      const validationErrors = [{ message: 'Date cannot be empty' }];
+      setErrors(validationErrors);
+      registerValidationErrors(validationId, validationErrors);
+    } else {
+      setErrors([]);
+      clearValidationErrors(validationId);
     }
   };
 
@@ -379,16 +382,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
   ): void => {
     if (event.key === 'Enter') {
       inputRef.current?.blur();
-    }
-  };
-
-  const validateAndUpdate = (): void => {
-    const newDate = parseDate(internalValue);
-    if (newDate) {
-      props.onValueChange(newDate);
-    } else {
-      // If invalid, revert to the last valid value
-      setInternalValue(props.value ? formatDate(props.value) : '');
     }
   };
 
@@ -471,8 +464,8 @@ function RatEditor(props: RatEditorProps): ReactElement {
     <div className="value-editor">
       <input
         ref={inputRef}
-        type="text"
-        inputMode="numeric"
+        type="number"
+        step="any"
         value={inputValue}
         onChange={handleChange}
         onBlur={handleBlur}
@@ -505,7 +498,7 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
     <div className="value-editor">
       <select
         value={props.value?.toString() ?? ''}
-        onChange={(evt) => {
+        onChange={(evt): void => {
           props.onValueChange(evt.target.value === 'true');
         }}
       >
@@ -535,7 +528,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   const [months, setMonths] = useState(props.value?.months ?? 0);
   const [days, setDays] = useState(props.value?.days ?? 0);
 
-  useEffect(() => {
+  useEffect((): void => {
     if (props.value) {
       setYears(props.value.years);
       setMonths(props.value.months);
@@ -570,6 +563,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           <input
             type="number"
             min="0"
+            step="1"
             value={years}
             onChange={(e) => handleChange('years', parseInt(e.target.value))}
           />
@@ -579,6 +573,8 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           <input
             type="number"
             min="0"
+            step="1"
+            max="11"
             value={months}
             onChange={(e) => handleChange('months', parseInt(e.target.value))}
           />
@@ -588,6 +584,8 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           <input
             type="number"
             min="0"
+            step="1"
+            max="30"
             value={days}
             onChange={(e) => handleChange('days', parseInt(e.target.value))}
           />
@@ -669,7 +667,9 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
       <div className="money-input-container">
         <input
           ref={inputRef}
-          type="text"
+          type="number"
+          step="0.01"
+          min="0"
           value={displayValue}
           onChange={handleChange}
           onBlur={handleBlur}
@@ -706,7 +706,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
     fieldName: string,
     fieldValue: RuntimeValue
   ): void => {
-    const newMap = new Map(value?.[1] || []);
+    const newMap = new Map(value?.[1] ?? []);
     newMap.set(fieldName, fieldValue);
     onValueChange([structDeclaration, newMap]);
   };

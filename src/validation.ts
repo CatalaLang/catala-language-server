@@ -50,13 +50,11 @@ export function clearValidationErrors(id: string): void {
 }
 
 // Validate a numeric input
-export function validateNumeric(
-  value: string,
-  options: { isInteger?: boolean; min?: number; max?: number } = {}
-): ValidationResult {
+export function validateNumeric(value: string): ValidationResult {
   const errors: ValidationError[] = [];
-  const numValue = parseFloat(value);
 
+  // HTML5 input type="number" validation already handles most cases
+  // We just need to check for empty values and specific constraints
   if (value.trim() === '') {
     errors.push({
       message: 'Value cannot be empty',
@@ -64,6 +62,9 @@ export function validateNumeric(
     return { isValid: false, errors };
   }
 
+  const numValue = parseFloat(value);
+
+  // This should rarely happen with HTML5 inputs, but just in case
   if (isNaN(numValue)) {
     errors.push({
       message: 'Value must be a number',
@@ -71,27 +72,9 @@ export function validateNumeric(
     return { isValid: false, errors };
   }
 
-  if (options.isInteger && !Number.isInteger(numValue)) {
-    errors.push({
-      message: 'Value must be an integer',
-    });
-  }
-
-  if (options.min !== undefined && numValue < options.min) {
-    errors.push({
-      message: `Value must be at least ${options.min}`,
-    });
-  }
-
-  if (options.max !== undefined && numValue > options.max) {
-    errors.push({
-      message: `Value must be at most ${options.max}`,
-    });
-  }
-
   return {
-    isValid: errors.length === 0,
-    errors,
+    isValid: true,
+    errors: [],
   };
 }
 
@@ -130,10 +113,11 @@ export function validateMoney(value: string): ValidationResult {
     return { isValid: false, errors };
   }
 
-  const regex = /^\d+(\.\d{1,2})?$/;
-  if (!regex.test(value)) {
+  // HTML5 input type="number" with step="0.01" handles most validation
+  const numValue = parseFloat(value);
+  if (isNaN(numValue) || numValue < 0) {
     errors.push({
-      message: 'Invalid money format (use format: 123.45)',
+      message: 'Please enter a valid monetary amount',
     });
   }
 
