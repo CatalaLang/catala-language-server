@@ -130,7 +130,7 @@ export function validateMoney(value: string): ValidationResult {
     return { isValid: false, errors };
   }
 
-  const regex = /^-?\d+(\.\d{1,2})?$/;
+  const regex = /^\d+(\.\d{1,2})?$/;
   if (!regex.test(value)) {
     errors.push({
       message: 'Invalid money format (use format: 123.45)',
