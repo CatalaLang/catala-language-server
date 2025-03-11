@@ -1,6 +1,7 @@
 // Editors for a single value type (grouped with a factory function)
 
-import { type ReactElement, useState, useEffect, useRef, useId } from 'react';
+import { type ReactElement, useState, useEffect, useId } from 'react';
+import { useValidatedInput } from './hooks/useValidatedInput';
 import type {
   Option,
   TestIo,
@@ -15,7 +16,6 @@ import { getDefaultValue } from './defaults';
 import type { ValidationError } from './validation';
 import {
   generateValidationId,
-  registerValidationErrors,
   clearValidationErrors,
   validateNumeric,
   validateMoney,
@@ -27,24 +27,7 @@ type Props = {
   validationId?: string; // Optional ID for validation tracking
 };
 
-// Component to display validation errors
-function ValidationErrorDisplay({
-  errors,
-}: {
-  errors: ValidationError[];
-}): ReactElement | null {
-  if (errors.length === 0) return null;
-
-  return (
-    <div className="validation-errors">
-      {errors.map((error, index) => (
-        <div key={index} className="validation-error">
-          {error.message}
-        </div>
-      ))}
-    </div>
-  );
-}
+import { ValidationErrorDisplay } from './components/ValidationErrorDisplay';
 
 export default function ValueEditor(props: Props): ReactElement {
   const typ = props.testIO.typ;
@@ -251,49 +234,21 @@ type IntEditorProps = {
 function IntEditor(props: IntEditorProps): ReactElement {
   const defaultId = useId();
   const validationId = props.validationId ?? `int_${defaultId}`;
-  const [inputValue, setInputValue] = useState(props.value?.toString() ?? '');
-  const [errors, setErrors] = useState<ValidationError[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Update internal state when props change
-  useEffect(() => {
-    if (props.value !== undefined) {
-      setInputValue(props.value.toString());
-    }
-  }, [props.value]);
-
-  const validate = (value: string): ValidationError[] => {
-    const result = validateNumeric(value, { isInteger: true });
-    return result.errors;
-  };
-
-  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>): void => {
-    const newValue = evt.target.value;
-    setInputValue(newValue);
-
-    // Clear errors during typing for better UX
-    if (errors.length > 0) {
-      setErrors([]);
-      clearValidationErrors(validationId);
-    }
-  };
-
-  const handleBlur = (): void => {
-    const validationErrors = validate(inputValue);
-    setErrors(validationErrors);
-    registerValidationErrors(validationId, validationErrors);
-
-    // If valid, update the value
-    if (validationErrors.length === 0 && inputValue.trim() !== '') {
-      props.onValueChange(Number(inputValue));
-    }
-  };
-
-  const handleKeyDown = (evt: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (evt.key === 'Enter') {
-      inputRef.current?.blur();
-    }
-  };
+  const {
+    inputValue,
+    errors,
+    handleChange,
+    handleBlur,
+    handleKeyDown,
+    inputRef,
+  } = useValidatedInput({
+    initialValue: props.value,
+    validator: (value) => validateNumeric(value).errors,
+    onValidChange: props.onValueChange,
+    validationId,
+    parseValue: Number,
+  });
 
   return (
     <div className="value-editor">
@@ -322,8 +277,6 @@ type DateEditorProps = {
 function DateEditor(props: DateEditorProps): ReactElement {
   const defaultId = useId();
   const validationId = props.validationId ?? `date_${defaultId}`;
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [errors, setErrors] = useState<ValidationError[]>([]);
 
   const formatDate = (date: {
     year: number;
@@ -335,61 +288,53 @@ function DateEditor(props: DateEditorProps): ReactElement {
     ).padStart(2, '0')}`;
   };
 
-  const [internalValue, setInternalValue] = useState(
-    props.value ? formatDate(props.value) : ''
-  );
-
   const parseDate = (
     dateString: string
-  ): { year: number; month: number; day: number } | null => {
+  ): { year: number; month: number; day: number } => {
     const [year, month, day] = dateString.split('-').map(Number);
-    if (isNaN(year) || isNaN(month) || isNaN(day)) {
-      return null;
-    }
     return { year, month, day };
   };
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    setInternalValue(event.target.value);
+  // Custom validator for dates
+  const validateDateInput = (value: string): ValidationError[] => {
+    if (value.trim() === '') {
+      return [{ message: 'Date cannot be empty' }];
+    }
+    return [];
+  };
 
-    // Clear errors during typing for better UX
+  const {
+    inputValue: internalValue,
+    errors,
+    handleKeyDown,
+    inputRef,
+    handleBlur,
+  } = useValidatedInput({
+    initialValue: props.value ? formatDate(props.value) : '',
+    validator: validateDateInput,
+    onValidChange: (value) => {
+      const date = parseDate(value);
+      props.onValueChange(date);
+    },
+    validationId,
+    parseValue: (value) => value,
+  });
+
+  // Custom change handler for dates to update immediately
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const newValue = event.target.value;
+
+    // Clear errors
     if (errors.length > 0) {
-      setErrors([]);
       clearValidationErrors(validationId);
     }
 
     // HTML5 date input provides valid dates, so we can update immediately
-    const newDate = parseDate(event.target.value);
-    if (newDate) {
-      props.onValueChange(newDate);
+    if (newValue) {
+      const date = parseDate(newValue);
+      props.onValueChange(date);
     }
   };
-
-  const handleBlur = (): void => {
-    // Just check if the value is empty
-    if (internalValue.trim() === '') {
-      const validationErrors = [{ message: 'Date cannot be empty' }];
-      setErrors(validationErrors);
-      registerValidationErrors(validationId, validationErrors);
-    } else {
-      setErrors([]);
-      clearValidationErrors(validationId);
-    }
-  };
-
-  const handleKeyDown = (
-    event: React.KeyboardEvent<HTMLInputElement>
-  ): void => {
-    if (event.key === 'Enter') {
-      inputRef.current?.blur();
-    }
-  };
-
-  useEffect(() => {
-    if (props.value) {
-      setInternalValue(formatDate(props.value));
-    }
-  }, [props.value]);
 
   return (
     <div className="value-editor">
@@ -416,49 +361,21 @@ type RatEditorProps = {
 function RatEditor(props: RatEditorProps): ReactElement {
   const defaultId = useId();
   const validationId = props.validationId ?? `rat_${defaultId}`;
-  const [inputValue, setInputValue] = useState(props.value?.toString() ?? '');
-  const [errors, setErrors] = useState<ValidationError[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Update internal state when props change
-  useEffect(() => {
-    if (props.value !== undefined) {
-      setInputValue(props.value.toString());
-    }
-  }, [props.value]);
-
-  const validate = (value: string): ValidationError[] => {
-    const result = validateNumeric(value);
-    return result.errors;
-  };
-
-  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>): void => {
-    const newValue = evt.target.value;
-    setInputValue(newValue);
-
-    // Clear errors during typing for better UX
-    if (errors.length > 0) {
-      setErrors([]);
-      clearValidationErrors(validationId);
-    }
-  };
-
-  const handleBlur = (): void => {
-    const validationErrors = validate(inputValue);
-    setErrors(validationErrors);
-    registerValidationErrors(validationId, validationErrors);
-
-    // If valid, update the value
-    if (validationErrors.length === 0 && inputValue.trim() !== '') {
-      props.onValueChange(Number(inputValue));
-    }
-  };
-
-  const handleKeyDown = (evt: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (evt.key === 'Enter') {
-      inputRef.current?.blur();
-    }
-  };
+  const {
+    inputValue,
+    errors,
+    handleChange,
+    handleBlur,
+    handleKeyDown,
+    inputRef,
+  } = useValidatedInput({
+    initialValue: props.value,
+    validator: (value) => validateNumeric(value).errors,
+    onValidChange: props.onValueChange,
+    validationId,
+    parseValue: Number,
+  });
 
   return (
     <div className="value-editor">
@@ -518,7 +435,7 @@ type DurationEditorProps = {
 function DurationEditor(props: DurationEditorProps): ReactElement {
   // Clean up validation on unmount
   useEffect(() => {
-    return () => {
+    return (): void => {
       if (props.validationId) {
         clearValidationErrors(props.validationId);
       }
@@ -604,61 +521,43 @@ type MoneyEditorProps = {
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const defaultId = useId();
   const validationId = props.validationId ?? `money_${defaultId}`;
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [errors, setErrors] = useState<ValidationError[]>([]);
 
   const centsToDisplayValue = (cents: number | undefined): string =>
     cents !== undefined ? (cents / 100).toFixed(2) : '';
 
-  const [displayValue, setDisplayValue] = useState(
-    centsToDisplayValue(props.value)
-  );
-
-  useEffect(() => {
-    setDisplayValue(centsToDisplayValue(props.value));
-  }, [props.value]);
-
-  const validate = (value: string): ValidationError[] => {
-    const result = validateMoney(value);
-    return result.errors;
+  const parseMoneyValue = (value: string): number => {
+    const numericValue = parseFloat(value);
+    return Math.round(numericValue * 100);
   };
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    setDisplayValue(event.target.value);
+  const {
+    inputValue: displayValue,
+    errors,
+    handleChange,
+    handleBlur: handleRawBlur,
+    handleKeyDown,
+    inputRef,
+  } = useValidatedInput({
+    initialValue: centsToDisplayValue(props.value),
+    validator: (value) => validateMoney(value).errors,
+    onValidChange: (value) => props.onValueChange(parseMoneyValue(value)),
+    validationId,
+    parseValue: (value) => value, // We'll handle the parsing in onValidChange
+  });
 
-    // Clear errors during typing for better UX
-    if (errors.length > 0) {
-      setErrors([]);
-      clearValidationErrors(validationId);
-    }
-  };
-
+  // Custom blur handler to format the value
   const handleBlur = (): void => {
-    const validationErrors = validate(displayValue);
-    setErrors(validationErrors);
-    registerValidationErrors(validationId, validationErrors);
+    handleRawBlur();
 
-    if (validationErrors.length === 0) {
+    // If no errors, format the value
+    if (errors.length === 0 && displayValue.trim() !== '') {
       const numericValue = parseFloat(displayValue);
       if (!isNaN(numericValue)) {
         const centsValue = Math.round(numericValue * 100);
         if (centsValue >= 0) {
           props.onValueChange(centsValue);
-          setDisplayValue(centsToDisplayValue(centsValue));
-        } else {
-          // Reset to the last valid value or empty string
-          setDisplayValue(centsToDisplayValue(props.value));
         }
-      } else {
-        // Reset to the last valid value or empty string
-        setDisplayValue(centsToDisplayValue(props.value));
       }
-    }
-  };
-
-  const handleKeyDown = (evt: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (evt.key === 'Enter') {
-      inputRef.current?.blur();
     }
   };
 
@@ -693,7 +592,7 @@ type StructEditorProps = {
 function StructEditor(props: StructEditorProps): ReactElement {
   // Clean up validation on unmount
   useEffect(() => {
-    return () => {
+    return (): void => {
       if (props.validationId) {
         clearValidationErrors(props.validationId);
       }
@@ -763,7 +662,7 @@ type ArrayEditorProps = {
 function ArrayEditor(props: ArrayEditorProps): ReactElement {
   // Clean up validation on unmount
   useEffect(() => {
-    return () => {
+    return (): void => {
       if (props.validationId) {
         clearValidationErrors(props.validationId);
       }
@@ -776,7 +675,7 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
     onValueChange([...value, newValue]);
   };
 
-  const handleUpdate = (index: number, newValue: RuntimeValue) => {
+  const handleUpdate = (index: number, newValue: RuntimeValue): void => {
     const updatedArray = [...value];
     updatedArray[index] = newValue;
     onValueChange(updatedArray);
@@ -853,7 +752,7 @@ function runtimeValueToTestIo(typ: Typ, value: Option<RuntimeValue>): TestIo {
 function EnumEditor(props: EnumEditorProps): ReactElement {
   // Clean up validation on unmount
   useEffect(() => {
-    return () => {
+    return (): void => {
       if (props.validationId) {
         clearValidationErrors(props.validationId);
       }
