@@ -565,6 +565,23 @@
   margin-top: 15px;
 }
 
+.validation-error {
+  color: #d32f2f;
+  font-size: 0.75rem;
+  margin-top: 3px;
+  text-align: left;
+}
+
+input[aria-invalid='true'] {
+  border-color: #d32f2f;
+  background-color: rgba(211, 47, 47, 0.04);
+}
+
+.value-editor {
+  display: flex;
+  flex-direction: column;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

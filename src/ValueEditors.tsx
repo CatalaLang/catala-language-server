@@ -1,6 +1,11 @@
 // Editors for a single value type (grouped with a factory function)
 
 import { type ReactElement, useState, useEffect } from 'react';
+import {
+  ValidationError,
+  useDebounceValidation,
+  validators,
+} from './ValidationUtils';
 import type {
   Option,
   TestIo,
@@ -209,16 +214,35 @@ type IntEditorProps = {
 };
 
 function IntEditor(props: IntEditorProps): ReactElement {
+  const initialValue = props.value !== undefined ? String(props.value) : '';
+
+  // Use the debounced validation hook
+  const [inputValue, validationResult, handleInputChange] =
+    useDebounceValidation<number>(
+      initialValue,
+      validators.integer,
+      props.onValueChange,
+      Number,
+      300
+    );
+
+  // Handle input changes from the UI
+  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
+    handleInputChange(evt.target.value);
+  };
+
   return (
     <div className="value-editor">
       <input
-        type="number"
-        step="1"
-        value={props?.value}
-        onChange={(evt) => {
-          props.onValueChange(Number(evt.target.value));
-        }}
+        type="text"
+        inputMode="numeric"
+        pattern="-?[0-9]*"
+        value={inputValue}
+        onChange={handleChange}
+        aria-invalid={!validationResult.isValid}
+        aria-describedby={validationResult.message ? 'int-error' : undefined}
       />
+      <ValidationError message={validationResult.message} />
     </div>
   );
 }
