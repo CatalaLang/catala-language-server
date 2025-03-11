@@ -1,7 +1,6 @@
 // Types for validation
 export type ValidationError = {
   message: string;
-  severity: 'error' | 'warning';
 };
 
 export type ValidationResult = {
@@ -61,7 +60,6 @@ export function validateNumeric(
   if (value.trim() === '') {
     errors.push({
       message: 'Value cannot be empty',
-      severity: 'error',
     });
     return { isValid: false, errors };
   }
@@ -69,7 +67,6 @@ export function validateNumeric(
   if (isNaN(numValue)) {
     errors.push({
       message: 'Value must be a number',
-      severity: 'error',
     });
     return { isValid: false, errors };
   }
@@ -77,21 +74,18 @@ export function validateNumeric(
   if (options.isInteger && !Number.isInteger(numValue)) {
     errors.push({
       message: 'Value must be an integer',
-      severity: 'error',
     });
   }
 
   if (options.min !== undefined && numValue < options.min) {
     errors.push({
       message: `Value must be at least ${options.min}`,
-      severity: 'error',
     });
   }
 
   if (options.max !== undefined && numValue > options.max) {
     errors.push({
       message: `Value must be at most ${options.max}`,
-      severity: 'error',
     });
   }
 
@@ -108,7 +102,6 @@ export function validateDate(value: string): ValidationResult {
   if (value.trim() === '') {
     errors.push({
       message: 'Date cannot be empty',
-      severity: 'error',
     });
     return { isValid: false, errors };
   }
@@ -117,7 +110,6 @@ export function validateDate(value: string): ValidationResult {
   if (isNaN(date.getTime())) {
     errors.push({
       message: 'Invalid date format',
-      severity: 'error',
     });
   }
 
@@ -134,7 +126,6 @@ export function validateMoney(value: string): ValidationResult {
   if (value.trim() === '') {
     errors.push({
       message: 'Value cannot be empty',
-      severity: 'error',
     });
     return { isValid: false, errors };
   }
@@ -143,7 +134,6 @@ export function validateMoney(value: string): ValidationResult {
   if (!regex.test(value)) {
     errors.push({
       message: 'Invalid money format (use format: 123.45)',
-      severity: 'error',
     });
   }
 

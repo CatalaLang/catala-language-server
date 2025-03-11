@@ -39,10 +39,7 @@ function ValidationErrorDisplay({
   return (
     <div className="validation-errors">
       {errors.map((error, index) => (
-        <div
-          key={index}
-          className={`validation-error validation-${error.severity}`}
-        >
+        <div key={index} className="validation-error">
           {error.message}
         </div>
       ))}
