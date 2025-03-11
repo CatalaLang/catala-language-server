@@ -401,16 +401,7 @@ type BoolEditorProps = {
 };
 
 function BoolEditor(props: BoolEditorProps): ReactElement {
-  // Boolean selects don't typically need validation as they're constrained
-  // But we'll clear any validation errors when the component unmounts
-  useEffect(() => {
-    return () => {
-      if (props.validationId) {
-        clearValidationErrors(props.validationId);
-      }
-    };
-  }, [props.validationId]);
-
+  // Boolean selects don't need validation as they're constrained by the select options
   return (
     <div className="value-editor">
       <select
@@ -433,14 +424,7 @@ type DurationEditorProps = {
 };
 
 function DurationEditor(props: DurationEditorProps): ReactElement {
-  // Clean up validation on unmount
-  useEffect(() => {
-    return (): void => {
-      if (props.validationId) {
-        clearValidationErrors(props.validationId);
-      }
-    };
-  }, [props.validationId]);
+  // Duration editor uses number inputs which have built-in validation
   const [years, setYears] = useState(props.value?.years ?? 0);
   const [months, setMonths] = useState(props.value?.months ?? 0);
   const [days, setDays] = useState(props.value?.days ?? 0);
@@ -590,14 +574,7 @@ type StructEditorProps = {
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
-  // Clean up validation on unmount
-  useEffect(() => {
-    return (): void => {
-      if (props.validationId) {
-        clearValidationErrors(props.validationId);
-      }
-    };
-  }, [props.validationId]);
+  // Struct editor delegates validation to child editors
   const { structDeclaration, value, onValueChange } = props;
   const fields = structDeclaration.fields;
 
@@ -635,6 +612,11 @@ function StructEditor(props: StructEditorProps): ReactElement {
                   onValueChange={(newValue) =>
                     handleFieldChange(fieldName, newValue.value!.value)
                   }
+                  validationId={
+                    props.validationId
+                      ? `${props.validationId}_field_${fieldName}`
+                      : undefined
+                  }
                 />
               </td>
             </tr>
@@ -660,14 +642,7 @@ type ArrayEditorProps = {
 };
 
 function ArrayEditor(props: ArrayEditorProps): ReactElement {
-  // Clean up validation on unmount
-  useEffect(() => {
-    return (): void => {
-      if (props.validationId) {
-        clearValidationErrors(props.validationId);
-      }
-    };
-  }, [props.validationId]);
+  // Array editor delegates validation to child editors
   const { elementType, value = [], onValueChange } = props;
 
   const handleAdd = (): void => {
@@ -728,6 +703,11 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
               onValueChange={(newValue) =>
                 handleUpdate(index, newValue.value!.value)
               }
+              validationId={
+                props.validationId
+                  ? `${props.validationId}_item_${index}`
+                  : undefined
+              }
             />
           </div>
         ))}
@@ -750,14 +730,7 @@ function runtimeValueToTestIo(typ: Typ, value: Option<RuntimeValue>): TestIo {
 }
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
-  // Clean up validation on unmount
-  useEffect(() => {
-    return (): void => {
-      if (props.validationId) {
-        clearValidationErrors(props.validationId);
-      }
-    };
-  }, [props.validationId]);
+  // Enum editor delegates validation to child ValueEditor when needed
   // Note that in Catala, an enum should always have at least 1 constructor
   // so dereferencing the first array element is valid
   const [currentCtor, setCurrentCtor] = useState(
@@ -790,6 +763,11 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
           onValueChange={(newValue: TestIo): void => {
             props.onValueChange(currentCtor, newValue.value ?? null);
           }}
+          validationId={
+            props.validationId
+              ? `${props.validationId}_value_${currentCtor}`
+              : undefined
+          }
         />
       )}
     </div>
