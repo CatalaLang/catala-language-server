@@ -248,6 +248,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
     onValidChange: props.onValueChange,
     validationId,
     parseValue: Number,
+    debounceMs: 300, // Shorter debounce for numbers
   });
 
   return (
@@ -318,6 +319,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
     },
     validationId,
     parseValue: (value) => value,
+    debounceMs: 300, // Shorter debounce for dates
   });
 
   // Custom change handler for dates to update immediately
@@ -375,6 +377,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
     onValidChange: props.onValueChange,
     validationId,
     parseValue: Number,
+    debounceMs: 300, // Shorter debounce for numbers
   });
 
   return (
@@ -401,13 +404,20 @@ type BoolEditorProps = {
 };
 
 function BoolEditor(props: BoolEditorProps): ReactElement {
-  // Boolean selects don't need validation as they're constrained by the select options
+  // Boolean selects don't need validation for correctness, but we want to trigger
+  // parent validation immediately on change
   return (
     <div className="value-editor">
       <select
         value={props.value?.toString() ?? ''}
         onChange={(evt): void => {
+          // Immediately update the value since boolean selects are always valid
           props.onValueChange(evt.target.value === 'true');
+
+          // If there's a validationId, clear any errors
+          if (props.validationId) {
+            clearValidationErrors(props.validationId);
+          }
         }}
       >
         <option value="false">false</option>
@@ -453,7 +463,14 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
         setDays(newValue);
         break;
     }
+
+    // Immediately update the value
     props.onValueChange({ years, months, days, [field]: newValue });
+
+    // If there's a validationId, clear any errors
+    if (props.validationId) {
+      clearValidationErrors(props.validationId);
+    }
   };
 
   return (
@@ -527,6 +544,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     onValidChange: (value) => props.onValueChange(parseMoneyValue(value)),
     validationId,
     parseValue: (value) => value, // We'll handle the parsing in onValidChange
+    debounceMs: 300, // Shorter debounce for money
   });
 
   // Custom blur handler to format the value
