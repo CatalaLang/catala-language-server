@@ -571,11 +571,6 @@ input.invalid {
   background-color: var(--vscode-inputValidation-errorBackground);
 }
 
-.value-editor {
-  display: flex;
-  flex-direction: column;
-}
-
 @keyframes fadeIn {
   from {
     opacity: 0;
