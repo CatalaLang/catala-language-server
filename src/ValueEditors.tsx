@@ -464,39 +464,81 @@ type MoneyEditorProps = {
   onValueChange(newValue: number): void;
 };
 
+function isPrefix(partial: string, complete: string): boolean {
+  // Check if partial is a prefix of complete, considering decimal places
+  const partialParts = partial.split('.');
+  const completeParts = complete.split('.');
+
+  // Compare dollar parts
+  if (!completeParts[0].startsWith(partialParts[0])) return false;
+
+  // If partial has decimal, check cents prefix
+  if (partialParts[1] !== undefined) {
+    const partialCents = partialParts[1];
+    const completeCents = completeParts[1] || '00';
+    return completeCents.startsWith(partialCents);
+  }
+
+  return true;
+}
+
+function validateMoneyInput(input: string): { valid: boolean; cents: number } {
+  // Default to 0 when empty
+  if (input === '') return { valid: true, cents: 0 };
+
+  // Allow numbers with optional decimal point
+  const moneyPattern = /^\d*\.?\d*$/;
+  if (!moneyPattern.test(input)) return { valid: false, cents: 0 };
+
+  // Split into dollars and cents
+  const [dollars, cents] = input.split('.');
+
+  // Calculate total cents
+  const dollarsCents = parseInt(dollars || '0', 10) * 100;
+  const partialCents = parseInt((cents || '00').padEnd(2, '0').slice(0, 2), 10);
+
+  return {
+    valid: true,
+    cents: dollarsCents + partialCents,
+  };
+}
+
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
-  const centsToDisplayValue = (cents: number | undefined): string =>
-    cents !== undefined ? (cents / 100).toFixed(2) : '';
-
-  const initialValue = centsToDisplayValue(props.value);
-  const [inputValue, handleInputChange] = useDebounceValidation<number>(
-    initialValue,
-    (value: number) => {
-      // Convert dollars to cents for storage
-      const centsValue = Math.round(value * 100);
-      props.onValueChange(centsValue);
-    },
-    Number,
-    300
+  const [inputValue, setInputValue] = useState(
+    props.value ? (props.value / 100).toFixed(2) : ''
   );
+  const [lastValidValue, setLastValidValue] = useState(props.value || 0);
 
-  // Handle input changes from the UI
-  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = evt.target.value;
+  // Handle external value changes (e.g., from parent)
+  useEffect(() => {
+    const formattedValue = (props.value || 0) / 100;
+    const formattedString = formattedValue.toFixed(2);
 
-    // Check if it's a valid money value (non-negative with up to 2 decimal places)
-    // Allow partial inputs during typing
-    const isValidFormat = /^\d*\.?\d{0,2}$/.test(newValue);
+    // Only update if the current input isn't a valid prefix
+    if (!isPrefix(inputValue, formattedString)) {
+      setInputValue(formattedString);
+    }
+  }, [props.value]);
 
-    // Only consider complete numbers as valid for updating the value
-    const isCompleteNumber = /^\d+(\.\d{1,2})?$/.test(newValue);
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newInput = e.target.value;
+    const { valid, cents } = validateMoneyInput(newInput);
 
-    // Pass to our debounced handler
-    handleInputChange(newValue, isValidFormat && isCompleteNumber);
+    setInputValue(newInput);
+
+    if (valid) {
+      setLastValidValue(cents);
+      props.onValueChange(cents); // Always propagate a valid number (minimum 0)
+    }
   };
 
-  // Determine if input is valid
-  const isValid = /^\d+(\.\d{1,2})?$/.test(inputValue);
+  const handleBlur = () => {
+    // On blur, format the value properly only if input isn't already valid
+    const formatted = (lastValidValue / 100).toFixed(2);
+    if (!isPrefix(inputValue, formatted)) {
+      setInputValue(formatted);
+    }
+  };
 
   return (
     <div className="value-editor money-editor">
@@ -504,11 +546,11 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         <input
           type="text"
           inputMode="decimal"
-          pattern="\d+(\.\d{1,2})?"
+          pattern="\d*\.?\d*"
           value={inputValue}
           onChange={handleChange}
+          onBlur={handleBlur}
           placeholder="0.00"
-          className={isValid ? '' : 'invalid'}
         />
       </div>
     </div>
