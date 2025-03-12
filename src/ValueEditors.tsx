@@ -219,7 +219,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
   );
 
   // Handle input changes from the UI
-  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>): void => {
     const newValue = evt.target.value;
 
     // Check if it's a valid integer
@@ -335,7 +335,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
   );
 
   // Handle input changes from the UI
-  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>): void => {
     const newValue = evt.target.value;
 
     // Check if it's a valid decimal number
@@ -464,24 +464,6 @@ type MoneyEditorProps = {
   onValueChange(newValue: number): void;
 };
 
-function isPrefix(partial: string, complete: string): boolean {
-  // Check if partial is a prefix of complete, considering decimal places
-  const partialParts = partial.split('.');
-  const completeParts = complete.split('.');
-
-  // Compare dollar parts
-  if (!completeParts[0].startsWith(partialParts[0])) return false;
-
-  // If partial has decimal, check cents prefix
-  if (partialParts[1] !== undefined) {
-    const partialCents = partialParts[1];
-    const completeCents = completeParts[1] || '00';
-    return completeCents.startsWith(partialCents);
-  }
-
-  return true;
-}
-
 function validateMoneyInput(input: string): { valid: boolean; cents: number } {
   // Default to 0 when empty
   if (input === '') return { valid: true, cents: 0 };
@@ -504,41 +486,36 @@ function validateMoneyInput(input: string): { valid: boolean; cents: number } {
 }
 
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
-  const [inputValue, setInputValue] = useState(
-    props.value ? (props.value / 100).toFixed(2) : ''
+  const initialValue =
+    props.value !== undefined ? (props.value / 100).toFixed(2) : '';
+
+  const [inputValue, handleInputChange] = useDebounceValidation<number>(
+    initialValue,
+    props.onValueChange,
+    (value: string) => {
+      const { valid, cents } = validateMoneyInput(value);
+      return valid ? cents : NaN;
+    },
+    300
   );
-  const [lastValidValue, setLastValidValue] = useState(props.value || 0);
 
-  // Handle external value changes (e.g., from parent)
+  // Handle input changes from the UI
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const newValue = e.target.value;
+    const isValid = validateMoneyInput(newValue).valid;
+    handleInputChange(newValue, isValid);
+  };
+
+  // Handle external value changes
   useEffect(() => {
-    const formattedValue = (props.value || 0) / 100;
-    const formattedString = formattedValue.toFixed(2);
-
-    // Only update if the current input isn't a valid prefix
-    if (!isPrefix(inputValue, formattedString)) {
-      setInputValue(formattedString);
+    if (props.value !== undefined) {
+      const formattedValue = (props.value / 100).toFixed(2);
+      handleInputChange(formattedValue, true);
     }
   }, [props.value]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newInput = e.target.value;
-    const { valid, cents } = validateMoneyInput(newInput);
-
-    setInputValue(newInput);
-
-    if (valid) {
-      setLastValidValue(cents);
-      props.onValueChange(cents); // Always propagate a valid number (minimum 0)
-    }
-  };
-
-  const handleBlur = () => {
-    // On blur, format the value properly only if input isn't already valid
-    const formatted = (lastValidValue / 100).toFixed(2);
-    if (!isPrefix(inputValue, formatted)) {
-      setInputValue(formatted);
-    }
-  };
+  // Determine if input is valid
+  const isValid = validateMoneyInput(inputValue).valid;
 
   return (
     <div className="value-editor money-editor">
@@ -549,7 +526,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
           pattern="\d*\.?\d*"
           value={inputValue}
           onChange={handleChange}
-          onBlur={handleBlur}
+          className={isValid ? '' : 'invalid'}
           placeholder="0.00"
         />
       </div>
@@ -571,7 +548,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
     fieldName: string,
     fieldValue: RuntimeValue
   ): void => {
-    const newMap = new Map(value?.[1] || []);
+    const newMap = new Map(value?.[1] ?? []);
     newMap.set(fieldName, fieldValue);
     onValueChange([structDeclaration, newMap]);
   };
@@ -631,7 +608,7 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
     onValueChange([...value, newValue]);
   };
 
-  const handleUpdate = (index: number, newValue: RuntimeValue) => {
+  const handleUpdate = (index: number, newValue: RuntimeValue): void => {
     const updatedArray = [...value];
     updatedArray[index] = newValue;
     onValueChange(updatedArray);
