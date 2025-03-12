@@ -879,28 +879,13 @@ let list_scopes include_dirs options =
     ScopeName.Map.filter_map
       (fun _sn -> function
         | { I.scope_visibility = Private; _ } -> None
-        | sc ->
-          let inputs = scope_inputs prg.program_ctx sc in
-          if inputs = [] then None
-          else
+        | sc -> (
+          if scope_inputs prg.program_ctx sc = [] then
             (* We do not consider no-input scopes *)
-            let has_valid_type =
-              let rec valid_type : O.typ -> bool = function
-                | O.TBool | TInt | TRat | TMoney | TDate | TDuration -> true
-                | TTuple tl -> List.for_all valid_type tl
-                | TStruct { fields; _ } ->
-                  List.map snd fields |> List.for_all valid_type
-                | TEnum { constructors; _ } ->
-                  List.map snd constructors
-                  |> List.filter_map Fun.id
-                  |> List.for_all valid_type
-                | TOption typ | TArray typ -> valid_type typ
-              in
-              List.for_all (fun (_, ty) -> valid_type ty) inputs
-            in
-            if has_valid_type then
-              Some (get_scope_def prg sc ~tested_module:module_name)
-            else None)
+            None
+          else
+            try Some (get_scope_def prg sc ~tested_module:module_name)
+            with _ -> None))
       modul.module_scopes
     |> ScopeName.Map.bindings
     |> List.map snd
