@@ -237,17 +237,20 @@ let get_source_position pos =
 
 let scope_inputs ?module_name decl_ctx scope =
   I.ScopeDef.Map.fold
-    (fun ((v, _pos), _kind) sdef acc ->
-      match sdef.I.scope_def_io.I.io_input with
-      | Runtime.NoInput, _ -> acc
-      | Runtime.OnlyInput, _ ->
-        ( ScopeVar.to_string v,
-          get_typ ?module_name decl_ctx sdef.I.scope_def_typ )
-        :: acc
-      | Runtime.Reentrant, _ ->
-        ( ScopeVar.to_string v,
-          get_typ ?module_name decl_ctx sdef.I.scope_def_typ )
-        :: acc)
+    (fun ((v, _pos), kind) sdef acc ->
+      match kind with
+      | SubScopeInput _ -> acc
+      | Var _ -> (
+        match fst sdef.I.scope_def_io.I.io_input with
+        | Runtime.NoInput -> acc
+        | Runtime.OnlyInput ->
+          ( ScopeVar.to_string v,
+            get_typ ?module_name decl_ctx sdef.I.scope_def_typ )
+          :: acc
+        | Runtime.Reentrant ->
+          ( ScopeVar.to_string v,
+            get_typ ?module_name decl_ctx sdef.I.scope_def_typ )
+          :: acc))
     scope.I.scope_defs []
   |> List.rev
 
@@ -255,11 +258,14 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
   let decl_ctx = prg.program_ctx in
   let input_typs : typ list =
     I.ScopeDef.Map.fold
-      (fun _ sdef acc ->
-        match sdef.I.scope_def_io.I.io_input with
-        | Runtime.NoInput, _ -> acc
-        | Runtime.OnlyInput, _ | Runtime.Reentrant, _ ->
-          sdef.I.scope_def_typ :: acc)
+      (fun (_, kind) sdef acc ->
+        match kind with
+        | SubScopeInput _ -> acc
+        | Var _ -> (
+          match fst sdef.I.scope_def_io.I.io_input with
+          | Runtime.NoInput -> acc
+          | Runtime.OnlyInput | Runtime.Reentrant -> sdef.I.scope_def_typ :: acc
+          ))
       scope.I.scope_defs []
     |> List.rev
   in
