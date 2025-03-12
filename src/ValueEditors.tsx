@@ -1,7 +1,7 @@
 // Editors for a single value type (grouped with a factory function)
 
 import { type ReactElement, useState, useEffect } from 'react';
-import { useDebounceValidation } from './ValidationUtils';
+import { useDebounce } from './Debounce';
 import type {
   Option,
   TestIo,
@@ -211,27 +211,24 @@ type IntEditorProps = {
 
 function IntEditor(props: IntEditorProps): ReactElement {
   const initialValue = props.value !== undefined ? String(props.value) : '';
-  const [inputValue, handleInputChange] = useDebounceValidation<number>(
+
+  const [inputValue, setInputValue] = useDebounce(
     initialValue,
-    props.onValueChange,
-    Number,
+    (value: string) => {
+      if (/^-?\d+$/.test(value)) {
+        props.onValueChange(Number(value));
+      }
+    },
     300
   );
 
-  // Handle input changes from the UI
-  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>): void => {
-    const newValue = evt.target.value;
-
-    // Check if it's a valid integer
-    // Allow empty string and minus sign during typing
-    const isValidInteger = /^-?\d+$/.test(newValue);
-
-    // Pass to our debounced handler
-    handleInputChange(newValue, isValidInteger);
-  };
-
   // Determine if input is valid
   const isValid = /^-?\d+$/.test(inputValue);
+
+  // Handle input changes from the UI
+  const handleChange = (evt: React.ChangeEvent<HTMLInputElement>): void => {
+    setInputValue(evt.target.value);
+  };
 
   return (
     <div className="value-editor">
@@ -327,30 +324,27 @@ type RatEditorProps = {
 
 function RatEditor(props: RatEditorProps): ReactElement {
   const initialValue = props.value !== undefined ? String(props.value) : '';
-  const [inputValue, handleInputChange] = useDebounceValidation<number>(
+
+  const [inputValue, setInputValue] = useDebounce(
     initialValue,
-    props.onValueChange,
-    Number,
+    (value: string) => {
+      // Only update if it's a complete valid number
+      if (/^-?\d+(\.\d+)?$/.test(value)) {
+        props.onValueChange(Number(value));
+      }
+    },
     300
   );
 
+  // Determine if input is valid for UI feedback
+  const isValidDecimal = /^-?\d*\.?\d*$/.test(inputValue);
+  const isCompleteNumber = /^-?\d+(\.\d+)?$/.test(inputValue);
+  const isValid = isValidDecimal && isCompleteNumber;
+
   // Handle input changes from the UI
   const handleChange = (evt: React.ChangeEvent<HTMLInputElement>): void => {
-    const newValue = evt.target.value;
-
-    // Check if it's a valid decimal number
-    // Allow empty string, minus sign, and partial decimal inputs during typing
-    const isValidDecimal = /^-?\d*\.?\d*$/.test(newValue);
-
-    // Only consider complete numbers as valid for updating the value
-    const isCompleteNumber = /^-?\d+(\.\d+)?$/.test(newValue);
-
-    // Pass to our debounced handler
-    handleInputChange(newValue, isValidDecimal && isCompleteNumber);
+    setInputValue(evt.target.value);
   };
-
-  // Determine if input is valid
-  const isValid = /^-?\d+(\.\d+)?$/.test(inputValue);
 
   return (
     <div className="value-editor">
@@ -489,33 +483,32 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const initialValue =
     props.value !== undefined ? (props.value / 100).toFixed(2) : '';
 
-  const [inputValue, handleInputChange] = useDebounceValidation<number>(
+  const [inputValue, setInputValue] = useDebounce(
     initialValue,
-    props.onValueChange,
     (value: string) => {
       const { valid, cents } = validateMoneyInput(value);
-      return valid ? cents : NaN;
+      if (valid) {
+        props.onValueChange(cents);
+      }
     },
     300
   );
 
+  // Determine if input is valid
+  const isValid = validateMoneyInput(inputValue).valid;
+
   // Handle input changes from the UI
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const newValue = e.target.value;
-    const isValid = validateMoneyInput(newValue).valid;
-    handleInputChange(newValue, isValid);
+    setInputValue(e.target.value);
   };
 
   // Handle external value changes
   useEffect(() => {
     if (props.value !== undefined) {
       const formattedValue = (props.value / 100).toFixed(2);
-      handleInputChange(formattedValue, true);
+      setInputValue(formattedValue);
     }
   }, [props.value]);
-
-  // Determine if input is valid
-  const isValid = validateMoneyInput(inputValue).valid;
 
   return (
     <div className="value-editor money-editor">
