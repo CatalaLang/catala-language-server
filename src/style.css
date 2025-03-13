@@ -20,6 +20,7 @@
   margin-left: 8px;
 }
 
+.test-editor-fold,
 .test-editor-run,
 .test-editor-delete {
   background: none;
@@ -33,9 +34,15 @@
   justify-content: center;
 }
 
+.test-editor-fold:hover,
 .test-editor-run:hover,
 .test-editor-delete:hover {
   background: var(--vscode-toolbar-hoverBackground);
+}
+
+.test-editor-fold {
+  color: var(--vscode-editor-foreground);
+  margin-right: 4px;
 }
 
 .test-editor-run {
