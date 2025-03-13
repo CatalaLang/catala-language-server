@@ -502,14 +502,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     setInputValue(e.target.value);
   };
 
-  // Handle external value changes
-  useEffect(() => {
-    if (props.value !== undefined) {
-      const formattedValue = (props.value / 100).toFixed(2);
-      setInputValue(formattedValue);
-    }
-  }, [props.value]);
-
   return (
     <div className="value-editor money-editor">
       <div className="money-input-container">

@@ -10,7 +10,7 @@ export function useDebounce(
   const debounceTimerRef = useRef<number | null>(null);
 
   // Handle input changes with debounce
-  const handleChange = (newValue: string) => {
+  const handleChange = (newValue: string): void => {
     setValue(newValue);
 
     // Clear any existing timer
