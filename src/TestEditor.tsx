@@ -29,18 +29,18 @@ export default function TestEditor(props: Props): ReactElement {
     });
   }
 
-  const [isFolded, setIsFolded] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <div className="test-editor">
       <div className="test-editor-bar">
         <button
-          className="test-editor-fold"
-          title={isFolded ? 'Unfold test case' : 'Fold test case'}
-          onClick={() => setIsFolded(!isFolded)}
+          className="test-editor-collapse"
+          title={isCollapsed ? 'Expand test case' : 'Collapse test case'}
+          onClick={() => setIsCollapsed(!isCollapsed)}
         >
           <span
-            className={`codicon ${isFolded ? 'codicon-unfold' : 'codicon-fold'}`}
+            className={`codicon ${isCollapsed ? 'codicon-unfold' : 'codicon-fold'}`}
           ></span>
         </button>
         <button
@@ -73,7 +73,7 @@ export default function TestEditor(props: Props): ReactElement {
       </div>
       <div
         className="test-editor-content"
-        style={{ display: isFolded ? 'none' : 'block' }}
+        style={{ display: isCollapsed ? 'none' : 'block' }}
       >
         <div className="test-section">
           <h2 className="test-section-title">Inputs</h2>
