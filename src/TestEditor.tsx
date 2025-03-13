@@ -1,4 +1,4 @@
-import { type ReactElement } from 'react';
+import { type ReactElement, useState } from 'react';
 import {
   type Test,
   type TestInputs,
@@ -29,9 +29,20 @@ export default function TestEditor(props: Props): ReactElement {
     });
   }
 
+  const [isFolded, setIsFolded] = useState(false);
+
   return (
     <div className="test-editor">
       <div className="test-editor-bar">
+        <button
+          className="test-editor-fold"
+          title={isFolded ? 'Unfold test case' : 'Fold test case'}
+          onClick={() => setIsFolded(!isFolded)}
+        >
+          <span
+            className={`codicon ${isFolded ? 'codicon-unfold' : 'codicon-fold'}`}
+          ></span>
+        </button>
         <button
           className={`test-editor-run ${props.runState?.status ?? ''}`}
           title="Run test"
@@ -60,7 +71,10 @@ export default function TestEditor(props: Props): ReactElement {
           <span className="codicon codicon-trash"></span>
         </button>
       </div>
-      <div className="test-editor-content">
+      <div
+        className="test-editor-content"
+        style={{ display: isFolded ? 'none' : 'block' }}
+      >
         <div className="test-section">
           <h2 className="test-section-title">Inputs</h2>
           <TestInputsEditor
