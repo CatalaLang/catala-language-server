@@ -1,7 +1,7 @@
 // Editors for a single value type (grouped with a factory function)
 
 import { type ReactElement, useState, useEffect } from 'react';
-import Row from './Row';
+import CollapsibleRow from './CollapsibleRow';
 import type {
   Option,
   TestIo,
@@ -500,7 +500,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
             const [isFolded, setIsFolded] = useState(false);
 
             return (
-              <Row
+              <CollapsibleRow
                 key={fieldName}
                 label={fieldName}
                 className="field-name"
@@ -522,7 +522,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
                     handleFieldChange(fieldName, newValue.value!.value)
                   }
                 />
-              </Row>
+              </CollapsibleRow>
             );
           })}
         </tbody>

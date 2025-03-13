@@ -8,7 +8,7 @@ type Props = {
   onToggleCollapse?: () => void;
 };
 
-export default function Row({
+export default function CollapsibleRow({
   label,
   children,
   className = '',
