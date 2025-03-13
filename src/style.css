@@ -198,8 +198,7 @@
   border-spacing: 0;
 }
 
-.test-inputs-table td:first-child,
-.test-outputs-table td:first-child {
+.row td:first-child {
   width: 200px;
   max-width: 200px;
   white-space: nowrap;
@@ -208,9 +207,12 @@
   padding-right: 16px;
 }
 
-.test-inputs-table td:last-child,
-.test-outputs-table td:last-child {
+.row td:last-child {
   width: auto;
+}
+
+.field-name td:first-child {
+  font-weight: bold;
 }
 
 .value-editor,

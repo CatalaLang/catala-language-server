@@ -1,6 +1,7 @@
 // Editors for a single value type (grouped with a factory function)
 
 import { type ReactElement, useState, useEffect } from 'react';
+import Row from './Row';
 import type {
   Option,
   TestIo,
@@ -492,22 +493,19 @@ function StructEditor(props: StructEditorProps): ReactElement {
         </thead>
         <tbody>
           {Array.from(fields.entries()).map(([fieldName, fieldType]) => (
-            <tr key={fieldName}>
-              <td className="field-name identifier">{fieldName}</td>
-              <td>
-                <ValueEditor
-                  testIO={{
-                    typ: fieldType,
-                    value: value?.[1].get(fieldName)
-                      ? { value: value[1].get(fieldName)! }
-                      : undefined,
-                  }}
-                  onValueChange={(newValue) =>
-                    handleFieldChange(fieldName, newValue.value!.value)
-                  }
-                />
-              </td>
-            </tr>
+            <Row key={fieldName} label={fieldName} className="field-name">
+              <ValueEditor
+                testIO={{
+                  typ: fieldType,
+                  value: value?.[1].get(fieldName)
+                    ? { value: value[1].get(fieldName)! }
+                    : undefined,
+                }}
+                onValueChange={(newValue) =>
+                  handleFieldChange(fieldName, newValue.value!.value)
+                }
+              />
+            </Row>
           ))}
         </tbody>
       </table>

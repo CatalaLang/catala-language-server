@@ -2,6 +2,7 @@ import type { Test, TestIo } from './generated/test_case';
 import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
 import type { ReactElement } from 'react';
+import Row from './Row';
 
 type Props = {
   test: Test;
@@ -71,30 +72,25 @@ export default function TestOutputsEditor({
           {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {
             const outputData = test_outputs.get(outputName);
             return (
-              <tr key={outputName}>
-                <td>
-                  <strong className="identifier">{outputName}</strong>
-                </td>
-                <td>
-                  {outputData?.value ? (
-                    <AssertionValueEditor
-                      testIO={outputData}
-                      onValueChange={(newValue) =>
-                        onAssertValueChange(outputName, newValue)
-                      }
-                      onAssertionDeletion={() => onAssertDelete(outputName)}
-                    />
-                  ) : (
-                    <button
-                      className="test-editor-run"
-                      onClick={() => onAssertAdd(outputName)}
-                    >
-                      <span className="codicon codicon-add"></span>
-                      Add expected value
-                    </button>
-                  )}
-                </td>
-              </tr>
+              <Row key={outputName} label={outputName}>
+                {outputData?.value ? (
+                  <AssertionValueEditor
+                    testIO={outputData}
+                    onValueChange={(newValue) =>
+                      onAssertValueChange(outputName, newValue)
+                    }
+                    onAssertionDeletion={() => onAssertDelete(outputName)}
+                  />
+                ) : (
+                  <button
+                    className="test-editor-run"
+                    onClick={() => onAssertAdd(outputName)}
+                  >
+                    <span className="codicon codicon-add"></span>
+                    Add expected value
+                  </button>
+                )}
+              </Row>
             );
           })}
         </tbody>

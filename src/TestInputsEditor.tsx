@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import type { TestInputs, TestIo } from './generated/test_case';
 import ValueEditor from './ValueEditors';
+import Row from './Row';
 
 type Props = {
   test_inputs: TestInputs;
@@ -29,17 +30,12 @@ export default function TestInputsEditor(props: Props): ReactElement {
             }
 
             return (
-              <tr key={inputName}>
-                <td>
-                  <strong className="identifier">{inputName}</strong>
-                </td>
-                <td>
-                  <ValueEditor
-                    testIO={testIo}
-                    onValueChange={onTestInputChange}
-                  />
-                </td>
-              </tr>
+              <Row key={inputName} label={inputName}>
+                <ValueEditor
+                  testIO={testIo}
+                  onValueChange={onTestInputChange}
+                />
+              </Row>
             );
           })}
         </tbody>
