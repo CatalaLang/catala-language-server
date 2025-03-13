@@ -2,7 +2,7 @@ import { type ReactElement, useState } from 'react';
 import type { Test, TestIo } from './generated/test_case';
 import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
-import Row from './Row';
+import CollapsibleRow from './CollapsibleRow';
 import { isCollapsible } from './ValueEditors';
 
 type Props = {
@@ -77,7 +77,7 @@ export default function TestOutputsEditor({
             const [isCollapsed, setIsCollapsed] = useState(false);
 
             return (
-              <Row
+              <CollapsibleRow
                 key={outputName}
                 label={outputName}
                 isCollapsed={isCollapsibleValue ? isCollapsed : undefined}
@@ -104,7 +104,7 @@ export default function TestOutputsEditor({
                     Add expected value
                   </button>
                 )}
-              </Row>
+              </CollapsibleRow>
             );
           })}
         </tbody>

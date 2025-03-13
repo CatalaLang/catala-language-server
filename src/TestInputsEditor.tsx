@@ -1,7 +1,7 @@
 import { type ReactElement, useState } from 'react';
 import type { TestInputs, TestIo } from './generated/test_case';
 import ValueEditor from './ValueEditors';
-import Row from './Row';
+import CollapsibleRow from './CollapsibleRow';
 import { isCollapsible } from './ValueEditors';
 
 type Props = {
@@ -24,7 +24,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
             }
 
             return (
-              <Row
+              <CollapsibleRow
                 key={inputName}
                 label={inputName}
                 isCollapsed={isCollapsible(testIo.typ) ? isFolded : undefined}
@@ -38,7 +38,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
                   testIO={testIo}
                   onValueChange={onTestInputChange}
                 />
-              </Row>
+              </CollapsibleRow>
             );
           })}
         </tbody>
