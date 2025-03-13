@@ -496,21 +496,35 @@ function StructEditor(props: StructEditorProps): ReactElement {
           </tr>
         </thead>
         <tbody>
-          {Array.from(fields.entries()).map(([fieldName, fieldType]) => (
-            <Row key={fieldName} label={fieldName} className="field-name">
-              <ValueEditor
-                testIO={{
-                  typ: fieldType,
-                  value: value?.[1].get(fieldName)
-                    ? { value: value[1].get(fieldName)! }
-                    : undefined,
-                }}
-                onValueChange={(newValue) =>
-                  handleFieldChange(fieldName, newValue.value!.value)
+          {Array.from(fields.entries()).map(([fieldName, fieldType]) => {
+            const [isFolded, setIsFolded] = useState(false);
+
+            return (
+              <Row
+                key={fieldName}
+                label={fieldName}
+                className="field-name"
+                isCollapsed={isCollapsible(fieldType) ? isFolded : undefined}
+                onToggleCollapse={
+                  isCollapsible(fieldType)
+                    ? () => setIsFolded(!isFolded)
+                    : undefined
                 }
-              />
-            </Row>
-          ))}
+              >
+                <ValueEditor
+                  testIO={{
+                    typ: fieldType,
+                    value: value?.[1].get(fieldName)
+                      ? { value: value[1].get(fieldName)! }
+                      : undefined,
+                  }}
+                  onValueChange={(newValue) =>
+                    handleFieldChange(fieldName, newValue.value!.value)
+                  }
+                />
+              </Row>
+            );
+          })}
         </tbody>
       </table>
     </div>
