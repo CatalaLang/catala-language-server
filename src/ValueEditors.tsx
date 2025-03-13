@@ -19,6 +19,10 @@ type Props = {
   onValueChange(newValue: TestIo): void;
 };
 
+export function isCollapsible(typ: Typ): boolean {
+  return typ.kind === 'TStruct' || typ.kind === 'TArray';
+}
+
 export default function ValueEditor(props: Props): ReactElement {
   const typ = props.testIO.typ;
   switch (typ.kind) {
