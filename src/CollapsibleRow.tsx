@@ -20,7 +20,7 @@ export default function CollapsibleRow({
 
   return (
     <tr className={className}>
-      <td>
+      <td className="row-label">
         <div className="row-header">
           {isCollapsible && (
             <button
@@ -35,10 +35,14 @@ export default function CollapsibleRow({
               ></span>
             </button>
           )}
-          <strong className="identifier">{label}</strong>
+          <strong className="identifier" title={label}>
+            {label}
+          </strong>
         </div>
       </td>
-      <td>{(!isCollapsible || !isCollapsed) && children}</td>
+      <td className="row-content">
+        {(!isCollapsible || !isCollapsed) && children}
+      </td>
     </tr>
   );
 }
