@@ -14,9 +14,7 @@ export default function AssertionValueEditor({
 }: Props): React.ReactElement {
   return (
     <div className="assertion-value-editor">
-      <div className="assertion-value-content">
-        <ValueEditor testIO={testIO} onValueChange={onValueChange} />
-      </div>
+      <ValueEditor testIO={testIO} onValueChange={onValueChange} />
       <button
         className="assertion-delete"
         title="Delete assertion"
