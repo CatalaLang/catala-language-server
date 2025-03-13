@@ -15,7 +15,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
       <table className="test-inputs-table">
         <tbody>
           {Array.from(props.test_inputs, ([inputName, testIo]) => {
-            const [isFolded, setIsFolded] = useState(false);
+            const [isCollapsed, setIsCollapsed] = useState(false);
 
             function onTestInputChange(newValue: TestIo): void {
               props.onTestInputsChange(
@@ -27,10 +27,12 @@ export default function TestInputsEditor(props: Props): ReactElement {
               <CollapsibleRow
                 key={inputName}
                 label={inputName}
-                isCollapsed={isCollapsible(testIo.typ) ? isFolded : undefined}
+                isCollapsed={
+                  isCollapsible(testIo.typ) ? isCollapsed : undefined
+                }
                 onToggleCollapse={
                   isCollapsible(testIo.typ)
-                    ? () => setIsFolded(!isFolded)
+                    ? () => setIsCollapsed(!isCollapsed)
                     : undefined
                 }
               >

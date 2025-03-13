@@ -22,9 +22,9 @@ export default function CollapsibleRow({
         <div className="row-header">
           {isCollapsible && (
             <button
-              className="test-editor-fold"
+              className="test-editor-collapse"
               onClick={onToggleCollapse}
-              title={isCollapsed ? 'Unfold' : 'Fold'}
+              title={isCollapsed ? 'Expand' : 'Collapse'}
             >
               <span
                 className={`codicon ${

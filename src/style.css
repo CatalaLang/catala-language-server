@@ -20,7 +20,7 @@
   margin-left: 8px;
 }
 
-.test-editor-fold,
+.test-editor-collapse,
 .test-editor-run,
 .test-editor-delete {
   background: none;
@@ -34,13 +34,13 @@
   justify-content: center;
 }
 
-.test-editor-fold:hover,
+.test-editor-collapse:hover,
 .test-editor-run:hover,
 .test-editor-delete:hover {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
-.test-editor-fold {
+.test-editor-collapse {
   color: var(--vscode-editor-foreground);
   margin-right: 4px;
 }
@@ -120,7 +120,6 @@
   font-size: 12px;
   padding: 6px;
 }
-
 
 .test-section {
   margin-bottom: 10px;
@@ -223,7 +222,7 @@
   flex-grow: 1;
 }
 
-.test-editor-fold {
+.test-editor-collapse {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
