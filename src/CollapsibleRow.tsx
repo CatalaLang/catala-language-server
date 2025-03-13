@@ -3,7 +3,6 @@ import type { ReactElement, ReactNode } from 'react';
 type Props = {
   label: string;
   children: ReactNode;
-  className?: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 };
@@ -11,7 +10,6 @@ type Props = {
 export default function CollapsibleRow({
   label,
   children,
-  className = '',
   isCollapsed,
   onToggleCollapse,
 }: Props): ReactElement {
@@ -19,7 +17,7 @@ export default function CollapsibleRow({
     isCollapsed !== undefined && onToggleCollapse !== undefined;
 
   return (
-    <tr className={className}>
+    <tr>
       <td className="row-label">
         <div className="row-header">
           {isCollapsible && (

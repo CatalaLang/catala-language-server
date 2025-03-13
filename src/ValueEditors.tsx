@@ -503,7 +503,6 @@ function StructEditor(props: StructEditorProps): ReactElement {
               <CollapsibleRow
                 key={fieldName}
                 label={fieldName}
-                className="field-name"
                 isCollapsed={isCollapsible(fieldType) ? isFolded : undefined}
                 onToggleCollapse={
                   isCollapsible(fieldType)
