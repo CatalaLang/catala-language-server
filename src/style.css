@@ -207,6 +207,26 @@
   padding-right: 16px;
 }
 
+.row-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.test-editor-fold {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0;
+}
+
+.identifier {
+  line-height: 16px;
+}
+
 .row td:last-child {
   width: auto;
 }
