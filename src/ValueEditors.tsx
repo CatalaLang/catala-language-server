@@ -208,21 +208,52 @@ export default function ValueEditor(props: Props): ReactElement {
   }
 }
 
+const INT_PATTERN = /^-?\d+$/;
+
+function isValidInt(value: string): boolean {
+  return INT_PATTERN.test(value);
+}
+
 type IntEditorProps = {
   value?: number; //initial value, may not exist
   onValueChange(newValue: number /* int */): void;
 };
 
 function IntEditor(props: IntEditorProps): ReactElement {
+  const [displayValue, setDisplayValue] = useState(
+    props.value?.toString() ?? ''
+  );
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const value = event.target.value;
+    setDisplayValue(value);
+
+    // Only update if valid
+    if (isValidInt(value)) {
+      props.onValueChange(Number(value));
+    }
+  };
+
+  const handleBlur = (): void => {
+    if (!isValidInt(displayValue)) {
+      // Reset to the last valid value or empty string
+      setDisplayValue(props.value?.toString() ?? '');
+    }
+  };
+
   return (
-    <div className="value-editor">
+    <div className="value-editor int-editor">
       <input
-        type="number"
-        step="1"
-        value={props?.value}
-        onChange={(evt) => {
-          props.onValueChange(Number(evt.target.value));
-        }}
+        type="text"
+        pattern={INT_PATTERN.source}
+        required
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={`int-input ${
+          displayValue && !isValidInt(displayValue) ? 'invalid-int' : ''
+        }`}
+        placeholder="0"
       />
     </div>
   );

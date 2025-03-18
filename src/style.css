@@ -178,6 +178,15 @@
   font-size: 13px;
 }
 
+.int-editor .int-input {
+  width: 100px;
+}
+
+.int-editor .invalid-int {
+  border-color: var(--vscode-inputValidation-errorBorder) !important;
+  background-color: var(--vscode-inputValidation-errorBackground) !important;
+}
+
 .value-editor input:focus,
 .value-editor select:focus,
 .struct-editor input:focus,
