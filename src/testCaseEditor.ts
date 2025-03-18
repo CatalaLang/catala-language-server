@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { logger } from './logger';
 import { assertUnreachable } from './util';
 
+import type { UpMessage } from './generated/test_case';
 import {
   type DownMessage,
   readUpMessage,
@@ -87,6 +88,49 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
+    function debounce<T extends (...args: any[]) => any>(
+      func: T,
+      waitMs: number
+    ): (...args: Parameters<T>) => void {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+      return function (...args: Parameters<T>): void {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+
+        timeoutId = setTimeout(() => {
+          func(...args);
+          timeoutId = null;
+        }, waitMs);
+      };
+    }
+
+    function applyGuiEdit(
+      typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>,
+      lang: string
+    ): void {
+      // re-emit catala text file from ATD test definitions
+      const newTextBuffer = atdToCatala(typed_msg.value, lang);
+      logger.log(`newTextBuffer:\n ${newTextBuffer}`);
+      // produce edit
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(
+        document.uri,
+        new vscode.Range(0, 0, document.lineCount, 0),
+        newTextBuffer
+      );
+      vscode.workspace.applyEdit(edit).then(() => {
+        //XXX concurrent edits? (e.g. from external sources?)
+        postMessageToWebView({
+          kind: 'Update',
+          value: parseTestFile(document.getText(), lang, document.uri.fsPath),
+        });
+      });
+    }
+
+    const debouncedApplyGuiEdit = debounce(applyGuiEdit, 450);
+
     webviewPanel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
       const lang = getLanguageFromFileName(document.fileName);
@@ -108,26 +152,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         }
         case 'GuiEdit': {
           logger.log('Got edit from webview');
-          // re-emit catala text file from ATD test definitions
-          const newTextBuffer = atdToCatala(typed_msg.value, lang);
-          logger.log(`newTextBuffer:\n ${newTextBuffer}`);
-          // produce edit
-          const edit = new vscode.WorkspaceEdit();
-          edit.replace(
-            document.uri,
-            new vscode.Range(0, 0, document.lineCount, 0),
-            newTextBuffer
-          );
-          vscode.workspace.applyEdit(edit).then(() => {
-            postMessageToWebView({
-              kind: 'Update',
-              value: parseTestFile(
-                document.getText(),
-                lang,
-                document.uri.fsPath
-              ), //XXX concurrent edits?
-            });
-          });
+          debouncedApplyGuiEdit(typed_msg, lang);
           break;
         }
         case 'TestRunRequest': {
