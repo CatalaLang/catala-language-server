@@ -288,28 +288,12 @@ function DateEditor(props: DateEditorProps): ReactElement {
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    setInternalValue(event.target.value);
-  };
+    const value = event.target.value;
+    setInternalValue(value);
 
-  const handleBlur = (): void => {
-    validateAndUpdate();
-  };
-
-  const handleKeyDown = (
-    event: React.KeyboardEvent<HTMLInputElement>
-  ): void => {
-    if (event.key === 'Enter') {
-      validateAndUpdate();
-    }
-  };
-
-  const validateAndUpdate = (): void => {
-    const newDate = parseDate(internalValue);
+    const newDate = parseDate(value);
     if (newDate) {
       props.onValueChange(newDate);
-    } else {
-      // If invalid, revert to the last valid value
-      setInternalValue(props.value ? formatDate(props.value) : '');
     }
   };
 
@@ -321,13 +305,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
 
   return (
     <div className="value-editor">
-      <input
-        type="date"
-        value={internalValue}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-      />
+      <input type="date" value={internalValue} onChange={handleChange} />
     </div>
   );
 }
