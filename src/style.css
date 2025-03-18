@@ -262,6 +262,26 @@
 .duration-fields input {
   width: 60px;
 }
+
+.rat-editor .rat-input {
+  width: 100px;
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  font-size: 13px;
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+}
+
+.rat-editor .rat-input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+.rat-editor .invalid-rat {
+  border-color: var(--vscode-inputValidation-errorBorder) !important;
+  background-color: var(--vscode-inputValidation-errorBackground) !important;
+}
 .money-editor .money-input {
   width: 100px;
   padding: 4px 8px;

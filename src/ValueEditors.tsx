@@ -310,20 +310,52 @@ function DateEditor(props: DateEditorProps): ReactElement {
   );
 }
 
+const RAT_PATTERN = /^-?\d+(\.\d*)?$/;
+
+function isValidRat(value: string): boolean {
+  return RAT_PATTERN.test(value);
+}
+
 type RatEditorProps = {
   value?: number; // initial value, may not exist
   onValueChange(newValue: number): void;
 };
 
 function RatEditor(props: RatEditorProps): ReactElement {
+  const [displayValue, setDisplayValue] = useState(
+    props.value?.toString() ?? ''
+  );
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const value = event.target.value;
+    setDisplayValue(value);
+
+    // Only update if valid
+    if (isValidRat(value)) {
+      props.onValueChange(Number(value));
+    }
+  };
+
+  const handleBlur = (): void => {
+    if (!isValidRat(displayValue)) {
+      // Reset to the last valid value or empty string
+      setDisplayValue(props.value?.toString() ?? '');
+    }
+  };
+
   return (
-    <div className="value-editor">
+    <div className="value-editor rat-editor">
       <input
-        type="number"
-        value={props.value}
-        onChange={(evt) => {
-          props.onValueChange(Number(evt.target.value));
-        }}
+        type="text"
+        pattern={RAT_PATTERN.source}
+        required
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={`rat-input ${
+          displayValue && !isValidRat(displayValue) ? 'invalid-rat' : ''
+        }`}
+        placeholder="0.0"
       />
     </div>
   );
