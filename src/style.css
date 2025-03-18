@@ -253,18 +253,24 @@
 .duration-fields input {
   width: 60px;
 }
-.money-editor .money-input-container {
-  display: flex;
-  align-items: center;
+.money-editor .money-input {
+  width: 100px;
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  font-size: 13px;
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
 }
 
-.money-editor .currency-symbol {
-  margin-right: 5px;
-  font-size: 1.2em;
+.money-editor .money-input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
 }
 
-.money-editor input {
-  flex: 1;
+.money-editor .invalid-money {
+  border-color: var(--vscode-inputValidation-errorBorder) !important;
+  background-color: var(--vscode-inputValidation-errorBackground) !important;
 }
 .test-editor-error {
   background-color: var(--vscode-notifications-background);
