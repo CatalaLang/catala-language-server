@@ -270,7 +270,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
     month: number;
     day: number;
   }): string => {
-    return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
+    return `${String(date.year).padStart(4, '0')}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
   };
 
   const [internalValue, setInternalValue] = useState(
@@ -282,6 +282,10 @@ function DateEditor(props: DateEditorProps): ReactElement {
   ): { year: number; month: number; day: number } | null => {
     const [year, month, day] = dateString.split('-').map(Number);
     if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return null;
+    }
+    if (year > 9999) {
+      //catala date literals are coded on 4 digits
       return null;
     }
     return { year, month, day };
@@ -296,12 +300,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
       props.onValueChange(newDate);
     }
   };
-
-  useEffect(() => {
-    if (props.value) {
-      setInternalValue(formatDate(props.value));
-    }
-  }, [props.value]);
 
   return (
     <div className="value-editor">
