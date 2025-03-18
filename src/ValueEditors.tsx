@@ -413,6 +413,12 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   );
 }
 
+const MONEY_PATTERN = /^\d+(\.\d{2})?$/;
+
+function isValidMoney(value: string): boolean {
+  return MONEY_PATTERN.test(value);
+}
+
 type MoneyEditorProps = {
   value?: number; // initial value in cents, may not exist
   onValueChange(newValue: number): void;
@@ -426,26 +432,19 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     centsToDisplayValue(props.value)
   );
 
-  useEffect(() => {
-    setDisplayValue(centsToDisplayValue(props.value));
-  }, [props.value]);
-
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    setDisplayValue(event.target.value);
+    const value = event.target.value;
+    setDisplayValue(value);
+
+    // Only update if valid
+    if (isValidMoney(value)) {
+      const centsValue = Math.round(parseFloat(value) * 100);
+      props.onValueChange(centsValue);
+    }
   };
 
   const handleBlur = (): void => {
-    const numericValue = parseFloat(displayValue);
-    if (!isNaN(numericValue)) {
-      const centsValue = Math.round(numericValue * 100);
-      if (centsValue >= 0) {
-        props.onValueChange(centsValue);
-        setDisplayValue(centsToDisplayValue(centsValue));
-      } else {
-        // Reset to the last valid value or empty string
-        setDisplayValue(centsToDisplayValue(props.value));
-      }
-    } else {
+    if (!isValidMoney(displayValue)) {
       // Reset to the last valid value or empty string
       setDisplayValue(centsToDisplayValue(props.value));
     }
@@ -453,15 +452,18 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
 
   return (
     <div className="value-editor money-editor">
-      <div className="money-input-container">
-        <input
-          type="text"
-          value={displayValue}
-          onChange={handleChange}
-          onBlur={handleBlur}
-          placeholder="0.00"
-        />
-      </div>
+      <input
+        type="text"
+        pattern={MONEY_PATTERN.source}
+        required
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={`money-input ${
+          displayValue && !isValidMoney(displayValue) ? 'invalid-money' : ''
+        }`}
+        placeholder="0.00"
+      />
     </div>
   );
 }
