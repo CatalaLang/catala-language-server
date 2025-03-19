@@ -165,6 +165,12 @@ export default function ValueEditor(props: Props): ReactElement {
     case 'TEnum':
       return (
         <EnumEditor
+          value={
+            props.testIO.value?.value.value as [
+              EnumDeclaration,
+              [string, Option<RuntimeValue>],
+            ]
+          }
           enumDeclaration={typ.value}
           onValueChange={(
             newCtor: string,
@@ -571,12 +577,6 @@ function StructEditor(props: StructEditorProps): ReactElement {
   );
 }
 
-type EnumEditorProps = {
-  enumDeclaration: EnumDeclaration;
-  value?: [EnumDeclaration, [string, Option<RuntimeValue>]];
-  onValueChange(ctor: string, value: Option<RuntimeValue>): void;
-};
-
 type ArrayEditorProps = {
   elementType: Typ;
   value?: RuntimeValue[];
@@ -665,11 +665,19 @@ function runtimeValueToTestIo(typ: Typ, value: Option<RuntimeValue>): TestIo {
   };
 }
 
+type EnumEditorProps = {
+  enumDeclaration: EnumDeclaration;
+  value?: [EnumDeclaration, [string, Option<RuntimeValue>]];
+  onValueChange(ctor: string, value: Option<RuntimeValue>): void;
+};
+
 function EnumEditor(props: EnumEditorProps): ReactElement {
   // Note that in Catala, an enum should always have at least 1 constructor
   // so dereferencing the first array element is valid
   const [currentCtor, setCurrentCtor] = useState(
-    Array.from(props.enumDeclaration.constructors.keys())[0]
+    props.value
+      ? props.value[1][0]
+      : Array.from(props.enumDeclaration.constructors.keys())[0]
   );
 
   return (
@@ -682,6 +690,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
             props.onValueChange(newCtor, null);
           }
         }}
+        value={currentCtor}
       >
         {Array.from(props.enumDeclaration.constructors.keys()).map(
           (optionName) => (
