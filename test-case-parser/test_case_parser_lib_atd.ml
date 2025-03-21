@@ -826,6 +826,8 @@ let run_test testing_scope include_dirs options =
     dcalc_prg;
   let program_fun = Expr.unbox (Program.to_expr dcalc_prg testing_scope_name) in
   let program_fun =
+    Message.with_delayed_errors
+    @@ fun () ->
     Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_fun
   in
   let _args, program_expr =
@@ -834,6 +836,8 @@ let run_test testing_scope include_dirs options =
     | _ -> assert false
   in
   let result_struct =
+    Message.with_delayed_errors
+    @@ fun () ->
     Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr
   in
   let results, out_struct =
