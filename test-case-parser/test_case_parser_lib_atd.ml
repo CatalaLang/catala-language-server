@@ -258,14 +258,7 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
   let decl_ctx = prg.program_ctx in
   let input_typs : typ list =
     I.ScopeDef.Map.fold
-      (fun (_, kind) sdef acc ->
-        match kind with
-        | SubScopeInput _ -> acc
-        | Var _ -> (
-          match fst sdef.I.scope_def_io.I.io_input with
-          | Runtime.NoInput -> acc
-          | Runtime.OnlyInput | Runtime.Reentrant -> sdef.I.scope_def_typ :: acc
-          ))
+      (fun _ sdef acc -> sdef.I.scope_def_typ :: acc)
       scope.I.scope_defs []
     |> List.rev
   in
