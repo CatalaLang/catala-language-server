@@ -286,13 +286,19 @@ let populate_scopecall
   ScopeVar.Map.fold
     (fun scope_var (def_pos, e) acc ->
       let name = ScopeVar.to_string scope_var in
+      let name =
+        String.split_on_char '#' name |> function [] -> name | h :: _ -> h
+      in
       let typ =
-        (* FIXME: [var_sig_typ] map doesn't contain valid var ids *)
-        (ScopeVar.Map.to_seq ctx.var_typs
-        |> Seq.find (fun (sv', _) -> ScopeVar.to_string sv' = name)
-        |> Option.get
-        |> snd)
-          .Desugared.Name_resolution.var_sig_typ
+        match
+          ScopeVar.Map.to_seq ctx.var_typs
+          |> Seq.find (fun (sv', _) -> ScopeVar.to_string sv' = name)
+        with
+        | None ->
+          Message.warning "no type found for %s (%s)" name
+            (Pos.to_string_shorter pos);
+          TLit TUnit, Pos.no_pos
+        | Some (_, t) -> t.Desugared.Name_resolution.var_sig_typ
       in
       let hash = hash_info (module ScopeVar) scope_var in
       let var = Definition { name; hash; typ } in
