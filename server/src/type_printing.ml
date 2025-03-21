@@ -289,7 +289,7 @@ let sig_type
   in
   MarkupContent.create ~kind:Markdown ~value:typ_s
 
-let pp_module locale fmt (itf : Surface.Ast.interface) =
+let pp_module locale fmt (mcontent : Surface.Ast.module_content) =
   let open Format in
   let open Surface.Ast in
   (* From Surface.Ast :
@@ -308,20 +308,38 @@ let pp_module locale fmt (itf : Surface.Ast.interface) =
       fprintf fmt "%s %s" (topdef_s locale) (Mark.remove top_def.topdef_name)
     | ScopeUse _ -> ()
   in
-  fprintf fmt "@[<v>%a@]"
-    (pp_print_list ~pp_sep:pp_print_space pp_code_block)
-    itf.intf_code
+  match mcontent.module_items with
+  | Interface items ->
+    fprintf fmt "@[<v>%a@]"
+      (pp_print_list ~pp_sep:pp_print_space pp_code_block)
+      items
+  | Code (ls : law_structure list) ->
+    let rec loop = function
+      | [] -> ()
+      | LawInclude _ :: t | ModuleDef _ :: t | ModuleUse _ :: t | LawText _ :: t
+        ->
+        loop t
+      | LawHeading (_, ls) :: t ->
+        loop ls;
+        loop t
+      | CodeBlock (cb, _, _) :: t ->
+        fprintf fmt "@[<v>%a@]"
+          (pp_print_list ~pp_sep:pp_print_space pp_code_block)
+          cb;
+        loop t
+    in
+    loop ls
 
-let module_type locale ?alias (module_itf : Surface.Ast.interface) =
+let module_type locale ?alias (module_content : Surface.Ast.module_content) =
   let locale_s =
     match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
   in
   let typ_s =
     asprintf "**Module %s%a**@\n```catala_code_%s@\n%a@\n```"
-      (fst module_itf.intf_modname.module_name)
+      (fst module_content.module_modname.module_name)
       (Utils.pp_opt (fun fmt alias ->
            Format.fprintf fmt " (%s %s)" (alias_s locale) alias))
-      alias locale_s (pp_module locale) module_itf
+      alias locale_s (pp_module locale) module_content
   in
   MarkupContent.create ~kind:Markdown ~value:typ_s
 

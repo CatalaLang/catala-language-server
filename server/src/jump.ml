@@ -82,7 +82,7 @@ type mjump = {
   hash : int;
   name : string;
   alias : string option;
-  interface : Surface.Ast.interface;
+  mcontent : Surface.Ast.module_content;
 }
 
 type var =
@@ -98,18 +98,20 @@ type var =
   | Module_use of mjump
   | Module_decl of mjump
 
-let pp_module_jump fmt { interface; alias; hash; _ } =
+let pp_module_jump fmt { mcontent; alias; hash; _ } =
   let open Format in
   fprintf fmt "%s#%d %a"
-    (Mark.remove interface.intf_modname.module_name)
+    (Mark.remove mcontent.module_modname.module_name)
     hash
     (pp_opt (fun fmt alias -> fprintf fmt "(alias:%s)" alias))
     alias
 
-let make_mjump ?alias (mname : ModuleName.t) (interface : Surface.Ast.interface)
-    =
-  let hash = Hashtbl.hash (Mark.get interface.intf_modname.module_name) in
-  { hash; name = ModuleName.to_string mname; alias; interface }
+let make_mjump
+    ?alias
+    (mname : ModuleName.t)
+    (mcontent : Surface.Ast.module_content) =
+  let hash = Hashtbl.hash (Mark.get mcontent.module_modname.module_name) in
+  { hash; name = ModuleName.to_string mname; alias; mcontent }
 
 let pp_var ppf =
   let open Format in
@@ -477,7 +479,7 @@ let traverse_topdef
     (module_lookup : ModuleName.t -> mjump)
     scope_lookup
     (topdef : TopdefName.t)
-    ((e, typ, _vis) : typed expr * typ * visibility)
+    ((e, typ, _vis, _meta) : typed expr * typ * visibility * bool)
     m : PMap.pmap =
   let name = TopdefName.to_string topdef in
   let topdef_pos = snd (TopdefName.get_info topdef) in
@@ -609,7 +611,7 @@ let add_scope_definitions
 
 let populate_modules
     input_src
-    (modules_itf : Surface.Ast.interface ModuleName.Map.t)
+    (modules_contents : Surface.Ast.module_content ModuleName.Map.t)
     (prog : typed program)
     (surface : Surface.Ast.program)
     (acc : PMap.t) : PMap.t * (ModuleName.t -> mjump) =
@@ -626,7 +628,7 @@ let populate_modules
     try
       let mname = C.find name convert_map in
       let mname_pos = Mark.get (ModuleName.get_info mname) in
-      let interface = ModuleName.Map.find mname modules_itf in
+      let interface = ModuleName.Map.find mname modules_contents in
       let alias = if alias <> name then Some alias else None in
       let mjump = make_mjump mname interface ?alias in
       let acc =
@@ -655,7 +657,7 @@ let populate_modules
               surface.program_used_modules
           in
           itf, alias)
-        modules_itf
+        modules_contents
     in
     fun mname ->
       let interface, alias = ModuleName.Map.find mname itf_map in
@@ -683,11 +685,11 @@ let populate_modules
 let populate
     input_src
     (ctx : Desugared.Name_resolution.context)
-    (modules_itf : Surface.Ast.interface ModuleName.Map.t)
+    (modules_contents : Surface.Ast.module_content ModuleName.Map.t)
     (surface : Surface.Ast.program)
     (prog : typed program) : t =
   let variables, mod_lookup =
-    populate_modules input_src modules_itf prog surface PMap.empty
+    populate_modules input_src modules_contents prog surface PMap.empty
   in
   let variables, scope_lookup_map = traverse ctx mod_lookup prog variables in
   let variables =
@@ -768,7 +770,7 @@ type type_lookup =
   | Expr of typ
   | Type of typ
   | Scope of (ScopeName.t * Scopelang.Ast.scope_var_ty ScopeVar.Map.t)
-  | Module of (Surface.Ast.interface * string option)
+  | Module of (Surface.Ast.module_content * string option)
 
 module Ord_lookup = Set.Make (struct
   type t = type_lookup
@@ -796,10 +798,10 @@ let lookup_type (tables : t) (p : Pos.t) :
     | Scope_def { scope_decl_name; scope_sig; _ }
     | Scope_decl { scope_decl_name; scope_sig; _ } ->
       Scope (scope_decl_name, scope_sig)
-    | Module_use { interface; alias; _ }
-    | Module_decl { interface; alias; _ }
-    | Module_def { interface; alias; _ } ->
-      Module (interface, alias)
+    | Module_use { mcontent; alias; _ }
+    | Module_decl { mcontent; alias; _ }
+    | Module_def { mcontent; alias; _ } ->
+      Module (mcontent, alias)
   in
   PMap.lookup_with_range p tables.variables
   |> function
