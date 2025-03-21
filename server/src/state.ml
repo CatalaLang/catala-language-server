@@ -208,7 +208,7 @@ let lookup_type_declaration f p =
   | Expr (TEnum e, _) | Type (TEnum e, _) ->
     let _, pos = EnumName.get_info e in
     Some (of_position pos)
-  | Module ({ Surface.Ast.intf_modname = itf; _ }, _) ->
+  | Module ({ Surface.Ast.module_modname = itf; _ }, _) ->
     Some (of_position @@ Mark.get itf.module_name)
   | Scope (scope_decl_name, _) ->
     Some (of_position @@ Mark.get (ScopeName.get_info scope_decl_name))
@@ -315,7 +315,8 @@ let load_module_interfaces config_dir includes program =
         ms
   in
   let rec aux req_chain seen uses :
-      (ModuleName.t * Surface.Ast.interface * ModuleName.t Ident.Map.t) option
+      (ModuleName.t * Surface.Ast.module_content * ModuleName.t Ident.Map.t)
+      option
       File.Map.t
       * ModuleName.t Ident.Map.t =
     List.fold_left
@@ -336,17 +337,19 @@ let load_module_interfaces config_dir includes program =
           (* Some file paths are absolute, we normalize them wrt to the config
              directory *)
           let f_path = Utils.join_paths config_dir f in
-          let intf =
+          let module_content =
             Surface.Parser_driver.load_interface (Global.FileName f_path)
           in
-          let modname = ModuleName.fresh intf.intf_modname.module_name in
+          let modname =
+            ModuleName.fresh module_content.module_modname.module_name
+          in
           let seen = File.Map.add f None seen in
           let seen, sub_use_map =
             aux
               (Mark.get use.Surface.Ast.mod_use_name :: req_chain)
-              seen intf.Surface.Ast.intf_submodules
+              seen module_content.Surface.Ast.module_submodules
           in
-          ( File.Map.add f (Some (modname, intf, sub_use_map)) seen,
+          ( File.Map.add f (Some (modname, module_content, sub_use_map)) seen,
             Ident.Map.add
               (Mark.remove use.Surface.Ast.mod_use_alias)
               modname use_map ))
@@ -474,7 +477,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
         Surface.Fill_positions.fill_pos_with_legislative_info prg
       in
       let open Catala_utils in
-      let ctx, modules_itf =
+      let ctx, modules_contents =
         let mod_uses, modules =
           match config_opt with
           | None -> String.Map.empty, Uid.Module.Map.empty
@@ -484,12 +487,14 @@ let process_document ?previous_file ?contents (uri : string) : t =
         let ctx =
           Desugared.Name_resolution.form_context (prg, mod_uses) modules
         in
-        let modules_itf : Surface.Ast.interface Uid.Module.Map.t =
+        let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
           Uid.Module.Map.map (fun elt -> fst elt) modules
         in
-        ctx, modules_itf
+        ctx, modules_content
       in
-      let prg = Desugared.From_surface.translate_program ctx prg in
+      let prg =
+        Desugared.From_surface.translate_program ctx modules_contents prg
+      in
       let prg = Desugared.Disambiguate.program prg in
       let () = Desugared.Linting.lint_program prg in
       let exceptions_graphs =
@@ -510,7 +515,9 @@ let process_document ?previous_file ?contents (uri : string) : t =
             prg.program_ctx.ctx_enums
         in
         let prg = Scopelang.Ast.type_program prg in
-        let jump_table = Jump.populate input_src ctx modules_itf surface prg in
+        let jump_table =
+          Jump.populate input_src ctx modules_contents surface prg
+        in
         !l, Some prg, Some jump_table
     with e ->
       let errors =
