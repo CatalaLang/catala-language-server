@@ -804,6 +804,22 @@ let run_test testing_scope include_dirs options =
         File.process_out cmd args |> ignore)
   in
   let desugared_prg, naming_ctx = read_program include_dirs options in
+  let desugared_prg =
+    (* Remove assertion, the diff will be performed by the GUI *)
+    let open Desugared.Ast in
+    let module_scopes =
+      ScopeName.Map.map
+        (fun scope ->
+          {
+            scope with
+            scope_assertions = AssertionName.Map.empty;
+            scope_meta_assertions = [];
+          })
+        desugared_prg.program_root.module_scopes
+    in
+    let program_root = { desugared_prg.program_root with module_scopes } in
+    { desugared_prg with program_root }
+  in
   let testing_scope_name =
     match
       Ident.Map.find_opt testing_scope
