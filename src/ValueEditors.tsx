@@ -553,7 +553,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
                 isCollapsed={isCollapsible(fieldType) ? isFolded : undefined}
                 onToggleCollapse={
                   isCollapsible(fieldType)
-                    ? () => setIsFolded(!isFolded)
+                    ? (): void => setIsFolded(!isFolded)
                     : undefined
                 }
               >
@@ -591,7 +591,7 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
     onValueChange([...value, newValue]);
   };
 
-  const handleUpdate = (index: number, newValue: RuntimeValue) => {
+  const handleUpdate = (index: number, newValue: RuntimeValue): void => {
     const updatedArray = [...value];
     updatedArray[index] = newValue;
     onValueChange(updatedArray);
@@ -613,7 +613,7 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
     <div className="array-editor">
       <div className="array-items">
         {value.map((item, index) => (
-          <div key={index} className="array-item">
+          <div key={Math.random()} className="array-item">
             <div className="array-item-controls">
               <button
                 className="array-move-up"
