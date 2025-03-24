@@ -124,6 +124,7 @@ let get_typ_literal = function
   | TMoney -> O.TMoney
   | TDate -> O.TDate
   | TDuration -> O.TDuration
+  | TPos -> assert false
 
 let rec get_typ ?module_name decl_ctx = function
   | TLit tlit, _ -> get_typ_literal tlit

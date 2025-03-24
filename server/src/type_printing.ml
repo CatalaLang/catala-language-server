@@ -88,7 +88,8 @@ let pp_lit locale fmt l =
        | TRat -> "decimal", "décimal"
        | TMoney -> "money", "argent"
        | TDuration -> "duration", "durée"
-       | TDate -> "date", "date")
+       | TDate -> "date", "date"
+       | TPos -> "position", "position")
 
 let pp_typ locale fmt (ty : typ) =
   let rec pp_typ fmt ty =
