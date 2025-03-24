@@ -434,7 +434,8 @@ let traverse_expr
       populate_scopecall ctx module_lookup scope_lookup pos scope args acc
         (f bnd_ctx)
     | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | EApp _ | ETuple _
-    | ETupleAccess _ | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ ->
+    | ETupleAccess _ | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ | EPos _
+      ->
       Expr.shallow_fold (f bnd_ctx) e acc
   in
   f Bindlib.empty_ctxt e m
