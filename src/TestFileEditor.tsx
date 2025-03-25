@@ -335,7 +335,7 @@ export default function TestFileEditor({
           <div className="test-editor-top-bar">
             <button className="test-editor-add-button" onClick={onAddNewTest}>
               <span className="codicon codicon-add"></span>
-              Add new test
+              <FormattedMessage id="testFile.addNewTest" />
             </button>
           </div>
           {state.tests.map((test) => (

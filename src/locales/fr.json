@@ -22,6 +22,8 @@
   "testEditor.resetExpected": "Réinitialiser les valeurs attendues",
   "testEditor.results": "Résultats",
   "assertion.delete": "Supprimer l'assertion",
+  "testFile.addNewTest": "Ajouter un nouveau test",
+  "testOutputs.addExpectedValue": "Ajouter une valeur attendue",
   "results.success": "✅",
   "results.failure": "❌",
   "results.expected": "attendu",
