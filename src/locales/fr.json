@@ -17,13 +17,14 @@
   "testEditor.delete": "Supprimer le test",
   "testEditor.passed": "Réussi",
   "testEditor.failed": "Échoué",
-  "testEditor.inputs": "Entrées",
-  "testEditor.expectedValues": "Valeurs attendues",
+  "testEditor.inputs": "Données d'entrée",
+  "testEditor.expectedValues": "Résultats attendus",
   "testEditor.resetExpected": "Réinitialiser les valeurs attendues",
   "testEditor.results": "Résultats",
   "assertion.delete": "Supprimer l'assertion",
   "results.success": "✅",
   "results.failure": "❌",
   "results.expected": "attendu",
-  "results.butGot": "mais obtenu"
+  "results.butGot": "mais obtenu",
+  "arrayEditor.addElement": "Ajouter un élément"
 }
