@@ -508,12 +508,22 @@ let process_document ?previous_file ?contents (uri : string) : t =
       | _ ->
         let prg =
           Scopelang.From_desugared.translate_program prg exceptions_graphs
+          |> Scopelang.Ast.type_program
         in
         let _type_ordering =
           Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
             prg.program_ctx.ctx_enums
         in
-        let prg = Scopelang.Ast.type_program prg in
+        let _ =
+          let type_ordering =
+            Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+              prg.program_ctx.ctx_enums
+          in
+          let prg = Scopelang.Ast.type_program prg in
+          let prg = Dcalc.From_scopelang.translate_program prg in
+          let prg = Shared_ast.Typing.program ~internal_check:true prg in
+          prg, type_ordering
+        in
         let jump_table =
           Jump.populate input_src ctx modules_contents surface prg
         in
