@@ -5,6 +5,7 @@ import {
   useCallback,
   useRef,
 } from 'react';
+import { FormattedMessage } from 'react-intl';
 import type { ScopeDefList } from './generated/test_case';
 import {
   type ParseResults,
@@ -91,7 +92,9 @@ export default function TestFileEditor({
 
           {modalState.step === 'selectFile' && (
             <>
-              <p>Select a Catala file to test:</p>
+              <p>
+                <FormattedMessage id="testFile.selectFile" />
+              </p>
               <button className="file-select-button" onClick={handleFileSelect}>
                 <span className="codicon codicon-file"></span>
                 Select File...
@@ -101,7 +104,12 @@ export default function TestFileEditor({
 
           {modalState.step === 'selectScope' && modalState.filename && (
             <>
-              <p>Select a scope from {modalState.filename}:</p>
+              <p>
+                <FormattedMessage
+                  id="testFile.selectScope"
+                  values={{ filename: modalState.filename }}
+                />
+              </p>
               <select
                 value={modalState.scopeUnderTest || ''}
                 onChange={(e) =>
@@ -127,10 +135,12 @@ export default function TestFileEditor({
                 onClick={handleModalSubmit}
                 disabled={!modalState.scopeUnderTest}
               >
-                Create Test
+                <FormattedMessage id="testFile.createTest" />
               </button>
             )}
-            <button onClick={handleModalClose}>Cancel</button>
+            <button onClick={handleModalClose}>
+              <FormattedMessage id="testFile.cancel" />
+            </button>
           </div>
         </div>
       </div>
@@ -298,18 +308,22 @@ export default function TestFileEditor({
       return <EmptyTestListMismatchWarning vscode={vscode} />;
     }
     case 'initializing':
-      return <strong>Initializing...</strong>;
+      return (
+        <strong>
+          <FormattedMessage id="app.initializing" />
+        </strong>
+      );
     case 'success': {
       if (state.tests.length === 0) {
         return (
           <>
             <div className="test-editor-empty">
               <p className="test-editor-empty-message">
-                No test cases found. Would you like to create your first test?
+                <FormattedMessage id="testFile.noTests" />
               </p>
               <button className="test-editor-add-button" onClick={onAddNewTest}>
                 <span className="codicon codicon-add"></span>
-                Add new test
+                <FormattedMessage id="testFile.addTest" />
               </button>
             </div>
             {renderModal()}
@@ -321,7 +335,7 @@ export default function TestFileEditor({
           <div className="test-editor-top-bar">
             <button className="test-editor-add-button" onClick={onAddNewTest}>
               <span className="codicon codicon-add"></span>
-              Add new test
+              <FormattedMessage id="testFile.addNewTest" />
             </button>
           </div>
           {state.tests.map((test) => (
@@ -352,7 +366,9 @@ function ParsingErrorWarning({
 }): ReactElement {
   return (
     <div role="alert" className="test-editor-error">
-      <h2>Oops! This should not have happened...</h2>
+      <h2>
+        <FormattedMessage id="testFile.errorTitle" />
+      </h2>
       <pre className="test-editor-error-message">{message}</pre>
       <button
         className="test-editor-open-text"
@@ -361,7 +377,7 @@ function ParsingErrorWarning({
         }
       >
         <span className="codicon codicon-edit"></span>
-        Open in Text Editor
+        <FormattedMessage id="testFile.openTextEditor" />
       </button>
     </div>
   );
@@ -374,12 +390,15 @@ function EmptyTestListMismatchWarning({
 }): ReactElement {
   return (
     <div className="test-editor-warning">
-      <h2>Test File Format Issue</h2>
+      <h2>
+        <FormattedMessage id="testFile.formatIssueTitle" />
+      </h2>
       <p>
-        The test file contains content, but it doesn't match the expected test
-        case format.
+        <FormattedMessage id="testFile.formatIssueText" />
       </p>
-      <p>Please edit the file manually in the text editor to fix the format.</p>
+      <p>
+        <FormattedMessage id="testFile.formatIssueFix" />
+      </p>
       <div className="test-editor-warning-actions">
         <button
           className="test-editor-open-text"

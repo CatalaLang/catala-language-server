@@ -1,6 +1,7 @@
 // Editors for a single value type (grouped with a factory function)
 
 import { type ReactElement, useState, useEffect } from 'react';
+import { FormattedMessage } from 'react-intl';
 import CollapsibleRow from './CollapsibleRow';
 import type {
   Option,
@@ -650,7 +651,7 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
       </div>
       <button className="array-add" onClick={handleAdd}>
         <span className="codicon codicon-add"></span>
-        Add Item
+        <FormattedMessage id="arrayEditor.addElement" />
       </button>
     </div>
   );

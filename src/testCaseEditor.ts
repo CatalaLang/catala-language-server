@@ -274,6 +274,8 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       )
     );
 
+    const language = vscode.env.language;
+
     return `
           <!DOCTYPE html>
           <html lang="en">
@@ -294,7 +296,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           </body>
           <script src="${scriptUri}"></script>
           <script>
-            window.Ui.renderUi();
+            window.Ui.renderUi("${language}");
           </script>
           </html>
       `;
