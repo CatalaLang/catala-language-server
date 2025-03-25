@@ -1,4 +1,5 @@
 import { type ReactElement, useState } from 'react';
+import { FormattedMessage } from 'react-intl';
 import {
   type Test,
   type TestInputs,
@@ -76,7 +77,9 @@ export default function TestEditor(props: Props): ReactElement {
         style={{ display: isCollapsed ? 'none' : 'block' }}
       >
         <div className="test-section">
-          <h2 className="test-section-title">Inputs</h2>
+          <h2 className="test-section-title">
+            <FormattedMessage id="testEditor.inputs" />
+          </h2>
           <TestInputsEditor
             test_inputs={props.test.test_inputs}
             onTestInputsChange={onTestInputsChange}
@@ -85,7 +88,7 @@ export default function TestEditor(props: Props): ReactElement {
         <div className="test-section">
           <div className="test-section-header">
             <h2 className="test-section-title">
-              Expected values
+              <FormattedMessage id="testEditor.expectedValues" />
               <button
                 className="reset-expected-values"
                 title="Reset Expected Values"
@@ -104,7 +107,9 @@ export default function TestEditor(props: Props): ReactElement {
           props.runState?.results?.kind === 'Ok' && (
             <div className="test-section">
               <div className="test-section-header">
-                <h2 className="test-section-title">Results</h2>
+                <h2 className="test-section-title">
+                  <FormattedMessage id="testEditor.results" />
+                </h2>
                 <Results
                   {...select(
                     props.test.test_outputs,

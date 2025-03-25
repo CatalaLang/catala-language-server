@@ -1,13 +1,15 @@
 {
   "compilerOptions": {
     "outDir": "./dist",
-    "module": "commonjs",
+    "module": "CommonJS",
     "target": "es2020",
     "lib": ["dom", "es2020"],
     "noImplicitAny": true,
     "strictNullChecks": true,
     "sourceMap": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "esModuleInterop": true
   },
   "exclude": ["node_modules", ".vscode-test"]
 }
