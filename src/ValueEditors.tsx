@@ -614,7 +614,7 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
     <div className="array-editor">
       <div className="array-items">
         {value.map((item, index) => (
-          <div key={Math.random()} className="array-item">
+          <div key={index} className="array-item">
             <div className="array-item-controls">
               <button
                 className="array-move-up"
