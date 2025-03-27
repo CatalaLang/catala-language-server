@@ -15,29 +15,25 @@
    the License. *)
 
 let () =
-  let combine r1 r2 =
-    let report src level ~over k msgf =
-      let v = r1.Logs.report src level ~over:(fun () -> ()) k msgf in
-      r2.Logs.report src level ~over (fun () -> v) msgf
-    in
-    { Logs.report }
-  in
-  let logfile_path, logfile =
-    let logfile_path, oc = Filename.open_temp_file "catala-lsp-logs" "" in
-    let fmt = Format.formatter_of_out_channel oc in
-    logfile_path, Logs.format_reporter ~app:fmt ~dst:fmt ()
+  let _options =
+    Catala_utils.Global.enforce_options
+    (* FIXME: this still prints warnings on stderr due to [Message] hard-wiring
+       [ifprintf] formatters *)
+      ~disable_warnings:false ~message_format:Lsp ()
   in
   let err_std =
-    Logs.format_reporter ~app:Format.err_formatter ~dst:Format.err_formatter ()
+    let pp_header ppf (l, h) =
+      match h with
+      | None ->
+        if l = Logs.App then Format.fprintf ppf "[LSP] "
+        else Format.fprintf ppf "[LSP|%a] " Logs.pp_level l
+      | Some h -> Format.fprintf ppf "[LSP|%s] " h
+    in
+    Logs.format_reporter ~pp_header ~app:Format.err_formatter
+      ~dst:Format.err_formatter ()
   in
-  Logs.set_reporter (combine logfile err_std);
-  Logs.set_level (Some Logs.Info);
-  Logs.info (fun m -> m "log file created: '%s'" logfile_path);
-  Catala_utils.Global.enforce_options
-  (* FIXME: this still prints warnings on stderr due to [Message] hard-wiring
-     [ifprintf] formatters *)
-    ~disable_warnings:false ~message_format:Lsp ()
-  |> ignore
+  Logs.set_reporter err_std;
+  ()
 
 let run () =
   Log.debug (fun m ->
@@ -46,7 +42,6 @@ let run () =
         (Array.to_list Sys.argv));
   let s = new Server.catala_lsp_server in
   let server = Linol_lwt.Jsonrpc2.create_stdio s in
-
   let task = Linol_lwt.Jsonrpc2.run (server ~env:()) in
   match Linol_lwt.run task with
   | () -> ()
