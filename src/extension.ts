@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
-import type { Executable } from 'vscode-languageclient/node';
+import type {
+  Executable,
+  LanguageClientOptions,
+  ServerOptions,
+} from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import * as path from 'path';
 
@@ -62,18 +66,20 @@ export function activate(context: vscode.ExtensionContext): void {
       cmd = lsp_binary;
     }
     const run: Executable = { command: cmd };
+    const serverOptions: ServerOptions = { run, debug: run };
+    const clientOptions: LanguageClientOptions = {
+      markdown: { isTrusted: true, supportHtml: true },
+      documentSelector: [
+        { scheme: 'file', language: 'catala_en', pattern: '**/*.catala_en' },
+        { scheme: 'file', language: 'catala_fr', pattern: '**/*.catala_fr' },
+      ],
+    };
     client = new LanguageClient(
-      cmd,
+      'catala-lsp',
       'Catala Language Server Protocol',
-      { run, debug: run },
-      {
-        documentSelector: [
-          { scheme: 'file', language: 'catala_en', pattern: '**/*.catala_en' },
-          { scheme: 'file', language: 'catala_fr', pattern: '**/*.catala_fr' },
-        ],
-      }
+      serverOptions,
+      clientOptions
     );
-
     client.start();
   }
 
