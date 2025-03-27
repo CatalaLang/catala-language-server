@@ -26,6 +26,16 @@
           "default": false,
           "description": "Enable the custom test case editor for Catala test files"
         },
+        "catala-lsp.trace.server": {
+          "description": "Controls the logging output of the language server. Valid settings are `off`, `messages`, or `verbose`.",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "messages"
+        },
         "catala.lspServerPath": {
           "type": "string",
           "default": null,
