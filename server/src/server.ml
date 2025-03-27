@@ -64,6 +64,22 @@ let run_with_delay ?(delay = 1.) ~when_ready f =
     Lwt.cancel !current_thread;
     current_thread := run_with_delay ()
 
+let set_log_level =
+  let open Linol_lwt.TraceValues in
+  function
+  | None | Some Off ->
+    Logs.app (fun m -> m "switching log level to [none]");
+    Logs.set_level None
+  | Some Messages ->
+    Logs.set_level (Some App);
+    Logs.app (fun m -> m "switching log level to [messages]")
+  | Some Compact ->
+    Logs.set_level (Some Info);
+    Logs.app (fun m -> m "switching log level to [compact]")
+  | Some Verbose ->
+    Logs.set_level (Some Debug);
+    Logs.app (fun m -> m "switching log level to [verbose]")
+
 class catala_lsp_server =
   let open Linol_lwt in
   object (self)
@@ -89,8 +105,10 @@ class catala_lsp_server =
     val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
     method spawn_query_handler = Lwt.async
 
-    method! on_req_initialize ~notify_back (_i : InitializeParams.t) =
+    method! on_req_initialize ~notify_back (i : InitializeParams.t) =
       let open Lwt.Syntax in
+      set_log_level i.trace;
+      Logs.app (fun m -> m "Starting lsp server");
       let sync_opts = self#config_sync_opts in
       let* documentFormattingProvider =
         let* available = Utils.check_catala_format_availability () in
@@ -121,7 +139,6 @@ class catala_lsp_server =
           ~textDocumentSync:(`TextDocumentSyncOptions sync_opts)
           ~workspaceSymbolProvider:self#config_workspace_symbol
           ?typeDefinitionProvider:self#config_type_definition ()
-        |> self#config_modify_capabilities
       in
       Lwt.return (InitializeResult.create ~capabilities ())
 
@@ -186,11 +203,14 @@ class catala_lsp_server =
           Linol_lwt.Jsonrpc2.IO.return ()
         with ServerError s -> Linol_lwt.Jsonrpc2.IO.failwith s
       end
+      | SetTrace params ->
+        set_log_level (Some params.value);
+        Lwt.return_unit
       | UnknownNotification notif ->
         let json = Jsonrpc.Notification.yojson_of_t notif in
         Log.warn (fun m -> m "unkown notification: %a" Yojson.Safe.pp json);
-        Lwt.return ()
-      | _ -> Lwt.return ()
+        Lwt.return_unit
+      | _ -> Lwt.return_unit
 
     method! on_request_unhandled : type r.
         notify_back:_ -> id:_ -> r Lsp.Client_request.t -> r Lwt.t =
