@@ -1,17 +1,12 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import TestFileEditor from './TestFileEditor';
 import { writeUpMessage } from './generated/test_case';
+import App from './App';
 
-const vscode = acquireVsCodeApi();
+export function renderUi(language: string): void {
+  const vscode = acquireVsCodeApi();
 
-export function renderUi(): void {
   const root = createRoot(document.getElementById('root') as HTMLElement);
-  root.render(
-    createElement(TestFileEditor, {
-      contents: { state: 'initializing' },
-      vscode,
-    })
-  );
+  root.render(createElement(App, { language, vscode }));
   vscode.postMessage(writeUpMessage({ kind: 'Ready' }));
 }

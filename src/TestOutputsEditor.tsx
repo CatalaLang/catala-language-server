@@ -1,4 +1,5 @@
 import { type ReactElement, useState } from 'react';
+import { FormattedMessage } from 'react-intl';
 import type { Test, TestIo } from './generated/test_case';
 import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
@@ -101,7 +102,7 @@ export default function TestOutputsEditor({
                     onClick={() => onAssertAdd(outputName)}
                   >
                     <span className="codicon codicon-add"></span>
-                    Add expected value
+                    <FormattedMessage id="testOutputs.addExpectedValue" />
                   </button>
                 )}
               </CollapsibleRow>
