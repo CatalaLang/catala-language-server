@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "outDir": "./dist",
-    "module": "esnext",
+    "module": "CommonJS",
     "target": "es2020",
     "lib": ["dom", "es2020"],
     "noImplicitAny": true,
@@ -9,8 +9,7 @@
     "sourceMap": true,
     "jsx": "react-jsx",
     "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "moduleResolution": "node"
+    "esModuleInterop": true
   },
   "exclude": ["node_modules", ".vscode-test"]
 }
