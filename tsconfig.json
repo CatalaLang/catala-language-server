@@ -3,7 +3,7 @@
     "outDir": "./dist",
     "module": "CommonJS",
     "target": "es2020",
-    "lib": ["dom", "es2020"],
+    "lib": ["dom", "es2021", "ES2021.Intl"],
     "noImplicitAny": true,
     "strictNullChecks": true,
     "sourceMap": true,
