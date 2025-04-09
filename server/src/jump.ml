@@ -297,7 +297,7 @@ let populate_scopecall
         | None ->
           Message.warning "no type found for %s (%s)" name
             (Pos.to_string_shorter pos);
-          TLit TUnit, Pos.no_pos
+          TLit TUnit, Pos.void
         | Some (_, t) -> t.Desugared.Name_resolution.var_sig_typ
       in
       let hash = hash_info (module ScopeVar) scope_var in

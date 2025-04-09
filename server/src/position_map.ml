@@ -200,7 +200,7 @@ module Make (D : Data) = struct
     fprintf ppf "@[<h>%a: %a@]" Trie.pp_itv (pos_to_itv p) D.format d
 
   let add_all pos data variables =
-    if pos = Pos.no_pos then variables
+    if pos = Pos.void then variables
     else
       let itv = pos_to_itv pos in
       let data = DS.of_list data in
