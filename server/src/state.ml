@@ -473,8 +473,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
         Surface.Parser_driver.parse_top_level_file ?resolve_included_file
           input_src
       in
-      let (prg as surface) =
-        Surface.Fill_positions.fill_pos_with_legislative_info prg
+      let (prg as surface) = prg
       in
       let open Catala_utils in
       let ctx, modules_contents =

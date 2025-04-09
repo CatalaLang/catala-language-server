@@ -408,7 +408,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
           let rules =
             try
               let def_key =
-                ( (subscope_var, Pos.no_pos),
+                ( (subscope_var, Pos.void),
                   I.ScopeDef.SubScopeInput
                     { name = tested_scope; var_within_origin_scope } )
               in
