@@ -23,12 +23,25 @@ let warn_r range message =
   Lsp.Types.Diagnostic.create ~range ~severity:Warning ~source:"catala-lsp"
     ~message ()
 
-let error_r range message =
-  Lsp.Types.Diagnostic.create ~range ~severity:Error ~source:"catala-lsp"
-    ~message ()
+let error_r ?related range message =
+  let relatedInformation =
+    Option.map
+      (List.map (fun (location, message) ->
+           DiagnosticRelatedInformation.create ~location ~message))
+      related
+  in
+  Lsp.Types.Diagnostic.create ?relatedInformation ~range ~severity:Error
+    ~source:"catala-lsp" ~message ()
 
 let warn_p pos msg = warn_r (range_of_pos pos) msg
-let error_p pos msg = error_r (range_of_pos pos) msg
+
+let error_p ?related pos msg =
+  let related =
+    Option.map
+      (List.map (fun (p, message) -> location_of_pos p, message))
+      related
+  in
+  error_r ?related (range_of_pos pos) msg
 
 let diag_r (severity : DiagnosticSeverity.t) range msg =
   match severity with
