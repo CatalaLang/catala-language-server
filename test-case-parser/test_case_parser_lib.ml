@@ -13,6 +13,7 @@
    the License. *)
 
 open Catala_utils
+open Clerk_lib
 open Shared_ast
 module I = Desugared.Ast
 module O = Test_case_t
