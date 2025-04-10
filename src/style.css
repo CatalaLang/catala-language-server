@@ -1,3 +1,7 @@
+body {
+  background-color: aqua;
+}
+
 .test-editor {
   margin-bottom: 20px;
   background-color: var(--vscode-editor-background);
@@ -114,7 +118,7 @@
 }
 
 .struct-editor .struct-name {
-  background-color: var(--vscode-symbolIcon-structForeground);
+  background-color: red;
   color: var(--vscode-editor-background);
   font-style: italic;
   font-size: 12px;
