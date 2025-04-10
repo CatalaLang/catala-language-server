@@ -15,6 +15,7 @@
    the License. *)
 
 open Lwt.Syntax
+open Catala_utils
 
 exception ServerError of string
 
@@ -39,6 +40,13 @@ let parse_settings settings =
          (Format.asprintf
             "ChangeConfiguration: received unexpected settings: %a"
             Yojson.Safe.pp settings))
+
+let lookup_project projects uri =
+  List.find_opt
+    (fun (_p, { Discovery.project_files; _ }) ->
+      Discovery.Scan_map.mem uri project_files)
+    projects
+  |> Option.map snd
 
 let preprocess_uri uri =
   let prefix = "file://" in
@@ -103,12 +111,16 @@ class catala_lsp_server =
         ()
 
     val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
+    val mutable projects : Discovery.projects = []
     method spawn_query_handler = Lwt.async
 
     method! on_req_initialize ~notify_back (i : InitializeParams.t) =
       let open Lwt.Syntax in
       set_log_level i.trace;
       Logs.app (fun m -> m "Starting lsp server");
+      Option.iter
+        (fun projs -> projects <- projs)
+        (Discovery.init ~notify_back i);
       let sync_opts = self#config_sync_opts in
       let* documentFormattingProvider =
         let* available = Utils.check_catala_format_availability () in
@@ -147,7 +159,17 @@ class catala_lsp_server =
 
     method private process_and_update_file ?contents uri =
       let previous_file = Hashtbl.find_opt buffers uri in
-      let f = State.process_document ?previous_file ?contents uri in
+      let f =
+        let project_state =
+          lookup_project projects uri
+          |> function
+          | None ->
+            Log.err (fun m -> m "cannot locate project for file '%s'" uri);
+            Discovery.default
+          | Some project_state -> project_state
+        in
+        State.process_document ?previous_file ?contents project_state uri
+      in
       Hashtbl.replace buffers uri f;
       f
 

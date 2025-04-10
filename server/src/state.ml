@@ -225,53 +225,6 @@ let lookup_document_symbols file =
           vl acc)
       variables []
 
-let lookup_clerk_toml (path : string) =
-  let from_dir = Filename.dirname path in
-  let open Catala_utils in
-  let find_in_parents cwd predicate =
-    let home = try Sys.getenv "HOME" with Not_found -> "" in
-    let rec lookup dir =
-      if predicate dir then Some dir
-      else if dir = home then None
-      else
-        let parent = Filename.dirname dir in
-        if parent = dir then None else lookup parent
-    in
-    match lookup cwd with Some rel -> Some rel | None -> None
-  in
-  try
-    begin
-      match
-        find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
-      with
-      | None ->
-        Log.debug (fun m -> m "no 'clerk.toml' config file found");
-        None
-      | Some dir -> (
-        Log.debug (fun m ->
-            m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
-        try
-          let config = Clerk_config.read File.(dir / "clerk.toml") in
-          let include_dirs =
-            let cwd = Sys.getcwd () in
-            List.map
-              (fun p -> Utils.join_paths cwd p)
-              config.global.include_dirs
-          in
-          let config =
-            { config with global = { config.global with include_dirs } }
-          in
-          Some (config, dir)
-        with Message.CompilerError c ->
-          Log.err (fun m ->
-              let pp fmt = Message.Content.emit ~ppf:fmt c Error in
-              m "error while parsing config file: %t" pp);
-          None)
-    end
-  with _ ->
-    Log.err (fun m -> m "failed to lookup config file");
-    None
-
 let load_module_interfaces config_dir includes program =
   (* Recurse into program modules, looking up files in [using] and loading
      them *)
@@ -372,71 +325,11 @@ let load_module_interfaces config_dir includes program =
   in
   root_uses, modules
 
-let find_inclusion (config_opt : (Clerk_config.t * string) option) file =
-  let open Catala_utils in
-  match config_opt with
-  | None -> None
-  | Some (config, config_dir) ->
-    List.fold_left
-      (fun acc ({ Clerk_config.name = mod_name; includes; _ } as modul) ->
-        if acc <> None then acc
-        else
-          let is_present =
-            List.exists
-              (fun included_file ->
-                File.equal (Filename.concat config_dir included_file) file)
-              includes
-          in
-          if is_present then Some (mod_name, modul) else None)
-      None config.modules
-
-let convert_meta_module
-    ~config_dir
-    (meta_module_name, (modul : Clerk_config.module_)) :
-    string Catala_utils.Global.input_src =
-  let language =
-    (* The language is the same as the included files or module used. *)
-    List.fold_left
-      (function
-        | None -> (
-          fun f -> try Some (Catala_utils.Cli.file_lang f) with _ -> None)
-        | acc -> fun _ -> acc)
-      None
-      (modul.includes
-      @ List.map
-          (function `Simple s | `With_alias (s, _) -> s)
-          modul.module_uses)
-    |> Option.value ~default:Catala_utils.Global.En
-  in
-  let pp_module
-      ppf
-      { Clerk_config.name = _; module_uses; includes : string list } =
-    let open Format in
-    let use_kwd, alias_kwd, include_kwd, module_kwd =
-      match language with
-      | Pl | En -> "Using", "as", "Include:", "Module"
-      | Fr -> "Usage de", "en tant que", "Inclusion:", "Module"
-    in
-    let pp_use ppf = function
-      | `Simple mod_name -> fprintf ppf "> %s %s" use_kwd mod_name
-      | `With_alias (mod_name, alias) ->
-        fprintf ppf "> %s %s %s %s" use_kwd mod_name alias_kwd alias
-    in
-    let pp_include ppf mod_path = fprintf ppf "> %s %s" include_kwd mod_path in
-    fprintf ppf "@[<v>@[<v>%a@]@ > %s %s@ @[<v>%a@]@]"
-      (pp_print_list ~pp_sep:pp_print_cut pp_use)
-      module_uses module_kwd meta_module_name
-      (pp_print_list ~pp_sep:pp_print_cut pp_include)
-      includes
-  in
-  Log.info (fun m -> m "generated meta-module:@\n%a@." pp_module modul);
-  Catala_utils.Global.Contents
-    ( Format.asprintf "%a" pp_module modul,
-      Filename.concat config_dir
-        (meta_module_name ^ ".catala_" ^ Catala_utils.Cli.language_code language)
-    )
-
-let process_document ?previous_file ?contents (uri : string) : t =
+let process_document
+    ?previous_file
+    ?contents
+    (project_state : Discovery.project)
+    (uri : string) : t =
   let open Catala_utils in
   Log.info (fun m -> m "processing document '%s'" uri);
   let uri = Uri.pct_decode uri in
@@ -445,17 +338,32 @@ let process_document ?previous_file ?contents (uri : string) : t =
     | None -> Global.FileName uri
     | Some c -> Contents (c, uri)
   in
-  let config_opt = lookup_clerk_toml uri in
   let input_src, resolve_included_file =
-    match config_opt, find_inclusion config_opt uri with
-    | Some (_, config_dir), Some i ->
-      Log.info (fun m ->
-          m "found document included as part of a meta-module: generating it.");
-      let resolve_included_file path =
-        if File.equal path uri then input_src else Global.FileName path
-      in
-      convert_meta_module ~config_dir i, Some resolve_included_file
-    | _ -> input_src, None
+    let project_file_opt =
+      Discovery.Scan_map.find_opt uri project_state.project_files
+    in
+    match project_file_opt with
+    | None -> (* should not happen *) input_src, None
+    | Some { Discovery.file = _; including_files; _ } ->
+      let module S = Discovery.Project_files in
+      if S.is_empty including_files then input_src, None
+      else begin
+        Log.info (fun m ->
+            m "found document included in files: %a" Utils.pp_string_list
+              (S.elements including_files
+              |> List.map (fun { Clerk_scan.file_name; _ } -> file_name)));
+        let including_file = S.choose including_files in
+        if S.cardinal including_files > 1 then
+          (* TODO: also handle multiple file processing *)
+          Log.info (fun m -> m "found multiple document inclusion");
+        Log.info (fun m ->
+            m "found document inclusion in %s - processing this one instead"
+              including_file.file_name);
+        let resolve_included_file path =
+          if File.equal path uri then input_src else Global.FileName path
+        in
+        FileName including_file.file_name, Some resolve_included_file
+      end
   in
   let _ = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
@@ -473,10 +381,8 @@ let process_document ?previous_file ?contents (uri : string) : t =
       let open Catala_utils in
       let ctx, modules_contents =
         let mod_uses, modules =
-          match config_opt with
-          | None -> String.Map.empty, Uid.Module.Map.empty
-          | Some (config, config_dir) ->
-            load_module_interfaces config_dir config.global.include_dirs prg
+          load_module_interfaces project_state.clerk_root_dir
+            project_state.clerk_config.global.include_dirs prg
         in
         let ctx =
           Desugared.Name_resolution.form_context (prg, mod_uses) modules
@@ -556,7 +462,6 @@ let process_document ?previous_file ?contents (uri : string) : t =
             Log.debug (fun m -> m "error (%d/%d): %t" (succ i) err_len pp_err)
           else Log.debug (fun m -> m "error: %t" pp_err))
         errors;
-
       List.rev !l, None, None
   in
   let file = create ?prog uri in
