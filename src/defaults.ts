@@ -1,7 +1,14 @@
-import type { Typ, RuntimeValue } from './generated/test_case';
+import type { Typ, RuntimeValue, RuntimeValueRaw } from './generated/test_case';
 import { assertUnreachable } from './util';
 
 export function getDefaultValue(typ: Typ): RuntimeValue {
+  return {
+    value: getDefaultValueRaw(typ),
+    attrs: [],
+  };
+}
+
+function getDefaultValueRaw(typ: Typ): RuntimeValueRaw {
   switch (typ.kind) {
     case 'TBool':
       return { kind: 'Bool', value: false };
