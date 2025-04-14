@@ -186,47 +186,56 @@ and get_enum ?module_name decl_ctx enum_name =
   { O.enum_name; constructors }
 
 type Pos.attr += Uid of string
+
 let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun decl_ctx e ->
-  let _uid = Pos.get_attr (Expr.pos e) (function Uid s -> failwith s | _ -> None) in 
-  match e with
-  | ELit (LBool b), _ -> O.Bool b
-  | ELit (LInt i), _ -> O.Integer (Z.to_int i)
-  | ELit (LRat r), _ -> O.Decimal (Q.to_float r)
-  | ELit (LMoney m), _ -> O.Money (Z.to_int m)
-  | ELit (LDate t), _ ->
-    let year, month, day = Dates_calc.Dates.date_to_ymd t in
-    O.Date { year; month; day }
-  | ELit (LDuration dt), _ ->
-    let years, months, days = Dates_calc.Dates.period_to_ymds dt in
-    O.Duration { years; months; days }
-  | ( EAppOp
+  let pos = Expr.pos e in
+  let attrs =
+    Pos.get_attrs pos (function Uid s -> Some (O.Uid s) | _ -> None)
+  in
+  let value =
+    match Mark.remove e with
+    | ELit (LBool b) -> O.Bool b
+    | ELit (LInt i) -> O.Integer (Z.to_int i)
+    | ELit (LRat r) -> O.Decimal (Q.to_float r)
+    | ELit (LMoney m) -> O.Money (Z.to_int m)
+    | ELit (LDate t) ->
+      let year, month, day = Dates_calc.Dates.date_to_ymd t in
+      O.Date { year; month; day }
+    | ELit (LDuration dt) ->
+      let years, months, days = Dates_calc.Dates.period_to_ymds dt in
+      O.Duration { years; months; days }
+    | EAppOp
         {
           op = Op.Add, _;
           args = [e1; e2];
           tys = [(TLit TDuration, _); (TLit TDuration, _)];
-        },
-      _ ) as e -> (
-    match get_value decl_ctx e1, get_value decl_ctx e2 with
-    | ( O.Duration { years = y1; months = m1; days = d1 },
-        O.Duration { years = y2; months = m2; days = d2 } ) ->
-      O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
-    | _ -> Message.error ~pos:(Expr.pos e) "Invalid duration literal.")
-  | EArray args, _ ->
-    O.Array (Array.of_list (List.map (get_value decl_ctx) args))
-  | EStruct { name; fields }, _ ->
-    O.Struct
-      ( get_struct decl_ctx name,
-        List.map
-          (fun (field, v) -> StructField.to_string field, get_value decl_ctx v)
-          (StructField.Map.bindings fields) )
-  | EInj { name; e = ELit LUnit, _; cons }, _ ->
-    O.Enum (get_enum decl_ctx name, (EnumConstructor.to_string cons, None))
-  | EInj { name; e; cons }, _ ->
-    O.Enum
-      ( get_enum decl_ctx name,
-        (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
-  | e -> Message.error ~pos:(Expr.pos e) "This test value is not a literal."
+        } -> (
+      match
+        (get_value decl_ctx e1).value, (get_value decl_ctx e2).value
+      with
+      | ( O.Duration { years = y1; months = m1; days = d1 },
+          O.Duration { years = y2; months = m2; days = d2 } ) ->
+        O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
+      | _ -> Message.error ~pos "Invalid duration literal.")
+    | EArray args ->
+      O.Array (Array.of_list (List.map (get_value decl_ctx) args))
+    | EStruct { name; fields } ->
+      O.Struct
+        ( get_struct decl_ctx name,
+          List.map
+            (fun (field, v) ->
+              StructField.to_string field, get_value decl_ctx v)
+            (StructField.Map.bindings fields) )
+    | EInj { name; e = ELit LUnit, _; cons } ->
+      O.Enum (get_enum decl_ctx name, (EnumConstructor.to_string cons, None))
+    | EInj { name; e; cons } ->
+      O.Enum
+        ( get_enum decl_ctx name,
+          (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
+    | _ -> Message.error ~pos "This test value is not a literal."
+  in
+  { O.value; attrs }
 
 let get_source_position pos =
   {
@@ -585,10 +594,11 @@ let get_value_strings = function
     }
   | _ -> raise (unsupported "unsupported language")
 
-let rec print_catala_value ~lang ppf =
+let rec print_catala_value ~lang ppf (v : O.runtime_value) =
   let open Format in
   let strings = get_value_strings lang in
-  function
+  (* TODO: Print attributes *)
+  match v.value with
   | O.Bool b ->
     pp_print_string ppf (if b then strings.true_str else strings.false_str)
   | O.Money m -> fprintf ppf strings.money_fmt (m / 100) (m mod 100)
@@ -640,30 +650,33 @@ let rec print_catala_value ~lang ppf =
       (Array.to_seq vl)
 
 let rec generate_default_value (typ : O.typ) : O.runtime_value =
-  match typ with
-  | TBool -> Bool false
-  | TInt -> Integer 0
-  | TRat -> Decimal 0.
-  | TMoney -> Money 0
-  | TDate -> Date { year = 1970; month = 1; day = 1 }
-  | TDuration -> Duration { years = 0; months = 0; days = 0 }
-  | TTuple l -> Array (List.map generate_default_value l |> Array.of_list)
-  | TStruct decl ->
-    Struct
-      (decl, List.map (fun (s, t) -> s, generate_default_value t) decl.fields)
-  | TEnum decl ->
-    let elt =
-      let cn, ty =
-        List.find_opt
-          (function _, None -> true | _ -> false)
-          decl.constructors
-        |> function Some s -> s | None -> List.hd decl.constructors
+  let value =
+    match typ with
+    | TBool -> O.Bool false
+    | TInt -> O.Integer 0
+    | TRat -> O.Decimal 0.
+    | TMoney -> O.Money 0
+    | TDate -> O.Date { year = 1970; month = 1; day = 1 }
+    | TDuration -> O.Duration { years = 0; months = 0; days = 0 }
+    | TTuple l -> O.Array (List.map generate_default_value l |> Array.of_list)
+    | TStruct decl ->
+      O.Struct
+        (decl, List.map (fun (s, t) -> s, generate_default_value t) decl.fields)
+    | TEnum decl ->
+      let elt =
+        let cn, ty =
+          List.find_opt
+            (function _, None -> true | _ -> false)
+            decl.constructors
+          |> function Some s -> s | None -> List.hd decl.constructors
+        in
+        cn, Option.map generate_default_value ty
       in
-      cn, Option.map generate_default_value ty
-    in
-    Enum (decl, elt)
-  | TOption typ -> generate_default_value typ
-  | TArray _ -> Array [||]
+      O.Enum (decl, elt)
+    | TOption typ -> (generate_default_value typ).value
+    | TArray _ -> O.Array [||]
+  in
+  { value; attrs = [] }
 
 let print_catala_value_opt ~lang ppf (t_in : O.test_io) =
   match t_in.O.value with
@@ -871,11 +884,15 @@ let run_test testing_scope include_dirs options =
   in
   let test_outputs =
     List.map
-      (fun (field, value) ->
+      (fun (field, value_expr) ->
         ( StructField.to_string field,
           {
             O.value =
-              Some { value = get_value dcalc_prg.decl_ctx value; pos = None };
+              Some
+                {
+                  value = get_value dcalc_prg.decl_ctx value_expr;
+                  pos = None (* TODO: Retrieve pos from value_expr? *);
+                };
             typ =
               get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
           } ))

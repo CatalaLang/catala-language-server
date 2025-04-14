@@ -24,7 +24,7 @@ function createRuntimeValue(
 ): RuntimeValue {
   return {
     value: newValueRaw,
-    attrs: originalRuntimeValue?.attrs ?? [], // Preserve attrs
+    attrs: originalRuntimeValue?.attrs ?? [],
   };
 }
 
@@ -46,7 +46,6 @@ export default function ValueEditor(props: Props): ReactElement {
       typ,
       value: {
         value: newRuntimeValue,
-        pos: valueDef?.pos, // Preserve original position
       },
     });
   };
@@ -340,7 +339,6 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   return (
     <div className="value-editor">
       <select value={currentValue.toString()} onChange={handleChange}>
-        {/* Consider adding an empty/default option if needed */}
         <option value="false">false</option>
         <option value="true">true</option>
       </select>
@@ -607,7 +605,20 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
   };
 
   const handleAdd = (): void => {
-    const newElement: RuntimeValue = getDefaultValue(elementType);
+    const newElementValue = getDefaultValue(elementType);
+    // Add a unique ID attribute when creating a new element
+    // (this is required by React)
+    // https://react.dev/learn/rendering-lists#keeping-list-items-in-order-with-key
+    const newElement: RuntimeValue = {
+      ...newElementValue,
+      attrs: [
+        ...(newElementValue.attrs ?? []), // Preserve existing attrs if any
+        {
+          kind: 'Uid',
+          value: String(self.crypto.randomUUID()),
+        },
+      ],
+    };
     updateParent([...currentArray, newElement]);
   };
 
