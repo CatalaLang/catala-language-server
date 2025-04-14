@@ -1,6 +1,6 @@
 open Catala_utils
 open Cmdliner
-module Lib = Test_case_parser_lib_atd
+module Lib = Test_case_parser_lib
 
 let buffer_path =
   let arg =
@@ -86,7 +86,7 @@ let register () =
     [cmd_generate; cmd_read; cmd_run; cmd_write; cmd_list_scopes];
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"] ~contexts:[Desugared.Name_resolution.Expression]
     @@ fun ~pos:_ value -> match value with
-    | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib_atd.Uid s)
+    | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.Uid s)
     | _ -> failwith "unexpected UID value"
 
 (* For now, can be invoked through `catala test-case-parser --plugin-dir
