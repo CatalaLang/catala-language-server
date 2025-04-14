@@ -55,7 +55,7 @@ type duration = {
   days : int;
 }
 
-type runtime_value = [
+type runtime_value_raw = [
   | Bool of bool
   | Money of int (* Counted in cents *)
   | Integer of int
@@ -66,6 +66,14 @@ type runtime_value = [
   | Struct of (struct_declaration * (string * runtime_value) list <json repr="object"> <ts repr="map">)
   | Array of runtime_value list <ocaml repr="array">
 ] <ocaml repr="classic">
+
+(* to be extended with free-form descriptions, etc. *)
+type attr_def = [Uid of string] <ocaml repr="classic">
+
+type runtime_value = {
+  value: runtime_value_raw;
+  attrs: attr_def list; (* for UIDs, comments... may be empty *)
+}
 
 (* Test data *)
 
