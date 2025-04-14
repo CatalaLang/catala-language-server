@@ -185,8 +185,10 @@ and get_enum ?module_name decl_ctx enum_name =
   in
   { O.enum_name; constructors }
 
+type Pos.attr += Uid of string
 let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun decl_ctx e ->
+  let _uid = Pos.get_attr (Expr.pos e) (function Uid s -> failwith s | _ -> None) in 
   match e with
   | ELit (LBool b), _ -> O.Bool b
   | ELit (LInt i), _ -> O.Integer (Z.to_int i)

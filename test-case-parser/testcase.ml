@@ -83,7 +83,11 @@ let man =
 let register () =
   Driver.Plugin.register_subcommands "testcase"
     ~doc:"Catala plugin for the handling of scope test cases" ~man
-    [cmd_generate; cmd_read; cmd_run; cmd_write; cmd_list_scopes]
+    [cmd_generate; cmd_read; cmd_run; cmd_write; cmd_list_scopes];
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"] ~contexts:[Desugared.Name_resolution.Expression]
+    @@ fun ~pos:_ value -> match value with
+    | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib_atd.Uid s)
+    | _ -> failwith "unexpected UID value"
 
 (* For now, can be invoked through `catala test-case-parser --plugin-dir
    _build/default/ <FILE>` but we need to figure out distribution through vscode
