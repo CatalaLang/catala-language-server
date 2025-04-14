@@ -7,6 +7,7 @@ import type {
   StructDeclaration,
   EnumDeclaration,
   Option,
+  RuntimeValueRaw,
 } from './generated/test_case';
 import { assertUnreachable } from './util';
 
@@ -113,10 +114,24 @@ function selectTestIo(expected: TestIo, actual: TestIo): TestIo {
   };
 }
 
+/*
+ * side-effect: strips attributes
+ */
 function selectRuntimeValue(
   expected: RuntimeValue,
   actual: RuntimeValue
 ): RuntimeValue {
+  const selected = selectRuntimeValueRaw(expected.value, actual.value);
+  return {
+    value: selected,
+    attrs: [],
+  };
+}
+
+function selectRuntimeValueRaw(
+  expected: RuntimeValueRaw,
+  actual: RuntimeValueRaw
+): RuntimeValueRaw {
   if (expected.kind !== actual.kind) {
     throw new Error(
       `Mismatch in type: expected ${expected.kind}, got ${actual.kind}`

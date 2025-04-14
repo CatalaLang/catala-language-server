@@ -8,12 +8,25 @@ import type {
   TestIo,
   StructDeclaration,
   RuntimeValue,
+  RuntimeValueRaw,
   Duration,
   EnumDeclaration,
   Typ,
+  ValueDef,
 } from './generated/test_case';
 import { assertUnreachable } from './util';
 import { getDefaultValue } from './defaults';
+
+// Helper to create a RuntimeValue from a RuntimeValueRaw, preserving attrs
+function createRuntimeValue(
+  newValueRaw: RuntimeValueRaw,
+  originalRuntimeValue?: RuntimeValue
+): RuntimeValue {
+  return {
+    value: newValueRaw,
+    attrs: originalRuntimeValue?.attrs ?? [], // Preserve attrs
+  };
+}
 
 type Props = {
   testIO: TestIo;
@@ -25,186 +38,66 @@ export function isCollapsible(typ: Typ): boolean {
 }
 
 export default function ValueEditor(props: Props): ReactElement {
-  const typ = props.testIO.typ;
+  const { testIO, onValueChange } = props;
+  const { typ, value: valueDef } = testIO;
+
+  const handleValueChange = (newRuntimeValue: RuntimeValue): void => {
+    onValueChange({
+      typ,
+      value: {
+        value: newRuntimeValue,
+        pos: valueDef?.pos, // Preserve original position
+      },
+    });
+  };
+
   switch (typ.kind) {
     case 'TInt':
-      // hmmm... much "value" nesting and use of type coercion, we might do better
       return (
-        <IntEditor
-          value={props.testIO.value?.value.value as number}
-          onValueChange={(newValue: number) => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Integer',
-                  value: newValue,
-                },
-              },
-            });
-          }}
-        />
+        <IntEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
     case 'TBool':
       return (
-        <BoolEditor
-          value={props.testIO.value?.value.value as boolean}
-          onValueChange={(newValue: boolean) => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Bool',
-                  value: newValue,
-                },
-              },
-            });
-          }}
-        />
+        <BoolEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
     case 'TStruct':
       return (
         <StructEditor
           structDeclaration={typ.value}
-          value={
-            props.testIO.value?.value.value as [
-              StructDeclaration,
-              Map<string, RuntimeValue>,
-            ]
-          }
-          onValueChange={(newValue) => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Struct',
-                  value: newValue,
-                },
-              },
-            });
-          }}
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
         />
       );
     case 'TRat':
       return (
-        <RatEditor
-          value={props.testIO.value?.value.value as number}
-          onValueChange={(newValue: number) => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Decimal',
-                  value: newValue,
-                },
-              },
-            });
-          }}
-        />
+        <RatEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
     case 'TDate':
       return (
-        <DateEditor
-          value={
-            props.testIO.value?.value.value as {
-              year: number;
-              month: number;
-              day: number;
-            }
-          }
-          onValueChange={(newValue: {
-            year: number;
-            month: number;
-            day: number;
-          }) => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Date',
-                  value: newValue,
-                },
-              },
-            });
-          }}
-        />
+        <DateEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
     case 'TDuration':
       return (
-        <DurationEditor
-          value={props.testIO.value?.value.value as Duration}
-          onValueChange={(newValue: Duration) => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Duration',
-                  value: newValue,
-                },
-              },
-            });
-          }}
-        />
+        <DurationEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
     case 'TMoney':
       return (
-        <MoneyEditor
-          value={props.testIO.value?.value.value as number}
-          onValueChange={(newValue: number) => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Money',
-                  value: newValue,
-                },
-              },
-            });
-          }}
-        />
+        <MoneyEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
     case 'TEnum':
       return (
         <EnumEditor
-          value={
-            props.testIO.value?.value.value as [
-              EnumDeclaration,
-              [string, Option<RuntimeValue>],
-            ]
-          }
           enumDeclaration={typ.value}
-          onValueChange={(
-            newCtor: string,
-            newValue: Option<RuntimeValue>
-          ): void => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Enum',
-                  value: [typ.value, [newCtor, newValue]],
-                },
-              },
-            });
-          }}
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
         />
       );
     case 'TArray':
       return (
         <ArrayEditor
           elementType={typ.value}
-          value={props.testIO.value?.value.value as RuntimeValue[]}
-          onValueChange={(newValue: RuntimeValue[]) => {
-            props.onValueChange({
-              typ,
-              value: {
-                value: {
-                  kind: 'Array',
-                  value: newValue,
-                },
-              },
-            });
-          }}
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
         />
       );
     case 'TTuple':
@@ -222,29 +115,52 @@ function isValidInt(value: string): boolean {
 }
 
 type IntEditorProps = {
-  value?: number; //initial value, may not exist
-  onValueChange(newValue: number /* int */): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function IntEditor(props: IntEditorProps): ReactElement {
+  const runtimeValue = props.valueDef?.value;
+  const initialValue =
+    runtimeValue?.value.kind === 'Integer'
+      ? runtimeValue.value.value
+      : undefined;
+
   const [displayValue, setDisplayValue] = useState(
-    props.value?.toString() ?? ''
+    initialValue?.toString() ?? ''
   );
 
+  // Update display value if prop changes externally
+  useEffect(() => {
+    const newValue =
+      runtimeValue?.value.kind === 'Integer'
+        ? runtimeValue.value.value
+        : undefined;
+    setDisplayValue(newValue?.toString() ?? '');
+  }, [runtimeValue]);
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = event.target.value;
-    setDisplayValue(value);
+    const valueStr = event.target.value;
+    setDisplayValue(valueStr);
 
     // Only update if valid
-    if (isValidInt(value)) {
-      props.onValueChange(Number(value));
+    if (isValidInt(valueStr)) {
+      const newValueRaw: RuntimeValueRaw = {
+        kind: 'Integer',
+        value: Number(valueStr),
+      };
+      props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     }
   };
 
   const handleBlur = (): void => {
     if (!isValidInt(displayValue)) {
       // Reset to the last valid value or empty string
-      setDisplayValue(props.value?.toString() ?? '');
+      const resetValue =
+        runtimeValue?.value.kind === 'Integer'
+          ? runtimeValue.value.value
+          : undefined;
+      setDisplayValue(resetValue?.toString() ?? '');
     }
   };
 
@@ -267,22 +183,35 @@ function IntEditor(props: IntEditorProps): ReactElement {
 }
 
 type DateEditorProps = {
-  value?: { year: number; month: number; day: number };
-  onValueChange(newValue: { year: number; month: number; day: number }): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function DateEditor(props: DateEditorProps): ReactElement {
-  const formatDate = (date: {
-    year: number;
-    month: number;
-    day: number;
-  }): string => {
-    return `${String(date.year).padStart(4, '0')}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
+  const runtimeValue = props.valueDef?.value;
+  const initialValue =
+    runtimeValue?.value.kind === 'Date' ? runtimeValue.value.value : undefined;
+
+  const formatDate = (
+    date: { year: number; month: number; day: number } | undefined
+  ): string => {
+    if (!date) return '';
+    return `${String(date.year).padStart(4, '0')}-${String(date.month).padStart(
+      2,
+      '0'
+    )}-${String(date.day).padStart(2, '0')}`;
   };
 
-  const [internalValue, setInternalValue] = useState(
-    props.value ? formatDate(props.value) : ''
-  );
+  const [internalValue, setInternalValue] = useState(formatDate(initialValue));
+
+  // Update display value if prop changes externally
+  useEffect(() => {
+    const newValue =
+      runtimeValue?.value.kind === 'Date'
+        ? runtimeValue.value.value
+        : undefined;
+    setInternalValue(formatDate(newValue));
+  }, [runtimeValue]);
 
   const parseDate = (
     dateString: string
@@ -299,14 +228,17 @@ function DateEditor(props: DateEditorProps): ReactElement {
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = event.target.value;
-    setInternalValue(value);
+    const dateStr = event.target.value;
+    setInternalValue(dateStr);
 
-    const newDate = parseDate(value);
+    const newDate = parseDate(dateStr);
     if (newDate) {
-      props.onValueChange(newDate);
+      const newValueRaw: RuntimeValueRaw = { kind: 'Date', value: newDate };
+      props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     }
   };
+
+  // TODO: Add onBlur validation?
 
   return (
     <div className="value-editor">
@@ -322,29 +254,52 @@ function isValidRat(value: string): boolean {
 }
 
 type RatEditorProps = {
-  value?: number; // initial value, may not exist
-  onValueChange(newValue: number): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function RatEditor(props: RatEditorProps): ReactElement {
+  const runtimeValue = props.valueDef?.value;
+  const initialValue =
+    runtimeValue?.value.kind === 'Decimal'
+      ? runtimeValue.value.value
+      : undefined;
+
   const [displayValue, setDisplayValue] = useState(
-    props.value?.toString() ?? ''
+    initialValue?.toString() ?? ''
   );
 
+  // Update display value if prop changes externally
+  useEffect(() => {
+    const newValue =
+      runtimeValue?.value.kind === 'Decimal'
+        ? runtimeValue.value.value
+        : undefined;
+    setDisplayValue(newValue?.toString() ?? '');
+  }, [runtimeValue]);
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = event.target.value;
-    setDisplayValue(value);
+    const valueStr = event.target.value;
+    setDisplayValue(valueStr);
 
     // Only update if valid
-    if (isValidRat(value)) {
-      props.onValueChange(Number(value));
+    if (isValidRat(valueStr)) {
+      const newValueRaw: RuntimeValueRaw = {
+        kind: 'Decimal',
+        value: Number(valueStr),
+      };
+      props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     }
   };
 
   const handleBlur = (): void => {
     if (!isValidRat(displayValue)) {
       // Reset to the last valid value or empty string
-      setDisplayValue(props.value?.toString() ?? '');
+      const resetValue =
+        runtimeValue?.value.kind === 'Decimal'
+          ? runtimeValue.value.value
+          : undefined;
+      setDisplayValue(resetValue?.toString() ?? '');
     }
   };
 
@@ -367,19 +322,25 @@ function RatEditor(props: RatEditorProps): ReactElement {
 }
 
 type BoolEditorProps = {
-  value?: boolean; // initial value, may not exist
-  onValueChange(newValue: boolean): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function BoolEditor(props: BoolEditorProps): ReactElement {
+  const runtimeValue = props.valueDef?.value;
+  const currentValue =
+    runtimeValue?.value.kind === 'Bool' ? runtimeValue.value.value : false; // Default to false
+
+  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>): void => {
+    const boolValue = event.target.value === 'true';
+    const newValueRaw: RuntimeValueRaw = { kind: 'Bool', value: boolValue };
+    props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+  };
+
   return (
     <div className="value-editor">
-      <select
-        value={props.value?.toString() ?? ''}
-        onChange={(evt) => {
-          props.onValueChange(evt.target.value === 'true');
-        }}
-      >
+      <select value={currentValue.toString()} onChange={handleChange}>
+        {/* Consider adding an empty/default option if needed */}
         <option value="false">false</option>
         <option value="true">true</option>
       </select>
@@ -388,22 +349,31 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
 }
 
 type DurationEditorProps = {
-  value?: Duration;
-  onValueChange(newValue: Duration): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function DurationEditor(props: DurationEditorProps): ReactElement {
-  const [years, setYears] = useState(props.value?.years ?? 0);
-  const [months, setMonths] = useState(props.value?.months ?? 0);
-  const [days, setDays] = useState(props.value?.days ?? 0);
+  const runtimeValue = props.valueDef?.value;
+  const initialValue =
+    runtimeValue?.value.kind === 'Duration'
+      ? runtimeValue.value.value
+      : undefined;
 
+  const [years, setYears] = useState(initialValue?.years ?? 0);
+  const [months, setMonths] = useState(initialValue?.months ?? 0);
+  const [days, setDays] = useState(initialValue?.days ?? 0);
+
+  // Update state if prop changes externally
   useEffect(() => {
-    if (props.value) {
-      setYears(props.value.years);
-      setMonths(props.value.months);
-      setDays(props.value.days);
-    }
-  }, [props.value]);
+    const newValue =
+      runtimeValue?.value.kind === 'Duration'
+        ? runtimeValue.value.value
+        : undefined;
+    setYears(newValue?.years ?? 0);
+    setMonths(newValue?.months ?? 0);
+    setDays(newValue?.days ?? 0);
+  }, [runtimeValue]);
 
   const handleChange = (
     field: 'years' | 'months' | 'days',
@@ -421,7 +391,12 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
         setDays(newValue);
         break;
     }
-    props.onValueChange({ years, months, days, [field]: newValue });
+    const newDuration: Duration = { years, months, days, [field]: newValue };
+    const newValueRaw: RuntimeValueRaw = {
+      kind: 'Duration',
+      value: newDuration,
+    };
+    props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
 
   return (
@@ -466,33 +441,54 @@ function isValidMoney(value: string): boolean {
 }
 
 type MoneyEditorProps = {
-  value?: number; // initial value in cents, may not exist
-  onValueChange(newValue: number): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
+  const runtimeValue = props.valueDef?.value;
+  const initialValue = // in cents
+    runtimeValue?.value.kind === 'Money' ? runtimeValue.value.value : undefined;
+
   const centsToDisplayValue = (cents: number | undefined): string =>
     cents !== undefined ? (cents / 100).toFixed(2) : '';
 
   const [displayValue, setDisplayValue] = useState(
-    centsToDisplayValue(props.value)
+    centsToDisplayValue(initialValue)
   );
 
+  // Update display value if prop changes externally
+  useEffect(() => {
+    const newValue =
+      runtimeValue?.value.kind === 'Money'
+        ? runtimeValue.value.value
+        : undefined;
+    setDisplayValue(centsToDisplayValue(newValue));
+  }, [runtimeValue]);
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = event.target.value;
-    setDisplayValue(value);
+    const valueStr = event.target.value;
+    setDisplayValue(valueStr);
 
     // Only update if valid
-    if (isValidMoney(value)) {
-      const centsValue = Math.round(parseFloat(value) * 100);
-      props.onValueChange(centsValue);
+    if (isValidMoney(valueStr)) {
+      const centsValue = Math.round(parseFloat(valueStr) * 100);
+      const newValueRaw: RuntimeValueRaw = {
+        kind: 'Money',
+        value: centsValue,
+      };
+      props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     }
   };
 
   const handleBlur = (): void => {
     if (!isValidMoney(displayValue)) {
       // Reset to the last valid value or empty string
-      setDisplayValue(centsToDisplayValue(props.value));
+      const resetValue =
+        runtimeValue?.value.kind === 'Money'
+          ? runtimeValue.value.value
+          : undefined;
+      setDisplayValue(centsToDisplayValue(resetValue));
     }
   };
 
@@ -516,21 +512,31 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
 
 type StructEditorProps = {
   structDeclaration: StructDeclaration;
-  value?: [StructDeclaration, Map<string, RuntimeValue>];
-  onValueChange(newValue: [StructDeclaration, Map<string, RuntimeValue>]): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
-  const { structDeclaration, value, onValueChange } = props;
+  const { structDeclaration, valueDef, onValueChange } = props;
+  const runtimeValue = valueDef?.value;
   const fields = structDeclaration.fields;
+  const currentStructData =
+    runtimeValue?.value.kind === 'Struct'
+      ? runtimeValue.value.value
+      : undefined;
+  const currentMap = currentStructData?.[1] ?? new Map<string, RuntimeValue>();
 
   const handleFieldChange = (
     fieldName: string,
-    fieldValue: RuntimeValue
+    fieldRuntimeValue: RuntimeValue // Note: This is the full RuntimeValue for the field
   ): void => {
-    const newMap = new Map(value?.[1] || []);
-    newMap.set(fieldName, fieldValue);
-    onValueChange([structDeclaration, newMap]);
+    const newMap = new Map(currentMap);
+    newMap.set(fieldName, fieldRuntimeValue);
+    const newValueRaw: RuntimeValueRaw = {
+      kind: 'Struct',
+      value: [structDeclaration, newMap],
+    };
+    onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
 
   return (
@@ -558,16 +564,21 @@ function StructEditor(props: StructEditorProps): ReactElement {
                     : undefined
                 }
               >
+                {/* Pass the field's ValueDef down */}
                 <ValueEditor
                   testIO={{
                     typ: fieldType,
-                    value: value?.[1].get(fieldName)
-                      ? { value: value[1].get(fieldName)! }
+                    value: currentMap.get(fieldName)
+                      ? { value: currentMap.get(fieldName)! } // Create a temporary ValueDef for the field
                       : undefined,
                   }}
-                  onValueChange={(newValue) =>
-                    handleFieldChange(fieldName, newValue.value!.value)
-                  }
+                  onValueChange={(newFieldTestIo) => {
+                    // newFieldTestIo contains the updated ValueDef for the field
+                    if (newFieldTestIo.value) {
+                      handleFieldChange(fieldName, newFieldTestIo.value.value); // Pass the RuntimeValue up
+                    }
+                    // Handle case where field value becomes undefined? Maybe delete from map?
+                  }}
                 />
               </CollapsibleRow>
             );
@@ -580,71 +591,94 @@ function StructEditor(props: StructEditorProps): ReactElement {
 
 type ArrayEditorProps = {
   elementType: Typ;
-  value?: RuntimeValue[];
-  onValueChange(newValue: RuntimeValue[]): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function ArrayEditor(props: ArrayEditorProps): ReactElement {
-  const { elementType, value = [], onValueChange } = props;
+  const { elementType, valueDef, onValueChange } = props;
+  const runtimeValue = valueDef?.value;
+  const currentArray =
+    runtimeValue?.value.kind === 'Array' ? runtimeValue.value.value : [];
 
-  const handleAdd = (): void => {
-    const newValue: RuntimeValue = getDefaultValue(elementType);
-    onValueChange([...value, newValue]);
+  const updateParent = (newArray: RuntimeValue[]): void => {
+    const newValueRaw: RuntimeValueRaw = { kind: 'Array', value: newArray };
+    onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
 
-  const handleUpdate = (index: number, newValue: RuntimeValue): void => {
-    const updatedArray = [...value];
-    updatedArray[index] = newValue;
-    onValueChange(updatedArray);
+  const handleAdd = (): void => {
+    const newElement: RuntimeValue = getDefaultValue(elementType);
+    updateParent([...currentArray, newElement]);
+  };
+
+  const handleUpdate = (index: number, updatedElement: RuntimeValue): void => {
+    const newArray = [...currentArray];
+    newArray[index] = updatedElement;
+    updateParent(newArray);
   };
 
   const handleDelete = (index: number): void => {
-    const newArray = value.filter((_, i) => i !== index);
-    onValueChange(newArray);
+    const newArray = currentArray.filter((_, i) => i !== index);
+    updateParent(newArray);
   };
 
   const handleMove = (fromIndex: number, toIndex: number): void => {
-    const newArray = [...value];
+    if (
+      toIndex < 0 ||
+      toIndex >= currentArray.length ||
+      fromIndex === toIndex
+    ) {
+      return; // Invalid move
+    }
+    const newArray = [...currentArray];
     const [movedItem] = newArray.splice(fromIndex, 1);
     newArray.splice(toIndex, 0, movedItem);
-    onValueChange(newArray);
+    updateParent(newArray);
   };
 
   return (
     <div className="array-editor">
       <div className="array-items">
-        {value.map((item, index) => (
+        {currentArray.map((item, index) => (
           <div key={index} className="array-item">
             <div className="array-item-controls">
               <button
                 className="array-move-up"
                 onClick={() => handleMove(index, index - 1)}
                 disabled={index === 0}
+                title="Move element up"
               >
-                ↑
+                <span className="codicon codicon-arrow-up"></span>
               </button>
               <button
                 className="array-move-down"
                 onClick={() => handleMove(index, index + 1)}
-                disabled={index === value.length - 1}
+                disabled={index === currentArray.length - 1}
+                title="Move element down"
               >
-                ↓
+                <span className="codicon codicon-arrow-down"></span>
               </button>
               <button
                 className="array-delete"
                 onClick={() => handleDelete(index)}
+                title="Delete element"
               >
-                ×
+                <span className="codicon codicon-trash"></span>
               </button>
             </div>
+            {/* Pass the element's ValueDef down */}
             <ValueEditor
               testIO={{
                 typ: elementType,
-                value: { value: item },
+                value: { value: item }, // Create temporary ValueDef for the element
               }}
-              onValueChange={(newValue) =>
-                handleUpdate(index, newValue.value!.value)
-              }
+              onValueChange={(newItemTestIo) => {
+                // newItemTestIo contains the updated ValueDef for the element
+                if (newItemTestIo.value) {
+                  handleUpdate(index, newItemTestIo.value.value); // Pass the RuntimeValue up
+                }
+                // Handle case where element value becomes undefined? Maybe delete?
+              }}
             />
           </div>
         ))}
@@ -657,58 +691,81 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
   );
 }
 
-function runtimeValueToTestIo(typ: Typ, value: Option<RuntimeValue>): TestIo {
-  return {
-    typ: typ,
-    ...(value != undefined && {
-      value: value,
-    }),
-  };
-}
-
 type EnumEditorProps = {
   enumDeclaration: EnumDeclaration;
-  value?: [EnumDeclaration, [string, Option<RuntimeValue>]];
-  onValueChange(ctor: string, value: Option<RuntimeValue>): void;
+  valueDef?: ValueDef;
+  onValueChange(newValue: RuntimeValue): void;
 };
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
+  const { enumDeclaration, valueDef, onValueChange } = props;
+  const runtimeValue = valueDef?.value;
+  const currentEnumData =
+    runtimeValue?.value.kind === 'Enum' ? runtimeValue.value.value : undefined;
+
   // Note that in Catala, an enum should always have at least 1 constructor
   // so dereferencing the first array element is valid
-  const [currentCtor, setCurrentCtor] = useState(
-    props.value
-      ? props.value[1][0]
-      : Array.from(props.enumDeclaration.constructors.keys())[0]
-  );
+  const defaultCtor = Array.from(enumDeclaration.constructors.keys())[0];
+  const currentCtor = currentEnumData ? currentEnumData[1][0] : defaultCtor;
+  const currentPayload = currentEnumData ? currentEnumData[1][1] : null;
+  const currentCtorType = enumDeclaration.constructors.get(currentCtor); // Option<Typ>
+
+  const handleCtorChange = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ): void => {
+    const newCtor = event.target.value;
+    const newCtorType = enumDeclaration.constructors.get(newCtor);
+
+    let newPayload: Option<RuntimeValue> = null;
+    if (newCtorType?.value) {
+      // If the new constructor has a payload, create a default value for it
+      newPayload = { value: getDefaultValue(newCtorType.value) };
+    }
+
+    const newValueRaw: RuntimeValueRaw = {
+      kind: 'Enum',
+      value: [enumDeclaration, [newCtor, newPayload]],
+    };
+    onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+  };
+
+  const handlePayloadChange = (newPayloadTestIo: TestIo): void => {
+    // newPayloadTestIo contains the updated ValueDef for the payload
+    const newPayloadValue = newPayloadTestIo.value?.value ?? null; // Extract RuntimeValue or null
+
+    // Construct the Option<RuntimeValue> correctly
+    const newPayloadOption: Option<RuntimeValue> =
+      newPayloadValue === null ? null : { value: newPayloadValue };
+
+    const newValueRaw: RuntimeValueRaw = {
+      kind: 'Enum',
+      value: [enumDeclaration, [currentCtor, newPayloadOption]],
+    };
+    onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+  };
 
   return (
-    <div className="value-editor">
-      <select
-        onChange={(evt: React.ChangeEvent<HTMLSelectElement>): void => {
-          const newCtor = evt.target.value;
-          setCurrentCtor(newCtor);
-          if (props.enumDeclaration.constructors.get(newCtor) === null) {
-            props.onValueChange(newCtor, null);
-          }
-        }}
-        value={currentCtor}
-      >
-        {Array.from(props.enumDeclaration.constructors.keys()).map(
-          (optionName) => (
-            <option key={optionName}>{optionName}</option>
-          )
-        )}
+    <div className="value-editor enum-editor">
+      <select onChange={handleCtorChange} value={currentCtor}>
+        {Array.from(enumDeclaration.constructors.keys()).map((ctorName) => (
+          <option key={ctorName} value={ctorName}>
+            {ctorName}
+          </option>
+        ))}
       </select>
-      {props.enumDeclaration.constructors.get(currentCtor) && (
-        <ValueEditor
-          testIO={runtimeValueToTestIo(
-            props.enumDeclaration.constructors.get(currentCtor)!.value,
-            props.value?.[1][1] ?? null //TODO make this more legible?
-          )}
-          onValueChange={(newValue: TestIo): void => {
-            props.onValueChange(currentCtor, newValue.value ?? null);
-          }}
-        />
+      {/* Render payload editor only if the current constructor expects one */}
+      {currentCtorType?.value && (
+        <div className="enum-payload-editor">
+          <ValueEditor
+            testIO={{
+              typ: currentCtorType.value,
+              value: currentPayload?.value
+                ? { value: currentPayload.value } // Create temporary ValueDef for payload
+                : undefined,
+            }}
+            onValueChange={handlePayloadChange}
+          />
+        </div>
       )}
     </div>
   );
