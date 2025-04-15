@@ -639,7 +639,7 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
       toIndex >= currentArray.length ||
       fromIndex === toIndex
     ) {
-      return; // Invalid move
+      return;
     }
     const newArray = [...currentArray];
     const [movedItem] = newArray.splice(fromIndex, 1);
@@ -650,49 +650,63 @@ function ArrayEditor(props: ArrayEditorProps): ReactElement {
   return (
     <div className="array-editor">
       <div className="array-items">
-        {currentArray.map((item, index) => (
-          <div key={index} className="array-item">
-            <div className="array-item-controls">
-              <button
-                className="array-move-up"
-                onClick={() => handleMove(index, index - 1)}
-                disabled={index === 0}
-                title="Move element up"
-              >
-                <span className="codicon codicon-arrow-up"></span>
-              </button>
-              <button
-                className="array-move-down"
-                onClick={() => handleMove(index, index + 1)}
-                disabled={index === currentArray.length - 1}
-                title="Move element down"
-              >
-                <span className="codicon codicon-arrow-down"></span>
-              </button>
-              <button
-                className="array-delete"
-                onClick={() => handleDelete(index)}
-                title="Delete element"
-              >
-                <span className="codicon codicon-trash"></span>
-              </button>
+        {currentArray.map((item, index) => {
+          // Find the UID attribute for the key
+          const uidAttr = item.attrs?.find((attr) => attr.kind === 'Uid');
+          let itemKey: string | number;
+          if (uidAttr?.kind === 'Uid') {
+            itemKey = uidAttr.value;
+          } else {
+            console.warn(
+              `Array item at index ${index} is missing a UID attribute. Falling back to index key.`
+            );
+            itemKey = index; // Fallback to index if UID is not found
+          }
+
+          return (
+            <div key={itemKey} className="array-item">
+              <div className="array-item-controls">
+                <button
+                  className="array-move-up"
+                  onClick={() => handleMove(index, index - 1)}
+                  disabled={index === 0}
+                  title="Move element up"
+                >
+                  <span className="codicon codicon-arrow-up"></span>
+                </button>
+                <button
+                  className="array-move-down"
+                  onClick={() => handleMove(index, index + 1)}
+                  disabled={index === currentArray.length - 1}
+                  title="Move element down"
+                >
+                  <span className="codicon codicon-arrow-down"></span>
+                </button>
+                <button
+                  className="array-delete"
+                  onClick={() => handleDelete(index)}
+                  title="Delete element"
+                >
+                  <span className="codicon codicon-trash"></span>
+                </button>
+              </div>
+              {/* Pass the element's ValueDef down */}
+              <ValueEditor
+                testIO={{
+                  typ: elementType,
+                  value: { value: item }, // Create temporary ValueDef for the element
+                }}
+                onValueChange={(newItemTestIo) => {
+                  // newItemTestIo contains the updated ValueDef for the element
+                  if (newItemTestIo.value) {
+                    handleUpdate(index, newItemTestIo.value.value); // Pass the RuntimeValue up
+                  }
+                  // Handle case where element value becomes undefined? Maybe delete?
+                }}
+              />
             </div>
-            {/* Pass the element's ValueDef down */}
-            <ValueEditor
-              testIO={{
-                typ: elementType,
-                value: { value: item }, // Create temporary ValueDef for the element
-              }}
-              onValueChange={(newItemTestIo) => {
-                // newItemTestIo contains the updated ValueDef for the element
-                if (newItemTestIo.value) {
-                  handleUpdate(index, newItemTestIo.value.value); // Pass the RuntimeValue up
-                }
-                // Handle case where element value becomes undefined? Maybe delete?
-              }}
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
       <button className="array-add" onClick={handleAdd}>
         <span className="codicon codicon-add"></span>
