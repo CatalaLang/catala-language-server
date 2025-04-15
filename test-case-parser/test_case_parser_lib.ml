@@ -594,10 +594,18 @@ let get_value_strings = function
     }
   | _ -> raise (unsupported "unsupported language")
 
+let print_attrs ppf (attrs:O.attr_def list) =
+  let open Format in
+  pp_print_list
+  (fun ppf (attr:O.attr_def) ->
+    match attr with
+    | Uid (s:string) -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s)
+  ppf attrs
+
 let rec print_catala_value ~lang ppf (v : O.runtime_value) =
   let open Format in
   let strings = get_value_strings lang in
-  (* TODO: Print attributes *)
+  print_attrs ppf v.attrs;
   match v.value with
   | O.Bool b ->
     pp_print_string ppf (if b then strings.true_str else strings.false_str)
