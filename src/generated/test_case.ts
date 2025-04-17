@@ -66,7 +66,7 @@ export type Duration = {
   days: number /*int*/;
 }
 
-export type RuntimeValue =
+export type RuntimeValueRaw =
 | { kind: 'Bool'; value: boolean }
 | { kind: 'Money'; value: number /*int*/ }
 | { kind: 'Integer'; value: number /*int*/ }
@@ -76,6 +76,14 @@ export type RuntimeValue =
 | { kind: 'Enum'; value: [EnumDeclaration, [string, Option<RuntimeValue>]] }
 | { kind: 'Struct'; value: [StructDeclaration, Map<string, RuntimeValue>] }
 | { kind: 'Array'; value: RuntimeValue[] }
+
+export type AttrDef =
+| { kind: 'Uid'; value: string }
+
+export type RuntimeValue = {
+  value: RuntimeValueRaw;
+  attrs: AttrDef[];
+}
 
 export type ValueDef = {
   value: RuntimeValue;
@@ -311,7 +319,7 @@ export function readDuration(x: any, context: any = x): Duration {
   };
 }
 
-export function writeRuntimeValue(x: RuntimeValue, context: any = x): any {
+export function writeRuntimeValueRaw(x: RuntimeValueRaw, context: any = x): any {
   switch (x.kind) {
     case 'Bool':
       return ['Bool', _atd_write_bool(x.value, x)]
@@ -334,7 +342,7 @@ export function writeRuntimeValue(x: RuntimeValue, context: any = x): any {
   }
 }
 
-export function readRuntimeValue(x: any, context: any = x): RuntimeValue {
+export function readRuntimeValueRaw(x: any, context: any = x): RuntimeValueRaw {
   _atd_check_json_tuple(2, x, context)
   switch (x[0]) {
     case 'Bool':
@@ -356,9 +364,41 @@ export function readRuntimeValue(x: any, context: any = x): RuntimeValue {
     case 'Array':
       return { kind: 'Array', value: _atd_read_array(readRuntimeValue)(x[1], x) }
     default:
-      _atd_bad_json('RuntimeValue', x, context)
+      _atd_bad_json('RuntimeValueRaw', x, context)
       throw new Error('impossible')
   }
+}
+
+export function writeAttrDef(x: AttrDef, context: any = x): any {
+  switch (x.kind) {
+    case 'Uid':
+      return ['Uid', _atd_write_string(x.value, x)]
+  }
+}
+
+export function readAttrDef(x: any, context: any = x): AttrDef {
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'Uid':
+      return { kind: 'Uid', value: _atd_read_string(x[1], x) }
+    default:
+      _atd_bad_json('AttrDef', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeRuntimeValue(x: RuntimeValue, context: any = x): any {
+  return {
+    'value': _atd_write_required_field('RuntimeValue', 'value', writeRuntimeValueRaw, x.value, x),
+    'attrs': _atd_write_required_field('RuntimeValue', 'attrs', _atd_write_array(writeAttrDef), x.attrs, x),
+  };
+}
+
+export function readRuntimeValue(x: any, context: any = x): RuntimeValue {
+  return {
+    value: _atd_read_required_field('RuntimeValue', 'value', readRuntimeValueRaw, x['value'], x),
+    attrs: _atd_read_required_field('RuntimeValue', 'attrs', _atd_read_array(readAttrDef), x['attrs'], x),
+  };
 }
 
 export function writeValueDef(x: ValueDef, context: any = x): any {
