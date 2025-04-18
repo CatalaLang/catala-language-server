@@ -2,6 +2,8 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { writeUpMessage } from './generated/test_case';
 import App from './App';
+import './style.css';
+import '../node_modules/@vscode/codicons/dist/codicon.css';
 
 export function renderUi(language: string): void {
   const vscode = acquireVsCodeApi();
