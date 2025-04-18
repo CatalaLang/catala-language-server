@@ -260,20 +260,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'ui.js')
     );
 
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'src', 'style.css')
-    );
-
-    const codiconsUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(
-        this.context.extensionUri,
-        'node_modules',
-        '@vscode/codicons',
-        'dist',
-        'codicon.css'
-      )
-    );
-
     const language = vscode.env.language;
 
     return `
@@ -283,8 +269,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
               <title>Test Case Editor</title>
-              <link rel="stylesheet" type="text/css" href="${styleUri}">
-              <link rel="stylesheet" type="text/css" href="${codiconsUri}">
               <style>
                   body {
                       padding: 10px;
