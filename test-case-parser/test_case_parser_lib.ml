@@ -211,9 +211,7 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
           args = [e1; e2];
           tys = [(TLit TDuration, _); (TLit TDuration, _)];
         } -> (
-      match
-        (get_value decl_ctx e1).value, (get_value decl_ctx e2).value
-      with
+      match (get_value decl_ctx e1).value, (get_value decl_ctx e2).value with
       | ( O.Duration { years = y1; months = m1; days = d1 },
           O.Duration { years = y2; months = m2; days = d2 } ) ->
         O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
@@ -594,13 +592,13 @@ let get_value_strings = function
     }
   | _ -> raise (unsupported "unsupported language")
 
-let print_attrs ppf (attrs:O.attr_def list) =
+let print_attrs ppf (attrs : O.attr_def list) =
   let open Format in
   pp_print_list
-  (fun ppf (attr:O.attr_def) ->
-    match attr with
-    | Uid (s:string) -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s)
-  ppf attrs
+    (fun ppf (attr : O.attr_def) ->
+      match attr with
+      | Uid (s : string) -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s)
+    ppf attrs
 
 let rec print_catala_value ~lang ppf (v : O.runtime_value) =
   let open Format in
@@ -893,14 +891,11 @@ let run_test testing_scope include_dirs options =
   let test_outputs =
     List.map
       (fun (field, value_expr) ->
+        let pos = Some (get_source_position (Expr.pos value_expr)) in
         ( StructField.to_string field,
           {
             O.value =
-              Some
-                {
-                  value = get_value dcalc_prg.decl_ctx value_expr;
-                  pos = None (* TODO: Retrieve pos from value_expr? *);
-                };
+              Some { value = get_value dcalc_prg.decl_ctx value_expr; pos };
             typ =
               get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
           } ))
