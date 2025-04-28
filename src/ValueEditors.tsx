@@ -2,7 +2,6 @@
 
 import { type ReactElement, useState, useEffect } from 'react';
 import { FormattedMessage } from 'react-intl';
-import CollapsibleRow from './CollapsibleRow';
 import type {
   Option,
   TestIo,
@@ -552,51 +551,33 @@ function StructEditor(props: StructEditorProps): ReactElement {
   };
 
   return (
-    <div className="struct-editor">
-      <table>
-        <thead>
-          <tr>
-            <th colSpan={2} className="struct-name">
-              {structDeclaration.struct_name}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from(fields.entries()).map(([fieldName, fieldType]) => {
-            const [isFolded, setIsFolded] = useState(false);
-
-            return (
-              <CollapsibleRow
-                key={fieldName}
-                label={fieldName}
-                isCollapsed={isCollapsible(fieldType) ? isFolded : undefined}
-                onToggleCollapse={
-                  isCollapsible(fieldType)
-                    ? (): void => setIsFolded(!isFolded)
-                    : undefined
-                }
-              >
-                {/* Pass the field's ValueDef down */}
-                <ValueEditor
-                  testIO={{
-                    typ: fieldType,
-                    value: currentMap.get(fieldName)
-                      ? { value: currentMap.get(fieldName)! } // Create a temporary ValueDef for the field
-                      : undefined,
-                  }}
-                  onValueChange={(newFieldTestIo) => {
-                    // newFieldTestIo contains the updated ValueDef for the field
-                    if (newFieldTestIo.value) {
-                      handleFieldChange(fieldName, newFieldTestIo.value.value); // Pass the RuntimeValue up
-                    }
-                    // Handle case where field value becomes undefined? Maybe delete from map?
-                  }}
-                />
-              </CollapsibleRow>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="struct-editor struct-container">
+      <div className="struct-header">{structDeclaration.struct_name}</div>
+      {Array.from(fields.entries()).map(([fieldName, fieldType]) => {
+        return (
+          <div className="struct-section">
+            <div className="struct-section-name">{fieldName}</div>
+            <div className="struct-section-value">
+              {/* Pass the field's ValueDef down */}
+              <ValueEditor
+                testIO={{
+                  typ: fieldType,
+                  value: currentMap.get(fieldName)
+                    ? { value: currentMap.get(fieldName)! } // Create a temporary ValueDef for the field
+                    : undefined,
+                }}
+                onValueChange={(newFieldTestIo) => {
+                  // newFieldTestIo contains the updated ValueDef for the field
+                  if (newFieldTestIo.value) {
+                    handleFieldChange(fieldName, newFieldTestIo.value.value); // Pass the RuntimeValue up
+                  }
+                  // Handle case where field value becomes undefined? Maybe delete from map?
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
