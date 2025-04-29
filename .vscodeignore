@@ -4,6 +4,7 @@
 .vscode
 .eslintignore
 .eslintrc.js
+.envrc
 tsconfig.json
 webpack.config.js
 node_modules/
@@ -15,7 +16,10 @@ syntaxes/*.iro
 
 server/
 _build/
+.github/
 test-case-parser/
 Makefile
 dune-project
 catala-lsp.opam
+.aider*
+.aider.tags.cache.v*/
