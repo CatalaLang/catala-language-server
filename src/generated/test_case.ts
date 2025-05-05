@@ -78,6 +78,7 @@ export type RuntimeValueRaw =
 | { kind: 'Array'; value: RuntimeValue[] }
 
 export type AttrDef =
+| { kind: 'TestDescription'; value: string }
 | { kind: 'Uid'; value: string }
 
 export type RuntimeValue = {
@@ -104,6 +105,7 @@ export type Test = {
   tested_scope: ScopeDef;
   test_inputs: TestInputs;
   test_outputs: TestOutputs;
+  description: string;
 }
 
 export type TestList = Test[]
@@ -371,6 +373,8 @@ export function readRuntimeValueRaw(x: any, context: any = x): RuntimeValueRaw {
 
 export function writeAttrDef(x: AttrDef, context: any = x): any {
   switch (x.kind) {
+    case 'TestDescription':
+      return ['TestDescription', _atd_write_string(x.value, x)]
     case 'Uid':
       return ['Uid', _atd_write_string(x.value, x)]
   }
@@ -379,6 +383,8 @@ export function writeAttrDef(x: AttrDef, context: any = x): any {
 export function readAttrDef(x: any, context: any = x): AttrDef {
   _atd_check_json_tuple(2, x, context)
   switch (x[0]) {
+    case 'TestDescription':
+      return { kind: 'TestDescription', value: _atd_read_string(x[1], x) }
     case 'Uid':
       return { kind: 'Uid', value: _atd_read_string(x[1], x) }
     default:
@@ -451,6 +457,7 @@ export function writeTest(x: Test, context: any = x): any {
     'tested_scope': _atd_write_required_field('Test', 'tested_scope', writeScopeDef, x.tested_scope, x),
     'test_inputs': _atd_write_required_field('Test', 'test_inputs', writeTestInputs, x.test_inputs, x),
     'test_outputs': _atd_write_required_field('Test', 'test_outputs', writeTestOutputs, x.test_outputs, x),
+    'description': _atd_write_required_field('Test', 'description', _atd_write_string, x.description, x),
   };
 }
 
@@ -460,6 +467,7 @@ export function readTest(x: any, context: any = x): Test {
     tested_scope: _atd_read_required_field('Test', 'tested_scope', readScopeDef, x['tested_scope'], x),
     test_inputs: _atd_read_required_field('Test', 'test_inputs', readTestInputs, x['test_inputs'], x),
     test_outputs: _atd_read_required_field('Test', 'test_outputs', readTestOutputs, x['test_outputs'], x),
+    description: _atd_read_required_field('Test', 'description', _atd_read_string, x['description'], x),
   };
 }
 

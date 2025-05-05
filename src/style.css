@@ -749,3 +749,14 @@
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
 }
+
+.test-description-editor {
+  width: 100%;
+}
+
+.test-description-textarea {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-input-foreground);
+  width: 100%;
+  max-width: 600px;
+}
