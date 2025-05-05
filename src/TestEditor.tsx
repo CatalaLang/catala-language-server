@@ -1,3 +1,4 @@
+import type { ChangeEvent } from 'react';
 import { type ReactElement, useState } from 'react';
 import { FormattedMessage } from 'react-intl';
 import {
@@ -27,6 +28,13 @@ export default function TestEditor(props: Props): ReactElement {
     props.onTestChange({
       ...props.test,
       test_inputs: newValue,
+    });
+  }
+
+  function onDescriptionChange(event: ChangeEvent<HTMLTextAreaElement>): void {
+    props.onTestChange({
+      ...props.test,
+      description: event.target.value,
     });
   }
 
@@ -76,6 +84,23 @@ export default function TestEditor(props: Props): ReactElement {
         className="test-editor-content"
         style={{ display: isCollapsed ? 'none' : 'block' }}
       >
+        <div className="test-section">
+          <h2 className="test-section-title">
+            <FormattedMessage
+              id="testEditor.description"
+              defaultMessage="Description"
+            />
+          </h2>
+          <div className="test-description-editor">
+            <textarea
+              value={props.test.description}
+              onChange={onDescriptionChange}
+              placeholder="Enter test description..."
+              rows={3}
+              className="test-description-textarea"
+            />
+          </div>
+        </div>
         <div className="test-section">
           <h2 className="test-section-title">
             <FormattedMessage id="testEditor.inputs" />

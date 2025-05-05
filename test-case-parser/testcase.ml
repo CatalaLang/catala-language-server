@@ -85,11 +85,12 @@ let register () =
     ~doc:"Catala plugin for the handling of scope test cases" ~man
     [cmd_generate; cmd_read; cmd_run; cmd_write; cmd_list_scopes];
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"] ~contexts:[Desugared.Name_resolution.Expression]
-    @@ fun ~pos:_ value -> match value with
+    @@ (fun ~pos:_ value -> match value with
     | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.Uid s)
-    | _ -> failwith "unexpected UID value"
+    | _ -> failwith "unexpected UID value");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"] ~contexts:[Desugared.Name_resolution.ScopeDecl]
+    @@ fun ~pos:_ value -> match value with
+    | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestDescription s)
+    | _ -> failwith "unexpected test description"
 
-(* For now, can be invoked through `catala test-case-parser --plugin-dir
-   _build/default/ <FILE>` but we need to figure out distribution through vscode
-   or otherwise. *)
 let () = register ()
