@@ -33,6 +33,8 @@ const commonConfig = {
 
 const extensionConfig = {
   ...commonConfig,
+  // we use the node target as we invoke external commands (catala compiler);
+  // we might want to look for an alternative solution
   target: 'node',
   entry: {
     extension: './src/extension.ts',
@@ -40,7 +42,7 @@ const extensionConfig = {
   output: {
     ...commonConfig.output,
     filename: 'extension.js',
-    libraryTarget: 'commonjs2',
+    libraryTarget: 'commonjs2', // TODO move to ESM?
   },
   externals: {
     vscode: 'commonjs vscode',
@@ -55,7 +57,7 @@ const uiConfig = {
       import: './src/uiEntryPoint.ts',
       library: {
         name: 'Ui',
-        type: 'window',
+        type: 'window', // TODO find something better... this is icky
       },
     },
   },
