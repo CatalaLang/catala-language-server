@@ -68,7 +68,10 @@ type runtime_value_raw = [
 ] <ocaml repr="classic">
 
 (* to be extended with free-form descriptions, etc. *)
-type attr_def = [Uid of string] <ocaml repr="classic">
+type attr_def = [
+  | TestDescription of string
+  | Uid of string
+  ] <ocaml repr="classic">
 
 type runtime_value = {
   value: runtime_value_raw;
@@ -92,9 +95,10 @@ type test_outputs = (string * test_io) list <json repr="object"> <ts repr="map">
 
 type test = {
   testing_scope: string;
-  tested_scope : scope_def;
-  test_inputs : test_inputs;
-  test_outputs : test_outputs;
+  tested_scope: scope_def;
+  test_inputs: test_inputs;
+  test_outputs: test_outputs;
+  description: string;
 }
 
 type test_list = test list

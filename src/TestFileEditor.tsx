@@ -153,7 +153,6 @@ export default function TestFileEditor({
         const idx = state.tests.findIndex(
           (tst) => tst.testing_scope === newValue.testing_scope
         );
-        console.log(`test changed at index ${idx}`);
         const newTestState = [...state.tests];
         newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
         console.log('old test state');

@@ -186,6 +186,7 @@ and get_enum ?module_name decl_ctx enum_name =
   { O.enum_name; constructors }
 
 type Pos.attr += Uid of string
+type Pos.attr += TestDescription of string
 
 let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun decl_ctx e ->
@@ -339,7 +340,8 @@ let get_scope_test
   let test_outputs =
     List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.outputs
   in
-  { O.testing_scope; tested_scope; test_outputs; test_inputs }
+  let description = "" in
+  { O.testing_scope; tested_scope; test_outputs; test_inputs; description }
 
 (* --- *)
 
@@ -384,6 +386,12 @@ let get_test_scopes prg =
 let get_catala_test (prg, naming_ctx) testing_scope_name =
   let testing_scope =
     ScopeName.Map.find testing_scope_name prg.I.program_root.module_scopes
+  in
+  let description =
+    Pos.get_attr
+      (Mark.get (ScopeName.get_info testing_scope_name))
+      (function TestDescription s -> Some s | _ -> None)
+    |> Option.value ~default:""
   in
   let subscope_var, tested_scope =
     let count = ScopeVar.Map.cardinal testing_scope.I.scope_sub_scopes in
@@ -510,7 +518,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
         var_str, { test_out with O.value })
       base_test.test_outputs
   in
-  { base_test with O.test_inputs; test_outputs }
+  { base_test with O.test_inputs; test_outputs; description }
 
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
@@ -597,7 +605,9 @@ let print_attrs ppf (attrs : O.attr_def list) =
   pp_print_list
     (fun ppf (attr : O.attr_def) ->
       match attr with
-      | Uid (s : string) -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s)
+      | Uid (s : string) -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s
+      | TestDescription (s : string) ->
+        fprintf ppf "#[testcase.test_description = %s]@\n" (String.quote s))
     ppf attrs
 
 let rec print_catala_value ~lang ppf (v : O.runtime_value) =
@@ -703,6 +713,7 @@ let write_catala_test ppf t lang =
   in
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala@,";
+  fprintf ppf "#[testcase.test_description = %s]@\n" (String.quote t.description);
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;
