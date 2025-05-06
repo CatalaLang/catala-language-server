@@ -40,7 +40,7 @@
         </dict>
         <dict>
           <key>match</key>
-          <string>\b(champ\s+d&apos;application|dépend\s+de|résultat\s+de|déclaration|inclus|liste\s+de|contenu\s+de|contenu|optionnel|structure|énumération|contexte|entrée|résultat|interne|règle|sous\s+condition|condition|donnée|conséquence|rempli|égal\s+à|assertion|définition|état|étiquette|exception|n'importe\s+quel|liste\s+vide|est\s+maximum|est\s+minimum|minimum\s+de|maximum\s+de|combinaison\s+de|initialement)\b</string>
+          <string>\b(champ\s+d&apos;application|dépend\s+de|résultat\s+de|déclaration|inclus|liste\s+de|contenu\s+de|contenu|optionnel|structure|énumération|contexte|entrée|résultat|interne|règle|sous\s+condition|condition|donnée|conséquence|rempli|égal\s+à|assertion|définition|état|étiquette|exception|n'importe\s+quel|liste\s+vide|est\s+maximum|est\s+minimum|minimum\s+de|maximum\s+de|combine\s+tout|transforme\s+chaque|en|initialement)\b</string>
           <key>name</key>
           <string>keyword.other.catala_code_fr</string>
         </dict>

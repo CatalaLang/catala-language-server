@@ -358,7 +358,7 @@
         </dict>
         <dict>
           <key>match</key>
-          <string>\b(scope|depends\s+on|result\s+of|declaration|includes|list\s+of|content\s+of|content|optional|structure|enumeration|context|input|output|internal|rule|under\s+condition|condition|data|consequence|fulfilled|equals|assertion|definition|state|label|exception|anything|list\s+empty|is\s+maximum|is\s+minimum|minimum\s+of|maximum\s+of|combine|initially)\b</string>
+          <string>\b(scope|depends\s+on|result\s+of|declaration|includes|list\s+of|content\s+of|content|optional|structure|enumeration|context|input|output|internal|rule|under\s+condition|condition|data|consequence|fulfilled|equals|assertion|definition|state|label|exception|anything|list\s+empty|is\s+maximum|is\s+minimum|minimum\s+of|maximum\s+of|combine|map\s+each|to|initially)\b</string>
           <key>name</key>
           <string>keyword.other.catala_en</string>
         </dict>
