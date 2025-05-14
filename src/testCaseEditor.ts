@@ -88,26 +88,58 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
+    // Debounce mechanism for GuiEdit messages
+    let guiEditTimeout: NodeJS.Timeout | null = null;
+    let latestGuiEditMessage: Extract<UpMessage, { kind: 'GuiEdit' }> | null =
+      null;
+
     function applyGuiEdit(
       typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>,
       lang: string
     ): void {
-      // re-emit catala text file from ATD test definitions
-      const newTextBuffer = atdToCatala(typed_msg.value, lang);
-      // produce edit
-      const edit = new vscode.WorkspaceEdit();
-      edit.replace(
-        document.uri,
-        new vscode.Range(0, 0, document.lineCount, 0),
-        newTextBuffer
-      );
-      vscode.workspace.applyEdit(edit).then(() => {
-        //XXX concurrent edits? (e.g. from external sources?)
-        postMessageToWebView({
-          kind: 'Update',
-          value: parseTestFile(document.getText(), lang, document.uri.fsPath),
-        });
-      });
+      // Store the latest message
+      latestGuiEditMessage = typed_msg;
+
+      // Clear any existing timeout
+      if (guiEditTimeout) {
+        clearTimeout(guiEditTimeout);
+      }
+
+      // Set a new timeout for the quiescence period (1.5 seconds)
+      guiEditTimeout = setTimeout(() => {
+        if (latestGuiEditMessage) {
+          // Send StandBy message to disable UI
+          postMessageToWebView({
+            kind: 'StandBy',
+          });
+
+          // re-emit catala text file from ATD test definitions
+          const newTextBuffer = atdToCatala(latestGuiEditMessage.value, lang);
+
+          // produce edit
+          const edit = new vscode.WorkspaceEdit();
+          edit.replace(
+            document.uri,
+            new vscode.Range(0, 0, document.lineCount, 0),
+            newTextBuffer
+          );
+
+          vscode.workspace.applyEdit(edit).then(() => {
+            //XXX concurrent edits? (e.g. from external sources?)
+            postMessageToWebView({
+              kind: 'Update',
+              value: parseTestFile(
+                document.getText(),
+                lang,
+                document.uri.fsPath
+              ),
+            });
+          });
+
+          // Reset the latest message
+          latestGuiEditMessage = null;
+        }
+      }, 1500);
     }
 
     webviewPanel.webview.onDidReceiveMessage(async (message: unknown) => {
