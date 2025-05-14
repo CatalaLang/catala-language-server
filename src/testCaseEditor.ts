@@ -92,6 +92,47 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
     let guiEditTimeout: NodeJS.Timeout | null = null;
     let latestGuiEditMessage: Extract<UpMessage, { kind: 'GuiEdit' }> | null =
       null;
+    let isApplyingEdit = false;
+
+    // Function to apply the edit with the latest message
+    async function applyLatestEdit(lang: string): Promise<void> {
+      if (!latestGuiEditMessage || isApplyingEdit) {
+        return;
+      }
+
+      isApplyingEdit = true;
+
+      try {
+        // Send StandBy message to disable UI
+        postMessageToWebView({
+          kind: 'StandBy',
+        });
+
+        // re-emit catala text file from ATD test definitions
+        const newTextBuffer = atdToCatala(latestGuiEditMessage.value, lang);
+
+        // produce edit
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(
+          document.uri,
+          new vscode.Range(0, 0, document.lineCount, 0),
+          newTextBuffer
+        );
+
+        await vscode.workspace.applyEdit(edit);
+
+        // Update the UI with the new state
+        postMessageToWebView({
+          kind: 'Update',
+          value: parseTestFile(document.getText(), lang, document.uri.fsPath),
+        });
+
+        // Reset the latest message
+        latestGuiEditMessage = null;
+      } finally {
+        isApplyingEdit = false;
+      }
+    }
 
     function applyGuiEdit(
       typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>,
@@ -107,40 +148,29 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
       // Set a new timeout for the quiescence period (1.5 seconds)
       guiEditTimeout = setTimeout(() => {
-        if (latestGuiEditMessage) {
-          // Send StandBy message to disable UI
-          postMessageToWebView({
-            kind: 'StandBy',
-          });
-
-          // re-emit catala text file from ATD test definitions
-          const newTextBuffer = atdToCatala(latestGuiEditMessage.value, lang);
-
-          // produce edit
-          const edit = new vscode.WorkspaceEdit();
-          edit.replace(
-            document.uri,
-            new vscode.Range(0, 0, document.lineCount, 0),
-            newTextBuffer
-          );
-
-          vscode.workspace.applyEdit(edit).then(() => {
-            //XXX concurrent edits? (e.g. from external sources?)
-            postMessageToWebView({
-              kind: 'Update',
-              value: parseTestFile(
-                document.getText(),
-                lang,
-                document.uri.fsPath
-              ),
-            });
-          });
-
-          // Reset the latest message
-          latestGuiEditMessage = null;
-        }
+        applyLatestEdit(lang);
       }, 1500);
     }
+
+    // Hook into the save event to immediately apply edits
+    const willSaveTextDocumentSubscription =
+      vscode.workspace.onWillSaveTextDocument((e) => {
+        if (
+          e.document.uri.toString() === document.uri.toString() &&
+          latestGuiEditMessage
+        ) {
+          // Clear any pending timeout
+          if (guiEditTimeout) {
+            clearTimeout(guiEditTimeout);
+            guiEditTimeout = null;
+          }
+
+          // Apply the edit immediately
+          const lang = getLanguageFromFileName(e.document.fileName);
+          // We need to wait for the edit to be applied before the save happens
+          e.waitUntil(applyLatestEdit(lang));
+        }
+      });
 
     webviewPanel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
@@ -261,6 +291,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
     webviewPanel.onDidDispose(() => {
       changeDocumentSubscription.dispose();
+      willSaveTextDocumentSubscription.dispose();
     });
   }
 
