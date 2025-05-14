@@ -88,13 +88,14 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
+    const QUIESCENCE_DELAY_MS = 1500;
+
     // Debounce mechanism for GuiEdit messages
     let guiEditTimeout: NodeJS.Timeout | null = null;
     let latestGuiEditMessage: Extract<UpMessage, { kind: 'GuiEdit' }> | null =
       null;
     let isApplyingEdit = false;
 
-    // Function to apply the edit with the latest message
     async function applyLatestEdit(lang: string): Promise<void> {
       if (!latestGuiEditMessage || isApplyingEdit) {
         return;
@@ -146,10 +147,10 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         clearTimeout(guiEditTimeout);
       }
 
-      // Set a new timeout for the quiescence period (1.5 seconds)
+      // Set a new timeout for the quiescence period
       guiEditTimeout = setTimeout(() => {
         applyLatestEdit(lang);
-      }, 1500);
+      }, QUIESCENCE_DELAY_MS);
     }
 
     // Hook into the save event to immediately apply edits
