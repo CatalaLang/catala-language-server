@@ -104,11 +104,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       isApplyingEdit = true;
 
       try {
-        // Send StandBy message to disable UI
-        postMessageToWebView({
-          kind: 'StandBy',
-        });
-
         // re-emit catala text file from ATD test definitions
         const newTextBuffer = atdToCatala(latestGuiEditMessage.value, lang);
 

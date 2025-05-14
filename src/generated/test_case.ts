@@ -151,7 +151,6 @@ export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
 | { kind: 'TestRunResults'; value: TestRunResults }
 | { kind: 'FileSelectedForNewTest'; value: FileSelection }
-| { kind: 'StandBy' }
 
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
@@ -662,34 +661,21 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
       return ['TestRunResults', writeTestRunResults(x.value, x)]
     case 'FileSelectedForNewTest':
       return ['FileSelectedForNewTest', writeFileSelection(x.value, x)]
-    case 'StandBy':
-      return 'StandBy'
   }
 }
 
 export function readDownMessage(x: any, context: any = x): DownMessage {
-  if (typeof x === 'string') {
-    switch (x) {
-      case 'StandBy':
-        return { kind: 'StandBy' }
-      default:
-        _atd_bad_json('DownMessage', x, context)
-        throw new Error('impossible')
-    }
-  }
-  else {
-    _atd_check_json_tuple(2, x, context)
-    switch (x[0]) {
-      case 'Update':
-        return { kind: 'Update', value: readParseResults(x[1], x) }
-      case 'TestRunResults':
-        return { kind: 'TestRunResults', value: readTestRunResults(x[1], x) }
-      case 'FileSelectedForNewTest':
-        return { kind: 'FileSelectedForNewTest', value: readFileSelection(x[1], x) }
-      default:
-        _atd_bad_json('DownMessage', x, context)
-        throw new Error('impossible')
-    }
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'Update':
+      return { kind: 'Update', value: readParseResults(x[1], x) }
+    case 'TestRunResults':
+      return { kind: 'TestRunResults', value: readTestRunResults(x[1], x) }
+    case 'FileSelectedForNewTest':
+      return { kind: 'FileSelectedForNewTest', value: readFileSelection(x[1], x) }
+    default:
+      _atd_bad_json('DownMessage', x, context)
+      throw new Error('impossible')
   }
 }
 

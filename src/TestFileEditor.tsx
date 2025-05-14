@@ -31,8 +31,7 @@ type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
   | { state: 'emptyTestListMismatch' }
-  | { state: 'success'; tests: TestList }
-  | { state: 'standby'; tests: TestList };
+  | { state: 'success'; tests: TestList };
 
 type TestRunState = {
   [scope: string]: {
@@ -150,7 +149,7 @@ export default function TestFileEditor({
 
   const onTestChange = useCallback(
     (newValue: Test): void => {
-      if (state.state === 'success' || state.state === 'standby') {
+      if (state.state === 'success') {
         const idx = state.tests.findIndex(
           (tst) => tst.testing_scope === newValue.testing_scope
         );
@@ -159,7 +158,7 @@ export default function TestFileEditor({
 
         // Optimistically update the state
         setState((prevState) => {
-          if (prevState.state === 'success' || prevState.state === 'standby') {
+          if (prevState.state === 'success') {
             return { ...prevState, tests: newTestState };
           }
           return prevState;
@@ -265,11 +264,6 @@ export default function TestFileEditor({
         case 'Update':
           setState(parseResultsToUiState(message.value));
           break;
-        case 'StandBy':
-          if (state.state === 'success') {
-            setState({ state: 'standby', tests: state.tests });
-          }
-          break;
         case 'TestRunResults': {
           const results = message.value;
           setTestRunState((prev) => {
@@ -323,9 +317,7 @@ export default function TestFileEditor({
           <FormattedMessage id="app.initializing" />
         </strong>
       );
-    case 'standby':
     case 'success': {
-      const isDisabled = state.state === 'standby';
       if (state.tests.length === 0) {
         return (
           <>
@@ -343,9 +335,7 @@ export default function TestFileEditor({
         );
       }
       return (
-        <div
-          className={`test-editor-container ${isDisabled ? 'disabled' : ''}`}
-        >
+        <div className="test-editor-container">
           <div className="test-editor-top-bar">
             <button className="test-editor-add-button" onClick={onAddNewTest}>
               <span className="codicon codicon-add"></span>
