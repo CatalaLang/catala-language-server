@@ -88,24 +88,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
-    function debounce<T extends (...args: any[]) => any>(
-      func: T,
-      waitMs: number
-    ): (...args: Parameters<T>) => void {
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-      return function (...args: Parameters<T>): void {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-
-        timeoutId = setTimeout(() => {
-          func(...args);
-          timeoutId = null;
-        }, waitMs);
-      };
-    }
-
     function applyGuiEdit(
       typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>,
       lang: string
@@ -129,8 +111,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
-    const debouncedApplyGuiEdit = debounce(applyGuiEdit, 450);
-
     webviewPanel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
       const lang = getLanguageFromFileName(document.fileName);
@@ -152,7 +132,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         }
         case 'GuiEdit': {
           logger.log('Got edit from webview');
-          debouncedApplyGuiEdit(typed_msg, lang);
+          applyGuiEdit(typed_msg, lang);
           break;
         }
         case 'TestRunRequest': {
