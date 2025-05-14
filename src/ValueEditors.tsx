@@ -448,8 +448,15 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const initialValue = // in cents
     runtimeValue?.value.kind === 'Money' ? runtimeValue.value.value : undefined;
 
-  const centsToDisplayValue = (cents: number | undefined): string =>
-    cents !== undefined ? (cents / 100).toFixed(2) : '';
+  const centsToDisplayValue = (cents: number | undefined): string => {
+    if (cents === undefined) {
+      return '';
+    }
+    if (cents % 100 === 0) {
+      return String(cents / 100);
+    }
+    return (cents / 100).toFixed(2);
+  };
 
   const [displayValue, setDisplayValue] = useState(
     centsToDisplayValue(initialValue)
@@ -479,17 +486,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     }
   };
 
-  const handleBlur = (): void => {
-    if (!isValidMoney(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Money'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(centsToDisplayValue(resetValue));
-    }
-  };
-
   return (
     <div className="value-editor money-editor">
       <input
@@ -498,7 +494,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`money-input ${
           displayValue && !isValidMoney(displayValue) ? 'invalid-money' : ''
         }`}
