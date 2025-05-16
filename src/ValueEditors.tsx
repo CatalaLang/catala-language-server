@@ -143,17 +143,6 @@ function IntEditor(props: IntEditorProps): ReactElement {
     }
   };
 
-  const handleBlur = (): void => {
-    if (!isValidInt(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Integer'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(resetValue?.toString() ?? '');
-    }
-  };
-
   return (
     <div className="value-editor int-editor">
       <input
@@ -162,7 +151,6 @@ function IntEditor(props: IntEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`int-input ${
           displayValue && !isValidInt(displayValue) ? 'invalid-int' : ''
         }`}
@@ -219,8 +207,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
     }
   };
 
-  // TODO: Add onBlur validation?
-
   return (
     <div className="value-editor">
       <input type="date" value={internalValue} onChange={handleChange} />
@@ -264,17 +250,6 @@ function RatEditor(props: RatEditorProps): ReactElement {
     }
   };
 
-  const handleBlur = (): void => {
-    if (!isValidRat(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Decimal'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(resetValue?.toString() ?? '');
-    }
-  };
-
   return (
     <div className="value-editor rat-editor">
       <input
@@ -283,7 +258,6 @@ function RatEditor(props: RatEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`rat-input ${
           displayValue && !isValidRat(displayValue) ? 'invalid-rat' : ''
         }`}
