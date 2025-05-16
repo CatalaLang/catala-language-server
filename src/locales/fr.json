@@ -31,5 +31,8 @@
   "results.butGot": "mais obtenu",
   "arrayEditor.addElement": "Ajouter un élément",
   "false": "faux",
-  "true": "vrai"
+  "true": "vrai",
+  "durationEditor.years": "Années :",
+  "durationEditor.months": "Mois :",
+  "durationEditor.days": "Jours :"
 }

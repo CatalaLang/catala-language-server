@@ -31,5 +31,8 @@
   "results.butGot": "but got",
   "arrayEditor.addElement": "Add element",
   "false": "false",
-  "true": "true"
+  "true": "true",
+  "durationEditor.years": "Years:",
+  "durationEditor.months": "Months:",
+  "durationEditor.days": "Days:"
 }
