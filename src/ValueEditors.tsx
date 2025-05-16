@@ -1,6 +1,6 @@
 // Editors for a single value type (grouped with a factory function)
 
-import { type ReactElement, useState, useEffect } from 'react';
+import { type ReactElement, useState } from 'react';
 import { FormattedMessage } from 'react-intl';
 import CollapsibleRow from './CollapsibleRow';
 import type {
@@ -129,15 +129,6 @@ function IntEditor(props: IntEditorProps): ReactElement {
     initialValue?.toString() ?? ''
   );
 
-  // Update display value if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Integer'
-        ? runtimeValue.value.value
-        : undefined;
-    setDisplayValue(newValue?.toString() ?? '');
-  }, [runtimeValue]);
-
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
     setDisplayValue(valueStr);
@@ -203,15 +194,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
 
   const [internalValue, setInternalValue] = useState(formatDate(initialValue));
 
-  // Update display value if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Date'
-        ? runtimeValue.value.value
-        : undefined;
-    setInternalValue(formatDate(newValue));
-  }, [runtimeValue]);
-
   const parseDate = (
     dateString: string
   ): { year: number; month: number; day: number } | null => {
@@ -267,15 +249,6 @@ function RatEditor(props: RatEditorProps): ReactElement {
   const [displayValue, setDisplayValue] = useState(
     initialValue?.toString() ?? ''
   );
-
-  // Update display value if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Decimal'
-        ? runtimeValue.value.value
-        : undefined;
-    setDisplayValue(newValue?.toString() ?? '');
-  }, [runtimeValue]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
@@ -361,17 +334,6 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   const [years, setYears] = useState(initialValue?.years ?? 0);
   const [months, setMonths] = useState(initialValue?.months ?? 0);
   const [days, setDays] = useState(initialValue?.days ?? 0);
-
-  // Update state if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Duration'
-        ? runtimeValue.value.value
-        : undefined;
-    setYears(newValue?.years ?? 0);
-    setMonths(newValue?.months ?? 0);
-    setDays(newValue?.days ?? 0);
-  }, [runtimeValue]);
 
   const handleChange = (
     field: 'years' | 'months' | 'days',
@@ -461,15 +423,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const [displayValue, setDisplayValue] = useState(
     centsToDisplayValue(initialValue)
   );
-
-  // Update display value if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Money'
-        ? runtimeValue.value.value
-        : undefined;
-    setDisplayValue(centsToDisplayValue(newValue));
-  }, [runtimeValue]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
