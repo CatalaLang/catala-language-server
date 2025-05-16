@@ -405,7 +405,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
     <div className="value-editor duration-editor">
       <div className="duration-fields">
         <label>
-          Years:
+          <FormattedMessage id="durationEditor.years" defaultMessage="Years:" />
           <input
             type="number"
             min="0"
@@ -414,7 +414,10 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           />
         </label>
         <label>
-          Months:
+          <FormattedMessage
+            id="durationEditor.months"
+            defaultMessage="Months:"
+          />
           <input
             type="number"
             min="0"
@@ -423,7 +426,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           />
         </label>
         <label>
-          Days:
+          <FormattedMessage id="durationEditor.days" defaultMessage="Days:" />
           <input
             type="number"
             min="0"
