@@ -339,8 +339,12 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   return (
     <div className="value-editor">
       <select value={currentValue.toString()} onChange={handleChange}>
-        <option value="false">false</option>
-        <option value="true">true</option>
+        <option value="false">
+          <FormattedMessage id="false" />
+        </option>
+        <option value="true">
+          <FormattedMessage id="true" />
+        </option>
       </select>
     </div>
   );
@@ -401,7 +405,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
     <div className="value-editor duration-editor">
       <div className="duration-fields">
         <label>
-          Years:
+          <FormattedMessage id="durationEditor.years" defaultMessage="Years:" />
           <input
             type="number"
             min="0"
@@ -410,7 +414,10 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           />
         </label>
         <label>
-          Months:
+          <FormattedMessage
+            id="durationEditor.months"
+            defaultMessage="Months:"
+          />
           <input
             type="number"
             min="0"
@@ -419,7 +426,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           />
         </label>
         <label>
-          Days:
+          <FormattedMessage id="durationEditor.days" defaultMessage="Days:" />
           <input
             type="number"
             min="0"

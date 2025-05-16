@@ -15,6 +15,7 @@
   "testEditor.expand": "Développer le cas de test",
   "testEditor.run": "Exécuter le test",
   "testEditor.delete": "Supprimer le test",
+  "testEditor.descriptionPlaceholder": "Entrez une description du test...",
   "testEditor.passed": "Réussi",
   "testEditor.failed": "Échoué",
   "testEditor.inputs": "Données d'entrée",
@@ -28,5 +29,10 @@
   "results.failure": "❌",
   "results.expected": "attendu",
   "results.butGot": "mais obtenu",
-  "arrayEditor.addElement": "Ajouter un élément"
+  "arrayEditor.addElement": "Ajouter un élément",
+  "false": "faux",
+  "true": "vrai",
+  "durationEditor.years": "Années :",
+  "durationEditor.months": "Mois :",
+  "durationEditor.days": "Jours :"
 }

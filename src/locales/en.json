@@ -12,6 +12,7 @@
   "testFile.formatIssueFix": "Please edit the file manually in the text editor to fix the format.",
   "testFile.openTextEditor": "Open in Text Editor",
   "testEditor.collapse": "Collapse test case",
+  "testEditor.descriptionPlaceholder": "Enter test description...",
   "testEditor.expand": "Expand test case",
   "testEditor.run": "Run test",
   "testEditor.delete": "Delete test",
@@ -28,5 +29,10 @@
   "results.failure": "❌",
   "results.expected": "expected",
   "results.butGot": "but got",
-  "arrayEditor.addElement": "Add element"
+  "arrayEditor.addElement": "Add element",
+  "false": "false",
+  "true": "true",
+  "durationEditor.years": "Years:",
+  "durationEditor.months": "Months:",
+  "durationEditor.days": "Days:"
 }
