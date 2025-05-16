@@ -339,8 +339,12 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   return (
     <div className="value-editor">
       <select value={currentValue.toString()} onChange={handleChange}>
-        <option value="false">false</option>
-        <option value="true">true</option>
+        <option value="false">
+          <FormattedMessage id="false" />
+        </option>
+        <option value="true">
+          <FormattedMessage id="true" />
+        </option>
       </select>
     </div>
   );

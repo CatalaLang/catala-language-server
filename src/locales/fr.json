@@ -28,5 +28,7 @@
   "results.failure": "❌",
   "results.expected": "attendu",
   "results.butGot": "mais obtenu",
-  "arrayEditor.addElement": "Ajouter un élément"
+  "arrayEditor.addElement": "Ajouter un élément",
+  "false": "faux",
+  "true": "vrai"
 }
