@@ -1,6 +1,6 @@
 // Editors for a single value type (grouped with a factory function)
 
-import { type ReactElement, useState, useEffect } from 'react';
+import { type ReactElement, useState } from 'react';
 import { FormattedMessage } from 'react-intl';
 import CollapsibleRow from './CollapsibleRow';
 import type {
@@ -129,15 +129,6 @@ function IntEditor(props: IntEditorProps): ReactElement {
     initialValue?.toString() ?? ''
   );
 
-  // Update display value if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Integer'
-        ? runtimeValue.value.value
-        : undefined;
-    setDisplayValue(newValue?.toString() ?? '');
-  }, [runtimeValue]);
-
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
     setDisplayValue(valueStr);
@@ -152,17 +143,6 @@ function IntEditor(props: IntEditorProps): ReactElement {
     }
   };
 
-  const handleBlur = (): void => {
-    if (!isValidInt(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Integer'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(resetValue?.toString() ?? '');
-    }
-  };
-
   return (
     <div className="value-editor int-editor">
       <input
@@ -171,7 +151,6 @@ function IntEditor(props: IntEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`int-input ${
           displayValue && !isValidInt(displayValue) ? 'invalid-int' : ''
         }`}
@@ -203,15 +182,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
 
   const [internalValue, setInternalValue] = useState(formatDate(initialValue));
 
-  // Update display value if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Date'
-        ? runtimeValue.value.value
-        : undefined;
-    setInternalValue(formatDate(newValue));
-  }, [runtimeValue]);
-
   const parseDate = (
     dateString: string
   ): { year: number; month: number; day: number } | null => {
@@ -236,8 +206,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     }
   };
-
-  // TODO: Add onBlur validation?
 
   return (
     <div className="value-editor">
@@ -268,15 +236,6 @@ function RatEditor(props: RatEditorProps): ReactElement {
     initialValue?.toString() ?? ''
   );
 
-  // Update display value if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Decimal'
-        ? runtimeValue.value.value
-        : undefined;
-    setDisplayValue(newValue?.toString() ?? '');
-  }, [runtimeValue]);
-
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
     setDisplayValue(valueStr);
@@ -291,17 +250,6 @@ function RatEditor(props: RatEditorProps): ReactElement {
     }
   };
 
-  const handleBlur = (): void => {
-    if (!isValidRat(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Decimal'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(resetValue?.toString() ?? '');
-    }
-  };
-
   return (
     <div className="value-editor rat-editor">
       <input
@@ -310,7 +258,6 @@ function RatEditor(props: RatEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`rat-input ${
           displayValue && !isValidRat(displayValue) ? 'invalid-rat' : ''
         }`}
@@ -361,17 +308,6 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   const [years, setYears] = useState(initialValue?.years ?? 0);
   const [months, setMonths] = useState(initialValue?.months ?? 0);
   const [days, setDays] = useState(initialValue?.days ?? 0);
-
-  // Update state if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Duration'
-        ? runtimeValue.value.value
-        : undefined;
-    setYears(newValue?.years ?? 0);
-    setMonths(newValue?.months ?? 0);
-    setDays(newValue?.days ?? 0);
-  }, [runtimeValue]);
 
   const handleChange = (
     field: 'years' | 'months' | 'days',
@@ -448,21 +384,19 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const initialValue = // in cents
     runtimeValue?.value.kind === 'Money' ? runtimeValue.value.value : undefined;
 
-  const centsToDisplayValue = (cents: number | undefined): string =>
-    cents !== undefined ? (cents / 100).toFixed(2) : '';
+  const centsToDisplayValue = (cents: number | undefined): string => {
+    if (cents === undefined) {
+      return '';
+    }
+    if (cents % 100 === 0) {
+      return String(cents / 100);
+    }
+    return (cents / 100).toFixed(2);
+  };
 
   const [displayValue, setDisplayValue] = useState(
     centsToDisplayValue(initialValue)
   );
-
-  // Update display value if prop changes externally
-  useEffect(() => {
-    const newValue =
-      runtimeValue?.value.kind === 'Money'
-        ? runtimeValue.value.value
-        : undefined;
-    setDisplayValue(centsToDisplayValue(newValue));
-  }, [runtimeValue]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
@@ -479,17 +413,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     }
   };
 
-  const handleBlur = (): void => {
-    if (!isValidMoney(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Money'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(centsToDisplayValue(resetValue));
-    }
-  };
-
   return (
     <div className="value-editor money-editor">
       <input
@@ -498,7 +421,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`money-input ${
           displayValue && !isValidMoney(displayValue) ? 'invalid-money' : ''
         }`}

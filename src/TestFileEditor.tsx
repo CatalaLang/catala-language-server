@@ -155,11 +155,16 @@ export default function TestFileEditor({
         );
         const newTestState = [...state.tests];
         newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
-        console.log('old test state');
-        console.log(state.tests);
-        console.log('new test state');
-        console.log(newTestState);
 
+        // Optimistically update the state
+        setState((prevState) => {
+          if (prevState.state === 'success') {
+            return { ...prevState, tests: newTestState };
+          }
+          return prevState;
+        });
+
+        // Send the update to the backend
         vscode.postMessage(
           writeUpMessage({
             kind: 'GuiEdit',

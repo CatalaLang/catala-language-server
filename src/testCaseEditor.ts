@@ -88,48 +88,85 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
-    function debounce<T extends (...args: any[]) => any>(
-      func: T,
-      waitMs: number
-    ): (...args: Parameters<T>) => void {
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const QUIESCENCE_DELAY_MS = 1500;
 
-      return function (...args: Parameters<T>): void {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
+    // Debounce mechanism for GuiEdit messages
+    let guiEditTimeout: NodeJS.Timeout | null = null;
+    let latestGuiEditMessage: Extract<UpMessage, { kind: 'GuiEdit' }> | null =
+      null;
+    let isApplyingEdit = false;
 
-        timeoutId = setTimeout(() => {
-          func(...args);
-          timeoutId = null;
-        }, waitMs);
-      };
+    async function applyLatestEdit(lang: string): Promise<void> {
+      if (!latestGuiEditMessage || isApplyingEdit) {
+        return;
+      }
+
+      isApplyingEdit = true;
+
+      try {
+        // re-emit catala text file from ATD test definitions
+        const newTextBuffer = atdToCatala(latestGuiEditMessage.value, lang);
+
+        // produce edit
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(
+          document.uri,
+          new vscode.Range(0, 0, document.lineCount, 0),
+          newTextBuffer
+        );
+
+        await vscode.workspace.applyEdit(edit);
+
+        // Update the UI with the new state
+        postMessageToWebView({
+          kind: 'Update',
+          value: parseTestFile(document.getText(), lang, document.uri.fsPath),
+        });
+
+        // Reset the latest message
+        latestGuiEditMessage = null;
+      } finally {
+        isApplyingEdit = false;
+      }
     }
 
     function applyGuiEdit(
       typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>,
       lang: string
     ): void {
-      // re-emit catala text file from ATD test definitions
-      const newTextBuffer = atdToCatala(typed_msg.value, lang);
-      logger.log(`newTextBuffer:\n ${newTextBuffer}`);
-      // produce edit
-      const edit = new vscode.WorkspaceEdit();
-      edit.replace(
-        document.uri,
-        new vscode.Range(0, 0, document.lineCount, 0),
-        newTextBuffer
-      );
-      vscode.workspace.applyEdit(edit).then(() => {
-        //XXX concurrent edits? (e.g. from external sources?)
-        postMessageToWebView({
-          kind: 'Update',
-          value: parseTestFile(document.getText(), lang, document.uri.fsPath),
-        });
-      });
+      // Store the latest message
+      latestGuiEditMessage = typed_msg;
+
+      // Clear any existing timeout
+      if (guiEditTimeout) {
+        clearTimeout(guiEditTimeout);
+      }
+
+      // Set a new timeout for the quiescence period
+      guiEditTimeout = setTimeout(() => {
+        applyLatestEdit(lang);
+      }, QUIESCENCE_DELAY_MS);
     }
 
-    const debouncedApplyGuiEdit = debounce(applyGuiEdit, 450);
+    // Hook into the save event to immediately apply edits
+    const willSaveTextDocumentSubscription =
+      vscode.workspace.onWillSaveTextDocument((e) => {
+        if (
+          e.document.uri.toString() === document.uri.toString() &&
+          latestGuiEditMessage
+        ) {
+          // Clear any pending timeout
+          if (guiEditTimeout) {
+            clearTimeout(guiEditTimeout);
+            guiEditTimeout = null;
+          }
+
+          // Apply the edit immediately
+          const lang = getLanguageFromFileName(e.document.fileName);
+          // We need to wait for the edit to be applied before the save happens
+          e.waitUntil(applyLatestEdit(lang));
+        }
+      });
 
     webviewPanel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
@@ -152,7 +189,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
         }
         case 'GuiEdit': {
           logger.log('Got edit from webview');
-          debouncedApplyGuiEdit(typed_msg, lang);
+          applyGuiEdit(typed_msg, lang);
           break;
         }
         case 'TestRunRequest': {
@@ -250,6 +287,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
     webviewPanel.onDidDispose(() => {
       changeDocumentSubscription.dispose();
+      willSaveTextDocumentSubscription.dispose();
     });
   }
 
