@@ -1,6 +1,6 @@
 import type { ChangeEvent } from 'react';
 import { type ReactElement, useState } from 'react';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import {
   type Test,
   type TestInputs,
@@ -24,6 +24,8 @@ type Props = {
 
 // Editor for a single test case (child of TestFileEditor)
 export default function TestEditor(props: Props): ReactElement {
+  const intl = useIntl();
+
   function onTestInputsChange(newValue: TestInputs): void {
     props.onTestChange({
       ...props.test,
@@ -97,7 +99,9 @@ export default function TestEditor(props: Props): ReactElement {
               value={description}
               onChange={(evt) => setDescription(evt.target.value)}
               onBlur={onDescriptionChange}
-              placeholder="Enter test description..."
+              placeholder={intl.formatMessage({
+                id: 'testEditor.descriptionPlaceholder',
+              })}
               rows={3}
               className="test-description-textarea"
             />
