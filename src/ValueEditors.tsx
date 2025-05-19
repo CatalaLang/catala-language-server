@@ -232,7 +232,13 @@ function DateEditor(props: DateEditorProps): ReactElement {
 
   return (
     <div className="value-editor">
-      <input type="date" value={internalValue} onChange={handleChange} />
+      <input
+        type="date"
+        min="0000-01-01"
+        max="9999-12-31"
+        value={internalValue}
+        onChange={handleChange}
+      />
     </div>
   );
 }
