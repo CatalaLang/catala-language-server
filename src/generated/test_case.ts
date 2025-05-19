@@ -146,6 +146,7 @@ export type UpMessage =
 | { kind: 'TestRunRequest'; value: TestRunRequest }
 | { kind: 'TestGenerateRequest'; value: TestGenerateRequest }
 | { kind: 'SelectFileForNewTest' }
+| { kind: 'CancelSourceUpdate' }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
@@ -620,6 +621,8 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return ['TestGenerateRequest', writeTestGenerateRequest(x.value, x)]
     case 'SelectFileForNewTest':
       return 'SelectFileForNewTest'
+    case 'CancelSourceUpdate':
+      return 'CancelSourceUpdate'
   }
 }
 
@@ -632,6 +635,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'OpenInTextEditor' }
       case 'SelectFileForNewTest':
         return { kind: 'SelectFileForNewTest' }
+      case 'CancelSourceUpdate':
+        return { kind: 'CancelSourceUpdate' }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')

@@ -192,6 +192,15 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           applyGuiEdit(typed_msg, lang);
           break;
         }
+        case 'CancelSourceUpdate': {
+          logger.log('Source update cancelled');
+          if (guiEditTimeout) {
+            clearTimeout(guiEditTimeout);
+            guiEditTimeout = null;
+          }
+
+          break;
+        }
         case 'TestRunRequest': {
           const { scope } = typed_msg.value;
           this.testQueue.add(() => runTest(document.fileName, scope));

@@ -16,6 +16,7 @@ import type {
 } from './generated/test_case';
 import { assertUnreachable } from './util';
 import { getDefaultValue } from './defaults';
+import { useCancelSourceUpdate } from './hooks/useCancelSourceUpdate';
 
 // Helper to create a RuntimeValue from a RuntimeValueRaw, preserving attrs
 function createRuntimeValue(
@@ -119,6 +120,7 @@ type IntEditorProps = {
 };
 
 function IntEditor(props: IntEditorProps): ReactElement {
+  const cancelSourceUpdate = useCancelSourceUpdate();
   const runtimeValue = props.valueDef?.value;
   const initialValue =
     runtimeValue?.value.kind === 'Integer'
@@ -149,6 +151,9 @@ function IntEditor(props: IntEditorProps): ReactElement {
         value: Number(valueStr),
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+    } else {
+      // ask plugin shell to cancel the generate souce -> parse update
+      cancelSourceUpdate();
     }
   };
 
@@ -244,6 +249,7 @@ type RatEditorProps = {
 };
 
 function RatEditor(props: RatEditorProps): ReactElement {
+  const cancelSourceUpdate = useCancelSourceUpdate();
   const runtimeValue = props.valueDef?.value;
   const initialValue =
     runtimeValue?.value.kind === 'Decimal'
@@ -260,7 +266,18 @@ function RatEditor(props: RatEditorProps): ReactElement {
       runtimeValue?.value.kind === 'Decimal'
         ? runtimeValue.value.value
         : undefined;
-    setDisplayValue(newValue?.toString() ?? '');
+    // We do not set the display value if the value coming from the compiler
+    // is equal but written differently. Instead, we keep the users' writing.
+    // This is because some rationals have more than one representation
+    // (e.g. '14', '14.', '14.0') and we do not want to replace those representations
+    // with a 'canonical' spelling because the user might be in the middle
+    // of inputting a different value.
+    if (
+      newValue === undefined ||
+      (newValue !== undefined && parseFloat(displayValue) !== newValue)
+    ) {
+      setDisplayValue(newValue?.toString() ?? '');
+    }
   }, [runtimeValue]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -274,6 +291,8 @@ function RatEditor(props: RatEditorProps): ReactElement {
         value: Number(valueStr),
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+    } else {
+      cancelSourceUpdate();
     }
   };
 
@@ -418,6 +437,7 @@ type MoneyEditorProps = {
 };
 
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
+  const cancelSourceUpdate = useCancelSourceUpdate();
   const runtimeValue = props.valueDef?.value;
   const initialValue = // in cents
     runtimeValue?.value.kind === 'Money' ? runtimeValue.value.value : undefined;
@@ -457,6 +477,8 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         value: centsValue,
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+    } else {
+      cancelSourceUpdate();
     }
   };
 

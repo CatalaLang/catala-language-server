@@ -18,6 +18,8 @@ import {
 import TestEditor from './TestEditor';
 import { assertUnreachable } from './util';
 import type { WebviewApi } from 'vscode-webview';
+import type { CancelSourceUpdateCallback } from './contexts/CancelSourceUpdateContext';
+import { CancelSourceUpdateProvider } from './contexts/CancelSourceUpdateContext';
 
 // Note:
 //
@@ -257,6 +259,10 @@ export default function TestFileEditor({
     }));
   }, []);
 
+  const cancelSourceUpdate: CancelSourceUpdateCallback = () => {
+    vscode.postMessage(writeUpMessage({ kind: 'CancelSourceUpdate' }));
+  };
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
       const message = readDownMessage(event.data);
@@ -335,25 +341,27 @@ export default function TestFileEditor({
         );
       }
       return (
-        <div className="test-editor-container">
-          <div className="test-editor-top-bar">
-            <button className="test-editor-add-button" onClick={onAddNewTest}>
-              <span className="codicon codicon-add"></span>
-              <FormattedMessage id="testFile.addNewTest" />
-            </button>
+        <CancelSourceUpdateProvider onCancelSourceUpdate={cancelSourceUpdate}>
+          <div className="test-editor-container">
+            <div className="test-editor-top-bar">
+              <button className="test-editor-add-button" onClick={onAddNewTest}>
+                <span className="codicon codicon-add"></span>
+                <FormattedMessage id="testFile.addNewTest" />
+              </button>
+            </div>
+            {state.tests.map((test) => (
+              <TestEditor
+                test={test}
+                key={test.testing_scope}
+                onTestChange={onTestChange}
+                onTestDelete={onTestDelete}
+                onTestRun={onTestRun}
+                runState={testRunState[test.testing_scope]}
+              />
+            ))}
+            {renderModal()}
           </div>
-          {state.tests.map((test) => (
-            <TestEditor
-              test={test}
-              key={test.testing_scope}
-              onTestChange={onTestChange}
-              onTestDelete={onTestDelete}
-              onTestRun={onTestRun}
-              runState={testRunState[test.testing_scope]}
-            />
-          ))}
-          {renderModal()}
-        </div>
+        </CancelSourceUpdateProvider>
       );
     }
     default:
