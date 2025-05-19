@@ -159,12 +159,7 @@ export default function TestFileEditor({
         newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
 
         // Optimistically update the state
-        setState((prevState) => {
-          if (prevState.state === 'success') {
-            return { ...prevState, tests: newTestState };
-          }
-          return prevState;
-        });
+        setState({ state: 'success', tests: newTestState });
 
         // Send the update to the backend
         vscode.postMessage(
@@ -184,9 +179,11 @@ export default function TestFileEditor({
         const newTestState = state.tests.filter(
           (test) => test.testing_scope !== testScope
         );
-        console.log('Deleting test:', testScope);
-        console.log('New test state:', newTestState);
 
+        // Optimistically update the state
+        setState({ state: 'success', tests: newTestState });
+
+        // Send the deletion to the backend
         vscode.postMessage(
           writeUpMessage({
             kind: 'GuiEdit',
