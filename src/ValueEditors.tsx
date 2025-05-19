@@ -431,7 +431,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   );
 }
 
-const MONEY_PATTERN = /^\d+(\.\d{2})?$/;
+const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 function isValidMoney(value: string): boolean {
   return MONEY_PATTERN.test(value);
@@ -454,6 +454,9 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     }
     if (cents % 100 === 0) {
       return String(cents / 100);
+    }
+    if (cents % 10 === 0) {
+      return (cents / 100).toFixed(1);
     }
     return (cents / 100).toFixed(2);
   };
