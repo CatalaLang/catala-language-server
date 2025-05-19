@@ -18,6 +18,8 @@ import {
 import TestEditor from './TestEditor';
 import { assertUnreachable } from './util';
 import type { WebviewApi } from 'vscode-webview';
+import type { CancelSourceUpdateCallback } from './contexts/CancelSourceUpdateContext';
+import { CancelSourceUpdateProvider } from './contexts/CancelSourceUpdateContext';
 
 // Note:
 //
@@ -155,11 +157,11 @@ export default function TestFileEditor({
         );
         const newTestState = [...state.tests];
         newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
-        console.log('old test state');
-        console.log(state.tests);
-        console.log('new test state');
-        console.log(newTestState);
 
+        // Optimistically update the state
+        setState({ state: 'success', tests: newTestState });
+
+        // Send the update to the backend
         vscode.postMessage(
           writeUpMessage({
             kind: 'GuiEdit',
@@ -177,9 +179,11 @@ export default function TestFileEditor({
         const newTestState = state.tests.filter(
           (test) => test.testing_scope !== testScope
         );
-        console.log('Deleting test:', testScope);
-        console.log('New test state:', newTestState);
 
+        // Optimistically update the state
+        setState({ state: 'success', tests: newTestState });
+
+        // Send the deletion to the backend
         vscode.postMessage(
           writeUpMessage({
             kind: 'GuiEdit',
@@ -251,6 +255,10 @@ export default function TestFileEditor({
       isOpen: false,
     }));
   }, []);
+
+  const cancelSourceUpdate: CancelSourceUpdateCallback = () => {
+    vscode.postMessage(writeUpMessage({ kind: 'CancelSourceUpdate' }));
+  };
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
@@ -330,25 +338,27 @@ export default function TestFileEditor({
         );
       }
       return (
-        <div className="test-editor-container">
-          <div className="test-editor-top-bar">
-            <button className="test-editor-add-button" onClick={onAddNewTest}>
-              <span className="codicon codicon-add"></span>
-              <FormattedMessage id="testFile.addNewTest" />
-            </button>
+        <CancelSourceUpdateProvider onCancelSourceUpdate={cancelSourceUpdate}>
+          <div className="test-editor-container">
+            <div className="test-editor-top-bar">
+              <button className="test-editor-add-button" onClick={onAddNewTest}>
+                <span className="codicon codicon-add"></span>
+                <FormattedMessage id="testFile.addNewTest" />
+              </button>
+            </div>
+            {state.tests.map((test) => (
+              <TestEditor
+                test={test}
+                key={test.testing_scope}
+                onTestChange={onTestChange}
+                onTestDelete={onTestDelete}
+                onTestRun={onTestRun}
+                runState={testRunState[test.testing_scope]}
+              />
+            ))}
+            {renderModal()}
           </div>
-          {state.tests.map((test) => (
-            <TestEditor
-              test={test}
-              key={test.testing_scope}
-              onTestChange={onTestChange}
-              onTestDelete={onTestDelete}
-              onTestRun={onTestRun}
-              runState={testRunState[test.testing_scope]}
-            />
-          ))}
-          {renderModal()}
-        </div>
+        </CancelSourceUpdateProvider>
       );
     }
     default:

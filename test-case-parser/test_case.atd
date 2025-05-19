@@ -144,6 +144,7 @@ type up_message = [
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request
   | SelectFileForNewTest
+  | CancelSourceUpdate
 ]
 
 type down_message = [

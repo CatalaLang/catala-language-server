@@ -16,6 +16,7 @@ import type {
 } from './generated/test_case';
 import { assertUnreachable } from './util';
 import { getDefaultValue } from './defaults';
+import { useCancelSourceUpdate } from './hooks/useCancelSourceUpdate';
 
 // Helper to create a RuntimeValue from a RuntimeValueRaw, preserving attrs
 function createRuntimeValue(
@@ -119,6 +120,7 @@ type IntEditorProps = {
 };
 
 function IntEditor(props: IntEditorProps): ReactElement {
+  const cancelSourceUpdate = useCancelSourceUpdate();
   const runtimeValue = props.valueDef?.value;
   const initialValue =
     runtimeValue?.value.kind === 'Integer'
@@ -149,17 +151,9 @@ function IntEditor(props: IntEditorProps): ReactElement {
         value: Number(valueStr),
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
-    }
-  };
-
-  const handleBlur = (): void => {
-    if (!isValidInt(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Integer'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(resetValue?.toString() ?? '');
+    } else {
+      // ask plugin shell to cancel the generate souce -> parse update
+      cancelSourceUpdate();
     }
   };
 
@@ -171,7 +165,6 @@ function IntEditor(props: IntEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`int-input ${
           displayValue && !isValidInt(displayValue) ? 'invalid-int' : ''
         }`}
@@ -237,11 +230,15 @@ function DateEditor(props: DateEditorProps): ReactElement {
     }
   };
 
-  // TODO: Add onBlur validation?
-
   return (
     <div className="value-editor">
-      <input type="date" value={internalValue} onChange={handleChange} />
+      <input
+        type="date"
+        min="0000-01-01"
+        max="9999-12-31"
+        value={internalValue}
+        onChange={handleChange}
+      />
     </div>
   );
 }
@@ -258,6 +255,7 @@ type RatEditorProps = {
 };
 
 function RatEditor(props: RatEditorProps): ReactElement {
+  const cancelSourceUpdate = useCancelSourceUpdate();
   const runtimeValue = props.valueDef?.value;
   const initialValue =
     runtimeValue?.value.kind === 'Decimal'
@@ -274,7 +272,18 @@ function RatEditor(props: RatEditorProps): ReactElement {
       runtimeValue?.value.kind === 'Decimal'
         ? runtimeValue.value.value
         : undefined;
-    setDisplayValue(newValue?.toString() ?? '');
+    // We do not set the display value if the value coming from the compiler
+    // is equal but written differently. Instead, we keep the users' writing.
+    // This is because some rationals have more than one representation
+    // (e.g. '14', '14.', '14.0') and we do not want to replace those representations
+    // with a 'canonical' spelling because the user might be in the middle
+    // of inputting a different value.
+    if (
+      newValue === undefined ||
+      (newValue !== undefined && parseFloat(displayValue) !== newValue)
+    ) {
+      setDisplayValue(newValue?.toString() ?? '');
+    }
   }, [runtimeValue]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -288,17 +297,8 @@ function RatEditor(props: RatEditorProps): ReactElement {
         value: Number(valueStr),
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
-    }
-  };
-
-  const handleBlur = (): void => {
-    if (!isValidRat(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Decimal'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(resetValue?.toString() ?? '');
+    } else {
+      cancelSourceUpdate();
     }
   };
 
@@ -310,7 +310,6 @@ function RatEditor(props: RatEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`rat-input ${
           displayValue && !isValidRat(displayValue) ? 'invalid-rat' : ''
         }`}
@@ -432,7 +431,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   );
 }
 
-const MONEY_PATTERN = /^\d+(\.\d{2})?$/;
+const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 function isValidMoney(value: string): boolean {
   return MONEY_PATTERN.test(value);
@@ -444,12 +443,23 @@ type MoneyEditorProps = {
 };
 
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
+  const cancelSourceUpdate = useCancelSourceUpdate();
   const runtimeValue = props.valueDef?.value;
   const initialValue = // in cents
     runtimeValue?.value.kind === 'Money' ? runtimeValue.value.value : undefined;
 
-  const centsToDisplayValue = (cents: number | undefined): string =>
-    cents !== undefined ? (cents / 100).toFixed(2) : '';
+  const centsToDisplayValue = (cents: number | undefined): string => {
+    if (cents === undefined) {
+      return '';
+    }
+    if (cents % 100 === 0) {
+      return String(cents / 100);
+    }
+    if (cents % 10 === 0) {
+      return (cents / 100).toFixed(1);
+    }
+    return (cents / 100).toFixed(2);
+  };
 
   const [displayValue, setDisplayValue] = useState(
     centsToDisplayValue(initialValue)
@@ -476,17 +486,8 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         value: centsValue,
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
-    }
-  };
-
-  const handleBlur = (): void => {
-    if (!isValidMoney(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Money'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(centsToDisplayValue(resetValue));
+    } else {
+      cancelSourceUpdate();
     }
   };
 
@@ -498,7 +499,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        onBlur={handleBlur}
         className={`money-input ${
           displayValue && !isValidMoney(displayValue) ? 'invalid-money' : ''
         }`}

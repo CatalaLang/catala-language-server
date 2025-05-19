@@ -32,9 +32,11 @@ export default function TestEditor(props: Props): ReactElement {
   }
 
   function onDescriptionChange(event: ChangeEvent<HTMLTextAreaElement>): void {
+    const newDescription = event.target.value;
+    setDescription(newDescription);
     props.onTestChange({
       ...props.test,
-      description: event.target.value,
+      description: newDescription,
     });
   }
 
@@ -95,8 +97,7 @@ export default function TestEditor(props: Props): ReactElement {
           <div className="test-description-editor">
             <textarea
               value={description}
-              onChange={(evt) => setDescription(evt.target.value)}
-              onBlur={onDescriptionChange}
+              onChange={onDescriptionChange}
               placeholder="Enter test description..."
               rows={3}
               className="test-description-textarea"
