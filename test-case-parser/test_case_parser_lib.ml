@@ -712,13 +712,15 @@ let write_catala_test ppf t lang =
     String.to_snake_case sname
   in
   pp_open_vbox ppf 0;
-  fprintf ppf "@,```catala@,";
+  fprintf ppf "@,```catala-metadata@,";
+  fprintf ppf "#[test]@\n";
   fprintf ppf "#[testcase.test_description = %s]@\n"
     (String.quote t.description);
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;
-  fprintf ppf "@]@,";
+  fprintf ppf "@]@,```@,";
+  fprintf ppf "@,```catala@,";
   fprintf ppf "@[<v 2>%s %s:" strings.scope t.testing_scope;
   List.iter
     (fun (tvar, t_in) ->
