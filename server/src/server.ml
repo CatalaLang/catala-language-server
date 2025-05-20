@@ -15,6 +15,7 @@
    the License. *)
 
 open Lwt.Syntax
+open Catala_utils
 
 exception ServerError of string
 
@@ -40,6 +41,13 @@ let parse_settings settings =
             "ChangeConfiguration: received unexpected settings: %a"
             Yojson.Safe.pp settings))
 
+let lookup_project projects uri =
+  List.find_opt
+    (fun (_p, { Discovery.project_files; _ }) ->
+      Discovery.Scan_map.mem uri project_files)
+    projects
+  |> Option.map snd
+
 let preprocess_uri uri =
   let prefix = "file://" in
   let prefix_len = String.length prefix in
@@ -64,6 +72,22 @@ let run_with_delay ?(delay = 1.) ~when_ready f =
     Lwt.cancel !current_thread;
     current_thread := run_with_delay ()
 
+let set_log_level =
+  let open Linol_lwt.TraceValues in
+  function
+  | None | Some Off ->
+    Logs.app (fun m -> m "switching log level to [none]");
+    Logs.set_level None
+  | Some Messages ->
+    Logs.set_level (Some App);
+    Logs.app (fun m -> m "switching log level to [messages]")
+  | Some Compact ->
+    Logs.set_level (Some Info);
+    Logs.app (fun m -> m "switching log level to [compact]")
+  | Some Verbose ->
+    Logs.set_level (Some Debug);
+    Logs.app (fun m -> m "switching log level to [verbose]")
+
 class catala_lsp_server =
   let open Linol_lwt in
   object (self)
@@ -87,10 +111,16 @@ class catala_lsp_server =
         ()
 
     val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
+    val mutable projects : Discovery.projects = []
     method spawn_query_handler = Lwt.async
 
-    method! on_req_initialize ~notify_back (_i : InitializeParams.t) =
+    method! on_req_initialize ~notify_back (i : InitializeParams.t) =
       let open Lwt.Syntax in
+      set_log_level i.trace;
+      Logs.app (fun m -> m "Starting lsp server");
+      Option.iter
+        (fun projs -> projects <- projs)
+        (Discovery.init ~notify_back i);
       let sync_opts = self#config_sync_opts in
       let* documentFormattingProvider =
         let* available = Utils.check_catala_format_availability () in
@@ -121,7 +151,6 @@ class catala_lsp_server =
           ~textDocumentSync:(`TextDocumentSyncOptions sync_opts)
           ~workspaceSymbolProvider:self#config_workspace_symbol
           ?typeDefinitionProvider:self#config_type_definition ()
-        |> self#config_modify_capabilities
       in
       Lwt.return (InitializeResult.create ~capabilities ())
 
@@ -130,7 +159,17 @@ class catala_lsp_server =
 
     method private process_and_update_file ?contents uri =
       let previous_file = Hashtbl.find_opt buffers uri in
-      let f = State.process_document ?previous_file ?contents uri in
+      let f =
+        let project_state =
+          lookup_project projects uri
+          |> function
+          | None ->
+            Log.err (fun m -> m "cannot locate project for file '%s'" uri);
+            Discovery.default
+          | Some project_state -> project_state
+        in
+        State.process_document ?previous_file ?contents project_state uri
+      in
       Hashtbl.replace buffers uri f;
       f
 
@@ -186,11 +225,14 @@ class catala_lsp_server =
           Linol_lwt.Jsonrpc2.IO.return ()
         with ServerError s -> Linol_lwt.Jsonrpc2.IO.failwith s
       end
+      | SetTrace params ->
+        set_log_level (Some params.value);
+        Lwt.return_unit
       | UnknownNotification notif ->
         let json = Jsonrpc.Notification.yojson_of_t notif in
         Log.warn (fun m -> m "unkown notification: %a" Yojson.Safe.pp json);
-        Lwt.return ()
-      | _ -> Lwt.return ()
+        Lwt.return_unit
+      | _ -> Lwt.return_unit
 
     method! on_request_unhandled : type r.
         notify_back:_ -> id:_ -> r Lsp.Client_request.t -> r Lwt.t =

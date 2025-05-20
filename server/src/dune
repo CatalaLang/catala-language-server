@@ -19,12 +19,12 @@
   logs.fmt
   catala.driver
   catala.surface
-  catala.clerk_config
+  catala.clerk_lib
   uri
   re)
  (modules
   (:standard \ Main))
- (flags (:standard)))
+ (flags (:standard -open Clerk_lib)))
 
 (alias
  (name lsp)

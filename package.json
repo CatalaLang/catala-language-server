@@ -35,6 +35,16 @@
           "type": "string",
           "default": null,
           "description": "Custom path to the `catala-format` executable"
+        },
+        "catala-lsp.trace.server": {
+          "description": "Controls the logging output of the language server. Valid settings are `off`, `messages`, or `verbose`.",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "messages"
         }
       }
     },
