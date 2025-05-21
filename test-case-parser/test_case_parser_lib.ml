@@ -378,9 +378,9 @@ let invalid_testing_scope fmt =
   Format.kasprintf (fun msg -> raise (InvalidTestingScope msg)) fmt
 
 let get_test_scopes prg =
-  let re_test = Re.(compile (str "_test")) in
   prg.I.program_root.module_scopes
-  |> ScopeName.Map.filter (fun name _ -> Re.execp re_test (ScopeName.base name))
+  |> ScopeName.Map.filter (fun scope_name _scope ->
+         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test)
   |> ScopeName.Map.keys
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
