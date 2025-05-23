@@ -328,7 +328,8 @@ let load_module_interfaces config_dir includes program =
 let process_document
     ?previous_file
     ?contents
-    (project_state : Discovery.project)
+    (project_file : Projects.project_file)
+    (project : Projects.project)
     (uri : string) : t =
   let open Catala_utils in
   Log.info (fun m -> m "processing document '%s'" uri);
@@ -339,31 +340,26 @@ let process_document
     | Some c -> Contents (c, uri)
   in
   let input_src, resolve_included_file =
-    let project_file_opt =
-      Discovery.Scan_map.find_opt uri project_state.project_files
-    in
-    match project_file_opt with
-    | None -> (* should not happen *) input_src, None
-    | Some { Discovery.file = _; including_files; _ } ->
-      let module S = Discovery.Project_files in
-      if S.is_empty including_files then input_src, None
-      else begin
-        Log.info (fun m ->
-            m "found document included in files: %a" Utils.pp_string_list
-              (S.elements including_files
-              |> List.map (fun { Clerk_scan.file_name; _ } -> file_name)));
-        let including_file = S.choose including_files in
-        if S.cardinal including_files > 1 then
-          (* TODO: also handle multiple file processing *)
-          Log.info (fun m -> m "found multiple document inclusion");
-        Log.info (fun m ->
-            m "found document inclusion in %s - processing this one instead"
-              including_file.file_name);
-        let resolve_included_file path =
-          if File.equal path uri then input_src else Global.FileName path
-        in
-        FileName including_file.file_name, Some resolve_included_file
-      end
+    let { Projects.file = _; including_files; _ } = project_file in
+    let module S = Projects.ScanItemFiles in
+    if S.is_empty including_files then input_src, None
+    else begin
+      Log.info (fun m ->
+          m "found document included in files: %a" Utils.pp_string_list
+            (S.elements including_files
+            |> List.map (fun { Clerk_scan.file_name; _ } -> file_name)));
+      let including_file = S.choose including_files in
+      if S.cardinal including_files > 1 then
+        (* TODO: also handle multiple file processing *)
+        Log.info (fun m -> m "found multiple document inclusion");
+      Log.info (fun m ->
+          m "found document inclusion in %s - processing this one instead"
+            including_file.file_name);
+      let resolve_included_file path =
+        if File.equal path uri then input_src else Global.FileName path
+      in
+      FileName including_file.file_name, Some resolve_included_file
+    end
   in
   let _ = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
@@ -380,9 +376,14 @@ let process_document
       let (prg as surface) = prg in
       let open Catala_utils in
       let ctx, modules_contents =
+        let root_dir, clerk_config =
+          match project.project_kind with
+          | Clerk { clerk_root_dir; clerk_config } ->
+            clerk_root_dir, clerk_config
+          | No_clerk -> project.project_dir, Clerk_config.default_config
+        in
         let mod_uses, modules =
-          load_module_interfaces project_state.clerk_root_dir
-            project_state.clerk_config.global.include_dirs prg
+          load_module_interfaces root_dir clerk_config.global.include_dirs prg
         in
         let ctx =
           Desugared.Name_resolution.form_context (prg, mod_uses) modules
