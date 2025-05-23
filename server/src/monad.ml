@@ -16,15 +16,6 @@
 
 module Option = struct
   let ( let* ) = Option.bind
-  let ( let*? ) x f = match x with None -> None | Some x -> f x
-
-  let ( let*?! ) (x, log) f =
-    match x with
-    | None ->
-      log ();
-      None
-    | Some x -> f x
-
   let nil_msg = Fun.id
   let return = Option.some
   let some = Option.some
