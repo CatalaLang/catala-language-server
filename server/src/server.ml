@@ -41,12 +41,20 @@ let parse_settings settings =
             "ChangeConfiguration: received unexpected settings: %a"
             Yojson.Safe.pp settings))
 
-let lookup_project projects uri =
-  List.find_opt
-    (fun (_p, { Discovery.project_files; _ }) ->
-      Discovery.Scan_map.mem uri project_files)
-    projects
-  |> Option.map snd
+let lookup_project ~notify_back uri projects =
+  let file = Uri.pct_decode uri in
+  match Projects.find_or_populate_project ~notify_back ~file !projects with
+  | file, project, `Unchanged -> file, project
+  | file, project, `Changed new_projects ->
+    projects := new_projects;
+    file, project
+
+let reload_project ~notify_back uri projects =
+  let file = Uri.pct_decode uri in
+  match Projects.find_or_populate_project ~notify_back ~file !projects with
+  | _file, project, `Unchanged ->
+    projects := Projects.reload_project ~notify_back project !projects
+  | _file, _project, `Changed new_projects -> projects := new_projects
 
 let preprocess_uri uri =
   let prefix = "file://" in
@@ -111,16 +119,14 @@ class catala_lsp_server =
         ()
 
     val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
-    val mutable projects : Discovery.projects = []
+    val projects : Projects.t ref = ref Projects.empty
     method spawn_query_handler = Lwt.async
 
     method! on_req_initialize ~notify_back (i : InitializeParams.t) =
       let open Lwt.Syntax in
       set_log_level i.trace;
       Logs.app (fun m -> m "Starting lsp server");
-      Option.iter
-        (fun projs -> projects <- projs)
-        (Discovery.init ~notify_back i);
+      projects := Projects.init ~notify_back i;
       let sync_opts = self#config_sync_opts in
       let* documentFormattingProvider =
         let* available = Utils.check_catala_format_availability () in
@@ -157,33 +163,26 @@ class catala_lsp_server =
     (* A list of include statements of the prelude files *)
     val mutable prelude = []
 
-    method private process_and_update_file ?contents uri =
+    method private process_and_update_file ?contents ~notify_back uri =
       let previous_file = Hashtbl.find_opt buffers uri in
       let f =
-        let project_state =
-          lookup_project projects uri
-          |> function
-          | None ->
-            Log.err (fun m -> m "cannot locate project for file '%s'" uri);
-            Discovery.default
-          | Some project_state -> project_state
-        in
-        State.process_document ?previous_file ?contents project_state uri
+        let project_file, project = lookup_project ~notify_back uri projects in
+        State.process_document ?previous_file ?contents project_file project uri
       in
       Hashtbl.replace buffers uri f;
       f
 
-    method private use_or_process_file ?contents uri =
+    method private use_or_process_file ?contents ~notify_back uri =
       match Hashtbl.find_opt buffers uri with
       | Some v -> v
-      | None -> self#process_and_update_file ?contents uri
+      | None -> self#process_and_update_file ?contents ~notify_back uri
 
     method private on_doc
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
         (uri : DocumentUri.t)
         (contents : string option) =
       let uri_s = DocumentUri.to_path uri in
-      let file = self#process_and_update_file ?contents uri_s in
+      let file = self#process_and_update_file ?contents ~notify_back uri_s in
       State.all_diagnostics file
       |> function
       | [] -> Lwt.return_unit
@@ -213,6 +212,10 @@ class catala_lsp_server =
     method! on_notif_doc_did_save ~notify_back d =
       Lwt.cancel !current_thread;
       let { DidSaveTextDocumentParams.textDocument; _ } = d in
+      (* Are we sure ? *)
+      reload_project ~notify_back
+        (DocumentUri.to_path textDocument.uri)
+        projects;
       self#on_doc ~notify_back textDocument.uri None
 
     method! on_notification_unhandled
@@ -257,7 +260,7 @@ class catala_lsp_server =
       notify_back#send_diagnostic []
 
     method! on_req_code_action
-        ~notify_back:_
+        ~notify_back
         ~id:_
         {
           textDocument = doc_id;
@@ -267,7 +270,9 @@ class catala_lsp_server =
           workDoneToken = _;
         }
         : CodeActionResult.t Lwt.t =
-      let f = self#use_or_process_file (DocumentUri.to_path doc_id.uri) in
+      let f =
+        self#use_or_process_file ~notify_back (DocumentUri.to_path doc_id.uri)
+      in
       let suggestions_opt = State.lookup_suggestions f range in
       let actions_opt : CodeAction.t list option =
         Option.map
@@ -296,7 +301,7 @@ class catala_lsp_server =
       Lwt.return result
 
     method! on_req_completion
-        ~notify_back:_
+        ~notify_back
         ~id:_
         ~uri
         ~pos
@@ -304,7 +309,7 @@ class catala_lsp_server =
         ~workDoneToken:_
         ~partialResultToken:_
         _doc_state =
-      let f = self#use_or_process_file (DocumentUri.to_path uri) in
+      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
       let suggestions_opt = State.lookup_suggestions_by_pos f pos in
       match suggestions_opt with
       | None -> Lwt.return_none
@@ -351,12 +356,12 @@ class catala_lsp_server =
       else Lwt.return_some (`Location all_locs)
 
     method private on_req_declaration
-        ~notify_back:_
+        ~notify_back
         ~(uri : Lsp.Uri.t)
         ~(pos : Position.t)
         ()
         : Locations.t option t =
-      let f = self#use_or_process_file (DocumentUri.to_path uri) in
+      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
       match State.lookup_declaration f pos with
       | None -> Lwt.return_none
       | Some l ->
@@ -397,26 +402,26 @@ class catala_lsp_server =
       if all_locs = [] then Lwt.return_none else Lwt.return_some all_locs
 
     method! on_req_hover
-        ~notify_back:_
+        ~notify_back
         ~id:_
         ~uri
         ~pos
         ~workDoneToken:_
         _doc_state
         : Hover.t option Lwt.t =
-      let f = self#use_or_process_file (DocumentUri.to_path uri) in
+      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
       match State.lookup_type f pos with
       | None -> Lwt.return_none
       | Some (range, md) ->
         Lwt.return_some (Hover.create ~range ~contents:(`MarkupContent md) ())
 
     method private on_req_type_definition
-        ~notify_back:_
+        ~notify_back
         ~(uri : Lsp.Uri.t)
         ~(pos : Position.t)
         ()
         : Locations.t option Lwt.t =
-      let f = self#use_or_process_file (DocumentUri.to_path uri) in
+      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
       match State.lookup_type_declaration f pos with
       | None -> Lwt.return_none
       | Some (file, range) ->
@@ -425,7 +430,7 @@ class catala_lsp_server =
         Lwt.return_some (`Location [loc])
 
     method! on_req_symbol
-        ~notify_back:_
+        ~notify_back
         ~id:_
         ~uri
         ~workDoneToken:_
@@ -435,7 +440,7 @@ class catala_lsp_server =
           | `SymbolInformation of SymbolInformation.t list ]
           option
           t =
-      let f = self#use_or_process_file (DocumentUri.to_path uri) in
+      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
       let all_symbols = State.lookup_document_symbols f in
       Lwt.return_some (`SymbolInformation all_symbols)
 
@@ -452,7 +457,9 @@ class catala_lsp_server =
             m "cannot find document content of document %s" doc_path);
         Lwt.return_none
       | Some { content = doc_content; _ } -> (
-        let (_f : State.file) = self#use_or_process_file doc_path in
+        let (_f : State.file) =
+          self#use_or_process_file ~notify_back doc_path
+        in
         let* r =
           Utils.try_format_document ~notify_back ~doc_content ~doc_path
         in
