@@ -331,11 +331,15 @@ let reload_project ~notify_back project projects =
   let project = project_of_folder ~notify_back project.project_dir in
   Projects.add project projects
 
+exception Project_not_found
+
 let find_or_populate_project ~notify_back ~file projects =
   let scan_dir () =
     let new_project = project_of_folder ~notify_back (Filename.dirname file) in
     match find_file_in_project ~file new_project with
-    | None -> assert false
+    | None ->
+      Log.err (fun m -> m "did not find project's file after scanning");
+      raise Project_not_found
     | Some file ->
       file, new_project, `Changed (Projects.add new_project projects)
   in
