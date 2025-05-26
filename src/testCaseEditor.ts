@@ -104,11 +104,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       isApplyingEdit = true;
 
       try {
-        // Disable UI before applying edits
-        postMessageToWebView({
-          kind: 'DisableUI',
-        });
-
         // re-emit catala text file from ATD test definitions
         const newTextBuffer = atdToCatala(latestGuiEditMessage.value, lang);
 
@@ -300,6 +295,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       }
     }
 
+    const CHANGE_SUBSCRIPTION_TIMEOUT = 500;
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
       (e) => {
         if (e.document.uri.toString() === document.uri.toString()) {
@@ -311,10 +307,10 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
             clearTimeout(textChangeTimeout);
           }
 
-          // Set a new timeout for the quiescence period (1 second)
+          // Set a new timeout for the quiescence period
           textChangeTimeout = setTimeout(() => {
             processLatestTextChange(e.document);
-          }, 1000);
+          }, CHANGE_SUBSCRIPTION_TIMEOUT);
         }
       }
     );
