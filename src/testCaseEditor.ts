@@ -122,11 +122,8 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
 
         await vscode.workspace.applyEdit(edit);
 
-        // Update the UI with the new state
-        postMessageToWebView({
-          kind: 'Update',
-          value: parseTestFile(document.getText(), lang, document.uri.fsPath),
-        });
+        // here, we do not need to update the UI explicitly
+        // because editing the text will trigger a parse loop
 
         // Reset the latest message
         latestGuiEditMessage = null;
@@ -227,27 +224,13 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               const updatedTests = [...currentTests.value, newTest[0]];
               const newTextBuffer = atdToCatala(updatedTests, lang);
 
-              // Disable UI before applying edits
-              postMessageToWebView({
-                kind: 'DisableUI',
-              });
-
               const edit = new vscode.WorkspaceEdit();
               edit.replace(
                 document.uri,
                 new vscode.Range(0, 0, document.lineCount, 0),
                 newTextBuffer
               );
-              vscode.workspace.applyEdit(edit).then(() => {
-                postMessageToWebView({
-                  kind: 'Update',
-                  value: parseTestFile(
-                    document.getText(),
-                    lang,
-                    document.uri.fsPath
-                  ),
-                });
-              });
+              vscode.workspace.applyEdit(edit);
             }
           } else {
             vscode.window.showErrorMessage(
