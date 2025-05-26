@@ -88,7 +88,7 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
-    const QUIESCENCE_DELAY_MS = 1500;
+    const QUIESCENCE_DELAY_MS = 1800;
 
     // Debounce mechanism for GuiEdit messages
     let guiEditTimeout: NodeJS.Timeout | null = null;
