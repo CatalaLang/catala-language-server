@@ -1,6 +1,6 @@
 // Editors for a single value type (grouped with a factory function)
 
-import { type ReactElement, useState, useEffect } from 'react';
+import { type ReactElement, useState, useEffect, useRef } from 'react';
 import { FormattedMessage } from 'react-intl';
 import CollapsibleRow from './CollapsibleRow';
 import type {
@@ -130,6 +130,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
   const [displayValue, setDisplayValue] = useState(
     initialValue?.toString() ?? ''
   );
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Update display value if prop changes externally
   useEffect(() => {
@@ -157,14 +158,24 @@ function IntEditor(props: IntEditorProps): ReactElement {
     }
   };
 
+  const handleBlur = (event: React.FocusEvent<HTMLInputElement>): void => {
+    // If the value is invalid, prevent blur by refocusing
+    if (displayValue && !isValidInt(displayValue)) {
+      event.preventDefault();
+      inputRef.current?.focus();
+    }
+  };
+
   return (
     <div className="value-editor int-editor">
       <input
+        ref={inputRef}
         type="text"
         pattern={INT_PATTERN.source}
         required
         value={displayValue}
         onChange={handleChange}
+        onBlur={handleBlur}
         className={`int-input ${
           displayValue && !isValidInt(displayValue) ? 'invalid-int' : ''
         }`}
@@ -265,6 +276,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
   const [displayValue, setDisplayValue] = useState(
     initialValue?.toString() ?? ''
   );
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Update display value if prop changes externally
   useEffect(() => {
@@ -302,14 +314,24 @@ function RatEditor(props: RatEditorProps): ReactElement {
     }
   };
 
+  const handleBlur = (event: React.FocusEvent<HTMLInputElement>): void => {
+    // If the value is invalid, prevent blur by refocusing
+    if (displayValue && !isValidRat(displayValue)) {
+      event.preventDefault();
+      inputRef.current?.focus();
+    }
+  };
+
   return (
     <div className="value-editor rat-editor">
       <input
+        ref={inputRef}
         type="text"
         pattern={RAT_PATTERN.source}
         required
         value={displayValue}
         onChange={handleChange}
+        onBlur={handleBlur}
         className={`rat-input ${
           displayValue && !isValidRat(displayValue) ? 'invalid-rat' : ''
         }`}
@@ -464,6 +486,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const [displayValue, setDisplayValue] = useState(
     centsToDisplayValue(initialValue)
   );
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Update display value if prop changes externally
   useEffect(() => {
@@ -491,14 +514,24 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     }
   };
 
+  const handleBlur = (event: React.FocusEvent<HTMLInputElement>): void => {
+    // If the value is invalid, prevent blur by refocusing
+    if (displayValue && !isValidMoney(displayValue)) {
+      event.preventDefault();
+      inputRef.current?.focus();
+    }
+  };
+
   return (
     <div className="value-editor money-editor">
       <input
+        ref={inputRef}
         type="text"
         pattern={MONEY_PATTERN.source}
         required
         value={displayValue}
         onChange={handleChange}
+        onBlur={handleBlur}
         className={`money-input ${
           displayValue && !isValidMoney(displayValue) ? 'invalid-money' : ''
         }`}
