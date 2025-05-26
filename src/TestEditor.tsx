@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { FormattedMessage } from 'react-intl';
 import {
   type Test,
@@ -42,6 +42,10 @@ export default function TestEditor(props: Props): ReactElement {
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [description, setDescription] = useState(props.test.description);
+
+  useEffect(() => {
+    setDescription(props.test.description);
+  }, [props.test.description]);
 
   return (
     <div className="test-editor">
