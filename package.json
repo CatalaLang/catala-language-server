@@ -154,6 +154,11 @@
       }
     }
   },
+  "activationEvents": [
+    "workspaceContains:**/clerk.toml",
+    "workspaceContains:**/*.catala_en",
+    "workspaceContains:**/*.catala_fr"
+  ],
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "opam exec -- dune build @lsp; webpack --mode development",
