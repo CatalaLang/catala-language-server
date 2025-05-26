@@ -272,18 +272,49 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       }
     });
 
+    // Debounce mechanism for text document changes
+    let textChangeTimeout: NodeJS.Timeout | null = null;
+    let latestDocumentText: string | null = null;
+    let isProcessingTextChange = false;
+
+    async function processLatestTextChange(
+      doc: vscode.TextDocument
+    ): Promise<void> {
+      if (isProcessingTextChange || latestDocumentText === null) {
+        return;
+      }
+
+      isProcessingTextChange = true;
+
+      try {
+        const lang = getLanguageFromFileName(doc.fileName);
+        postMessageToWebView({
+          kind: 'Update',
+          value: parseTestFile(latestDocumentText, lang, doc.uri.fsPath),
+        });
+
+        // Reset the latest text
+        latestDocumentText = null;
+      } finally {
+        isProcessingTextChange = false;
+      }
+    }
+
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
       (e) => {
         if (e.document.uri.toString() === document.uri.toString()) {
-          const lang = getLanguageFromFileName(e.document.fileName);
-          postMessageToWebView({
-            kind: 'Update',
-            value: parseTestFile(
-              e.document.getText(),
-              lang,
-              document.uri.fsPath
-            ),
-          });
+          // Store the latest document text
+          latestDocumentText = e.document.getText();
+
+          // Clear any existing timeout
+          if (textChangeTimeout) {
+            clearTimeout(textChangeTimeout);
+          }
+
+          // Set a new timeout for the quiescence period (1 second)
+          textChangeTimeout = setTimeout(() => {
+            processLatestTextChange(e.document);
+          }, 1000);
         }
       }
     );
