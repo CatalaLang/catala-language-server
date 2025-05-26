@@ -16,6 +16,7 @@
 
 open Lwt.Syntax
 open Catala_utils
+open Lsp.Types
 
 exception ServerError of string
 
@@ -95,6 +96,28 @@ let set_log_level =
   | Some Verbose ->
     Logs.set_level (Some Debug);
     Logs.app (fun m -> m "switching log level to [verbose]")
+
+let protect_project_not_found f =
+  Lwt.catch f (function
+    | Projects.Project_not_found -> Lwt.return_unit
+    | e -> Lwt.fail e)
+
+let protect_project_not_found_opt f =
+  Lwt.catch f (function
+    | Projects.Project_not_found -> Lwt.return_none
+    | e -> Lwt.fail e)
+
+let should_ignore (uri : DocumentUri.t) =
+  let file = Uri.pct_decode (DocumentUri.to_string uri) in
+  let p = File.path_to_list file in
+  let b =
+    List.exists (fun s -> String.length s <= 0 && s.[0] = '.' && s.[0] = '_') p
+  in
+  Log.debug (fun m ->
+      if b then
+        m "file %s ignored: either a hidden file or inside an ignored directory"
+          file);
+  b
 
 class catala_lsp_server =
   let open Linol_lwt in
@@ -181,20 +204,27 @@ class catala_lsp_server =
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
         (uri : DocumentUri.t)
         (contents : string option) =
-      let uri_s = DocumentUri.to_path uri in
-      let file = self#process_and_update_file ?contents ~notify_back uri_s in
-      State.all_diagnostics file
-      |> function
-      | [] -> Lwt.return_unit
-      | all_diags ->
-        Lwt_list.iter_s
-          (fun (uri, diags) ->
-            notify_back#set_uri (DocumentUri.of_path uri);
-            notify_back#send_diagnostic diags)
-          all_diags
+      if should_ignore uri then Lwt.return_unit
+      else
+        protect_project_not_found
+        @@ fun () ->
+        let uri_s = DocumentUri.to_path uri in
+        let file = self#process_and_update_file ?contents ~notify_back uri_s in
+        State.all_diagnostics file
+        |> function
+        | [] -> Lwt.return_unit
+        | all_diags ->
+          Lwt_list.iter_s
+            (fun (uri, diags) ->
+              notify_back#set_uri (DocumentUri.of_path uri);
+              notify_back#send_diagnostic diags)
+            all_diags
 
     method on_notif_doc_did_open ~notify_back d ~content =
-      self#on_doc ~notify_back d.uri (Some content)
+      if should_ignore d.uri then Lwt.return_unit
+      else
+        protect_project_not_found
+        @@ fun () -> self#on_doc ~notify_back d.uri (Some content)
 
     method on_notif_doc_did_change
         ~notify_back
@@ -205,18 +235,22 @@ class catala_lsp_server =
       let when_ready () =
         Lwt.async @@ fun () -> notify_back#send_diagnostic []
       in
-      run_with_delay ~when_ready (fun () ->
-          self#on_doc ~notify_back d.uri (Some new_content));
-      Lwt.return_unit
+      if should_ignore d.uri then Lwt.return_unit
+      else (
+        run_with_delay ~when_ready (fun () ->
+            self#on_doc ~notify_back d.uri (Some new_content));
+        Lwt.return_unit)
 
     method! on_notif_doc_did_save ~notify_back d =
       Lwt.cancel !current_thread;
       let { DidSaveTextDocumentParams.textDocument; _ } = d in
-      (* Are we sure ? *)
-      reload_project ~notify_back
-        (DocumentUri.to_path textDocument.uri)
-        projects;
-      self#on_doc ~notify_back textDocument.uri None
+      if should_ignore textDocument.uri then Lwt.return_unit
+      else (
+        (* FIXME: are we sure ? *)
+        reload_project ~notify_back
+          (DocumentUri.to_path textDocument.uri)
+          projects;
+        self#on_doc ~notify_back textDocument.uri None)
 
     method! on_notification_unhandled
         ~notify_back:_
@@ -256,8 +290,10 @@ class catala_lsp_server =
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
     method on_notif_doc_did_close ~notify_back d =
-      Hashtbl.remove buffers (DocumentUri.to_path d.uri);
-      notify_back#send_diagnostic []
+      if should_ignore d.uri then Lwt.return_unit
+      else (
+        Hashtbl.remove buffers (DocumentUri.to_path d.uri);
+        notify_back#send_diagnostic [])
 
     method! on_req_code_action
         ~notify_back
@@ -270,35 +306,43 @@ class catala_lsp_server =
           workDoneToken = _;
         }
         : CodeActionResult.t Lwt.t =
-      let f =
-        self#use_or_process_file ~notify_back (DocumentUri.to_path doc_id.uri)
-      in
-      let suggestions_opt = State.lookup_suggestions f range in
-      let actions_opt : CodeAction.t list option =
-        Option.map
-          (fun (range, suggestions) ->
-            let changes : (DocumentUri.t * TextEdit.t list) list option =
-              Option.some
-              @@ List.map
-                   (fun suggestion ->
-                     doc_id.uri, [TextEdit.create ~range ~newText:suggestion])
-                   suggestions
-            in
-            [
-              CodeAction.create ~title:"completion"
-                ~kind:CodeActionKind.QuickFix ~isPreferred:true
-                ~edit:
-                  { changes; documentChanges = None; changeAnnotations = None }
-                ();
-            ])
-          suggestions_opt
-      in
-      let result =
-        Option.map
-          (fun l -> List.map (fun action -> `CodeAction action) l)
-          actions_opt
-      in
-      Lwt.return result
+      if should_ignore doc_id.uri then Lwt.return_none
+      else
+        protect_project_not_found_opt
+        @@ fun () ->
+        let f =
+          self#use_or_process_file ~notify_back (DocumentUri.to_path doc_id.uri)
+        in
+        let suggestions_opt = State.lookup_suggestions f range in
+        let actions_opt : CodeAction.t list option =
+          Option.map
+            (fun (range, suggestions) ->
+              let changes : (DocumentUri.t * TextEdit.t list) list option =
+                Option.some
+                @@ List.map
+                     (fun suggestion ->
+                       doc_id.uri, [TextEdit.create ~range ~newText:suggestion])
+                     suggestions
+              in
+              [
+                CodeAction.create ~title:"completion"
+                  ~kind:CodeActionKind.QuickFix ~isPreferred:true
+                  ~edit:
+                    {
+                      changes;
+                      documentChanges = None;
+                      changeAnnotations = None;
+                    }
+                  ();
+              ])
+            suggestions_opt
+        in
+        let result =
+          Option.map
+            (fun l -> List.map (fun action -> `CodeAction action) l)
+            actions_opt
+        in
+        Lwt.return result
 
     method! on_req_completion
         ~notify_back
@@ -309,21 +353,27 @@ class catala_lsp_server =
         ~workDoneToken:_
         ~partialResultToken:_
         _doc_state =
-      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
-      let suggestions_opt = State.lookup_suggestions_by_pos f pos in
-      match suggestions_opt with
-      | None -> Lwt.return_none
-      | Some (range, suggestions) ->
-        Lwt.return
-        @@ Some
-             (`List
-               (List.map
-                  (fun sugg ->
-                    let textEdit =
-                      `TextEdit (TextEdit.create ~range ~newText:sugg)
-                    in
-                    CompletionItem.create ~label:sugg ~textEdit ())
-                  suggestions))
+      if should_ignore uri then Lwt.return_none
+      else
+        protect_project_not_found_opt
+        @@ fun () ->
+        let f =
+          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
+        in
+        let suggestions_opt = State.lookup_suggestions_by_pos f pos in
+        match suggestions_opt with
+        | None -> Lwt.return_none
+        | Some (range, suggestions) ->
+          Lwt.return
+          @@ Some
+               (`List
+                 (List.map
+                    (fun sugg ->
+                      let textEdit =
+                        `TextEdit (TextEdit.create ~range ~newText:sugg)
+                      in
+                      CompletionItem.create ~label:sugg ~textEdit ())
+                    suggestions))
 
     method! on_req_definition
         ~notify_back
@@ -334,26 +384,30 @@ class catala_lsp_server =
         ~(partialResultToken : Linol_lwt.ProgressToken.t option)
         doc_state =
       ignore (notify_back, id, workDoneToken, partialResultToken, doc_state);
-      let uri = DocumentUri.to_path uri in
-      let _f = self#use_or_process_file uri in
-      let all_locs =
-        Hashtbl.fold
-          (fun _uri f acc ->
-            match State.lookup_def ~uri f pos with
-            | None -> acc
-            | Some l ->
-              let locs =
-                List.map
-                  (fun (file, range) ->
-                    let uri = DocumentUri.of_path file in
-                    Lsp.Types.Location.create ~range ~uri)
-                  l
-              in
-              locs @ acc)
-          buffers []
-      in
-      if all_locs = [] then Lwt.return_none
-      else Lwt.return_some (`Location all_locs)
+      if should_ignore uri then Lwt.return_none
+      else
+        protect_project_not_found_opt
+        @@ fun () ->
+        let uri = DocumentUri.to_path uri in
+        let _f = self#use_or_process_file uri in
+        let all_locs =
+          Hashtbl.fold
+            (fun _uri f acc ->
+              match State.lookup_def ~uri f pos with
+              | None -> acc
+              | Some l ->
+                let locs =
+                  List.map
+                    (fun (file, range) ->
+                      let uri = DocumentUri.of_path file in
+                      Lsp.Types.Location.create ~range ~uri)
+                    l
+                in
+                locs @ acc)
+            buffers []
+        in
+        if all_locs = [] then Lwt.return_none
+        else Lwt.return_some (`Location all_locs)
 
     method private on_req_declaration
         ~notify_back
@@ -361,19 +415,25 @@ class catala_lsp_server =
         ~(pos : Position.t)
         ()
         : Locations.t option t =
-      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
-      match State.lookup_declaration f pos with
-      | None -> Lwt.return_none
-      | Some l ->
-        let locations =
-          List.map
-            (fun (file, range) ->
-              let uri = DocumentUri.of_path file in
-              Lsp.Types.Location.create ~range ~uri)
-            l
+      if should_ignore uri then Lwt.return_none
+      else
+        protect_project_not_found_opt
+        @@ fun () ->
+        let f =
+          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
         in
-        let locs : Linol_lwt.Locations.t = `Location locations in
-        Lwt.return_some locs
+        match State.lookup_declaration f pos with
+        | None -> Lwt.return_none
+        | Some l ->
+          let locations =
+            List.map
+              (fun (file, range) ->
+                let uri = DocumentUri.of_path file in
+                Lsp.Types.Location.create ~range ~uri)
+              l
+          in
+          let locs : Linol_lwt.Locations.t = `Location locations in
+          Lwt.return_some locs
 
     method private on_req_references
         ~notify_back:_
@@ -381,25 +441,29 @@ class catala_lsp_server =
         ~(pos : Position.t)
         ()
         : Location.t list option Lwt.t =
-      let _f = self#use_or_process_file (DocumentUri.to_path uri) in
-      let uri = DocumentUri.to_path uri in
-      let all_locs =
-        Hashtbl.fold
-          (fun _uri (f : State.file) acc ->
-            match State.lookup_usages ~uri f pos with
-            | None -> acc
-            | Some l ->
-              let locs =
-                List.map
-                  (fun (file, range) ->
-                    let uri = DocumentUri.of_path file in
-                    Lsp.Types.Location.create ~range ~uri)
-                  l
-              in
-              locs @ acc)
-          buffers []
-      in
-      if all_locs = [] then Lwt.return_none else Lwt.return_some all_locs
+      if should_ignore uri then Lwt.return_none
+      else
+        protect_project_not_found_opt
+        @@ fun () ->
+        let _f = self#use_or_process_file (DocumentUri.to_path uri) in
+        let uri = DocumentUri.to_path uri in
+        let all_locs =
+          Hashtbl.fold
+            (fun _uri (f : State.file) acc ->
+              match State.lookup_usages ~uri f pos with
+              | None -> acc
+              | Some l ->
+                let locs =
+                  List.map
+                    (fun (file, range) ->
+                      let uri = DocumentUri.of_path file in
+                      Lsp.Types.Location.create ~range ~uri)
+                    l
+                in
+                locs @ acc)
+            buffers []
+        in
+        if all_locs = [] then Lwt.return_none else Lwt.return_some all_locs
 
     method! on_req_hover
         ~notify_back
@@ -409,11 +473,17 @@ class catala_lsp_server =
         ~workDoneToken:_
         _doc_state
         : Hover.t option Lwt.t =
-      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
-      match State.lookup_type f pos with
-      | None -> Lwt.return_none
-      | Some (range, md) ->
-        Lwt.return_some (Hover.create ~range ~contents:(`MarkupContent md) ())
+      if should_ignore uri then Lwt.return_none
+      else
+        protect_project_not_found_opt
+        @@ fun () ->
+        let f =
+          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
+        in
+        match State.lookup_type f pos with
+        | None -> Lwt.return_none
+        | Some (range, md) ->
+          Lwt.return_some (Hover.create ~range ~contents:(`MarkupContent md) ())
 
     method private on_req_type_definition
         ~notify_back
@@ -421,13 +491,19 @@ class catala_lsp_server =
         ~(pos : Position.t)
         ()
         : Locations.t option Lwt.t =
-      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
-      match State.lookup_type_declaration f pos with
-      | None -> Lwt.return_none
-      | Some (file, range) ->
-        let uri = DocumentUri.of_path file in
-        let loc = Lsp.Types.Location.create ~range ~uri in
-        Lwt.return_some (`Location [loc])
+      if should_ignore uri then Lwt.return_none
+      else
+        protect_project_not_found_opt
+        @@ fun () ->
+        let f =
+          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
+        in
+        match State.lookup_type_declaration f pos with
+        | None -> Lwt.return_none
+        | Some (file, range) ->
+          let uri = DocumentUri.of_path file in
+          let loc = Lsp.Types.Location.create ~range ~uri in
+          Lwt.return_some (`Location [loc])
 
     method! on_req_symbol
         ~notify_back
@@ -440,34 +516,45 @@ class catala_lsp_server =
           | `SymbolInformation of SymbolInformation.t list ]
           option
           t =
-      let f = self#use_or_process_file ~notify_back (DocumentUri.to_path uri) in
-      let all_symbols = State.lookup_document_symbols f in
-      Lwt.return_some (`SymbolInformation all_symbols)
+      if should_ignore uri then Lwt.return_none
+      else
+        protect_project_not_found_opt
+        @@ fun () ->
+        let f =
+          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
+        in
+        let all_symbols = State.lookup_document_symbols f in
+        Lwt.return_some (`SymbolInformation all_symbols)
 
     method private on_req_document_formatting
         ~notify_back
         (params : DocumentFormattingParams.t)
         : TextEdit.t list option Lwt.t =
+      (* TODO: check file uri to discard bad files *)
       let doc_id = params.textDocument in
-      let doc_path = DocumentUri.to_path doc_id.uri in
-      Log.info (fun m -> m "trying to format document %s" doc_path);
-      match self#find_doc doc_id.uri with
-      | None ->
-        Log.warn (fun m ->
-            m "cannot find document content of document %s" doc_path);
-        Lwt.return_none
-      | Some { content = doc_content; _ } -> (
-        let (_f : State.file) =
-          self#use_or_process_file ~notify_back doc_path
-        in
-        let* r =
-          Utils.try_format_document ~notify_back ~doc_content ~doc_path
-        in
-        match r with
+      if should_ignore doc_id.uri then Lwt.return_none
+      else
+        let doc_path = DocumentUri.to_path doc_id.uri in
+        protect_project_not_found_opt
+        @@ fun () ->
+        Log.info (fun m -> m "trying to format document %s" doc_path);
+        match self#find_doc doc_id.uri with
         | None ->
-          Log.info (fun m -> m "failed to format document");
+          Log.warn (fun m ->
+              m "cannot find document content of document %s" doc_path);
           Lwt.return_none
-        | Some r ->
-          Log.info (fun m -> m "document formatting done");
-          Lwt.return_some r)
+        | Some { content = doc_content; _ } -> (
+          let (_f : State.file) =
+            self#use_or_process_file ~notify_back doc_path
+          in
+          let* r =
+            Utils.try_format_document ~notify_back ~doc_content ~doc_path
+          in
+          match r with
+          | None ->
+            Log.info (fun m -> m "failed to format document");
+            Lwt.return_none
+          | Some r ->
+            Log.info (fun m -> m "document formatting done");
+            Lwt.return_some r)
   end
