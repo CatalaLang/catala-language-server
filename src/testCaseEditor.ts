@@ -104,6 +104,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       isApplyingEdit = true;
 
       try {
+        // Disable UI before applying edits
+        postMessageToWebView({
+          kind: 'DisableUI',
+        });
+
         // re-emit catala text file from ATD test definitions
         const newTextBuffer = atdToCatala(latestGuiEditMessage.value, lang);
 
@@ -221,6 +226,12 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
               newTest[0] = renameIfNeeded(currentTests.value, newTest[0]); //XXX kludge?
               const updatedTests = [...currentTests.value, newTest[0]];
               const newTextBuffer = atdToCatala(updatedTests, lang);
+
+              // Disable UI before applying edits
+              postMessageToWebView({
+                kind: 'DisableUI',
+              });
+
               const edit = new vscode.WorkspaceEdit();
               edit.replace(
                 document.uri,

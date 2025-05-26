@@ -151,4 +151,5 @@ type down_message = [
   | Update of parse_results
   | TestRunResults of test_run_results
   | FileSelectedForNewTest of file_selection
+  | DisableUI
 ]

@@ -66,6 +66,8 @@ export default function TestFileEditor({
     step: 'selectFile',
   });
   const modalContentRef = useRef<HTMLDivElement>(null);
+  const [isUIDisabled, setIsUIDisabled] = useState(false);
+  const activeElementRef = useRef<Element | null>(null);
 
   useEffect(() => {
     if (modalState.isOpen && modalContentRef.current) {
@@ -266,6 +268,16 @@ export default function TestFileEditor({
       switch (message.kind) {
         case 'Update':
           setState(parseResultsToUiState(message.value));
+          setIsUIDisabled(false);
+          // Restaurer le focus après la mise à jour
+          setTimeout(() => {
+            if (
+              activeElementRef.current &&
+              activeElementRef.current instanceof HTMLElement
+            ) {
+              activeElementRef.current.focus();
+            }
+          }, 0);
           break;
         case 'TestRunResults': {
           const results = message.value;
@@ -293,6 +305,11 @@ export default function TestFileEditor({
             filename: message.value.filename,
             availableScopes: message.value.available_scopes,
           }));
+          break;
+        case 'DisableUI':
+          // Sauvegarder l'élément actif avant de désactiver l'interface
+          activeElementRef.current = document.activeElement;
+          setIsUIDisabled(true);
           break;
         default:
           assertUnreachable(message);
@@ -339,7 +356,10 @@ export default function TestFileEditor({
       }
       return (
         <CancelSourceUpdateProvider onCancelSourceUpdate={cancelSourceUpdate}>
-          <div className="test-editor-container">
+          <div
+            className="test-editor-container"
+            {...(isUIDisabled ? { inert: '' } : {})}
+          >
             <div className="test-editor-top-bar">
               <button className="test-editor-add-button" onClick={onAddNewTest}>
                 <span className="codicon codicon-add"></span>
