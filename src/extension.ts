@@ -73,6 +73,12 @@ export function activate(context: vscode.ExtensionContext): void {
         { scheme: 'file', language: 'catala_en', pattern: '**/*.catala_en' },
         { scheme: 'file', language: 'catala_fr', pattern: '**/*.catala_fr' },
       ],
+      synchronize: {
+        fileEvents: [
+          vscode.workspace.createFileSystemWatcher('**/*.catala_en'),
+          vscode.workspace.createFileSystemWatcher('**/*.catala_fr'),
+        ],
+      },
     };
     client = new LanguageClient(
       'catala-lsp',
