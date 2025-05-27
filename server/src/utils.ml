@@ -16,6 +16,7 @@
 
 open Lsp.Types
 open Catala_utils
+open Server_types
 
 let pp_opt pp fmt =
   let open Format in
@@ -41,8 +42,10 @@ let lsp_range start end_ = Lsp.Types.Range.create ~start ~end_
 let start_pos = lsp_pos 1 1
 let start_range = lsp_range start_pos start_pos
 
-let pos_of_range file ({ start; end_ } : Range.t) : Pos.t =
-  Pos.from_info file (succ start.line) (succ start.character) (succ end_.line)
+let pos_of_range doc_id ({ start; end_ } : Range.t) : Pos.t =
+  Pos.from_info
+    (doc_id :> File.t)
+    (succ start.line) (succ start.character) (succ end_.line)
     (succ end_.character)
 
 let pos_to_loc (pos : Pos.t) : Linol_lwt.Position.t * Linol_lwt.Position.t =
@@ -119,9 +122,10 @@ let lookup_catala_format_config_path
   in
   r
 
-let try_format_document ~notify_back ~doc_content ~doc_path :
+let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
     TextEdit.t list option Lwt.t =
   let open Lwt.Syntax in
+  let doc_path = (doc_id :> File.t) in
   Lwt.catch
     (fun () ->
       let language =
@@ -211,9 +215,9 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
           Lwt.return_none)
     (fun _ -> Lwt.return_none)
 
-let try_format_document ~notify_back ~doc_content ~doc_path =
+let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) =
   Lwt.catch
-    (fun () -> try_format_document ~notify_back ~doc_content ~doc_path)
+    (fun () -> try_format_document ~notify_back ~doc_content doc_id)
     (fun exn ->
       let open Lwt.Syntax in
       let* () =

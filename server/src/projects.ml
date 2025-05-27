@@ -15,6 +15,7 @@
    the License. *)
 
 open Catala_utils
+open Server_types
 
 module Scan_item = struct
   type t = Clerk_scan.item
@@ -22,13 +23,12 @@ module Scan_item = struct
   let compare
       { Clerk_scan.file_name; _ }
       { Clerk_scan.file_name = file_name'; _ } =
-    String.compare file_name file_name'
+    Doc_id.(compare (of_file file_name) (of_file file_name'))
 
   let format fmt { Clerk_scan.file_name; _ } =
     Format.pp_print_string fmt file_name
 end
 
-module ProjectFiles = Map.Make (String)
 module ScanItemFiles = Set.Make (Scan_item)
 
 type project_file = {
@@ -44,7 +44,7 @@ type project_kind =
 type project = {
   project_dir : string;
   project_kind : project_kind;
-  project_files : project_file ProjectFiles.t;
+  project_files : project_file Doc_id.Map.t;
 }
 
 module Projects = Set.Make (struct
@@ -60,8 +60,10 @@ let empty = Projects.empty
 
 let format_file ppf { file; including_files; used_by } =
   let open Format in
-  fprintf ppf "file: %s, includes: %a, used by: %a" file.file_name
-    (pp_print_list pp_print_string)
+  fprintf ppf "file: %s, %aused by: %a" file.file_name
+    (fun fmt -> function
+      | [] -> ()
+      | l -> fprintf fmt "%a, " (pp_print_list pp_print_string) l)
     (ScanItemFiles.elements including_files
     |> List.map (fun { Clerk_scan.file_name; _ } -> file_name))
     (pp_print_list pp_print_string)
@@ -71,7 +73,8 @@ let format_file ppf { file; including_files; used_by } =
 let format_kind ppf =
   let open Format in
   function
-  | Clerk _config -> fprintf ppf "kind: clerk found"
+  | Clerk { clerk_root_dir; _ } ->
+    fprintf ppf "kind: clerk found in %s" clerk_root_dir
   | No_clerk -> fprintf ppf "kind: no clerk found"
 
 let format_project ppf (p : project) =
@@ -79,7 +82,7 @@ let format_project ppf (p : project) =
   fprintf ppf "@[<v 2>project dir: %s, %a, files:@ %a@]" p.project_dir
     format_kind p.project_kind
     (pp_print_list format_file)
-    (List.map snd (ProjectFiles.bindings p.project_files))
+    (List.map snd (Doc_id.Map.bindings p.project_files))
 
 let format_projects ppf (projects : Projects.t) =
   let open Format in
@@ -87,7 +90,8 @@ let format_projects ppf (projects : Projects.t) =
     (pp_print_list format_project)
     (Projects.elements projects)
 
-let lookup_project ~file projects =
+let lookup_project (doc_id : Doc_id.t) projects =
+  let file = (doc_id :> File.t) in
   (* Lookup file in longest prefix project dir *)
   assert (not (Filename.is_relative file));
   let file = Filename.dirname file in
@@ -106,14 +110,8 @@ let lookup_project ~file projects =
   | Some x when is_prefix x -> Some x
   | Some _ -> None
 
-let mk_project p =
-  {
-    project_dir = p;
-    project_kind = No_clerk;
-    project_files = ProjectFiles.empty;
-  }
-
-let clean_item ({ Clerk_scan.file_name; included_files; _ } as item) =
+let clean_item ({ Clerk_scan.file_name; included_files; _ } as item) :
+    Clerk_scan.item =
   {
     item with
     file_name = File.clean_path file_name;
@@ -170,7 +168,7 @@ let retrieve_project_files
   let open Clerk_scan in
   Log.info (fun m -> m "building inclusion graph");
   let tree = tree clerk_root_dir in
-  let known_items = Hashtbl.create 10 in
+  let known_items : (string, item) Hashtbl.t = Hashtbl.create 10 in
   let known_modules = Hashtbl.create 10 in
   Seq.iter
     (fun (_, _, items) ->
@@ -191,14 +189,14 @@ let retrieve_project_files
   let g =
     Hashtbl.fold
       (fun _n item g ->
-        ProjectFiles.add item.file_name
+        Doc_id.(Map.add (of_file item.file_name))
           {
             file = item;
             including_files = ScanItemFiles.empty;
             used_by = ScanItemFiles.empty;
           }
           g)
-      known_items ProjectFiles.empty
+      known_items Doc_id.Map.empty
   in
   Hashtbl.fold
     (fun n item g ->
@@ -219,7 +217,7 @@ let retrieve_project_files
       let g =
         List.fold_left
           (fun g included_item ->
-            ProjectFiles.update included_item.file_name
+            Doc_id.(Map.update (of_file included_item.file_name))
               (function
                 | None ->
                   Some
@@ -252,7 +250,7 @@ let retrieve_project_files
           | None -> (* No file using this module *) g
           | Some modul ->
             (* Found a good module candidate *)
-            ProjectFiles.update item.file_name
+            Doc_id.(Map.update (of_file item.file_name))
               (function
                 | None ->
                   Some
@@ -309,23 +307,23 @@ let init ~notify_back (params : Linol_lwt.InitializeParams.t) : projects =
   let no_workspace_folder_provided () =
     Log.warn (fun m -> m "no workspace folder provided")
   in
-  let*? workspaceFolders =
+  let*? workspace_folders =
     params.workspaceFolders, no_workspace_folder_provided
   in
-  let workspaceFolders =
-    match workspaceFolders with None | Some [] -> None | x -> x
+  let workspace_folders =
+    match workspace_folders with None | Some [] -> None | x -> x
   in
-  let*? workspaceFolders = workspaceFolders, no_workspace_folder_provided in
+  let*? workspace_folders = workspace_folders, no_workspace_folder_provided in
   List.fold_left
     (fun projects workspace_folder ->
       let project = project_of_workspace_folder ~notify_back workspace_folder in
       Log.app (fun m -> m "project %s loaded" project.project_dir);
       Log.debug (fun m -> m "@[<v 2>Projects:@ %a@]" format_project project);
       Projects.add project projects)
-    Projects.empty workspaceFolders
+    Projects.empty workspace_folders
 
-let find_file_in_project ~file (project : project) =
-  ProjectFiles.find_opt file project.project_files
+let find_file_in_project doc_id (project : project) =
+  Doc_id.(Map.find_opt doc_id project.project_files)
 
 let reload_project ~notify_back project projects =
   let project = project_of_folder ~notify_back project.project_dir in
@@ -333,20 +331,21 @@ let reload_project ~notify_back project projects =
 
 exception Project_not_found
 
-let find_or_populate_project ~notify_back ~file projects =
+let find_or_populate_project ~notify_back (doc_id : Doc_id.t) projects =
   let scan_dir () =
-    let new_project = project_of_folder ~notify_back (Filename.dirname file) in
-    match find_file_in_project ~file new_project with
+    let new_project =
+      project_of_folder ~notify_back (Filename.dirname (doc_id :> File.t))
+    in
+    match find_file_in_project doc_id new_project with
     | None ->
       Log.err (fun m -> m "did not find project's file after scanning");
       raise Project_not_found
     | Some file ->
       file, new_project, `Changed (Projects.add new_project projects)
   in
-  let file = Uri.pct_decode file in
-  match lookup_project ~file projects with
+  match lookup_project doc_id projects with
   | Some project -> (
-    let file_opt = find_file_in_project ~file project in
+    let file_opt = find_file_in_project doc_id project in
     match file_opt with
     | None ->
       (* File is not found, let's rescan the whole project.. *)
