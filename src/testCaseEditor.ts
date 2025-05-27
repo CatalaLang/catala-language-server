@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { logger } from './logger';
 import { assertUnreachable } from './util';
 
-import type { UpMessage } from './generated/test_case';
+import type { ParseResults, TestList, UpMessage } from './generated/test_case';
 import {
   type DownMessage,
   readUpMessage,
@@ -19,14 +19,197 @@ import {
 } from './testCaseCompilerInterop';
 import { renameIfNeeded } from './testCaseUtils';
 
+/**
+ * Custom document.
+ * The editor UI works with the AST (ATD structure, a TestList)
+ * but the extension will serialize it to / parse it from a Catala text file.
+ */
+class CatalaTestCaseDocument
+  extends vscode.Disposable
+  implements vscode.CustomDocument
+{
+  private readonly _uri: vscode.Uri;
+  private readonly _language: string;
+  private _parseResults: ParseResults; //XXX not sure
+
+  private readonly _onDidDispose = new vscode.EventEmitter<void>();
+  public readonly onDidDispose = this._onDidDispose.event;
+
+  static async create(
+    uri: vscode.Uri,
+    backupId: string | undefined
+  ): Promise<CatalaTestCaseDocument> {
+    const dataFile =
+      typeof backupId === 'string' ? vscode.Uri.parse(backupId) : uri;
+    const fileData = await CatalaTestCaseDocument.readFile(dataFile);
+    return new CatalaTestCaseDocument(uri, fileData);
+  }
+
+  private static async readFile(uri: vscode.Uri): Promise<Uint8Array> {
+    if (uri.scheme === 'untitled') {
+      return new Uint8Array();
+    }
+    return new Uint8Array(await vscode.workspace.fs.readFile(uri));
+  }
+
+  private readonly _onDidChange = new vscode.EventEmitter<
+    vscode.CustomDocumentContentChangeEvent<CatalaTestCaseDocument>
+  >();
+  public readonly onDidChange = this._onDidChange.event;
+
+  public get uri(): vscode.Uri {
+    return this._uri;
+  }
+
+  public get language(): string {
+    return this._language;
+  }
+
+  //XXX still not confident in this interface
+  public get parseResults(): ParseResults {
+    return this._parseResults;
+  }
+
+  async save(cancellation: vscode.CancellationToken): Promise<void> {
+    await this.saveAs(this.uri, cancellation);
+  }
+
+  async saveAs(
+    targetResource: vscode.Uri,
+    cancellation: vscode.CancellationToken
+  ): Promise<void> {
+    if (this._parseResults.kind !== 'Results') {
+      throw new Error('Invalid testcase file, cannot save');
+    }
+    const catalaSource = atdToCatala(this._parseResults.value, this.language);
+    const writeData = Buffer.from(catalaSource, 'utf-8');
+    if (cancellation.isCancellationRequested) {
+      return;
+    }
+    await vscode.workspace.fs.writeFile(targetResource, writeData);
+  }
+
+  async revert(_cancellation: vscode.CancellationToken): Promise<void> {
+    // XXX TODO
+    throw new Error('unimplemented');
+  }
+
+  async backup(
+    destination: vscode.Uri,
+    cancellation: vscode.CancellationToken
+  ): Promise<vscode.CustomDocumentBackup> {
+    await this.saveAs(destination, cancellation);
+
+    return {
+      id: destination.toString(),
+      delete: async (): Promise<void> => {
+        try {
+          await vscode.workspace.fs.delete(destination);
+        } catch {
+          // noop
+        }
+      },
+    };
+  }
+
+  /**
+   * Called by VS Code when there are no more references to the document.
+   * This happens when all editors for it have been closed.
+   */
+  dispose(): void {
+    this._onDidDispose.fire();
+    super.dispose();
+  }
+
+  public setContents(tests: TestList): void {
+    // XXX revisit API
+    this._parseResults = { kind: 'Results', value: tests };
+    this._onDidChange.fire({ document: this });
+  }
+
+  private constructor(uri: vscode.Uri, initialContent: Uint8Array) {
+    super(() => {}); //XXX -- the sample just seems to be able to call super()
+    this._uri = uri;
+    this._language = getLanguageFromUri(this._uri);
+    const documentText = new TextDecoder('utf-8').decode(initialContent);
+    // XXX not sure...
+    this._parseResults = parseTestFile(
+      documentText,
+      this._language,
+      this._uri.fsPath
+    );
+  }
+}
+
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
 // web view whose entry point is in `uiEntryPoint.ts`
-export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
+export class TestCaseEditorProvider
+  implements vscode.CustomEditorProvider<CatalaTestCaseDocument>
+{
   private testQueue: PQueue;
+
+  private _onDidChangeCustomDocument = new vscode.EventEmitter<
+    vscode.CustomDocumentContentChangeEvent<CatalaTestCaseDocument>
+  >();
+  public readonly onDidChangeCustomDocument =
+    this._onDidChangeCustomDocument.event; //XXX change for an event that supports edits
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.testQueue = new PQueue({ concurrency: 1 });
+  }
+
+  saveCustomDocument(
+    document: CatalaTestCaseDocument,
+    cancellation: vscode.CancellationToken
+  ): Thenable<void> {
+    return document.save(cancellation);
+  }
+
+  saveCustomDocumentAs(
+    document: CatalaTestCaseDocument,
+    destination: vscode.Uri,
+    cancellation: vscode.CancellationToken
+  ): Thenable<void> {
+    return document.saveAs(destination, cancellation);
+  }
+
+  revertCustomDocument(
+    document: CatalaTestCaseDocument,
+    cancellation: vscode.CancellationToken
+  ): Thenable<void> {
+    return document.revert(cancellation);
+  }
+
+  backupCustomDocument(
+    document: CatalaTestCaseDocument,
+    context: vscode.CustomDocumentBackupContext,
+    cancellation: vscode.CancellationToken
+  ): Thenable<vscode.CustomDocumentBackup> {
+    return document.backup(context.destination, cancellation);
+  }
+
+  async openCustomDocument(
+    uri: vscode.Uri,
+    openContext: vscode.CustomDocumentOpenContext,
+    _token: vscode.CancellationToken
+  ): Promise<CatalaTestCaseDocument> {
+    // Read document
+    const document = await CatalaTestCaseDocument.create(
+      uri,
+      openContext.backupId
+    );
+
+    // Listener setup: listen document change events and forward those
+    const changeListener = document.onDidChange((_e) => {
+      this._onDidChangeCustomDocument.fire({ document }); //XXX TODO use a document model that supports edits...
+    });
+
+    document.onDidDispose(() => {
+      changeListener.dispose();
+    });
+
+    return document;
   }
 
   public static register(context: vscode.ExtensionContext): vscode.Disposable {
@@ -45,8 +228,8 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
     return providerRegistration;
   }
 
-  public async resolveCustomTextEditor(
-    document: vscode.TextDocument,
+  async resolveCustomEditor(
+    document: CatalaTestCaseDocument,
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
@@ -77,9 +260,6 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       webviewPanel.webview.postMessage(writeDownMessage(message));
     }
 
-    // listen for a 'ready' message from the web view, then send the initial
-    // document (in parsed form)
-
     async function runTest(fileName: string, scope: string): Promise<void> {
       const results = runTestScope(fileName, scope);
       postMessageToWebView({
@@ -88,76 +268,32 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       });
     }
 
-    function debounce<T extends (...args: any[]) => any>(
-      func: T,
-      waitMs: number
-    ): (...args: Parameters<T>) => void {
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-      return function (...args: Parameters<T>): void {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-
-        timeoutId = setTimeout(() => {
-          func(...args);
-          timeoutId = null;
-        }, waitMs);
-      };
-    }
-
     function applyGuiEdit(
-      typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>,
-      lang: string
+      typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>
     ): void {
-      // re-emit catala text file from ATD test definitions
-      const newTextBuffer = atdToCatala(typed_msg.value, lang);
-      logger.log(`newTextBuffer:\n ${newTextBuffer}`);
-      // produce edit
-      const edit = new vscode.WorkspaceEdit();
-      edit.replace(
-        document.uri,
-        new vscode.Range(0, 0, document.lineCount, 0),
-        newTextBuffer
-      );
-      vscode.workspace.applyEdit(edit).then(() => {
-        //XXX concurrent edits? (e.g. from external sources?)
-        postMessageToWebView({
-          kind: 'Update',
-          value: parseTestFile(document.getText(), lang, document.uri.fsPath),
-        });
-      });
+      document.setContents(typed_msg.value); //XXX TODO move to full-fledged edits.
     }
-
-    const debouncedApplyGuiEdit = debounce(applyGuiEdit, 450);
 
     webviewPanel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
-      const lang = getLanguageFromFileName(document.fileName);
       switch (typed_msg.kind) {
+        // listen for a 'ready' message from the web view, then send the initial
+        // document (in parsed form)
         case 'Ready': {
-          const parseResults = parseTestFile(
-            document.getText(),
-            lang,
-            document.uri.fsPath
-          );
-          logger.log(
-            `Got ready message from webview, sending parsed document: \n ${JSON.stringify(parseResults)}`
-          );
+          logger.log(`Got ready message from webview, sending parsed document`);
           postMessageToWebView({
             kind: 'Update',
-            value: parseResults,
+            value: document.parseResults,
           });
           break;
         }
         case 'GuiEdit': {
-          logger.log('Got edit from webview');
-          debouncedApplyGuiEdit(typed_msg, lang);
+          applyGuiEdit(typed_msg);
           break;
         }
         case 'TestRunRequest': {
           const { scope } = typed_msg.value;
-          this.testQueue.add(() => runTest(document.fileName, scope));
+          this.testQueue.add(() => runTest(document.uri.fsPath, scope)); // assumes that the document is local (fsPath)
           break;
         }
         case 'TestGenerateRequest': {
@@ -166,31 +302,14 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
           if (results.kind === 'Results') {
             const newTest = results.value;
 
-            const currentTests = parseTestFile(
-              document.getText(),
-              lang,
-              document.uri.fsPath
-            );
+            const currentTests = document.parseResults;
+
             if (currentTests.kind === 'Results') {
               newTest[0] = renameIfNeeded(currentTests.value, newTest[0]); //XXX kludge?
               const updatedTests = [...currentTests.value, newTest[0]];
-              const newTextBuffer = atdToCatala(updatedTests, lang);
-              const edit = new vscode.WorkspaceEdit();
-              edit.replace(
-                document.uri,
-                new vscode.Range(0, 0, document.lineCount, 0),
-                newTextBuffer
-              );
-              vscode.workspace.applyEdit(edit).then(() => {
-                postMessageToWebView({
-                  kind: 'Update',
-                  value: parseTestFile(
-                    document.getText(),
-                    lang,
-                    document.uri.fsPath
-                  ),
-                });
-              });
+
+              // set new document state -- this should trigger an UI update
+              document.setContents(updatedTests);
             }
           } else {
             vscode.window.showErrorMessage(
@@ -232,24 +351,23 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
       }
     });
 
-    const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
-      (e) => {
-        if (e.document.uri.toString() === document.uri.toString()) {
-          const lang = getLanguageFromFileName(e.document.fileName);
-          postMessageToWebView({
-            kind: 'Update',
-            value: parseTestFile(
-              e.document.getText(),
-              lang,
-              document.uri.fsPath
-            ),
-          });
-        }
+    const changeSubscription = document.onDidChange((_e) => {
+      const parseResults = document.parseResults;
+      if (parseResults.kind !== 'Results') {
+        return;
       }
-    );
+      // update GUI
+      postMessageToWebView({
+        kind: 'Update',
+        value: document.parseResults,
+      });
+    });
 
     webviewPanel.onDidDispose(() => {
-      changeDocumentSubscription.dispose();
+      // Any disposal code should go here
+      // e.g. subscriptions to vs code 'system' events
+      // (content change monitoring...)
+      changeSubscription.dispose();
     });
   }
 
@@ -287,11 +405,11 @@ export class TestCaseEditorProvider implements vscode.CustomTextEditorProvider {
   }
 }
 
-function getLanguageFromFileName(fileName: string): string {
-  const extension = path.extname(fileName);
+function getLanguageFromUri(uri: vscode.Uri): string {
+  const extension = path.extname(uri.path);
   const match = extension.match(/\.catala_(\w+)$/);
   if (match?.[1]) {
     return match[1];
   }
-  throw new Error(`Unable to determine language from file name: ${fileName}`);
+  throw new Error(`Unable to determine language from file name: ${uri}`);
 }
