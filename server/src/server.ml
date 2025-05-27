@@ -226,20 +226,23 @@ class catala_lsp_server =
         protect_project_not_found
         @@ fun () -> self#on_doc ~notify_back d.uri (Some content)
 
+    method private document_changed ~notify_back ?new_content uri =
+      let when_ready () =
+        Lwt.async @@ fun () -> notify_back#send_diagnostic []
+      in
+      if should_ignore uri then Lwt.return_unit
+      else (
+        run_with_delay ~when_ready (fun () ->
+            self#on_doc ~notify_back uri new_content);
+        Lwt.return_unit)
+
     method on_notif_doc_did_change
         ~notify_back
         d
         (_c : TextDocumentContentChangeEvent.t list)
         ~old_content:_
         ~new_content =
-      let when_ready () =
-        Lwt.async @@ fun () -> notify_back#send_diagnostic []
-      in
-      if should_ignore d.uri then Lwt.return_unit
-      else (
-        run_with_delay ~when_ready (fun () ->
-            self#on_doc ~notify_back d.uri (Some new_content));
-        Lwt.return_unit)
+      self#document_changed ~notify_back ~new_content d.uri
 
     method! on_notif_doc_did_save ~notify_back d =
       Lwt.cancel !current_thread;
@@ -252,8 +255,20 @@ class catala_lsp_server =
           projects;
         self#on_doc ~notify_back textDocument.uri None)
 
+    method private on_notif_did_change_watched_files ~notify_back changes =
+      Lwt_list.iter_s
+        (fun { FileEvent.uri; type_ } ->
+          match type_ with
+          | Created | Changed ->
+            notify_back#set_uri uri;
+            self#document_changed ~notify_back uri
+          | Deleted ->
+            self#on_notif_doc_did_close ~notify_back
+              (TextDocumentIdentifier.create ~uri))
+        changes
+
     method! on_notification_unhandled
-        ~notify_back:_
+        ~notify_back
         (n : Lsp.Client_notification.t) =
       match n with
       | Lsp.Client_notification.ChangeConfiguration { settings } -> begin
@@ -269,6 +284,8 @@ class catala_lsp_server =
         let json = Jsonrpc.Notification.yojson_of_t notif in
         Log.warn (fun m -> m "unkown notification: %a" Yojson.Safe.pp json);
         Lwt.return_unit
+      | DidChangeWatchedFiles { changes } ->
+        self#on_notif_did_change_watched_files ~notify_back changes
       | _ -> Lwt.return_unit
 
     method! on_request_unhandled : type r.
@@ -289,11 +306,9 @@ class catala_lsp_server =
           self#on_req_document_formatting ~notify_back params
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
-    method on_notif_doc_did_close ~notify_back d =
-      if should_ignore d.uri then Lwt.return_unit
-      else (
-        Hashtbl.remove buffers (DocumentUri.to_path d.uri);
-        notify_back#send_diagnostic [])
+    method on_notif_doc_did_close ~notify_back:_ d =
+      Hashtbl.remove buffers (DocumentUri.to_path d.uri);
+      Lwt.return_unit
 
     method! on_req_code_action
         ~notify_back
