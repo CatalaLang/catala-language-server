@@ -15,47 +15,34 @@
    the License. *)
 
 open Server_types
-open Lwt.Syntax
 
-type 'a document_state = {
+type 'result document_state = {
   document_id : Doc_id.t;
   project : Projects.project;
   project_file : Projects.project_file;
-  process_result : 'a option;
+  process_result : 'result option;
   diagnostics : Linol_lwt.Jsonrpc2.Diagnostic.t list;
 }
 
-let make_empty_document document_id project project_file =
-  {
-    document_id;
-    project;
-    project_file;
-    process_result = None;
-    diagnostics = [];
-  }
+val make_empty_document :
+  Doc_id.doc_id ->
+  Projects.project ->
+  Projects.project_file ->
+  'a document_state
 
-type 'a server_state = {
+type 'result server_state = {
   projects : Projects.t;
-  documents : 'a document_state Doc_id.Map.t;
+  documents : 'result document_state Doc_id.Map.t;
 }
 
-type 'result locked_server_state = {
-  lock : Lwt_mutex.t;
-  mutable state : 'result server_state;
-}
+type 'result locked_server_state
 
-let use s (f : 'result server_state -> 'a Lwt.t) : 'a Lwt.t =
-  Lwt_mutex.with_lock s.lock @@ fun () -> f s.state
+val use :
+  'result locked_server_state -> ('result server_state -> 'a Lwt.t) -> 'a Lwt.t
 
-let use_and_update
-    s
-    (f : 'result server_state -> ('a * 'result server_state) Lwt.t) : 'a Lwt.t =
-  Lwt_mutex.with_lock s.lock
-  @@ fun () ->
-  let* ret, new_state = f s.state in
-  s.state <- new_state;
-  Lwt.return ret
+val use_and_update :
+  'result locked_server_state ->
+  ('result server_state -> ('a * 'result server_state) Lwt.t) ->
+  'a Lwt.t
 
-let make () =
-  let state = { projects = Projects.empty; documents = Doc_id.Map.empty } in
-  { lock = Lwt_mutex.create (); state }
+val make : unit -> 'result locked_server_state
