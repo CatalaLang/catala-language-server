@@ -25,7 +25,7 @@ module Doc_id = struct
     DocumentUri.to_path document |> Uri.pct_decode
 
   let of_catala_pos (pos : Pos.t) : doc_id = Pos.get_file pos
-  let to_lsp_uri file = DocumentUri.of_path (Uri.pct_encode file)
+  let to_lsp_uri file = DocumentUri.of_path file
   let format = Format.pp_print_string
   let compare = String.compare
   let equal = String.equal
