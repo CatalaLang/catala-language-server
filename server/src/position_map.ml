@@ -14,6 +14,8 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
+open Server_types
+
 module type Data = sig
   type t
 
@@ -164,19 +166,18 @@ module Make_trie (D : Data) = struct
 end
 
 open Catala_utils
-module FileMap = Map.Make (String)
 
 module Make (D : Data) = struct
   module Trie = Make_trie (D)
   module DS = Trie.DS
 
-  type pmap = Trie.t FileMap.t
+  type pmap = Trie.t Doc_id.Map.t
   type t = pmap
 
   let pp ppf pmap =
     let open Format in
     fprintf ppf "@[<v 2>variables:@ %a@]"
-      (FileMap.format ~pp_sep:pp_print_cut Trie.pp_trie)
+      (Doc_id.Map.format ~pp_sep:pp_print_cut Trie.pp_trie)
       pmap
 
   let ( -- ) i j = List.init (j - i + 1) (fun x -> i + x)
@@ -204,7 +205,7 @@ module Make (D : Data) = struct
     else
       let itv = pos_to_itv pos in
       let data = DS.of_list data in
-      FileMap.update (Pos.get_file pos)
+      Doc_id.Map.update (Doc_id.of_catala_pos pos)
         (function
           | None -> Some [Trie.Node { itv; data; children = [] }]
           | Some trie -> Some (Trie.insert_all itv data trie))
@@ -215,32 +216,32 @@ module Make (D : Data) = struct
   let lookup pos pmap =
     let ( let* ) = Option.bind in
     (* we assume that pos's start/end lines, start/end column are equal *)
-    let* trie = FileMap.find_opt (Pos.get_file pos) pmap in
+    let* trie = Doc_id.Map.find_opt (Doc_id.of_catala_pos pos) pmap in
     Trie.lookup (Pos.get_start_line pos, Pos.get_start_column pos) trie
 
   let lookup_with_range pos pmap =
     let ( let* ) = Option.bind in
     (* we assume that pos's start/end lines, start/end column are equal *)
-    let* trie = FileMap.find_opt (Pos.get_file pos) pmap in
+    let* trie = Doc_id.Map.find_opt (Doc_id.of_catala_pos pos) pmap in
     Trie.lookup_with_range
       (Pos.get_start_line pos, Pos.get_start_column pos)
       trie
 
   let fold f pmap acc =
-    let rec fold file trie acc =
+    let rec fold (doc_id : Doc_id.t) trie acc =
       List.fold_left
         (fun acc (Trie.Node { itv = (li, i), (lj, j); children; data }) ->
-          let acc = f (Pos.from_info file li i lj j) data acc in
-          fold file children acc)
+          let acc = f (Pos.from_info (doc_id :> File.t) li i lj j) data acc in
+          fold doc_id children acc)
         acc trie
     in
-    FileMap.fold fold pmap acc
+    Doc_id.Map.fold fold pmap acc
 
   let fold_on_file file f pmap acc =
-    FileMap.find_opt file pmap
+    Doc_id.Map.find_opt file pmap
     |> function
-    | None -> acc | Some pmap -> fold f (FileMap.singleton file pmap) acc
+    | None -> acc | Some pmap -> fold f (Doc_id.Map.singleton file pmap) acc
 
   let iter f pmap = fold (fun k v () -> f k v) pmap ()
-  let empty = FileMap.empty
+  let empty = Doc_id.Map.empty
 end
