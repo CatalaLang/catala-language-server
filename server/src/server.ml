@@ -16,7 +16,9 @@
 
 open Lwt.Syntax
 open Catala_utils
-open Lsp.Types
+open Server_types
+
+let f (_ : Doc_id.t) = assert false
 
 exception ServerError of string
 
@@ -42,28 +44,18 @@ let parse_settings settings =
             "ChangeConfiguration: received unexpected settings: %a"
             Yojson.Safe.pp settings))
 
-let lookup_project ~notify_back uri projects =
-  let file = Uri.pct_decode uri in
-  match Projects.find_or_populate_project ~notify_back ~file !projects with
+let lookup_project ~notify_back doc_id projects =
+  match Projects.find_or_populate_project ~notify_back doc_id !projects with
   | file, project, `Unchanged -> file, project
   | file, project, `Changed new_projects ->
     projects := new_projects;
     file, project
 
-let reload_project ~notify_back uri projects =
-  let file = Uri.pct_decode uri in
-  match Projects.find_or_populate_project ~notify_back ~file !projects with
+let reload_project ~notify_back doc_id projects =
+  match Projects.find_or_populate_project ~notify_back doc_id !projects with
   | _file, project, `Unchanged ->
     projects := Projects.reload_project ~notify_back project !projects
   | _file, _project, `Changed new_projects -> projects := new_projects
-
-let preprocess_uri uri =
-  let prefix = "file://" in
-  let prefix_len = String.length prefix in
-  let uri_len = String.length uri in
-  if prefix_len < uri_len && String.sub uri 0 prefix_len = prefix then
-    String.sub uri prefix_len (uri_len - prefix_len)
-  else uri
 
 let mk_prelude _files = []
 let current_thread = ref Lwt.return_unit
@@ -107,8 +99,8 @@ let protect_project_not_found_opt f =
     | Projects.Project_not_found -> Lwt.return_none
     | e -> Lwt.fail e)
 
-let should_ignore (uri : DocumentUri.t) =
-  let file = Uri.pct_decode (DocumentUri.to_string uri) in
+let should_ignore (uri : Doc_id.t) =
+  let file = (uri :> File.t) in
   let p = File.path_to_list file in
   let b =
     List.exists (fun s -> String.length s <= 0 && s.[0] = '.' && s.[0] = '_') p
@@ -135,13 +127,12 @@ class catala_lsp_server =
 
     method! config_sync_opts =
       (* configure how sync happens *)
-      let change = Lsp.Types.TextDocumentSyncKind.Incremental in
-      Lsp.Types.TextDocumentSyncOptions.create ~openClose:true ~change
-        ~save:
-          (`SaveOptions (Lsp.Types.SaveOptions.create ~includeText:false ()))
+      let change = TextDocumentSyncKind.Incremental in
+      TextDocumentSyncOptions.create ~openClose:true ~change
+        ~save:(`SaveOptions (SaveOptions.create ~includeText:false ()))
         ()
 
-    val buffers : (string, State.t) Hashtbl.t = Hashtbl.create 32
+    val buffers : (Doc_id.t, State.t) Hashtbl.t = Hashtbl.create 32
     val projects : Projects.t ref = ref Projects.empty
     method spawn_query_handler = Lwt.async
 
@@ -186,13 +177,16 @@ class catala_lsp_server =
     (* A list of include statements of the prelude files *)
     val mutable prelude = []
 
-    method private process_and_update_file ?contents ~notify_back uri =
-      let previous_file = Hashtbl.find_opt buffers uri in
+    method private process_and_update_file ?contents ~notify_back doc_id =
+      let previous_file = Hashtbl.find_opt buffers doc_id in
       let f =
-        let project_file, project = lookup_project ~notify_back uri projects in
-        State.process_document ?previous_file ?contents project_file project uri
+        let project_file, project =
+          lookup_project ~notify_back doc_id projects
+        in
+        State.process_document ?previous_file ?contents project_file project
+          doc_id
       in
-      Hashtbl.replace buffers uri f;
+      Hashtbl.replace buffers doc_id f;
       f
 
     method private use_or_process_file ?contents ~notify_back uri =
@@ -202,38 +196,42 @@ class catala_lsp_server =
 
     method private on_doc
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
-        (uri : DocumentUri.t)
+        (doc_id : Doc_id.t)
         (contents : string option) =
-      if should_ignore uri then Lwt.return_unit
+      if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
         @@ fun () ->
-        let uri_s = DocumentUri.to_path uri in
-        let file = self#process_and_update_file ?contents ~notify_back uri_s in
+        let file = self#process_and_update_file ?contents ~notify_back doc_id in
         State.all_diagnostics file
         |> function
         | [] -> Lwt.return_unit
         | all_diags ->
           Lwt_list.iter_s
-            (fun (uri, diags) ->
-              notify_back#set_uri (DocumentUri.of_path uri);
+            (fun (doc_id, diags) ->
+              notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
               notify_back#send_diagnostic diags)
             all_diags
 
     method on_notif_doc_did_open ~notify_back d ~content =
-      if should_ignore d.uri then Lwt.return_unit
+      let doc_id = Doc_id.of_lsp_uri d.uri in
+      if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
-        @@ fun () -> self#on_doc ~notify_back d.uri (Some content)
+        @@ fun () -> self#on_doc ~notify_back doc_id (Some content)
 
-    method private document_changed ~notify_back ?new_content uri =
+    method private document_changed ~notify_back ?new_content doc_id =
       let when_ready () =
-        Lwt.async @@ fun () -> notify_back#send_diagnostic []
+        Lwt.async
+        @@ fun () ->
+        notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+        notify_back#send_diagnostic []
       in
-      if should_ignore uri then Lwt.return_unit
+      if should_ignore doc_id then Lwt.return_unit
       else (
         run_with_delay ~when_ready (fun () ->
-            self#on_doc ~notify_back uri new_content);
+            notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+            self#on_doc ~notify_back doc_id new_content);
         Lwt.return_unit)
 
     method on_notif_doc_did_change
@@ -242,26 +240,23 @@ class catala_lsp_server =
         (_c : TextDocumentContentChangeEvent.t list)
         ~old_content:_
         ~new_content =
-      self#document_changed ~notify_back ~new_content d.uri
+      self#document_changed ~notify_back ~new_content (Doc_id.of_lsp_uri d.uri)
 
     method! on_notif_doc_did_save ~notify_back d =
       Lwt.cancel !current_thread;
-      let { DidSaveTextDocumentParams.textDocument; _ } = d in
-      if should_ignore textDocument.uri then Lwt.return_unit
+      let doc_id = Doc_id.of_lsp_uri d.textDocument.uri in
+      if should_ignore doc_id then Lwt.return_unit
       else (
         (* FIXME: are we sure ? *)
-        reload_project ~notify_back
-          (DocumentUri.to_path textDocument.uri)
-          projects;
-        self#on_doc ~notify_back textDocument.uri None)
+        reload_project ~notify_back doc_id projects;
+        self#on_doc ~notify_back doc_id None)
 
     method private on_notif_did_change_watched_files ~notify_back changes =
       Lwt_list.iter_s
         (fun { FileEvent.uri; type_ } ->
           match type_ with
           | Created | Changed ->
-            notify_back#set_uri uri;
-            self#document_changed ~notify_back uri
+            self#document_changed ~notify_back (Doc_id.of_lsp_uri uri)
           | Deleted ->
             self#on_notif_doc_did_close ~notify_back
               (TextDocumentIdentifier.create ~uri))
@@ -307,27 +302,27 @@ class catala_lsp_server =
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
     method on_notif_doc_did_close ~notify_back:_ d =
-      Hashtbl.remove buffers (DocumentUri.to_path d.uri);
+      let doc_id = Doc_id.of_lsp_uri d.uri in
+      Hashtbl.remove buffers doc_id;
       Lwt.return_unit
 
     method! on_req_code_action
         ~notify_back
         ~id:_
         {
-          textDocument = doc_id;
+          textDocument;
           range;
           context = _;
           partialResultToken = _;
           workDoneToken = _;
         }
         : CodeActionResult.t Lwt.t =
-      if should_ignore doc_id.uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri textDocument.uri in
+      if should_ignore doc_id then Lwt.return_none
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let f =
-          self#use_or_process_file ~notify_back (DocumentUri.to_path doc_id.uri)
-        in
+        let f = self#use_or_process_file ~notify_back doc_id in
         let suggestions_opt = State.lookup_suggestions f range in
         let actions_opt : CodeAction.t list option =
           Option.map
@@ -336,7 +331,8 @@ class catala_lsp_server =
                 Option.some
                 @@ List.map
                      (fun suggestion ->
-                       doc_id.uri, [TextEdit.create ~range ~newText:suggestion])
+                       ( textDocument.uri,
+                         [TextEdit.create ~range ~newText:suggestion] ))
                      suggestions
               in
               [
@@ -368,13 +364,12 @@ class catala_lsp_server =
         ~workDoneToken:_
         ~partialResultToken:_
         _doc_state =
-      if should_ignore uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri uri in
+      if should_ignore doc_id then Lwt.return_none
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let f =
-          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
-        in
+        let f = self#use_or_process_file ~notify_back doc_id in
         let suggestions_opt = State.lookup_suggestions_by_pos f pos in
         match suggestions_opt with
         | None -> Lwt.return_none
@@ -399,23 +394,23 @@ class catala_lsp_server =
         ~(partialResultToken : Linol_lwt.ProgressToken.t option)
         doc_state =
       ignore (notify_back, id, workDoneToken, partialResultToken, doc_state);
-      if should_ignore uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri uri in
+      if should_ignore doc_id then Lwt.return_none
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let uri = DocumentUri.to_path uri in
-        let _f = self#use_or_process_file uri in
+        let _f = self#use_or_process_file doc_id in
         let all_locs =
           Hashtbl.fold
             (fun _uri f acc ->
-              match State.lookup_def ~uri f pos with
+              match State.lookup_def ~doc_id f pos with
               | None -> acc
               | Some l ->
                 let locs =
                   List.map
                     (fun (file, range) ->
                       let uri = DocumentUri.of_path file in
-                      Lsp.Types.Location.create ~range ~uri)
+                      Location.create ~range ~uri)
                     l
                 in
                 locs @ acc)
@@ -430,13 +425,12 @@ class catala_lsp_server =
         ~(pos : Position.t)
         ()
         : Locations.t option t =
-      if should_ignore uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri uri in
+      if should_ignore doc_id then Lwt.return_none
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let f =
-          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
-        in
+        let f = self#use_or_process_file ~notify_back doc_id in
         match State.lookup_declaration f pos with
         | None -> Lwt.return_none
         | Some l ->
@@ -444,7 +438,7 @@ class catala_lsp_server =
             List.map
               (fun (file, range) ->
                 let uri = DocumentUri.of_path file in
-                Lsp.Types.Location.create ~range ~uri)
+                Location.create ~range ~uri)
               l
           in
           let locs : Linol_lwt.Locations.t = `Location locations in
@@ -456,23 +450,23 @@ class catala_lsp_server =
         ~(pos : Position.t)
         ()
         : Location.t list option Lwt.t =
-      if should_ignore uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri uri in
+      if should_ignore doc_id then Lwt.return_none
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let _f = self#use_or_process_file (DocumentUri.to_path uri) in
-        let uri = DocumentUri.to_path uri in
+        let _f = self#use_or_process_file doc_id in
         let all_locs =
           Hashtbl.fold
             (fun _uri (f : State.file) acc ->
-              match State.lookup_usages ~uri f pos with
+              match State.lookup_usages ~doc_id f pos with
               | None -> acc
               | Some l ->
                 let locs =
                   List.map
                     (fun (file, range) ->
                       let uri = DocumentUri.of_path file in
-                      Lsp.Types.Location.create ~range ~uri)
+                      Location.create ~range ~uri)
                     l
                 in
                 locs @ acc)
@@ -488,13 +482,12 @@ class catala_lsp_server =
         ~workDoneToken:_
         _doc_state
         : Hover.t option Lwt.t =
-      if should_ignore uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri uri in
+      if should_ignore doc_id then Lwt.return_none
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let f =
-          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
-        in
+        let f = self#use_or_process_file ~notify_back doc_id in
         match State.lookup_type f pos with
         | None -> Lwt.return_none
         | Some (range, md) ->
@@ -506,18 +499,17 @@ class catala_lsp_server =
         ~(pos : Position.t)
         ()
         : Locations.t option Lwt.t =
-      if should_ignore uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri uri in
+      if should_ignore doc_id then Lwt.return_none
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let f =
-          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
-        in
+        let f = self#use_or_process_file ~notify_back doc_id in
         match State.lookup_type_declaration f pos with
         | None -> Lwt.return_none
         | Some (file, range) ->
           let uri = DocumentUri.of_path file in
-          let loc = Lsp.Types.Location.create ~range ~uri in
+          let loc = Location.create ~range ~uri in
           Lwt.return_some (`Location [loc])
 
     method! on_req_symbol
@@ -531,13 +523,12 @@ class catala_lsp_server =
           | `SymbolInformation of SymbolInformation.t list ]
           option
           t =
-      if should_ignore uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri uri in
+      if should_ignore doc_id then Lwt.return_none
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let f =
-          self#use_or_process_file ~notify_back (DocumentUri.to_path uri)
-        in
+        let f = self#use_or_process_file ~notify_back doc_id in
         let all_symbols = State.lookup_document_symbols f in
         Lwt.return_some (`SymbolInformation all_symbols)
 
@@ -545,26 +536,24 @@ class catala_lsp_server =
         ~notify_back
         (params : DocumentFormattingParams.t)
         : TextEdit.t list option Lwt.t =
-      (* TODO: check file uri to discard bad files *)
-      let doc_id = params.textDocument in
-      if should_ignore doc_id.uri then Lwt.return_none
+      let doc_id = Doc_id.of_lsp_uri params.textDocument.uri in
+      if should_ignore doc_id then Lwt.return_none
       else
-        let doc_path = DocumentUri.to_path doc_id.uri in
         protect_project_not_found_opt
         @@ fun () ->
-        Log.info (fun m -> m "trying to format document %s" doc_path);
-        match self#find_doc doc_id.uri with
+        Log.info (fun m ->
+            m "trying to format document %a" Doc_id.format doc_id);
+        match self#find_doc params.textDocument.uri with
         | None ->
           Log.warn (fun m ->
-              m "cannot find document content of document %s" doc_path);
+              m "cannot find document content of document %a" Doc_id.format
+                doc_id);
           Lwt.return_none
         | Some { content = doc_content; _ } -> (
           let (_f : State.file) =
-            self#use_or_process_file ~notify_back doc_path
+            self#use_or_process_file ~notify_back doc_id
           in
-          let* r =
-            Utils.try_format_document ~notify_back ~doc_content ~doc_path
-          in
+          let* r = Utils.try_format_document ~notify_back ~doc_content doc_id in
           match r with
           | None ->
             Log.info (fun m -> m "failed to format document");

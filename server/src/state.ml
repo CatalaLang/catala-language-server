@@ -18,7 +18,7 @@ open Utils
 open Diagnostic
 open Linol_lwt
 open Catala_utils
-open Clerk_lib
+open Server_types
 
 module RangeMap = Stdlib.Map.Make (struct
   type t = Range.t
@@ -26,14 +26,12 @@ module RangeMap = Stdlib.Map.Make (struct
   let compare = compare
 end)
 
-module UriMap = Map.Make (String)
-
 type file = {
-  uri : string;
+  doc_id : Doc_id.t;
   locale : Catala_utils.Global.backend_lang;
   scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
   jump_table : Jump.t option;
-  errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t UriMap.t;
+  errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t Doc_id.Map.t;
 }
 
 type t = file
@@ -50,18 +48,18 @@ let pp_range fmt { Range.start; end_ } =
   in
   fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
 
-let create ?prog uri =
+let create ?prog doc_id =
   {
-    uri;
-    locale = Catala_utils.Cli.file_lang uri;
-    errors = UriMap.empty;
+    doc_id;
+    locale = Catala_utils.Cli.file_lang (doc_id :> File.t);
+    errors = Doc_id.Map.empty;
     scopelang_prg = prog;
     jump_table = None;
   }
 
-let add_suggestions file uri range err =
+let add_suggestions file doc_id range err =
   let errors =
-    UriMap.update uri
+    Doc_id.Map.update doc_id
       (function
         | None -> Some (RangeMap.singleton range (range, err))
         | Some rmap -> Some (RangeMap.add range (range, err) rmap))
@@ -70,7 +68,7 @@ let add_suggestions file uri range err =
   { file with errors }
 
 let lookup_suggestions file range =
-  Option.bind (UriMap.find_opt file.uri file.errors)
+  Option.bind (Doc_id.Map.find_opt file.doc_id file.errors)
   @@ fun rmap ->
   RangeMap.find_opt range rmap
   |> function
@@ -95,7 +93,7 @@ let all_symbols_as_warning file =
     (* Log.info (fun m -> m "%a@." Jump.PMap.pp variables); *)
     (* Generates warning diagnostic for each symbol *)
     [
-      ( file.uri,
+      ( file.doc_id,
         Jump.LTable.bindings lookup_table
         |> List.map snd
         |> List.concat_map
@@ -107,15 +105,16 @@ let all_symbols_as_warning file =
                     | None -> None
                     | Some r -> (
                       List.filter
-                        (fun r -> Catala_utils.Pos.get_file r = file.uri)
+                        (fun r ->
+                          Catala_utils.Pos.get_file r = (file.doc_id :> File.t))
                         r
                       |> function [] -> None | r -> Some r))
                |> List.concat
                |> List.map build) );
     ]
     @ [
-        ( file.uri,
-          Jump.PMap.fold_on_file file.uri
+        ( file.doc_id,
+          Jump.PMap.fold_on_file file.doc_id
             (fun r v acc ->
               let msg =
                 Format.asprintf "%a : @[<h>%a@]"
@@ -128,7 +127,7 @@ let all_symbols_as_warning file =
 
 let all_diagnostics file =
   let open Catala_utils.Message in
-  let errs = UriMap.bindings file.errors in
+  let errs = Doc_id.Map.bindings file.errors in
   List.map
     (fun (uri, rmap) ->
       ( uri,
@@ -151,37 +150,41 @@ let all_diagnostics file =
 
 let of_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
 
-let generic_lookup ?uri { uri = file_uri; jump_table; _ } (p : Position.t) f =
+let generic_lookup
+    ?doc_id
+    { doc_id = file_doc_id; jump_table; _ }
+    (p : Position.t)
+    f =
   let open Option in
-  let uri = Option.value uri ~default:file_uri in
-  let p = Utils.(lsp_range p p |> pos_of_range uri) in
+  let uri = Option.value doc_id ~default:file_doc_id in
+  let p = Utils.(lsp_range p p |> pos_of_range (uri :> File.t)) in
   let open Jump in
   let ( let* ) = Option.bind in
   let* jump_table = jump_table in
   let l = lookup jump_table p in
   List.filter_map f l |> List.concat |> function [] -> None | l -> Some l
 
-let lookup_declaration ?uri f p =
-  generic_lookup ?uri f p (fun { declaration; _ } ->
+let lookup_declaration ?doc_id f p =
+  generic_lookup ?doc_id f p (fun { declaration; _ } ->
       Option.map (fun x -> [x]) declaration)
   |> Option.map (List.map of_position)
 
-let lookup_def ?uri f p =
-  generic_lookup ?uri f p (fun { definitions; _ } -> definitions)
+let lookup_def ~doc_id f p =
+  generic_lookup ~doc_id f p (fun { definitions; _ } -> definitions)
   |> Option.map (List.map of_position)
   |> function
   | Some l -> Some l
   | None ->
     (* If no definition is found, we default to referencing the declaration. In
        most case, it is relevant hence a better UX. *)
-    lookup_declaration ?uri f p
+    lookup_declaration ~doc_id f p
 
-let lookup_usages ?uri f p =
-  generic_lookup ?uri f p (fun { usages; _ } -> usages)
+let lookup_usages ?doc_id f p =
+  generic_lookup ?doc_id f p (fun { usages; _ } -> usages)
   |> Option.map (List.map of_position)
 
 let lookup_type f p =
-  let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
+  let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
   let prg = f.scopelang_prg in
@@ -191,7 +194,7 @@ let lookup_type f p =
   Some (r, md)
 
 let lookup_type_declaration f p =
-  let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
+  let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
   let* _r, lookup_s = Jump.lookup_type jt p in
@@ -217,7 +220,7 @@ let lookup_document_symbols file =
   match variables with
   | None -> []
   | Some variables ->
-    Jump.PMap.fold_on_file file.uri
+    Jump.PMap.fold_on_file file.doc_id
       (fun p vl acc ->
         Jump.PMap.DS.fold
           (fun v acc ->
@@ -330,14 +333,14 @@ let process_document
     ?contents
     (project_file : Projects.project_file)
     (project : Projects.project)
-    (uri : string) : t =
+    (doc_id : Doc_id.t) : t =
   let open Catala_utils in
-  Log.info (fun m -> m "processing document '%s'" uri);
-  let uri = Uri.pct_decode uri in
+  Log.info (fun m -> m "processing document '%a'" Doc_id.format doc_id);
+  let file = (doc_id :> File.t) in
   let input_src =
     match contents with
-    | None -> Global.FileName uri
-    | Some c -> Contents (c, uri)
+    | None -> Global.FileName file
+    | Some c -> Contents (c, file)
   in
   let input_src, resolve_included_file =
     let { Projects.file = _; including_files; _ } = project_file in
@@ -356,7 +359,7 @@ let process_document
           m "found document inclusion in %s - processing this one instead"
             including_file.file_name);
       let resolve_included_file path =
-        if File.equal path uri then input_src else Global.FileName path
+        if File.equal path file then input_src else Global.FileName path
       in
       FileName including_file.file_name, Some resolve_included_file
     end
@@ -465,7 +468,7 @@ let process_document
         errors;
       List.rev !l, None, None
   in
-  let file = create ?prog uri in
+  let file = create ?prog doc_id in
   let file =
     match previous_file, jump_table with
     | Some { jump_table = Some jump_table; scopelang_prg; _ }, None ->
@@ -482,10 +485,10 @@ let process_document
       in
       let uri, range =
         match err.pos, err.kind with
-        | None, _ -> uri, dummy_range
+        | None, _ -> doc_id, dummy_range
         | Some pos, Lexing ->
-          Catala_utils.Pos.get_file pos, unclosed_range_of_pos pos
-        | Some pos, _ -> Catala_utils.Pos.get_file pos, range_of_pos pos
+          Doc_id.of_catala_pos pos, unclosed_range_of_pos pos
+        | Some pos, _ -> Doc_id.of_catala_pos pos, range_of_pos pos
       in
       add_suggestions f uri range err)
     file errors
