@@ -16,6 +16,7 @@
 
 open QCheck
 open Catala_utils
+open Server_types
 
 module PMap = Position_map.Make (struct
   include String
@@ -61,11 +62,7 @@ let map_gen =
 
 let gen_pair = Gen.(pair map_gen (pair pos_gen data_gen))
 
-module S = Set.Make (struct
-  type t = string
-
-  let compare = compare
-end)
+module S = Set.Make (String)
 
 let elements t =
   PMap.fold (fun _ d acc -> S.add_seq (PMap.DS.to_seq d) acc) t S.empty
@@ -112,7 +109,6 @@ let gen_hierarchy_arb =
 let pbt_hierarchy_test =
   let hierarchy_prop l =
     let t = insert_all l PMap.empty in
-    let open Position_map in
     let rec check (PMap.Trie.Node { itv = (li, i), (lj, j); children; _ }) :
         bool =
       let inner (PMap.Trie.Node { itv = (li', i'), (lj', j'); _ } as node) =
@@ -127,7 +123,7 @@ let pbt_hierarchy_test =
       in
       List.for_all inner children
     in
-    FileMap.for_all (fun _ nodes -> List.for_all check nodes) t
+    Doc_id.Map.for_all (fun _ nodes -> List.for_all check nodes) t
   in
   QCheck.Test.make ~name:"hierarchy" ~long_factor:1000 ~count:100_000
     ~max_fail:0 gen_hierarchy_arb hierarchy_prop
