@@ -45,4 +45,11 @@ val use_and_update :
   ('result server_state -> ('a * 'result server_state) Lwt.t) ->
   'a Lwt.t
 
+val delayed_update :
+  ?delay:float ->
+  Doc_id.doc_id ->
+  'result locked_server_state ->
+  ('result server_state -> 'result server_state Lwt.t) ->
+  unit Lwt.t
+
 val make : unit -> 'result locked_server_state
