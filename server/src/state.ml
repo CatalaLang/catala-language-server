@@ -228,6 +228,19 @@ let lookup_document_symbols file =
           vl acc)
       variables []
 
+exception Failed_to_load_interface of Surface.Ast.module_use
+
+let module_usage_error ({ mod_use_name; _ } : Surface.Ast.module_use) =
+  let pos = Mark.get mod_use_name in
+  let module_name = Mark.remove mod_use_name in
+  {
+    Message.kind = Generic;
+    message =
+      (fun fmt -> Format.fprintf fmt "Failed to parse module %s" module_name);
+    pos = Some pos;
+    suggestion = None;
+  }
+
 let load_module_interfaces config_dir includes program =
   (* Recurse into program modules, looking up files in [using] and loading
      them *)
@@ -290,7 +303,8 @@ let load_module_interfaces config_dir includes program =
              directory *)
           let f_path = Utils.join_paths config_dir f in
           let module_content =
-            Surface.Parser_driver.load_interface (Global.FileName f_path)
+            try Surface.Parser_driver.load_interface (Global.FileName f_path)
+            with _ -> raise (Failed_to_load_interface use)
           in
           let modname =
             ModuleName.fresh module_content.module_modname.module_name
@@ -367,7 +381,11 @@ let process_document
   in
   let _ = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
-  let on_error e = l := e :: !l in
+  let on_error e =
+    match e with
+    | { Message.kind = Generic; pos = None; _ } -> ()
+    | _ -> l := e :: !l
+  in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
   let errors, prog, jump_table =
     try
@@ -387,7 +405,9 @@ let process_document
           | No_clerk -> project.project_dir, Clerk_config.default_config
         in
         let mod_uses, modules =
-          load_module_interfaces root_dir clerk_config.global.include_dirs prg
+          try
+            load_module_interfaces root_dir clerk_config.global.include_dirs prg
+          with e -> raise e
         in
         let ctx =
           Desugared.Name_resolution.form_context (prg, mod_uses) modules
@@ -436,9 +456,14 @@ let process_document
         !l, Some prg, Some jump_table
     with e ->
       let errors =
+        let e = match e with Fun.Finally_raised e -> e | e -> e in
         match e with
         | Catala_utils.Message.CompilerError er -> [er]
         | Catala_utils.Message.CompilerErrors er_l -> er_l
+        | Failed_to_load_interface mod_use ->
+          let lsp_err = module_usage_error mod_use in
+          on_error lsp_err;
+          []
         | e ->
           on_error
             {
