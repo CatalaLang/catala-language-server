@@ -14,7 +14,6 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
-open Lwt.Syntax
 open Catala_utils
 open Server_types
 module SState = Server_state_types
@@ -36,21 +35,6 @@ let reload_project ~notify_back doc_id projects =
   | _file, project, `Unchanged ->
     projects := Projects.reload_project ~notify_back project !projects
   | _file, _project, `Changed new_projects -> projects := new_projects
-
-let current_thread = ref Lwt.return_unit
-
-let run_with_delay ?(delay = 1.) ~when_ready f =
-  let run_with_delay () =
-    let* () = Lwt_unix.sleep delay in
-    f ()
-  in
-  match Lwt.state !current_thread with
-  | Fail _ | Return () ->
-    when_ready ();
-    current_thread := run_with_delay ()
-  | Sleep ->
-    Lwt.cancel !current_thread;
-    current_thread := run_with_delay ()
 
 let set_log_level =
   let open Linol_lwt.TraceValues in
@@ -82,7 +66,7 @@ let should_ignore (uri : Doc_id.t) =
   let file = (uri :> File.t) in
   let p = File.path_to_list file in
   let b =
-    List.exists (fun s -> String.length s <= 0 && s.[0] = '.' && s.[0] = '_') p
+    List.exists (fun s -> String.length s > 0 && (s.[0] = '.' || s.[0] = '_')) p
   in
   Log.debug (fun m ->
       if b then
@@ -98,6 +82,21 @@ let retrieve_existing_document doc_id server_state =
   | Some { process_result = Some f; _ } -> Lwt.return_some f
   | _ -> Lwt.return_none
 
+let send_diagnostics ~notify_back doc_id file =
+  (* FIXME: use project scan to send all diagnostics *)
+  Log.debug (fun m -> m "sending diagnostics");
+  State.all_diagnostics file
+  |> function
+  | [] ->
+    notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+    notify_back#send_diagnostic []
+  | all_diags ->
+    Lwt_list.iter_s
+      (fun (doc_id, diags) ->
+        notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+        notify_back#send_diagnostic diags)
+      all_diags
+
 class catala_lsp_server =
   let open Linol_lwt in
   object (self)
@@ -109,7 +108,7 @@ class catala_lsp_server =
     method! config_completion = Some (CompletionOptions.create ())
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
-    method! config_symbol = Some (`Bool true)
+    method! config_symbol = Some (`Bool false)
     method private config_workspace_symbol = `Bool false
     method private config_declaration = Some (`Bool true)
     method private config_references = Some (`Bool true)
@@ -166,9 +165,11 @@ class catala_lsp_server =
         ( InitializeResult.create ~capabilities (),
           { SState.projects; documents } )
 
-    method private process_file ?contents ~notify_back doc_id =
-      SState.use_and_update server_state
-      @@ fun { projects; documents } ->
+    method private unlocked_process_file
+        ?contents
+        ~notify_back
+        doc_id
+        { SState.projects; documents } =
       Doc_id.Map.find_opt doc_id documents
       |> function
       | Some document ->
@@ -198,6 +199,12 @@ class catala_lsp_server =
         (* TODO: rescan project if includes/module uses changed *)
         Lwt.return (new_file, new_state)
 
+    method private process_file ?contents ~notify_back doc_id =
+      SState.use_and_update server_state
+      @@ fun unlocked_server_state ->
+      self#unlocked_process_file ?contents ~notify_back doc_id
+        unlocked_server_state
+
     method private use_or_process_file ~notify_back doc_id =
       let* (doc_opt : State.file SState.document_state option) =
         SState.use server_state
@@ -218,36 +225,26 @@ class catala_lsp_server =
         protect_project_not_found
         @@ fun () ->
         let* file = self#process_file ?contents ~notify_back doc_id in
-        State.all_diagnostics file
-        |> function
-        | [] -> Lwt.return_unit
-        | all_diags ->
-          Lwt_list.iter_s
-            (fun (doc_id, diags) ->
-              notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
-              notify_back#send_diagnostic diags)
-            all_diags
+        send_diagnostics ~notify_back doc_id file
 
     method on_notif_doc_did_open ~notify_back d ~content =
       let doc_id = Doc_id.of_lsp_uri d.uri in
+      self#on_doc ~notify_back doc_id (Some content)
+
+    method private document_changed ~notify_back ?new_content doc_id =
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
-        @@ fun () -> self#on_doc ~notify_back doc_id (Some content)
-
-    method private document_changed ~notify_back ?new_content doc_id =
-      let when_ready () =
-        Lwt.async
         @@ fun () ->
+        SState.delayed_update doc_id server_state
+        @@ fun state ->
         notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
-        notify_back#send_diagnostic []
-      in
-      if should_ignore doc_id then Lwt.return_unit
-      else (
-        run_with_delay ~when_ready (fun () ->
-            notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
-            self#on_doc ~notify_back doc_id new_content);
-        Lwt.return_unit)
+        let* file, new_state =
+          self#unlocked_process_file ?contents:new_content ~notify_back doc_id
+            state
+        in
+        let* () = send_diagnostics ~notify_back doc_id file in
+        Lwt.return new_state
 
     method on_notif_doc_did_change
         ~notify_back
@@ -258,23 +255,17 @@ class catala_lsp_server =
       self#document_changed ~notify_back ~new_content (Doc_id.of_lsp_uri d.uri)
 
     method! on_notif_doc_did_save ~notify_back d =
-      Lwt.cancel !current_thread;
       let doc_id = Doc_id.of_lsp_uri d.textDocument.uri in
-      if should_ignore doc_id then Lwt.return_unit
-      else self#on_doc ~notify_back doc_id None
+      self#on_doc ~notify_back doc_id None
 
     method private on_notif_did_change_watched_files ~notify_back changes =
-      (* Triggers even on save *)
-      Lwt_list.iter_s
+      (* Triggers even on save.. *)
+      Lwt_list.iter_p
         (fun { FileEvent.uri; type_ } ->
+          let doc_id = Doc_id.of_lsp_uri uri in
           match type_ with
-          | Created | Changed ->
-            (* Buggy: should not call changed if document is clean *)
-            (* self#document_changed ~notify_back (Doc_id.of_lsp_uri uri) *)
-            Lwt.return_unit
-          | Deleted ->
-            self#on_notif_doc_did_close ~notify_back
-              (TextDocumentIdentifier.create ~uri))
+          | Created | Changed -> self#document_changed ~notify_back doc_id
+          | Deleted -> self#on_doc_did_close ~notify_back doc_id)
         changes
 
     method! on_notification_unhandled
@@ -310,12 +301,16 @@ class catala_lsp_server =
           self#on_req_document_formatting ~notify_back params
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
-    method on_notif_doc_did_close ~notify_back:_ d =
-      let doc_id = Doc_id.of_lsp_uri d.uri in
-      SState.use_and_update server_state
-      @@ fun { projects; documents } ->
-      let documents = Doc_id.Map.remove doc_id documents in
-      Lwt.return ((), { SState.projects; documents })
+    method private on_doc_did_close ~notify_back:_ (doc_id : Doc_id.t) =
+      if should_ignore doc_id then Lwt.return_unit
+      else
+        SState.use_and_update server_state
+        @@ fun { projects; documents } ->
+        let documents = Doc_id.Map.remove doc_id documents in
+        Lwt.return ((), { SState.projects; documents })
+
+    method on_notif_doc_did_close ~notify_back d =
+      self#on_doc_did_close ~notify_back (Doc_id.of_lsp_uri d.uri)
 
     method! on_req_code_action
         ~notify_back:_
@@ -345,7 +340,7 @@ class catala_lsp_server =
                      suggestions
               in
               [
-                CodeAction.create ~title:"completion"
+                CodeAction.create ~title:"suggestions"
                   ~kind:CodeActionKind.QuickFix ~isPreferred:true
                   ~edit:
                     {

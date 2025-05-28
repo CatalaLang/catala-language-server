@@ -32,6 +32,7 @@
           "enum": [
             "off",
             "messages",
+            "compact",
             "verbose"
           ],
           "default": "messages"
