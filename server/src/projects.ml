@@ -338,7 +338,9 @@ let find_or_populate_project ~notify_back (doc_id : Doc_id.t) projects =
     in
     match find_file_in_project doc_id new_project with
     | None ->
-      Log.err (fun m -> m "did not find project's file after scanning");
+      Log.err (fun m ->
+          m "did not find project for file %a after scanning" Doc_id.format
+            doc_id);
       raise Project_not_found
     | Some file ->
       file, new_project, `Changed (Projects.add new_project projects)
