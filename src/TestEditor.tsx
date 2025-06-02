@@ -41,7 +41,6 @@ export default function TestEditor(props: Props): ReactElement {
   }
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [description, setDescription] = useState(props.test.description);
 
   return (
     <div className="test-editor">
@@ -96,8 +95,8 @@ export default function TestEditor(props: Props): ReactElement {
           </h2>
           <div className="test-description-editor">
             <textarea
-              value={description}
-              onChange={(evt) => setDescription(evt.target.value)}
+              value={props.test.description}
+              onChange={onDescriptionChange}
               onBlur={onDescriptionChange}
               placeholder={intl.formatMessage({
                 id: 'testEditor.descriptionPlaceholder',
