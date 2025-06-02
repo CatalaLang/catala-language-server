@@ -31,6 +31,8 @@ class CatalaTestCaseDocument
   private readonly _uri: vscode.Uri;
   private readonly _language: string;
   private _parseResults: ParseResults; //XXX not sure
+  private _history: ParseResults[] = []; //TODO bound capacity? Edit coalescing?
+  private _savedHistory: ParseResults[] = []; //TODO bound capacity? Edit coalescing?
 
   private readonly _onDidDispose = new vscode.EventEmitter<void>();
   public readonly onDidDispose = this._onDidDispose.event;
@@ -52,10 +54,22 @@ class CatalaTestCaseDocument
     return new Uint8Array(await vscode.workspace.fs.readFile(uri));
   }
 
+  // Fired when an edit is made, notify vs code
+  // (which in turn manages the undo stack and dirty indicator...)
+  // this does **not** require an explicit subscription in
+  // our code.
+  // Triggered from `setContents()`
   private readonly _onDidChange = new vscode.EventEmitter<
-    vscode.CustomDocumentContentChangeEvent<CatalaTestCaseDocument>
+    vscode.CustomDocumentEditEvent<CatalaTestCaseDocument>
   >();
   public readonly onDidChange = this._onDidChange.event;
+
+  // This event is used to trigger UI refreshes.
+  // It is fired on GUI edits, undo and redo operations
+  private readonly _onDidChangeDocument = new vscode.EventEmitter<
+    vscode.CustomDocumentContentChangeEvent<CatalaTestCaseDocument>
+  >();
+  public readonly onDidChangeContent = this._onDidChangeDocument.event;
 
   public get uri(): vscode.Uri {
     return this._uri;
@@ -72,6 +86,7 @@ class CatalaTestCaseDocument
 
   async save(cancellation: vscode.CancellationToken): Promise<void> {
     await this.saveAs(this.uri, cancellation);
+    this._savedHistory = Array.from(this._history);
   }
 
   async saveAs(
@@ -90,8 +105,13 @@ class CatalaTestCaseDocument
   }
 
   async revert(_cancellation: vscode.CancellationToken): Promise<void> {
-    // XXX TODO
-    throw new Error('unimplemented');
+    const diskContent = await CatalaTestCaseDocument.readFile(this.uri);
+    this._parseResults = parseContents(diskContent);
+    this._history = this._savedHistory;
+
+    this._onDidChangeDocument.fire({
+      document: this,
+    });
   }
 
   async backup(
@@ -121,24 +141,38 @@ class CatalaTestCaseDocument
     super.dispose();
   }
 
+  // 'makeEdit' in sample
   public setContents(tests: TestList): void {
     // XXX revisit API
     this._parseResults = { kind: 'Results', value: tests };
-    this._onDidChange.fire({ document: this });
+    this._onDidChange.fire({
+      document: this,
+      label: 'edit',
+      undo: (): void => {
+        const lastRev = this._history.pop();
+        if (lastRev !== undefined) {
+          this._parseResults = lastRev;
+          this._onDidChangeDocument.fire({ document: this });
+        }
+      },
+      redo: (): void => {
+        throw new Error('unimplemented');
+      },
+    });
   }
 
   private constructor(uri: vscode.Uri, initialContent: Uint8Array) {
     super(() => {}); //XXX -- the sample just seems to be able to call super()
     this._uri = uri;
     this._language = getLanguageFromUri(this._uri);
-    const documentText = new TextDecoder('utf-8').decode(initialContent);
     // XXX not sure...
-    this._parseResults = parseTestFile(
-      documentText,
-      this._language,
-      this._uri.fsPath
-    );
+    this._parseResults = parseContents(initialContent);
   }
+}
+
+function parseContents(content: Uint8Array): ParseResults {
+  const documentText = new TextDecoder('utf-8').decode(content);
+  return parseTestFile(documentText, this._language, this._uri.fsPath);
 }
 
 // This class contains the 'backend' part of the test case editor that
@@ -150,10 +184,10 @@ export class TestCaseEditorProvider
   private testQueue: PQueue;
 
   private _onDidChangeCustomDocument = new vscode.EventEmitter<
-    vscode.CustomDocumentContentChangeEvent<CatalaTestCaseDocument>
+    vscode.CustomDocumentEditEvent<CatalaTestCaseDocument>
   >();
   public readonly onDidChangeCustomDocument =
-    this._onDidChangeCustomDocument.event; //XXX change for an event that supports edits
+    this._onDidChangeCustomDocument.event;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.testQueue = new PQueue({ concurrency: 1 });
@@ -199,15 +233,6 @@ export class TestCaseEditorProvider
       uri,
       openContext.backupId
     );
-
-    // Listener setup: listen document change events and forward those
-    const changeListener = document.onDidChange((_e) => {
-      this._onDidChangeCustomDocument.fire({ document }); //XXX TODO use a document model that supports edits...
-    });
-
-    document.onDidDispose(() => {
-      changeListener.dispose();
-    });
 
     return document;
   }
@@ -271,7 +296,7 @@ export class TestCaseEditorProvider
     function applyGuiEdit(
       typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>
     ): void {
-      document.setContents(typed_msg.value); //XXX TODO move to full-fledged edits.
+      document.setContents(typed_msg.value);
     }
 
     webviewPanel.webview.onDidReceiveMessage(async (message: unknown) => {
@@ -308,7 +333,7 @@ export class TestCaseEditorProvider
               newTest[0] = renameIfNeeded(currentTests.value, newTest[0]); //XXX kludge?
               const updatedTests = [...currentTests.value, newTest[0]];
 
-              // set new document state -- this should trigger an UI update
+              // set new document state -- this will trigger an UI update
               document.setContents(updatedTests);
             }
           } else {
@@ -351,7 +376,7 @@ export class TestCaseEditorProvider
       }
     });
 
-    const changeSubscription = document.onDidChange((_e) => {
+    const changeSubscription = document.onDidChangeContent((_e) => {
       const parseResults = document.parseResults;
       if (parseResults.kind !== 'Results') {
         return;
