@@ -57,7 +57,10 @@ class CatalaTestCaseDocument
   // Fired when an edit is made, notify vs code
   // (which in turn manages the undo stack and dirty indicator...)
   // This does **not** require an explicit subscription in
-  // our code.
+  // our code (although we re-emit it from the editor,
+  // which is the only thing that VS code knows about -- the custom
+  // document model is unknown to VS code).
+  //
   // Triggered from `setContents()`
   private readonly _onDidChange = new vscode.EventEmitter<
     vscode.CustomDocumentEditEvent<CatalaTestCaseDocument>
@@ -80,7 +83,7 @@ class CatalaTestCaseDocument
     return this._language;
   }
 
-  //XXX still not confident in this interface
+  //XXX not confident in this interface
   public get parseResults(): ParseResults {
     return this._parseResults;
   }
@@ -144,15 +147,12 @@ class CatalaTestCaseDocument
 
   // 'makeEdit' in sample
   public setContents(tests: TestList): void {
-    // XXX revisit API
     this._parseResults = { kind: 'Results', value: tests };
     this._history.push(this._parseResults);
 
     this._onDidChange.fire({
       document: this,
       label: 'edit',
-      //XXX we might want to make undo/redo logic slightly clearer
-      //(avoid relying on this to ease reasoning)
       undo: (): void => {
         const lastRev = this._history.pop();
         if (lastRev !== undefined) {
@@ -173,7 +173,7 @@ class CatalaTestCaseDocument
     super(() => {}); //XXX -- the sample just seems to be able to call super()
     this._uri = uri;
     this._language = getLanguageFromUri(this._uri);
-    // XXX not sure...
+
     this._parseResults = parseContents(
       initialContent,
       this._uri,
@@ -400,10 +400,6 @@ export class TestCaseEditorProvider
     });
 
     const changeSubscription = document.onDidChangeContent((_e) => {
-      const parseResults = document.parseResults;
-      if (parseResults.kind !== 'Results') {
-        return;
-      }
       // update GUI
       postMessageToWebView({
         kind: 'Update',
