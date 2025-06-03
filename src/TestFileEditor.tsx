@@ -160,6 +160,9 @@ export default function TestFileEditor({
         console.log('new test state');
         console.log(newTestState);
 
+        // optimistic update
+        setState({ state: 'success', tests: newTestState });
+
         vscode.postMessage(
           writeUpMessage({
             kind: 'GuiEdit',
@@ -179,6 +182,9 @@ export default function TestFileEditor({
         );
         console.log('Deleting test:', testScope);
         console.log('New test state:', newTestState);
+
+        // optimistic update
+        setState({ state: 'success', tests: newTestState });
 
         vscode.postMessage(
           writeUpMessage({
