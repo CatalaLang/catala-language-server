@@ -13,7 +13,7 @@ import { select } from './testCaseUtils';
 
 type Props = {
   test: Test;
-  onTestChange(newValue: Test): void;
+  onTestChange(newValue: Test, mayBeBatched: boolean): void;
   onTestDelete(testScope: string): void;
   onTestRun(testScope: string): void;
   runState?: {
@@ -27,17 +27,23 @@ export default function TestEditor(props: Props): ReactElement {
   const intl = useIntl();
 
   function onTestInputsChange(newValue: TestInputs): void {
-    props.onTestChange({
-      ...props.test,
-      test_inputs: newValue,
-    });
+    props.onTestChange(
+      {
+        ...props.test,
+        test_inputs: newValue,
+      },
+      false
+    );
   }
 
   function onDescriptionChange(event: ChangeEvent<HTMLTextAreaElement>): void {
-    props.onTestChange({
-      ...props.test,
-      description: event.target.value,
-    });
+    props.onTestChange(
+      {
+        ...props.test,
+        description: event.target.value,
+      },
+      true
+    );
   }
 
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -129,7 +135,9 @@ export default function TestEditor(props: Props): ReactElement {
           </div>
           <TestOutputsEditor
             test={props.test}
-            onTestChange={props.onTestChange}
+            onTestChange={(test) => {
+              props.onTestChange(test, false);
+            }}
           />
         </div>
         {props.runState?.status === 'success' &&

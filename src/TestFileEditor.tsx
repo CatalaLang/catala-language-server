@@ -148,7 +148,7 @@ export default function TestFileEditor({
   };
 
   const onTestChange = useCallback(
-    (newValue: Test): void => {
+    (newValue: Test, mayBeBatched: boolean): void => {
       if (state.state === 'success') {
         const idx = state.tests.findIndex(
           (tst) => tst.testing_scope === newValue.testing_scope
@@ -166,7 +166,7 @@ export default function TestFileEditor({
         vscode.postMessage(
           writeUpMessage({
             kind: 'GuiEdit',
-            value: newTestState,
+            value: [newTestState, mayBeBatched],
           })
         );
       }
@@ -189,7 +189,7 @@ export default function TestFileEditor({
         vscode.postMessage(
           writeUpMessage({
             kind: 'GuiEdit',
-            value: newTestState,
+            value: [newTestState, false],
           })
         );
       }

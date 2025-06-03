@@ -141,7 +141,7 @@ export type FileSelection = {
 
 export type UpMessage =
 | { kind: 'Ready' }
-| { kind: 'GuiEdit'; value: TestList }
+| { kind: 'GuiEdit'; value: [TestList, boolean] }
 | { kind: 'OpenInTextEditor' }
 | { kind: 'TestRunRequest'; value: TestRunRequest }
 | { kind: 'TestGenerateRequest'; value: TestGenerateRequest }
@@ -611,7 +611,7 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
     case 'Ready':
       return 'Ready'
     case 'GuiEdit':
-      return ['GuiEdit', writeTestList(x.value, x)]
+      return ['GuiEdit', ((x, context) => [writeTestList(x[0], x), _atd_write_bool(x[1], x)])(x.value, x)]
     case 'OpenInTextEditor':
       return 'OpenInTextEditor'
     case 'TestRunRequest':
@@ -641,7 +641,7 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
     _atd_check_json_tuple(2, x, context)
     switch (x[0]) {
       case 'GuiEdit':
-        return { kind: 'GuiEdit', value: readTestList(x[1], x) }
+        return { kind: 'GuiEdit', value: ((x, context): [TestList, boolean] => { _atd_check_json_tuple(2, x, context); return [readTestList(x[0], x), _atd_read_bool(x[1], x)] })(x[1], x) }
       case 'TestRunRequest':
         return { kind: 'TestRunRequest', value: readTestRunRequest(x[1], x) }
       case 'TestGenerateRequest':
