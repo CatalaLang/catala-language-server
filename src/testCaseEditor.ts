@@ -56,7 +56,7 @@ class CatalaTestCaseDocument
 
   // Fired when an edit is made, notify vs code
   // (which in turn manages the undo stack and dirty indicator...)
-  // this does **not** require an explicit subscription in
+  // This does **not** require an explicit subscription in
   // our code.
   // Triggered from `setContents()`
   private readonly _onDidChange = new vscode.EventEmitter<
@@ -65,7 +65,8 @@ class CatalaTestCaseDocument
   public readonly onDidChange = this._onDidChange.event;
 
   // This event is used to trigger UI refreshes.
-  // It is fired on GUI edits, undo and redo operations
+  // It is fired on GUI edits, undo and redo operations.
+  // We subscribe to this event from `resolveCustomEditor`
   private readonly _onDidChangeDocument = new vscode.EventEmitter<
     vscode.CustomDocumentContentChangeEvent<CatalaTestCaseDocument>
   >();
@@ -106,7 +107,7 @@ class CatalaTestCaseDocument
 
   async revert(_cancellation: vscode.CancellationToken): Promise<void> {
     const diskContent = await CatalaTestCaseDocument.readFile(this.uri);
-    this._parseResults = parseContents(diskContent);
+    this._parseResults = parseContents(diskContent, this._uri, this._language);
     this._history = this._savedHistory;
 
     this._onDidChangeDocument.fire({
@@ -145,9 +146,13 @@ class CatalaTestCaseDocument
   public setContents(tests: TestList): void {
     // XXX revisit API
     this._parseResults = { kind: 'Results', value: tests };
+    this._history.push(this._parseResults);
+
     this._onDidChange.fire({
       document: this,
       label: 'edit',
+      //XXX we might want to make undo/redo logic slightly clearer
+      //(avoid relying on this to ease reasoning)
       undo: (): void => {
         const lastRev = this._history.pop();
         if (lastRev !== undefined) {
@@ -156,9 +161,12 @@ class CatalaTestCaseDocument
         }
       },
       redo: (): void => {
-        throw new Error('unimplemented');
+        this._history.push(this._parseResults);
+        this._onDidChangeDocument.fire({ document: this });
       },
     });
+
+    this._onDidChangeDocument.fire({ document: this });
   }
 
   private constructor(uri: vscode.Uri, initialContent: Uint8Array) {
@@ -166,13 +174,21 @@ class CatalaTestCaseDocument
     this._uri = uri;
     this._language = getLanguageFromUri(this._uri);
     // XXX not sure...
-    this._parseResults = parseContents(initialContent);
+    this._parseResults = parseContents(
+      initialContent,
+      this._uri,
+      this._language
+    );
   }
 }
 
-function parseContents(content: Uint8Array): ParseResults {
+function parseContents(
+  content: Uint8Array,
+  uri: vscode.Uri,
+  language: string
+): ParseResults {
   const documentText = new TextDecoder('utf-8').decode(content);
-  return parseTestFile(documentText, this._language, this._uri.fsPath);
+  return parseTestFile(documentText, language, uri.fsPath);
 }
 
 // This class contains the 'backend' part of the test case editor that
@@ -233,6 +249,13 @@ export class TestCaseEditorProvider
       uri,
       openContext.backupId
     );
+
+    const docChangeSubscription = document.onDidChange((e) => {
+      this._onDidChangeCustomDocument.fire(e);
+    });
+    document.onDidDispose(() => {
+      docChangeSubscription.dispose();
+    });
 
     return document;
   }
