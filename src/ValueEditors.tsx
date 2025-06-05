@@ -274,6 +274,15 @@ function RatEditor(props: RatEditorProps): ReactElement {
       runtimeValue?.value.kind === 'Decimal'
         ? runtimeValue.value.value
         : undefined;
+    if (parseFloat(displayValue) == newValue) {
+      // we're doing an equality check on floats here;
+      // but its sole purpose is to preserve user input when
+      // inputting a decimal separator, i.e. when
+      // the user is typing '13.4' in the process of typing
+      // '13.42' ; so the usefulness of this comparison is
+      // to keep the user-supplied string to '13.' instead of '13'
+      return;
+    }
     setDisplayValue(newValue?.toString() ?? '');
   }, [runtimeValue]);
 
