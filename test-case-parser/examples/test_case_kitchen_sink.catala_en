@@ -1,35 +1,56 @@
 > Using Kitchensink
 
-```catala
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
 declaration scope DateComp_test:
   output date_comp scope Kitchensink.DateComp
   
+```
+
+```catala
 scope DateComp_test:
   definition date_comp.birthday equals |1982-07-16|
 ```
 
-```catala
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
 declaration scope DurationComp_test:
   output duration_comp scope Kitchensink.DurationComp
   
+```
+
+```catala
 scope DurationComp_test:
   definition duration_comp.duration_until_next_vacation equals 2 month
 ```
 
-```catala
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
 declaration scope MoneyComp_test:
   output money_comp scope Kitchensink.MoneyComp
-
-scope MoneyComp_test:
-  definition money_comp.gross_price equals $100
-  assertion money_comp.price_including_vat = $120
+  
 ```
 
 ```catala
-declaration scope LunchReimbursement_test:
-  output out scope Kitchensink.LunchReimbursement
+scope MoneyComp_test:
+  definition money_comp.gross_price equals $100.00
+  assertion (money_comp.price_including_vat = $120.00)
+```
 
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
+declaration scope LunchReimbursement_test:
+  output lunch_reimbursement scope Kitchensink.LunchReimbursement
+  
+```
+
+```catala
 scope LunchReimbursement_test:
-  definition out.option equals FixedPrice
-  assertion out.reimbursement = $20
+  definition lunch_reimbursement.option equals
+    Kitchensink.LunchOption.FixedPrice
+  assertion (lunch_reimbursement.reimbursement = $20.00)
 ```

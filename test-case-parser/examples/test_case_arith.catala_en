@@ -1,20 +1,30 @@
 > Using Arith
 
-```catala
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
 declaration scope A_test:
   output a scope Arith.A
   
+```
+
+```catala
 scope A_test:
   definition a.a equals 2
   definition a.b equals 4
   definition a.c equals Arith.Pair { -- x: 50 -- y: 200. }
-  assertion a.w = 42
+  assertion (a.w = 42)
 ```
 
-```catala
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
 declaration scope B_test:
   output a scope Arith.A
   
+```
+
+```catala
 scope B_test:
   definition a.a equals 2
   definition a.b equals 3

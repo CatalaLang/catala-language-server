@@ -1,11 +1,16 @@
 > Using Bool
 
-```catala
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
 declaration scope A_test:
-  output aout scope Bool.A
+  output a scope Bool.A
+  
+```
 
+```catala
 scope A_test:
-  definition aout.x equals 22
-  definition aout.add_meaning_of_life equals true
-  assertion aout.out = 1337
+  definition a.x equals 22
+  definition a.add_meaning_of_life equals true
+  assertion (a.out = 1337)
 ```
