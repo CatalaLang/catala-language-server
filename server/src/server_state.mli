@@ -18,13 +18,17 @@ open Server_types
 
 type 'result document_state = {
   document_id : Doc_id.t;
+  contents : string option;
   project : Projects.project;
   project_file : Projects.project_file;
-  process_result : 'result option;
+  last_valid_result : 'result option;
+  fwd_deps : Doc_id.Set.t;
+  bwd_deps : Doc_id.Set.t;
   diagnostics : Linol_lwt.Jsonrpc2.Diagnostic.t list;
 }
 
 val make_empty_document :
+  ?contents:string ->
   Doc_id.doc_id ->
   Projects.project ->
   Projects.project_file ->

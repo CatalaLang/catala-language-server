@@ -37,6 +37,11 @@ let is_included (p : Pos.t) p' =
   && Pos.get_start_column p >= Pos.get_start_column p'
   && Pos.get_end_column p <= Pos.get_end_column p'
 
+let dummy_range =
+  Range.create
+    ~start:{ line = 0; character = 0 }
+    ~end_:{ line = 0; character = 0 }
+
 let lsp_pos line character = Lsp.Types.Position.create ~line ~character
 let lsp_range start end_ = Lsp.Types.Range.create ~start ~end_
 let start_pos = lsp_pos 1 1

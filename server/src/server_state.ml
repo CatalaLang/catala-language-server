@@ -19,18 +19,24 @@ open Lwt.Syntax
 
 type 'a document_state = {
   document_id : Doc_id.t;
+  contents : string option;
   project : Projects.project;
   project_file : Projects.project_file;
-  process_result : 'a option;
+  last_valid_result : 'a option;
+  fwd_deps : Doc_id.Set.t;
+  bwd_deps : Doc_id.Set.t;
   diagnostics : Linol_lwt.Jsonrpc2.Diagnostic.t list;
 }
 
-let make_empty_document document_id project project_file =
+let make_empty_document ?contents document_id project project_file =
   {
     document_id;
+    contents;
     project;
     project_file;
-    process_result = None;
+    last_valid_result = None;
+    fwd_deps = Doc_id.Set.empty;
+    bwd_deps = Doc_id.Set.empty;
     diagnostics = [];
   }
 
