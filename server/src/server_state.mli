@@ -18,6 +18,7 @@ open Server_types
 
 type 'result document_state = {
   document_id : Doc_id.t;
+  contents : string option;
   project : Projects.project;
   project_file : Projects.project_file;
   process_result : 'result option;
@@ -25,6 +26,7 @@ type 'result document_state = {
 }
 
 val make_empty_document :
+  ?contents:string ->
   Doc_id.doc_id ->
   Projects.project ->
   Projects.project_file ->
