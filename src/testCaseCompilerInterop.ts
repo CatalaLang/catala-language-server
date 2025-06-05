@@ -88,7 +88,7 @@ export function runTestScope(
     //compile dependencies (hack)
     const cwd = getCwd(filename);
     if (cwd) {
-      const relFilename = path.relative(cwd ?? '', filename);
+      const relFilename = path.relative(cwd, filename);
       execFileSync('clerk', ['run', relFilename], { cwd });
     }
     const result = execFileSync(cmd, args);
