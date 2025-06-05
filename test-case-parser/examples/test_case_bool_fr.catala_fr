@@ -1,10 +1,15 @@
 > Usage de Bool
 
-```catala
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
 déclaration champ d'application A_test:
-  résultat aout champ d'application Bool.A
+  résultat a champ d'application Bool.A
+  
+```
 
+```catala
 champ d'application A_test:
-  définition aout.x égal à 22
-  définition aout.add_meaning_of_life égal à vrai
+  définition a.x égal à 22
+  définition a.add_meaning_of_life égal à vrai
 ```
