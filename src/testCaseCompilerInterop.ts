@@ -91,7 +91,7 @@ export function runTestScope(
       const relFilename = path.relative(cwd, filename);
       execFileSync('clerk', ['run', relFilename], { cwd });
     }
-    const result = execFileSync(cmd, args);
+    const result = execFileSync(cmd, args, { ...(cwd && { cwd }) });
     const test = readTest(JSON.parse(result.toString()));
     return {
       kind: 'Ok',
