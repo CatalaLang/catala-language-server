@@ -67,6 +67,24 @@ let use s (f : 'result server_state -> 'a Lwt.t) : 'a Lwt.t =
     s.delayed_state <- Ready server_state;
     f server_state
 
+let use_if_ready s (f : 'result server_state -> 'a Lwt.t) : 'a option Lwt.t =
+  Lwt_mutex.with_lock s.lock
+  @@ fun () ->
+  match s.delayed_state with
+  | Ready state ->
+    let* x = f state in
+    Lwt.return_some x
+  | Delayed _ -> Lwt.return_none
+
+let use_now s (f : 'result server_state -> 'a Lwt.t) : 'a Lwt.t =
+  Lwt_mutex.with_lock s.lock
+  @@ fun () ->
+  match s.delayed_state with
+  | Ready state -> f state
+  | Delayed { curr_server_state; _ } ->
+    Log.debug (fun m -> m "processing on potentially outdated document state");
+    f curr_server_state
+
 let use_and_update
     s
     (f : 'result server_state -> ('a * 'result server_state) Lwt.t) : 'a Lwt.t =

@@ -74,8 +74,21 @@ let should_ignore (uri : Doc_id.t) =
           file);
   b
 
+let retrieve_existing_document_if_ready doc_id server_state =
+  SState.use_if_ready server_state
+  @@ fun { documents; _ } ->
+  match Doc_id.Map.find_opt doc_id documents with
+  | Some { process_result = Some f; _ } -> Lwt.return_some f
+  | _ -> Lwt.return_none
+
+let retrieve_existing_document_now doc_id server_state =
+  SState.use_now server_state
+  @@ fun { documents; _ } ->
+  match Doc_id.Map.find_opt doc_id documents with
+  | Some { process_result = Some f; _ } -> Lwt.return_some f
+  | _ -> Lwt.return_none
+
 let retrieve_existing_document doc_id server_state =
-  (* TODO: ensure that we resolve the doc_id's thread if any. *)
   SState.use server_state
   @@ fun { documents; _ } ->
   match Doc_id.Map.find_opt doc_id documents with
@@ -326,38 +339,41 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri textDocument.uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? f = retrieve_existing_document doc_id server_state in
-        let suggestions_opt = State.lookup_suggestions f range in
-        let actions_opt : CodeAction.t list option =
-          Option.map
-            (fun (range, suggestions) ->
-              let changes : (DocumentUri.t * TextEdit.t list) list option =
-                Option.some
-                @@ List.map
-                     (fun suggestion ->
-                       ( textDocument.uri,
-                         [TextEdit.create ~range ~newText:suggestion] ))
-                     suggestions
-              in
-              [
-                CodeAction.create ~title:"suggestions"
-                  ~kind:CodeActionKind.QuickFix ~isPreferred:true
-                  ~edit:
-                    {
-                      changes;
-                      documentChanges = None;
-                      changeAnnotations = None;
-                    }
-                  ();
-              ])
-            suggestions_opt
-        in
-        let result =
-          Option.map
-            (fun l -> List.map (fun action -> `CodeAction action) l)
-            actions_opt
-        in
-        Lwt.return result
+        let*? r = retrieve_existing_document_if_ready doc_id server_state in
+        match r with
+        | None -> Lwt.return_none
+        | Some f ->
+          let suggestions_opt = State.lookup_suggestions f range in
+          let actions_opt : CodeAction.t list option =
+            Option.map
+              (fun (range, suggestions) ->
+                let changes : (DocumentUri.t * TextEdit.t list) list option =
+                  Option.some
+                  @@ List.map
+                       (fun suggestion ->
+                         ( textDocument.uri,
+                           [TextEdit.create ~range ~newText:suggestion] ))
+                       suggestions
+                in
+                [
+                  CodeAction.create ~title:"suggestions"
+                    ~kind:CodeActionKind.QuickFix ~isPreferred:true
+                    ~edit:
+                      {
+                        changes;
+                        documentChanges = None;
+                        changeAnnotations = None;
+                      }
+                    ();
+                ])
+              suggestions_opt
+          in
+          let result =
+            Option.map
+              (fun l -> List.map (fun action -> `CodeAction action) l)
+              actions_opt
+          in
+          Lwt.return result
 
     method! on_req_completion
         ~notify_back:_
@@ -371,7 +387,7 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? f = retrieve_existing_document doc_id server_state in
+        let*? f = retrieve_existing_document_now doc_id server_state in
         let suggestions_opt = State.lookup_suggestions_by_pos f pos in
         match suggestions_opt with
         | None -> Lwt.return_none
