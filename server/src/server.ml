@@ -16,7 +16,7 @@
 
 open Catala_utils
 open Server_types
-module SState = Server_state_types
+module SState = Server_state
 
 let ( let*? ) v f =
   Lwt.bind v @@ function None -> Lwt.return_none | Some x -> f x
