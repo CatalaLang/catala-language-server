@@ -11,6 +11,7 @@ import {
 } from './generated/test_case';
 import { logger } from './logger';
 import { Uri, window, workspace } from 'vscode';
+import path from 'path';
 
 function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
@@ -84,6 +85,12 @@ export function runTestScope(
   const args = ['testcase', 'run', '--scope', testScope, filename];
   logger.log(`Exec: ${cmd} ${args.join(' ')}`);
   try {
+    //compile dependencies (hack)
+    const cwd = getCwd(filename);
+    if (cwd) {
+      const relFilename = path.relative(cwd ?? '', filename);
+      execFileSync('clerk', ['run', relFilename], { cwd });
+    }
     const result = execFileSync(cmd, args);
     const test = readTest(JSON.parse(result.toString()));
     return {
