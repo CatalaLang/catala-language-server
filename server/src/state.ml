@@ -345,9 +345,9 @@ let load_module_interfaces config_dir includes program =
 let process_document
     ?previous_file
     ?contents
-    (document : file Server_state_types.document_state) : t =
+    (document : file Server_state.document_state) : t =
   let open Catala_utils in
-  let { Server_state_types.document_id = doc_id; project; project_file; _ } =
+  let { Server_state.document_id = doc_id; project; project_file; _ } =
     document
   in
   Log.info (fun m -> m "processing document '%a'" Doc_id.format doc_id);
