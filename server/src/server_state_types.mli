@@ -40,6 +40,14 @@ type 'result locked_server_state
 val use :
   'result locked_server_state -> ('result server_state -> 'a Lwt.t) -> 'a Lwt.t
 
+val use_if_ready :
+  'result locked_server_state ->
+  ('result server_state -> 'a Lwt.t) ->
+  'a option Lwt.t
+
+val use_now :
+  'result locked_server_state -> ('result server_state -> 'a Lwt.t) -> 'a Lwt.t
+
 val use_and_update :
   'result locked_server_state ->
   ('result server_state -> ('a * 'result server_state) Lwt.t) ->
