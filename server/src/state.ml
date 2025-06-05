@@ -30,7 +30,7 @@ type file = {
   doc_id : Doc_id.t;
   locale : Catala_utils.Global.backend_lang;
   scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
-  jump_table : Jump.t option;
+  jump_table : Jump_table.t option;
   errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t Doc_id.Map.t;
 }
 
@@ -90,14 +90,14 @@ let all_symbols_as_warning file =
   | None -> []
   | Some { variables; lookup_table } ->
     (* Displays the full position map in logs *)
-    (* Log.info (fun m -> m "%a@." Jump.PMap.pp variables); *)
+    (* Log.info (fun m -> m "%a@." Jump_table.PMap.pp variables); *)
     (* Generates warning diagnostic for each symbol *)
     [
       ( file.doc_id,
-        Jump.LTable.bindings lookup_table
+        Jump_table.LTable.bindings lookup_table
         |> List.map snd
         |> List.concat_map
-             (fun { Jump.declaration; definitions; usages; types } ->
+             (fun { Jump_table.declaration; definitions; usages; types } ->
                let build r = diag_r Warning (range_of_pos r) (`String "abc") in
                let declaration = Option.map (fun x -> [x]) declaration in
                [declaration; definitions; usages; types]
@@ -114,12 +114,14 @@ let all_symbols_as_warning file =
     ]
     @ [
         ( file.doc_id,
-          Jump.PMap.fold_on_file file.doc_id
+          Jump_table.PMap.fold_on_file file.doc_id
             (fun r v acc ->
               let msg =
                 Format.asprintf "%a : @[<h>%a@]"
-                  Format.(pp_print_list ~pp_sep:pp_print_space Jump.pp_var)
-                  (Jump.PMap.DS.elements v) Catala_utils.Pos.format_loc_text r
+                  Format.(
+                    pp_print_list ~pp_sep:pp_print_space Jump_table.pp_var)
+                  (Jump_table.PMap.DS.elements v)
+                  Catala_utils.Pos.format_loc_text r
               in
               diag_r Warning (range_of_pos r) (`String msg) :: acc)
             variables [] );
@@ -158,7 +160,7 @@ let generic_lookup
   let open Option in
   let uri = Option.value doc_id ~default:file_doc_id in
   let p = Utils.(lsp_range p p |> pos_of_range (uri :> File.t)) in
-  let open Jump in
+  let open Jump_table in
   let ( let* ) = Option.bind in
   let* jump_table = jump_table in
   let l = lookup jump_table p in
@@ -188,8 +190,10 @@ let lookup_type f p =
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
   let prg = f.scopelang_prg in
-  let* r, lookup_s = Jump.lookup_type jt p in
-  let kind = try Jump.Ord_lookup.max_elt lookup_s with _ -> assert false in
+  let* r, lookup_s = Jump_table.lookup_type jt p in
+  let kind =
+    try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
+  in
   let md = Type_printing.typ_to_markdown ?prg f.locale kind in
   Some (r, md)
 
@@ -197,10 +201,12 @@ let lookup_type_declaration f p =
   let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
   let ( let* ) = Option.bind in
   let* jt = f.jump_table in
-  let* _r, lookup_s = Jump.lookup_type jt p in
+  let* _r, lookup_s = Jump_table.lookup_type jt p in
   let open Shared_ast in
-  let elt = try Jump.Ord_lookup.max_elt lookup_s with _ -> assert false in
-  match (elt : Jump.type_lookup) with
+  let elt =
+    try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
+  in
+  match (elt : Jump_table.type_lookup) with
   | Expr (TStruct s, _) | Type (TStruct s, _) ->
     let _, pos = StructName.get_info s in
     Some (of_position pos)
@@ -220,11 +226,13 @@ let lookup_document_symbols file =
   match variables with
   | None -> []
   | Some variables ->
-    Jump.PMap.fold_on_file file.doc_id
+    Jump_table.PMap.fold_on_file file.doc_id
       (fun p vl acc ->
-        Jump.PMap.DS.fold
+        Jump_table.PMap.DS.fold
           (fun v acc ->
-            match Jump.var_to_symbol p v with None -> acc | Some v -> v :: acc)
+            match Jump_table.var_to_symbol p v with
+            | None -> acc
+            | Some v -> v :: acc)
           vl acc)
       variables []
 
@@ -451,7 +459,7 @@ let process_document
           prg, type_ordering
         in
         let jump_table =
-          Jump.populate input_src ctx modules_contents surface prg
+          Jump_table.populate input_src ctx modules_contents surface prg
         in
         !l, Some prg, Some jump_table
     with e ->
