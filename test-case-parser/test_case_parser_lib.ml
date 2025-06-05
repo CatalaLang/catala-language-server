@@ -713,7 +713,8 @@ let write_catala_test ppf t lang =
   in
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala@,";
-  fprintf ppf "#[testcase.test_description = %s]@\n" (String.quote t.description);
+  fprintf ppf "#[testcase.test_description = %s]@\n"
+    (String.quote t.description);
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;
@@ -749,7 +750,7 @@ let write_catala options outfile =
       | Global.Stdin _ -> "")
   in
   let _fname, with_out =
-    File.get_formatter_of_out_channel () ~source_file:(Global.Stdin "")
+    File.get_main_out_formatter () ~source_file:(Global.Stdin "")
       ~output_file:(Option.map options.Global.path_rewrite outfile)
   in
   with_out
@@ -871,7 +872,7 @@ let run_test testing_scope include_dirs options =
     Dcalc.From_scopelang.translate_program prg
   in
   Interpreter.load_runtime_modules
-    ~hashf:Hash.(finalise ~closure_conversion:false ~monomorphize_types:false)
+    ~hashf:Hash.(finalise ~monomorphize_types:false)
     dcalc_prg;
   let program_fun = Expr.unbox (Program.to_expr dcalc_prg testing_scope_name) in
   let program_fun =
