@@ -19,6 +19,10 @@ open Diagnostic
 open Linol_lwt
 open Catala_utils
 open Server_types
+open Shared_ast
+
+let ( let*? ) = Option.bind
+let ( let*?! ) (x, default) f = match x with None -> default | Some x -> f x
 
 module RangeMap = Stdlib.Map.Make (struct
   type t = Range.t
@@ -26,11 +30,17 @@ module RangeMap = Stdlib.Map.Make (struct
   let compare = compare
 end)
 
+type processing_result = {
+  prg : typed Scopelang.Ast.program;
+  used_modules : ModuleName.t File.Map.t;
+  included_files : Doc_id.Set.t;
+  jump_table : Jump_table.t;
+}
+
 type file = {
   doc_id : Doc_id.t;
   locale : Catala_utils.Global.backend_lang;
-  scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
-  jump_table : Jump_table.t option;
+  result : processing_result option;
   errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t Doc_id.Map.t;
 }
 
@@ -48,14 +58,13 @@ let pp_range fmt { Range.start; end_ } =
   in
   fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
 
-let create ?prog doc_id =
-  {
-    doc_id;
-    locale = Catala_utils.Cli.file_lang (doc_id :> File.t);
-    errors = Doc_id.Map.empty;
-    scopelang_prg = prog;
-    jump_table = None;
-  }
+let create (doc_id : Doc_id.t) ?locale result =
+  let locale =
+    match locale with
+    | Some x -> x
+    | None -> Catala_utils.Cli.file_lang (doc_id :> File.t)
+  in
+  { doc_id; locale; result; errors = Doc_id.Map.empty }
 
 let add_suggestions file doc_id range err =
   let errors =
@@ -86,9 +95,9 @@ let lookup_suggestions_by_pos file pos =
    all processed symbols in LSP. Useful to determine which expression wasn't
    properly handled. *)
 let all_symbols_as_warning file =
-  match file.jump_table with
+  match file.result with
   | None -> []
-  | Some { variables; lookup_table } ->
+  | Some { jump_table = { variables; lookup_table }; _ } ->
     (* Displays the full position map in logs *)
     (* Log.info (fun m -> m "%a@." Jump_table.PMap.pp variables); *)
     (* Generates warning diagnostic for each symbol *)
@@ -154,15 +163,14 @@ let of_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
 
 let generic_lookup
     ?doc_id
-    { doc_id = file_doc_id; jump_table; _ }
+    file
     (p : Position.t)
-    f =
+    (f : Jump_table.lookup_entry -> 'a option) =
+  let*? { jump_table; _ } = file.result in
   let open Option in
-  let uri = Option.value doc_id ~default:file_doc_id in
+  let uri = Option.value doc_id ~default:file.doc_id in
   let p = Utils.(lsp_range p p |> pos_of_range (uri :> File.t)) in
   let open Jump_table in
-  let ( let* ) = Option.bind in
-  let* jump_table = jump_table in
   let l = lookup jump_table p in
   List.filter_map f l |> List.concat |> function [] -> None | l -> Some l
 
@@ -187,21 +195,18 @@ let lookup_usages ?doc_id f p =
 
 let lookup_type f p =
   let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
-  let ( let* ) = Option.bind in
-  let* jt = f.jump_table in
-  let prg = f.scopelang_prg in
-  let* r, lookup_s = Jump_table.lookup_type jt p in
+  let*? { jump_table = jt; prg; _ } = f.result in
+  let*? r, lookup_s = Jump_table.lookup_type jt p in
   let kind =
     try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
   in
-  let md = Type_printing.typ_to_markdown ?prg f.locale kind in
+  let md = Type_printing.typ_to_markdown ~prg f.locale kind in
   Some (r, md)
 
 let lookup_type_declaration f p =
   let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
-  let ( let* ) = Option.bind in
-  let* jt = f.jump_table in
-  let* _r, lookup_s = Jump_table.lookup_type jt p in
+  let*? { jump_table = jt; _ } = f.result in
+  let*? _r, lookup_s = Jump_table.lookup_type jt p in
   let open Shared_ast in
   let elt =
     try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
@@ -220,21 +225,16 @@ let lookup_type_declaration f p =
   | Expr _ | Type _ -> None
 
 let lookup_document_symbols file =
-  let variables =
-    Option.bind file.jump_table @@ fun tbl -> Some tbl.variables
-  in
-  match variables with
-  | None -> []
-  | Some variables ->
-    Jump_table.PMap.fold_on_file file.doc_id
-      (fun p vl acc ->
-        Jump_table.PMap.DS.fold
-          (fun v acc ->
-            match Jump_table.var_to_symbol p v with
-            | None -> acc
-            | Some v -> v :: acc)
-          vl acc)
-      variables []
+  let*?! { jump_table; _ } = file.result, [] in
+  Jump_table.PMap.fold_on_file file.doc_id
+    (fun p vl acc ->
+      Jump_table.PMap.DS.fold
+        (fun v acc ->
+          match Jump_table.var_to_symbol p v with
+          | None -> acc
+          | Some v -> v :: acc)
+        vl acc)
+    jump_table.variables []
 
 exception Failed_to_load_interface of Surface.Ast.module_use
 
@@ -348,18 +348,22 @@ let load_module_interfaces config_dir includes program =
           ModuleName.Map.add mname (intf, use_map) acc)
       file_module_map ModuleName.Map.empty
   in
-  root_uses, modules
+  let file_map =
+    File.Map.filter_map
+      (fun _ -> function None -> None | Some (mname, _, _) -> Some mname)
+      file_module_map
+  in
+  root_uses, modules, file_map
 
-let process_document
-    ?previous_file
-    ?contents
-    (document : file Server_state.document_state) : t =
+let process_document ?contents (document : file Server_state.document_state) : t
+    =
   let open Catala_utils in
   let { Server_state.document_id = doc_id; project; project_file; _ } =
     document
   in
   Log.info (fun m -> m "processing document '%a'" Doc_id.format doc_id);
   let file = (doc_id :> File.t) in
+  let locale = Catala_utils.Cli.file_lang file in
   let input_src =
     match contents with
     | None -> Global.FileName file
@@ -395,7 +399,7 @@ let process_document
     | _ -> l := e :: !l
   in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
-  let errors, prog, jump_table =
+  let errors, result =
     try
       (* Resets the lexing context to a fresh one *)
       Surface.Lexer_common.context := Law;
@@ -405,26 +409,22 @@ let process_document
       in
       let (prg as surface) = prg in
       let open Catala_utils in
-      let ctx, modules_contents =
-        let root_dir, clerk_config =
-          match project.project_kind with
-          | Clerk { clerk_root_dir; clerk_config } ->
-            clerk_root_dir, clerk_config
-          | No_clerk -> project.project_dir, Clerk_config.default_config
-        in
-        let mod_uses, modules =
-          try
-            load_module_interfaces root_dir clerk_config.global.include_dirs prg
-          with e -> raise e
-        in
-        let ctx =
-          Desugared.Name_resolution.form_context (prg, mod_uses) modules
-        in
-        let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
-          Uid.Module.Map.map (fun elt -> fst elt) modules
-        in
-        ctx, modules_content
+      let root_dir, clerk_config =
+        match project.project_kind with
+        | Clerk { clerk_root_dir; clerk_config } -> clerk_root_dir, clerk_config
+        | No_clerk -> project.project_dir, Clerk_config.default_config
       in
+      let mod_uses, modules, used_modules =
+        try load_module_interfaces root_dir clerk_config.global.include_dirs prg
+        with e -> raise e
+      in
+      let ctx =
+        Desugared.Name_resolution.form_context (prg, mod_uses) modules
+      in
+      let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
+        Uid.Module.Map.map (fun elt -> fst elt) modules
+      in
+      let ctx, modules_contents = ctx, modules_content in
       let prg =
         Desugared.From_surface.translate_program ctx modules_contents prg
       in
@@ -438,7 +438,7 @@ let process_document
         (* If the module is external, we skip it as the translation from
            desugared would trigger an error *)
         Log.debug (fun m -> m "skipping external module interface");
-        [], None, None
+        [], None
       | _ ->
         let prg =
           Scopelang.From_desugared.translate_program prg exceptions_graphs
@@ -455,13 +455,25 @@ let process_document
           in
           let prg = Scopelang.Ast.type_program prg in
           let prg = Dcalc.From_scopelang.translate_program prg in
-          let prg = Shared_ast.Typing.program ~internal_check:true prg in
+          let prg = Typing.program ~internal_check:true prg in
           prg, type_ordering
         in
         let jump_table =
           Jump_table.populate input_src ctx modules_contents surface prg
         in
-        !l, Some prg, Some jump_table
+        let included_files =
+          let scan_item = Clerk_scan.catala_file (doc_id :> File.t) locale in
+          List.map
+            (fun f ->
+              let file = Mark.remove f |> File.clean_path in
+              assert (not (Filename.is_relative file));
+              Doc_id.of_file file)
+            scan_item.included_files
+          |> Doc_id.Set.of_list
+        in
+        let result = { prg; used_modules; included_files; jump_table } in
+        Log.info (fun m -> m "successful validation of %a" Doc_id.format doc_id);
+        !l, Some result
     with e ->
       let errors =
         let e = match e with Fun.Finally_raised e -> e | e -> e in
@@ -500,23 +512,11 @@ let process_document
             Log.debug (fun m -> m "error (%d/%d): %t" (succ i) err_len pp_err)
           else Log.debug (fun m -> m "error: %t" pp_err))
         errors;
-      List.rev !l, None, None
+      List.rev !l, None
   in
-  let file = create ?prog doc_id in
-  let file =
-    match previous_file, jump_table with
-    | Some { jump_table = Some jump_table; scopelang_prg; _ }, None ->
-      { file with jump_table = Some jump_table; scopelang_prg }
-    | _, Some jump_table -> { file with jump_table = Some jump_table }
-    | (None | Some _), None -> file
-  in
+  let file = create doc_id result in
   List.fold_left
     (fun f (err : Catala_utils.Message.lsp_error) ->
-      let dummy_range =
-        Range.create
-          ~start:{ line = 0; character = 0 }
-          ~end_:{ line = 0; character = 0 }
-      in
       let uri, range =
         match err.pos, err.kind with
         | None, _ -> doc_id, dummy_range
