@@ -313,7 +313,7 @@ let pp_module locale fmt (mcontent : Surface.Ast.module_content) =
   | Interface items ->
     fprintf fmt "@[<v>%a@]"
       (pp_print_list ~pp_sep:pp_print_space pp_code_block)
-      items
+      (List.map Mark.remove items)
   | Code (ls : law_structure list) ->
     let rec loop = function
       | [] -> ()
