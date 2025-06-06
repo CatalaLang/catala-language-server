@@ -72,21 +72,21 @@ let retrieve_existing_document_if_ready doc_id server_state =
   SState.use_if_ready server_state
   @@ fun { documents; _ } ->
   match Doc_id.Map.find_opt doc_id documents with
-  | Some { process_result = Some f; _ } -> Lwt.return_some f
+  | Some { last_valid_result = Some f; _ } -> Lwt.return_some f
   | _ -> Lwt.return_none
 
 let retrieve_existing_document_now doc_id server_state =
   SState.use_now server_state
   @@ fun { documents; _ } ->
   match Doc_id.Map.find_opt doc_id documents with
-  | Some { process_result = Some f; _ } -> Lwt.return_some f
+  | Some { last_valid_result = Some f; _ } -> Lwt.return_some f
   | _ -> Lwt.return_none
 
 let retrieve_existing_document doc_id server_state =
   SState.use server_state
   @@ fun { documents; _ } ->
   match Doc_id.Map.find_opt doc_id documents with
-  | Some { process_result = Some f; _ } -> Lwt.return_some f
+  | Some { last_valid_result = Some f; _ } -> Lwt.return_some f
   | _ -> Lwt.return_none
 
 let send_diagnostics ~notify_back doc_id file =
@@ -109,34 +109,30 @@ let unlocked_process_file
     ~notify_back
     doc_id
     { SState.projects; documents } =
-  Doc_id.Map.find_opt doc_id documents
-  |> function
-  | Some document ->
-    let previous_file = document.process_result in
-    let new_file = State.process_document ?previous_file ?contents document in
-    let documents =
-      Doc_id.Map.add document.document_id
-        { document with contents; process_result = Some new_file }
-        documents
-    in
-    let new_state = { SState.projects; documents } in
-    Lwt.return (new_file, new_state)
-  | None ->
-    let (project_file, project), new_projects_opt =
-      lookup_project ~notify_back doc_id projects
-    in
-    let projects = Option.value ~default:projects new_projects_opt in
-    let document =
-      SState.make_empty_document ?contents doc_id project project_file
-    in
-    let new_file = State.process_document ?contents document in
-    let documents =
-      Doc_id.Map.add document.document_id
-        { document with process_result = Some new_file }
-        documents
-    in
-    let new_state = { SState.projects; documents } in
-    Lwt.return (new_file, new_state)
+  let document, projects =
+    Doc_id.Map.find_opt doc_id documents
+    |> function
+    | Some document -> document, projects
+    | None ->
+      let (project_file, project), new_projects_opt =
+        lookup_project ~notify_back doc_id projects
+      in
+      let projects = Option.value ~default:projects new_projects_opt in
+      SState.make_empty_document ?contents doc_id project project_file, projects
+  in
+  let new_file = State.process_document ?contents document in
+  let last_valid_result =
+    match new_file.result with
+    | None -> document.last_valid_result
+    | Some _ -> Some new_file
+  in
+  let documents =
+    Doc_id.Map.add document.document_id
+      { document with contents; last_valid_result }
+      documents
+  in
+  let new_state = { SState.projects; documents } in
+  Lwt.return (new_file, new_state)
 
 let process_file ?contents ~notify_back server_state doc_id =
   SState.use_and_update server_state
@@ -219,9 +215,9 @@ class catala_lsp_server =
         Lwt.return (Doc_id.Map.find_opt doc_id documents)
       in
       match doc_opt with
-      | Some { SState.process_result = None; _ } | None ->
+      | Some { SState.last_valid_result = None; _ } | None ->
         process_file ~notify_back server_state doc_id
-      | Some { process_result = Some x; _ } -> Lwt.return x
+      | Some { last_valid_result = Some x; _ } -> Lwt.return x
 
     method private on_doc
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
