@@ -327,7 +327,7 @@ let find_file_in_project doc_id (project : project) =
 
 let reload_project ~notify_back project projects =
   let project = project_of_folder ~notify_back project.project_dir in
-  Projects.add project projects
+  project, Projects.add project projects
 
 exception Project_not_found
 

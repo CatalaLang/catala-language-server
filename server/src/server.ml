@@ -16,6 +16,7 @@
 
 open Catala_utils
 open Server_types
+open Utils
 module SState = Server_state
 
 let ( let*? ) v f =
@@ -89,23 +90,65 @@ let retrieve_existing_document doc_id server_state =
   | Some { last_valid_result = Some f; _ } -> Lwt.return_some f
   | _ -> Lwt.return_none
 
-let send_diagnostics ~notify_back doc_id file =
-  (* FIXME: use project scan to send all diagnostics *)
-  Log.debug (fun m -> m "sending diagnostics");
-  State.all_diagnostics file
-  |> function
-  | [] ->
-    notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
-    notify_back#send_diagnostic []
-  | all_diags ->
-    Lwt_list.iter_s
-      (fun (doc_id, diags) ->
-        notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
-        notify_back#send_diagnostic diags)
-      all_diags
+let unlocked_send_all_diagnostics =
+  let previous_diags = ref Doc_id.Map.empty in
+  fun ~notify_back unlocked_server_state (file : State.file) ->
+    let open Lwt.Syntax in
+    let {
+      SState.projects = _;
+      documents : State.file SState.document_state Doc_id.Map.t;
+    } =
+      unlocked_server_state
+    in
+    let doc_id = file.doc_id in
+    let all_diagnostics : Diagnostic.t RangeMap.t Doc_id.Map.t =
+      Doc_id.Map.fold
+        (fun _doc_id doc_state acc ->
+          Doc_id.Map.union
+            (fun _ l r -> Some (RangeMap.union (fun _ l _ -> Some l) l r))
+            doc_state.SState.errors acc)
+        documents Doc_id.Map.empty
+    in
+    let extra_diags =
+      (* Compute diags that differs from last time to "reset" diagnostics *)
+      Doc_id.Map.fold
+        (fun doc_id _ acc ->
+          if Doc_id.Map.mem doc_id all_diagnostics then acc
+          else (doc_id, []) :: acc)
+        !previous_diags []
+    in
+    previous_diags := all_diagnostics;
+    Log.debug (fun m -> m "sending all diagnostics");
+    let send_diagnostics (doc_id, diags) =
+      notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+      notify_back#send_diagnostic diags
+    in
+    if Doc_id.Map.is_empty all_diagnostics then begin
+      notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+      let* () = notify_back#send_diagnostic [] in
+      let* () = Lwt_list.iter_s send_diagnostics extra_diags in
+      Lwt.return_unit
+    end
+    else
+      let all_diagnostics : Diagnostic.t list Doc_id.Map.t =
+        Doc_id.Map.map
+          (fun rmap -> List.map snd (RangeMap.bindings rmap))
+          all_diagnostics
+      in
+      let* () =
+        Doc_id.Map.bindings all_diagnostics |> Lwt_list.iter_s send_diagnostics
+      in
+      let* () = Lwt_list.iter_s send_diagnostics extra_diags in
+      Lwt.return_unit
+
+let send_all_diagnostics ~notify_back server_state (file : State.file) =
+  SState.use_now server_state
+  @@ fun unlocked_sstate ->
+  unlocked_send_all_diagnostics ~notify_back unlocked_sstate file
 
 let unlocked_process_file
     ?contents
+    ?(is_saved = false)
     ~notify_back
     doc_id
     { SState.projects; documents } =
@@ -121,24 +164,55 @@ let unlocked_process_file
       SState.make_empty_document ?contents doc_id project project_file, projects
   in
   let new_file = State.process_document ?contents document in
-  let last_valid_result =
-    match new_file.result with
-    | None -> document.last_valid_result
-    | Some _ -> Some new_file
+  let should_refresh_project =
+    is_saved
+    &&
+    match document.last_valid_result, new_file.result with
+    | Some { result = Some result; _ }, Some new_result ->
+      not
+        (Doc_id.Set.equal result.included_files new_result.included_files
+        && File.Map.keys result.used_modules
+           = File.Map.keys new_result.used_modules)
+    | _ -> false
   in
-  let documents =
-    Doc_id.Map.add document.document_id
-      { document with contents; last_valid_result }
-      documents
-  in
-  let new_state = { SState.projects; documents } in
-  Lwt.return (new_file, new_state)
+  if should_refresh_project then
+    let () =
+      Log.info (fun m ->
+          m "dependencies changed in %a: reloading project" Doc_id.format doc_id)
+    in
+    let project, projects =
+      Projects.reload_project ~notify_back document.project projects
+    in
+    let project_file =
+      Projects.find_file_in_project doc_id project |> Option.get
+    in
+    let fresh_document =
+      Server_state.make_empty_document ?contents doc_id project project_file
+    in
+    let document = { fresh_document with last_valid_result = Some new_file } in
+    Lwt.return
+      ( new_file,
+        { SState.projects; documents = Doc_id.Map.singleton doc_id document } )
+  else
+    let last_valid_result =
+      match new_file.result with
+      | None -> document.last_valid_result
+      | Some _ -> Some new_file
+    in
+    let errors = State.all_diagnostics new_file in
+    let documents =
+      Doc_id.Map.add document.document_id
+        { document with contents; last_valid_result; errors }
+        documents
+    in
+    let new_state = { SState.projects; documents } in
+    Lwt.return (new_file, new_state)
 
-let process_file ?contents ~notify_back server_state doc_id =
+let process_file ?contents ?is_saved ~notify_back server_state doc_id =
   SState.use_and_update server_state
   @@ fun unlocked_server_state ->
-  (* TODO: figure out a way to properly update projects on dependency changes *)
-  unlocked_process_file ?contents ~notify_back doc_id unlocked_server_state
+  unlocked_process_file ?contents ?is_saved ~notify_back doc_id
+    unlocked_server_state
 
 class catala_lsp_server =
   let open Linol_lwt in
@@ -221,31 +295,35 @@ class catala_lsp_server =
 
     method private on_doc
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
+        ?is_saved
         (doc_id : Doc_id.t)
         (contents : string option) =
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
         @@ fun () ->
-        let* file = process_file ?contents ~notify_back server_state doc_id in
-        send_diagnostics ~notify_back doc_id file
+        let* file =
+          process_file ?contents ?is_saved ~notify_back server_state doc_id
+        in
+        send_all_diagnostics ~notify_back server_state file
 
     method on_notif_doc_did_open ~notify_back d ~content =
       let doc_id = Doc_id.of_lsp_uri d.uri in
-      self#on_doc ~notify_back doc_id (Some content)
+      self#on_doc ~notify_back ~is_saved:true doc_id (Some content)
 
     method private document_changed ~notify_back ?new_content doc_id =
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
         @@ fun () ->
+        notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+        let* () = notify_back#send_diagnostic [] in
         SState.delayed_update doc_id server_state
         @@ fun state ->
-        notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
         let* file, new_state =
           unlocked_process_file ?contents:new_content ~notify_back doc_id state
         in
-        let* () = send_diagnostics ~notify_back doc_id file in
+        let* () = unlocked_send_all_diagnostics ~notify_back new_state file in
         Lwt.return new_state
 
     method on_notif_doc_did_change
@@ -258,7 +336,7 @@ class catala_lsp_server =
 
     method! on_notif_doc_did_save ~notify_back d =
       let doc_id = Doc_id.of_lsp_uri d.textDocument.uri in
-      self#on_doc ~notify_back doc_id None
+      self#on_doc ~notify_back ~is_saved:true doc_id None
 
     method private on_notif_did_change_watched_files ~notify_back changes =
       (* Triggers even on save.. *)
@@ -279,7 +357,7 @@ class catala_lsp_server =
         Lwt.return_unit
       | UnknownNotification notif ->
         let json = Jsonrpc.Notification.yojson_of_t notif in
-        Log.warn (fun m -> m "unkown notification: %a" Yojson.Safe.pp json);
+        Log.warn (fun m -> m "unknown notification: %a" Yojson.Safe.pp json);
         Lwt.return_unit
       | DidChangeWatchedFiles { changes } ->
         self#on_notif_did_change_watched_files ~notify_back changes
