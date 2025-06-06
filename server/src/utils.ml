@@ -37,6 +37,12 @@ let is_included (p : Pos.t) p' =
   && Pos.get_start_column p >= Pos.get_start_column p'
   && Pos.get_end_column p <= Pos.get_end_column p'
 
+module RangeMap = Stdlib.Map.Make (struct
+  type t = Range.t
+
+  let compare = compare
+end)
+
 let dummy_range =
   Range.create
     ~start:{ line = 0; character = 0 }

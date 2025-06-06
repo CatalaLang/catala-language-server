@@ -65,7 +65,7 @@ val reload_project :
   notify_back:Linol_lwt.Jsonrpc2.notify_back ->
   project ->
   Projects.t ->
-  Projects.t
+  project * Projects.t
 
 exception Project_not_found
 

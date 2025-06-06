@@ -24,12 +24,6 @@ open Shared_ast
 let ( let*? ) = Option.bind
 let ( let*?! ) (x, default) f = match x with None -> default | Some x -> f x
 
-module RangeMap = Stdlib.Map.Make (struct
-  type t = Range.t
-
-  let compare = compare
-end)
-
 type processing_result = {
   prg : typed Scopelang.Ast.program;
   used_modules : ModuleName.t File.Map.t;
@@ -41,7 +35,8 @@ type file = {
   doc_id : Doc_id.t;
   locale : Catala_utils.Global.backend_lang;
   result : processing_result option;
-  errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t Doc_id.Map.t;
+  errors :
+    (Range.t * Catala_utils.Message.lsp_error) Utils.RangeMap.t Doc_id.Map.t;
 }
 
 type t = file
@@ -136,28 +131,26 @@ let all_symbols_as_warning file =
             variables [] );
       ]
 
-let all_diagnostics file =
+let all_diagnostics file : Diagnostic.t RangeMap.t Doc_id.Map.t =
   let open Catala_utils.Message in
-  let errs = Doc_id.Map.bindings file.errors in
-  List.map
-    (fun (uri, rmap) ->
-      ( uri,
-        List.map
-          (fun (range, (_range, err)) ->
-            let severity = err_severity err.kind in
-            let message =
-              try Format.asprintf "%t" err.message
-              with exn ->
-                (* FIXME: the pretty-printer crashes due to shady UTF-8 byte
-                   access *)
-                Log.warn (fun m ->
-                    m "exception during error message decoding: %s"
-                      (Printexc.to_string exn));
-                "Cannot display the error description, save the file first."
-            in
-            diag_r severity range (`String message))
-          (RangeMap.bindings rmap) ))
-    errs
+  Doc_id.Map.map
+    (fun rmap ->
+      RangeMap.mapi
+        (fun range (_range, err) ->
+          let severity = err_severity err.kind in
+          let message =
+            try Format.asprintf "%t" err.message
+            with exn ->
+              (* FIXME: the pretty-printer crashes due to shady UTF-8 byte
+                 access *)
+              Log.warn (fun m ->
+                  m "exception during error message decoding: %s"
+                    (Printexc.to_string exn));
+              "Cannot display the error description, save the file first."
+          in
+          diag_r severity range (`String message))
+        rmap)
+    file.errors
 
 let of_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
 
