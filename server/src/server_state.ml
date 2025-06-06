@@ -23,9 +23,7 @@ type 'a document_state = {
   project : Projects.project;
   project_file : Projects.project_file;
   last_valid_result : 'a option;
-  fwd_deps : Doc_id.Set.t;
-  bwd_deps : Doc_id.Set.t;
-  diagnostics : Linol_lwt.Jsonrpc2.Diagnostic.t list;
+  errors : Diagnostic.t Utils.RangeMap.t Doc_id.Map.t;
 }
 
 let make_empty_document ?contents document_id project project_file =
@@ -35,9 +33,7 @@ let make_empty_document ?contents document_id project project_file =
     project;
     project_file;
     last_valid_result = None;
-    fwd_deps = Doc_id.Set.empty;
-    bwd_deps = Doc_id.Set.empty;
-    diagnostics = [];
+    errors = Doc_id.Map.empty;
   }
 
 type 'a server_state = {
