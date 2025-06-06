@@ -13,7 +13,7 @@
 (library
  (name test_case_parser_lib)
  (modules test_case_t test_case_j test_case_parser_lib)
- (libraries catala.driver catala.clerk_config atdgen-runtime))
+ (libraries catala.driver catala.clerk_lib atdgen-runtime))
 
 (executable
  (name testcase)
@@ -22,7 +22,6 @@
  (libraries yojson atdgen-runtime test_case_parser_lib)
  (embed_in_plugin_libraries
   otoml
-  catala.clerk_config
   yojson
   atdgen-runtime
   test_case_parser_lib))

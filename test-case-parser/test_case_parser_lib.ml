@@ -45,7 +45,7 @@ let lookup_clerk_toml from_dir =
       | Some (abs_dir, rel) ->
         let clerk_toml_path = File.(abs_dir / "clerk.toml") in
         Message.debug "Found config file: %s" clerk_toml_path;
-        let config = Clerk_config.read clerk_toml_path in
+        let config = Clerk_lib.Clerk_config.read clerk_toml_path in
         Some (config, rel)
     end
   with _ -> None

@@ -18,6 +18,7 @@ open Utils
 open Diagnostic
 open Linol_lwt
 open Catala_utils
+open Clerk_lib
 
 module RangeMap = Stdlib.Map.Make (struct
   type t = Range.t
@@ -473,8 +474,7 @@ let process_document ?previous_file ?contents (uri : string) : t =
         Surface.Parser_driver.parse_top_level_file ?resolve_included_file
           input_src
       in
-      let (prg as surface) = prg
-      in
+      let (prg as surface) = prg in
       let open Catala_utils in
       let ctx, modules_contents =
         let mod_uses, modules =
