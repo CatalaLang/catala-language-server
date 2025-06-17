@@ -21,10 +21,11 @@
  (modules testcase)
  (libraries yojson atdgen-runtime test_case_parser_lib)
  (embed_in_plugin_libraries
-  otoml
-  yojson
-  atdgen-runtime
-  test_case_parser_lib))
+   otoml
+   catala.clerk_lib
+   yojson
+   atdgen-runtime
+   test_case_parser_lib))
 
 (install
  (files
