@@ -378,9 +378,9 @@ let invalid_testing_scope fmt =
   Format.kasprintf (fun msg -> raise (InvalidTestingScope msg)) fmt
 
 let get_test_scopes prg =
-  let re_test = Re.(compile (str "_test")) in
   prg.I.program_root.module_scopes
-  |> ScopeName.Map.filter (fun name _ -> Re.execp re_test (ScopeName.base name))
+  |> ScopeName.Map.filter (fun scope_name _scope ->
+         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test)
   |> ScopeName.Map.keys
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
@@ -712,13 +712,15 @@ let write_catala_test ppf t lang =
     String.to_snake_case sname
   in
   pp_open_vbox ppf 0;
-  fprintf ppf "@,```catala@,";
+  fprintf ppf "@,```catala-metadata@,";
+  fprintf ppf "#[test]@\n";
   fprintf ppf "#[testcase.test_description = %s]@\n"
     (String.quote t.description);
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;
-  fprintf ppf "@]@,";
+  fprintf ppf "@]@,```@,";
+  fprintf ppf "@,```catala@,";
   fprintf ppf "@[<v 2>%s %s:" strings.scope t.testing_scope;
   List.iter
     (fun (tvar, t_in) ->
