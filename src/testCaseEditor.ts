@@ -190,11 +190,15 @@ export class TestCaseEditorProvider
             const currentTests = document.parseResults;
 
             if (currentTests.kind === 'Results') {
-              newTest[0] = renameIfNeeded(currentTests.value, newTest[0]); //XXX kludge?
+              newTest[0] = renameIfNeeded(currentTests.value, newTest[0]);
               const updatedTests = [...currentTests.value, newTest[0]];
 
-              // set new document state -- this will trigger an UI update
               document.scheduleChange(updatedTests, false);
+
+              postMessageToWebView({
+                kind: 'Update',
+                value: { kind: 'Results', value: updatedTests },
+              });
             }
           } else {
             vscode.window.showErrorMessage(
