@@ -23,12 +23,7 @@ open Clerk_lib
 module RangeMap = Stdlib.Map.Make (struct
   type t = Range.t
 
-  let compare
-      ({ Range.start; end_ } as x)
-      ({ Range.start = start'; end_ = end_' } as y) =
-    if (start' >= start && end_' <= end_) || (start >= start' && end_ <= end_')
-    then 0
-    else compare x y
+  let compare = compare
 end)
 
 module UriMap = Map.Make (String)

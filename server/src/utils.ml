@@ -53,7 +53,9 @@ let range_of_pos (pos : Pos.t) : Range.t =
 
 let unclosed_range_of_pos (pos : Pos.t) : Range.t =
   let start, end_ = pos_to_loc pos in
-  { Range.start; end_ = { end_ with character = end_.character + 100_000 } }
+  if start.line = end_.line || end_.character > 0 then
+    { Range.start; end_ = { line = end_.line + 1; character = 0 } }
+  else { Range.start; end_ }
 
 let send_notification ?(type_ = MessageType.Warning) ~notify_back message =
   let message = Format.sprintf "Catala LSP: %s" message in
