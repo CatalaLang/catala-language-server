@@ -554,6 +554,17 @@
   margin-bottom: 8px;
 }
 
+.array-items-non-nested {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* for array elements that contain other arrays */
+.array-items-nested {
+  flex-wrap: nowrap;
+  flex-direction: column;
+}
+
 .array-item {
   display: flex;
   gap: 8px;
