@@ -8,12 +8,44 @@ import type {
   ValueDef,
 } from './generated/test_case';
 import ValueEditor, { createRuntimeValue } from './ValueEditors';
+import { assertUnreachable } from './util';
 
 type ArrayEditorProps = {
   elementType: Typ;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
 };
+
+// We introspect the array type to understand whether
+// there are any nested arrays down the line.
+//
+// If no nesting happens, then we display the array elements
+// as 'cards' within a 2D layout to maximize space usage --
+// otherwise, we arrange elements vertically.
+function hasNestedArrays(typ: Typ): boolean {
+  if (typ.kind === 'TArray') {
+    return true;
+  } else if (
+    typ.kind !== 'TEnum' &&
+    typ.kind !== 'TOption' &&
+    typ.kind !== 'TStruct' &&
+    typ.kind !== 'TTuple'
+  ) {
+    return false;
+  } else if (typ.kind === 'TEnum') {
+    return Array.from(typ.value.constructors.values())
+      .filter((val) => val !== null)
+      .map((val) => val?.value)
+      .some(hasNestedArrays);
+  } else if (typ.kind === 'TOption') {
+    return hasNestedArrays(typ.value);
+  } else if (typ.kind === 'TStruct') {
+    return Array.from(typ.value.fields.values()).some(hasNestedArrays);
+  } else if (typ.kind === 'TTuple') {
+    return typ.value.some(hasNestedArrays);
+  }
+  assertUnreachable(typ);
+}
 
 export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   const { elementType, valueDef, onValueChange } = props;
@@ -71,7 +103,10 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   return (
     <div className="array-editor">
-      <div className="array-items">
+      <div className="array-header">Header</div>
+      <div
+        className={`array-items ${hasNestedArrays(props.elementType) ? 'array-items-nested' : 'array-items-non-nested'}`}
+      >
         {currentArray.map((item, index) => {
           // Find the UID attribute for the key
           const uidAttr = item.attrs?.find((attr) => attr.kind === 'Uid');
@@ -129,11 +164,12 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
             </div>
           );
         })}
+        {/* Note that the button is a peer of the array items (last element) */}
+        <button className="array-add" onClick={handleAdd}>
+          <span className="codicon codicon-add"></span>
+          <FormattedMessage id="arrayEditor.addElement" />
+        </button>
       </div>
-      <button className="array-add" onClick={handleAdd}>
-        <span className="codicon codicon-add"></span>
-        <FormattedMessage id="arrayEditor.addElement" />
-      </button>
     </div>
   );
 }
