@@ -20,8 +20,9 @@ type ArrayEditorProps = {
 // there are any nested arrays down the line.
 //
 // If no nesting happens, then we display the array elements
-// as 'cards' within a 2D layout to maximize space usage --
-// otherwise, we arrange elements vertically.
+// as 'cards' within a 2D layout to maximize space use --
+// otherwise, we arrange elements vertically to keep horizontal
+// space for further nesting.
 function hasNestedArrays(typ: Typ): boolean {
   if (typ.kind === 'TArray') {
     return true;
