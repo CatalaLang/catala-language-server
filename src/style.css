@@ -548,6 +548,14 @@
   border-radius: 4px;
   padding: 8px;
   margin-bottom: 8px;
+  display: flex;
+}
+
+.array-header {
+  display: inline-flex;
+  border-right: 3px solid var(--vscode-input-border);
+  padding-right: 7px;
+  padding-left: 5px;
 }
 
 .array-items {
