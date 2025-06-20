@@ -96,28 +96,10 @@
   margin-bottom: 15px;
 }
 
-.struct-editor table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  border: 1px solid var(--vscode-editor-foreground);
-}
-
-.struct-editor th,
-.struct-editor td {
-  padding: 6px;
-  text-align: left;
-}
-
-.struct-editor th {
-  border-bottom: 1px solid var(--vscode-editor-foreground);
-}
-
 .struct-editor .struct-name {
-  background-color: var(--vscode-symbolIcon-structForeground);
-  color: var(--vscode-editor-background);
   font-style: italic;
   font-size: 12px;
+  text-decoration: underline;
   padding: 6px;
 }
 
@@ -193,33 +175,6 @@
 .struct-editor select:focus {
   outline: none;
   border-color: var(--vscode-focusBorder);
-}
-
-.test-inputs-table,
-.test-outputs-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.row-label {
-  width: 150px;
-  max-width: 150px;
-  min-width: 150px;
-  padding-right: 8px;
-  vertical-align: top;
-}
-
-.row-content {
-  width: auto;
-  min-width: 100px;
-}
-
-.row-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
 }
 
 .identifier {
@@ -555,7 +510,7 @@
   display: inline-flex;
   border-right: 3px solid var(--vscode-input-border);
   padding-right: 7px;
-  padding-left: 5px;
+  margin-right: 5px;
 }
 
 .array-items {
