@@ -20,17 +20,19 @@ open Lwt.Syntax
 type 'a document_state = {
   document_id : Doc_id.t;
   contents : string option;
+  saved : bool;
   project : Projects.project;
   project_file : Projects.project_file;
   last_valid_result : 'a option;
   errors : Diagnostic.t Utils.RangeMap.t Doc_id.Map.t;
 }
 
-let make_empty_document ?contents document_id project project_file =
+let make_document ?contents ~saved document_id project project_file =
   {
     document_id;
     contents;
     project;
+    saved;
     project_file;
     last_valid_result = None;
     errors = Doc_id.Map.empty;
@@ -38,7 +40,7 @@ let make_empty_document ?contents document_id project project_file =
 
 type 'a server_state = {
   projects : Projects.t;
-  documents : 'a document_state Doc_id.Map.t;
+  open_documents : 'a document_state Doc_id.Map.t;
 }
 
 type 'result delayed_state =
@@ -167,5 +169,7 @@ let delayed_update
     Lwt.return_unit
 
 let make () =
-  let state = { projects = Projects.empty; documents = Doc_id.Map.empty } in
+  let state =
+    { projects = Projects.empty; open_documents = Doc_id.Map.empty }
+  in
   { lock = Lwt_mutex.create (); delayed_state = Ready state }
