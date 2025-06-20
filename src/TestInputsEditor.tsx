@@ -1,6 +1,6 @@
 import { type ReactElement } from 'react';
 import type { TestInputs, TestIo } from './generated/test_case';
-import ValueEditor from './ValueEditors';
+import ValueEditor from './editors/ValueEditors';
 
 type Props = {
   test_inputs: TestInputs;

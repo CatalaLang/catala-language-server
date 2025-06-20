@@ -12,10 +12,10 @@ import type {
   EnumDeclaration,
   Typ,
   ValueDef,
-} from './generated/test_case';
+} from '../generated/test_case';
 import { ArrayEditor } from './ArrayEditor';
-import { assertUnreachable } from './util';
-import { getDefaultValue } from './defaults';
+import { assertUnreachable } from '../util';
+import { getDefaultValue } from '../defaults';
 
 // Helper to create a RuntimeValue from a RuntimeValueRaw, preserving attrs
 export function createRuntimeValue(
