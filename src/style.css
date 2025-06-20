@@ -570,7 +570,6 @@
   gap: 8px;
   align-items: center;
   padding: 8px;
-  border-bottom: 1px solid var(--vscode-panel-border);
 }
 
 .array-item:last-child {
