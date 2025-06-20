@@ -1,14 +1,14 @@
 import type { ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
-import { getDefaultValue } from './defaults';
+import { getDefaultValue } from '../defaults';
 import type {
   RuntimeValue,
   RuntimeValueRaw,
   Typ,
   ValueDef,
-} from './generated/test_case';
+} from '../generated/test_case';
 import ValueEditor, { createRuntimeValue } from './ValueEditors';
-import { assertUnreachable } from './util';
+import { assertUnreachable } from '../util';
 
 type ArrayEditorProps = {
   elementType: Typ;
