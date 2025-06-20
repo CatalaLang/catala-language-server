@@ -1,5 +1,5 @@
 import type { TestIo } from './generated/test_case';
-import ValueEditor from './ValueEditors';
+import ValueEditor from './editors/ValueEditors';
 
 type Props = {
   testIO: TestIo;
