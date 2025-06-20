@@ -15,6 +15,7 @@
   "testEditor.expand": "Développer le cas de test",
   "testEditor.run": "Exécuter le test",
   "testEditor.delete": "Supprimer le test",
+  "testEditor.description": "Description",
   "testEditor.descriptionPlaceholder": "Entrez une description du test...",
   "testEditor.passed": "Réussi",
   "testEditor.failed": "Échoué",
