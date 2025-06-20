@@ -553,7 +553,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
 
   return (
     <div className="struct-editor struct-container">
-      <div className="struct-header">{structDeclaration.struct_name}</div>
+      <div className="struct-name">{structDeclaration.struct_name}</div>
       {Array.from(fields.entries()).map(([fieldName, fieldType]) => {
         return (
           <div className="struct-section">
