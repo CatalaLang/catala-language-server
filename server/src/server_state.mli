@@ -19,14 +19,16 @@ open Server_types
 type 'result document_state = {
   document_id : Doc_id.t;
   contents : string option;
+  saved : bool;
   project : Projects.project;
   project_file : Projects.project_file;
   last_valid_result : 'result option;
   errors : Diagnostic.t Utils.RangeMap.t Doc_id.Map.t;
 }
 
-val make_empty_document :
+val make_document :
   ?contents:string ->
+  saved:bool ->
   Doc_id.doc_id ->
   Projects.project ->
   Projects.project_file ->
@@ -34,7 +36,7 @@ val make_empty_document :
 
 type 'result server_state = {
   projects : Projects.t;
-  documents : 'result document_state Doc_id.Map.t;
+  open_documents : 'result document_state Doc_id.Map.t;
 }
 
 type 'result locked_server_state
