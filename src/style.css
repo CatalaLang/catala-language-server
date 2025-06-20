@@ -606,11 +606,11 @@
 }
 
 .array-add {
-  background-color: var(--vscode-button-background);
+  background-color: transparent;
   color: var(--vscode-button-foreground);
-  border: none;
+  border: 1px dashed var(--vscode-button-background);
   padding: 4px 8px;
-  border-radius: 2px;
+  border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
