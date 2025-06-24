@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import { logger } from './logger';
 import { assertUnreachable } from './util';
 
@@ -26,6 +27,21 @@ export function parseContents(
 ): ParseResults {
   const documentText = new TextDecoder('utf-8').decode(content);
   return parseTestFile(documentText, language, uri.fsPath);
+}
+
+let catalaBasedir: string | undefined;
+
+export function getCmd(execName: string): string {
+  if (catalaBasedir === undefined) {
+    return execName;
+  } else {
+    const fullPath: string = `{catalaBasedir}/{execName}`;
+    if (!fs.existsSync(fullPath)) {
+      logger.log(`Path {fullPath} does not exist, using default`);
+      return execName;
+    }
+    return fullPath;
+  }
 }
 
 // This class contains the 'backend' part of the test case editor that
@@ -132,6 +148,8 @@ export class TestCaseEditorProvider
       );
       return;
     }
+
+    catalaBasedir = config.get<string>('catalaBasedir');
 
     webviewPanel.webview.options = {
       enableScripts: true,

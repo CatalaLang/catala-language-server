@@ -35,6 +35,10 @@
           "type": "string",
           "default": null,
           "description": "Custom path to the `catala-format` executable"
+        },
+        "catala.catalaBasedir": {
+          "type": "string",
+          "description": "Base directory for catala + clerk"
         }
       }
     },

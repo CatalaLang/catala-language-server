@@ -12,6 +12,7 @@ import {
 import { logger } from './logger';
 import { Uri, window, workspace } from 'vscode';
 import path from 'path';
+import { getCmd } from './testCaseEditor';
 
 function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
@@ -27,7 +28,7 @@ export function parseTestFile(
   // TODO we could revisit this to make the parsing async
   try {
     const results = execFileSync(
-      'catala',
+      getCmd('catala'),
       ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
       { input: content, ...(cwd && { cwd }) }
     );
@@ -52,9 +53,13 @@ export function parseTestFile(
 export function atdToCatala(tests: TestList, lang: string): string {
   //XXX this probably needs better error handling
   try {
-    const results = execFileSync('catala', ['testcase', 'write', '-l', lang], {
-      input: JSON.stringify(writeTestList(tests)),
-    });
+    const results = execFileSync(
+      getCmd('catala'),
+      ['testcase', 'write', '-l', lang],
+      {
+        input: JSON.stringify(writeTestList(tests)),
+      }
+    );
     return results.toString();
   } catch (error) {
     logger.log(`Error in atdToCatala: ${error}`);
@@ -80,7 +85,7 @@ export function runTestScope(
    * these could be handled externally as well)
    */
 
-  const cmd = 'catala';
+  const cmd = getCmd('catala');
 
   const args = ['testcase', 'run', '--scope', testScope, filename];
   logger.log(`Exec: ${cmd} ${args.join(' ')}`);
@@ -111,7 +116,7 @@ export function runTestScope(
 
 export function getAvailableScopes(filename: string): ScopeDefList {
   try {
-    const results = execFileSync('catala', [
+    const results = execFileSync(getCmd('catala'), [
       'testcase',
       'list-scopes',
       filename,
@@ -124,7 +129,7 @@ export function getAvailableScopes(filename: string): ScopeDefList {
 }
 
 export function generate(scope: string, filename: string): TestGenerateResults {
-  const cmd = 'catala';
+  const cmd = getCmd('catala');
   const args = ['testcase', 'generate', '--scope', scope, filename];
   logger.log(`${cmd} ${args}`);
   try {
