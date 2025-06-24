@@ -35,6 +35,16 @@
           "type": "string",
           "default": null,
           "description": "Custom path to the `catala-format` executable"
+        },
+        "catala.catalaPath": {
+          "type": "string",
+          "default": "catala",
+          "description": "Custom path to the `catala` executable"
+        },
+        "catala.clerkPath": {
+          "type": "string",
+          "default": "clerk",
+          "description": "Custom path to the `clerk` executable"
         }
       }
     },
