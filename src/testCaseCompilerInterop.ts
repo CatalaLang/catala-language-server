@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type { ScopeDefList, TestGenerateResults } from './generated/test_case';
 import {
@@ -17,6 +18,20 @@ function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
 }
 
+function pathFromConfig(confId: string, defaultCmd: string): string {
+  const confPath = vscode.workspace
+    .getConfiguration('catala')
+    .get<string>(confId);
+  if (confPath === undefined || confPath.trim() === '') return defaultCmd;
+  return confPath;
+}
+
+const catalaPath: string = pathFromConfig('catalaPath', 'catala');
+logger.log(`catala command: ${catalaPath}`);
+
+const clerkPath: string = pathFromConfig('clerkPath', 'clerk');
+logger.log(`clerk command: ${clerkPath}`);
+
 export function parseTestFile(
   content: string,
   lang: string,
@@ -27,7 +42,7 @@ export function parseTestFile(
   // TODO we could revisit this to make the parsing async
   try {
     const results = execFileSync(
-      'catala',
+      catalaPath,
       ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
       { input: content, ...(cwd && { cwd }) }
     );
@@ -52,9 +67,13 @@ export function parseTestFile(
 export function atdToCatala(tests: TestList, lang: string): string {
   //XXX this probably needs better error handling
   try {
-    const results = execFileSync('catala', ['testcase', 'write', '-l', lang], {
-      input: JSON.stringify(writeTestList(tests)),
-    });
+    const results = execFileSync(
+      catalaPath,
+      ['testcase', 'write', '-l', lang],
+      {
+        input: JSON.stringify(writeTestList(tests)),
+      }
+    );
     return results.toString();
   } catch (error) {
     logger.log(`Error in atdToCatala: ${error}`);
@@ -80,18 +99,16 @@ export function runTestScope(
    * these could be handled externally as well)
    */
 
-  const cmd = 'catala';
-
   const args = ['testcase', 'run', '--scope', testScope, filename];
-  logger.log(`Exec: ${cmd} ${args.join(' ')}`);
+  logger.log(`Exec: ${catalaPath} ${args.join(' ')}`);
   try {
     //compile dependencies (hack)
     const cwd = getCwd(filename);
     if (cwd) {
       const relFilename = path.relative(cwd, filename);
-      execFileSync('clerk', ['run', relFilename], { cwd });
+      execFileSync(clerkPath, ['run', relFilename], { cwd });
     }
-    const result = execFileSync(cmd, args, { ...(cwd && { cwd }) });
+    const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
     const test = readTest(JSON.parse(result.toString()));
     return {
       kind: 'Ok',
@@ -111,7 +128,7 @@ export function runTestScope(
 
 export function getAvailableScopes(filename: string): ScopeDefList {
   try {
-    const results = execFileSync('catala', [
+    const results = execFileSync(catalaPath, [
       'testcase',
       'list-scopes',
       filename,
@@ -124,7 +141,7 @@ export function getAvailableScopes(filename: string): ScopeDefList {
 }
 
 export function generate(scope: string, filename: string): TestGenerateResults {
-  const cmd = 'catala';
+  const cmd = catalaPath;
   const args = ['testcase', 'generate', '--scope', scope, filename];
   logger.log(`${cmd} ${args}`);
   try {
