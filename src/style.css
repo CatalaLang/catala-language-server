@@ -612,7 +612,7 @@
 }
 
 .simple-items-container {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -622,13 +622,16 @@
   border-radius: 4px;
   padding: 8px;
   min-width: 200px;
-  flex: 1 0 auto;
+  max-width: 300px;
 }
 
 .item-label {
+  display: block;
   font-weight: 500;
   margin-bottom: 6px;
   color: var(--vscode-foreground);
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .complex-items-container {
