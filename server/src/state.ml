@@ -28,7 +28,7 @@ type processing_result = {
   prg : typed Scopelang.Ast.program;
   used_modules : ModuleName.t File.Map.t;
   included_files : Doc_id.Set.t;
-  jump_table : Jump_table.t;
+  jump_table : Jump_table.t Lazy.t;
 }
 
 type file = {
@@ -92,7 +92,7 @@ let lookup_suggestions_by_pos file pos =
 let all_symbols_as_warning file =
   match file.result with
   | None -> []
-  | Some { jump_table = { variables; lookup_table }; _ } ->
+  | Some { jump_table = (lazy { variables; lookup_table }); _ } ->
     (* Displays the full position map in logs *)
     (* Log.info (fun m -> m "%a@." Jump_table.PMap.pp variables); *)
     (* Generates warning diagnostic for each symbol *)
@@ -159,12 +159,12 @@ let generic_lookup
     file
     (p : Position.t)
     (f : Jump_table.lookup_entry -> 'a option) =
-  let*? { jump_table; _ } = file.result in
+  let*? { jump_table = (lazy jt); _ } = file.result in
   let open Option in
   let uri = Option.value doc_id ~default:file.doc_id in
   let p = Utils.(lsp_range p p |> pos_of_range (uri :> File.t)) in
   let open Jump_table in
-  let l = lookup jump_table p in
+  let l = lookup jt p in
   List.filter_map f l |> List.concat |> function [] -> None | l -> Some l
 
 let lookup_declaration ?doc_id f p =
@@ -188,7 +188,7 @@ let lookup_usages ?doc_id f p =
 
 let lookup_type f p =
   let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
-  let*? { jump_table = jt; prg; _ } = f.result in
+  let*? { jump_table = (lazy jt); prg; _ } = f.result in
   let*? r, lookup_s = Jump_table.lookup_type jt p in
   let kind =
     try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
@@ -198,7 +198,7 @@ let lookup_type f p =
 
 let lookup_type_declaration f p =
   let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
-  let*? { jump_table = jt; _ } = f.result in
+  let*? { jump_table = (lazy jt); _ } = f.result in
   let*? _r, lookup_s = Jump_table.lookup_type jt p in
   let open Shared_ast in
   let elt =
@@ -218,7 +218,7 @@ let lookup_type_declaration f p =
   | Expr _ | Type _ -> None
 
 let lookup_document_symbols file =
-  let*?! { jump_table; _ } = file.result, [] in
+  let*?! { jump_table = (lazy jt); _ } = file.result, [] in
   Jump_table.PMap.fold_on_file file.doc_id
     (fun p vl acc ->
       Jump_table.PMap.DS.fold
@@ -227,7 +227,7 @@ let lookup_document_symbols file =
           | None -> acc
           | Some v -> v :: acc)
         vl acc)
-    jump_table.variables []
+    jt.variables []
 
 exception Failed_to_load_interface of Surface.Ast.module_use
 
@@ -452,7 +452,7 @@ let process_document ?contents (document : file Server_state.document_state) : t
           prg, type_ordering
         in
         let jump_table =
-          Jump_table.populate input_src ctx modules_contents surface prg
+          lazy (Jump_table.populate input_src ctx modules_contents surface prg)
         in
         let included_files =
           let scan_item = Clerk_scan.catala_file (doc_id :> File.t) locale in
