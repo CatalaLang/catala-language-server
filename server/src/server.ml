@@ -137,6 +137,7 @@ let send_all_diagnostics ~notify_back server_state =
 
 let rec unlocked_process_file
     ?contents
+    ?lightweight
     ~is_saved
     ~notify_back
     doc_id
@@ -155,7 +156,7 @@ let rec unlocked_process_file
           project_file,
         projects )
   in
-  let new_file = State.process_document ?contents document in
+  let new_file = State.process_document ?contents ?lightweight document in
   let open_documents =
     let last_valid_result =
       match new_file.result with
@@ -210,8 +211,8 @@ and unlocked_process_project
           |> function None -> None | Some doc -> doc.contents
         in
         let* _, projects =
-          unlocked_process_file ?contents ~is_saved:false ~notify_back doc_id
-            projects
+          unlocked_process_file ?contents ~lightweight:true ~is_saved:false
+            ~notify_back doc_id projects
         in
         Lwt.return projects)
       project.project_files (Lwt.return sstate)
