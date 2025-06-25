@@ -348,8 +348,10 @@ let load_module_interfaces config_dir includes program =
   in
   root_uses, modules, file_map
 
-let process_document ?contents (document : file Server_state.document_state) : t
-    =
+let process_document
+    ?contents
+    ?(lightweight = false)
+    (document : file Server_state.document_state) : t =
   let open Catala_utils in
   let { Server_state.document_id = doc_id; project; project_file; _ } =
     document
@@ -437,19 +439,19 @@ let process_document ?contents (document : file Server_state.document_state) : t
           Scopelang.From_desugared.translate_program prg exceptions_graphs
           |> Scopelang.Ast.type_program
         in
-        let _type_ordering =
-          Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
-            prg.program_ctx.ctx_enums
-        in
-        let _ =
-          let type_ordering =
-            Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
-              prg.program_ctx.ctx_enums
-          in
-          let prg = Scopelang.Ast.type_program prg in
-          let prg = Dcalc.From_scopelang.translate_program prg in
-          let prg = Typing.program ~internal_check:true prg in
-          prg, type_ordering
+        let () =
+          if not lightweight then
+            let _type_ordering =
+              Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+                prg.program_ctx.ctx_enums
+            in
+            let _type_ordering =
+              Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+                prg.program_ctx.ctx_enums
+            in
+            let prg = Scopelang.Ast.type_program prg in
+            let prg = Dcalc.From_scopelang.translate_program prg in
+            ignore @@ Typing.program ~internal_check:true prg
         in
         let jump_table =
           lazy (Jump_table.populate input_src ctx modules_contents surface prg)
