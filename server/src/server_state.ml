@@ -144,7 +144,7 @@ let delayed_update
     Lwt.return_unit
   | Delayed { doc_id = doc_id'; curr_server_state; delayed_action; action = _ }
     when Doc_id.equal doc_id doc_id' ->
-    (* If both update are towards the same document, we cancel the existing
+    (* If both updates are towards the same document, we cancel the existing
        one *)
     Lwt.cancel delayed_action;
     let delayed_action = make_delayed_action ?delay s f in
@@ -152,8 +152,8 @@ let delayed_update
       Delayed { doc_id; curr_server_state; delayed_action; action = f };
     Lwt.return_unit
   | Delayed { doc_id = _; curr_server_state; delayed_action; action } ->
-    (* If the delayed update is one a different document, we wrap up the first
-       one before creating the new one *)
+    (* If the delayed update is on a different document, we finish up the first
+       one before creating a new one *)
     Lwt.cancel delayed_action;
     Log.debug (fun m -> m "forcing delayed action");
     let* new_server_state = action curr_server_state in
