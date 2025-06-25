@@ -44,9 +44,8 @@ export function CompositeEditor({ items }: CompositeEditorProps): ReactElement {
     complexItems.length > 0 ? complexItems[0].key : ''
   );
 
-  // If there's only one complex item and no simple items, display it directly
-  const singleComplexItem =
-    simpleItems.length === 0 && complexItems.length === 1;
+  // If there's only one complex item, display it directly without tabs
+  const singleComplexItem = complexItems.length === 1;
 
   return (
     <div className="composite-editor">
@@ -63,7 +62,7 @@ export function CompositeEditor({ items }: CompositeEditorProps): ReactElement {
       )}
 
       {/* Complex items displayed in a tabbed view */}
-      {complexItems.length > 0 && !singleComplexItem && (
+      {complexItems.length > 1 && (
         <div className="complex-items-container">
           <div className="tabs">
             {complexItems.map((item) => (
