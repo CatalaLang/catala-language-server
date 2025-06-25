@@ -91,35 +91,44 @@ let retrieve_existing_document doc_id server_state =
   | Some { last_valid_result = Some f; _ } -> Lwt.return_some f
   | _ -> Lwt.return_none
 
-let unlocked_send_all_diagnostics ~notify_back { SState.open_documents; _ } =
-  let open Lwt.Syntax in
-  let all_diagnostics : Diagnostic.t RangeMap.t Doc_id.Map.t =
+let unlocked_send_all_diagnostics =
+  let previous_faulty_documents = ref Doc_id.Set.empty in
+  fun ~notify_back { SState.open_documents; _ } ->
+    let open Lwt.Syntax in
+    let send_diagnostics (doc_id, diags) =
+      notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+      notify_back#send_diagnostic diags
+    in
+    let all_diagnostics : Diagnostic.t RangeMap.t Doc_id.Map.t =
+      Doc_id.Map.fold
+        (fun _doc_id doc_state acc ->
+          Doc_id.Map.union
+            (fun _ l r -> Some (RangeMap.union (fun _ l _ -> Some l) l r))
+            doc_state.SState.errors acc)
+        open_documents Doc_id.Map.empty
+    in
+    let extra_diagnostics =
+      Doc_id.Set.fold
+        (fun doc_id acc ->
+          if Doc_id.Map.mem doc_id all_diagnostics then acc
+          else Doc_id.Map.add doc_id RangeMap.empty acc)
+        !previous_faulty_documents Doc_id.Map.empty
+    in
+    previous_faulty_documents :=
+      Doc_id.Set.of_list (Doc_id.Map.keys all_diagnostics);
+    let all_diagnostics =
+      Doc_id.Map.union
+        (fun _ _ _ -> assert false)
+        extra_diagnostics all_diagnostics
+    in
     Doc_id.Map.fold
-      (fun doc_id doc_state acc ->
-        let acc =
-          (* Always create an empty value so that empty diagnostics are always
-             sent in order to deactivate errors *)
-          Doc_id.Map.update doc_id
-            (function None -> Some RangeMap.empty | Some s -> Some s)
-            acc
-        in
-        Doc_id.Map.union
-          (fun _ l r -> Some (RangeMap.union (fun _ l _ -> Some l) l r))
-          doc_state.SState.errors acc)
-      open_documents Doc_id.Map.empty
-  in
-  let send_diagnostics (doc_id, diags) =
-    notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
-    notify_back#send_diagnostic diags
-  in
-  Doc_id.Map.fold
-    (fun doc_id diags r ->
-      let* () = r in
-      Log.debug (fun m ->
-          m "sending diagnostics of file %a" Doc_id.format doc_id);
-      let diags = List.map snd (RangeMap.bindings diags) in
-      send_diagnostics (doc_id, diags))
-    all_diagnostics Lwt.return_unit
+      (fun doc_id diags r ->
+        let* () = r in
+        Log.debug (fun m ->
+            m "sending diagnostics of file %a" Doc_id.format doc_id);
+        let diags = List.map snd (RangeMap.bindings diags) in
+        send_diagnostics (doc_id, diags))
+      all_diagnostics Lwt.return_unit
 
 let send_all_diagnostics ~notify_back server_state =
   SState.use_now server_state
@@ -305,20 +314,39 @@ class catala_lsp_server =
     method private process_document
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
         ~is_saved
+        ?(is_open = false)
         (doc_id : Doc_id.t)
         (contents : string option) =
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
         @@ fun () ->
-        let* _file =
-          process_file ?contents ~is_saved ~notify_back server_state doc_id
+        let* should_skip =
+          SState.use server_state
+          @@ fun sstate ->
+          if not is_open then Lwt.return_false
+          else
+            match Doc_id.Map.find_opt doc_id sstate.open_documents with
+            | Some { last_valid_result = Some _; _ } ->
+              let () =
+                Log.debug (fun m ->
+                    m "document %a already in cache, skipping validation"
+                      Doc_id.format doc_id)
+              in
+              Lwt.return_true
+            | _ -> Lwt.return_false
         in
-        send_all_diagnostics ~notify_back server_state
+        if should_skip then Lwt.return_unit
+        else
+          let* _file =
+            process_file ?contents ~is_saved ~notify_back server_state doc_id
+          in
+          send_all_diagnostics ~notify_back server_state
 
     method on_notif_doc_did_open ~notify_back d ~content =
       let doc_id = Doc_id.of_lsp_uri d.uri in
-      self#process_document ~notify_back ~is_saved:true doc_id (Some content)
+      self#process_document ~notify_back ~is_open:true ~is_saved:true doc_id
+        (Some content)
 
     method private document_changed ~notify_back ?new_content doc_id =
       if should_ignore doc_id then Lwt.return_unit
@@ -490,7 +518,7 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? f = retrieve_existing_document_now doc_id server_state in
+        let*? f = retrieve_existing_document doc_id server_state in
         match State.lookup_def ~doc_id f pos with
         | None -> Lwt.return_none
         | Some l ->
@@ -513,7 +541,7 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? f = retrieve_existing_document_now doc_id server_state in
+        let*? f = retrieve_existing_document doc_id server_state in
         match State.lookup_declaration f pos with
         | None -> Lwt.return_none
         | Some l ->
@@ -536,7 +564,7 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? f = retrieve_existing_document_now doc_id server_state in
+        let*? f = retrieve_existing_document doc_id server_state in
         match State.lookup_usages ~doc_id f pos with
         | None -> Lwt.return_none
         | Some l ->
@@ -560,7 +588,7 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? f = retrieve_existing_document_now doc_id server_state in
+        let*? f = retrieve_existing_document doc_id server_state in
         match State.lookup_type f pos with
         | None -> Lwt.return_none
         | Some (range, md) ->
@@ -575,7 +603,7 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? f = retrieve_existing_document_now doc_id server_state in
+        let*? f = retrieve_existing_document doc_id server_state in
         match State.lookup_type_declaration f pos with
         | None -> Lwt.return_none
         | Some (file, range) ->
@@ -599,7 +627,7 @@ class catala_lsp_server =
       else
         protect_project_not_found_opt
         @@ fun () ->
-        let*? f = retrieve_existing_document_now doc_id server_state in
+        let*? f = retrieve_existing_document doc_id server_state in
         let all_symbols = State.lookup_document_symbols f in
         Lwt.return_some (`SymbolInformation all_symbols)
 
