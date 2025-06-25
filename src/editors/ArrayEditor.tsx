@@ -23,7 +23,10 @@ type ArrayEditorProps = {
 // as 'cards' within a 2D layout to maximize space use --
 // otherwise, we arrange elements vertically to keep horizontal
 // space for further nesting.
-function hasNestedArrays(typ: Typ): boolean {
+//
+// It is exported as this introspection capability
+// is also needed by CompositeEditor
+export function hasNestedArrays(typ: Typ): boolean {
   if (typ.kind === 'TArray') {
     return true;
   } else if (
