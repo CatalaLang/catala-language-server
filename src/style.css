@@ -506,13 +506,6 @@
   display: flex;
 }
 
-.array-header {
-  display: inline-flex;
-  border-right: 3px solid var(--vscode-input-border);
-  padding-right: 7px;
-  margin-right: 5px;
-}
-
 .array-items {
   margin-bottom: 8px;
 }
