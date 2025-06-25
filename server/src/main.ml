@@ -35,6 +35,16 @@ let () =
   Logs.set_reporter err_std;
   ()
 
+type Catala_utils.Pos.attr += Nil
+
+let () =
+  (* Dummy registration *)
+  Driver.Plugin.register_subcommands "testcase" ~doc:"" ~man:[] [];
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
+    ~contexts:[Desugared.Name_resolution.Expression] (fun ~pos:_ _ -> Some Nil);
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
+    ~contexts:[Desugared.Name_resolution.ScopeDecl] (fun ~pos:_ _ -> Some Nil)
+
 let run () =
   Log.debug (fun m ->
       m "Command: %a"
