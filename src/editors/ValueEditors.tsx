@@ -16,6 +16,7 @@ import type {
 import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../util';
 import { getDefaultValue } from '../defaults';
+import { CompositeEditor } from './CompositeEditor';
 
 // Helper to create a RuntimeValue from a RuntimeValueRaw, preserving attrs
 export function createRuntimeValue(
@@ -551,34 +552,36 @@ function StructEditor(props: StructEditorProps): ReactElement {
     onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
 
+  // Create editor items for CompositeEditor
+  const editorItems = Array.from(fields.entries()).map(
+    ([fieldName, fieldType]) => {
+      return {
+        key: fieldName,
+        label: fieldName,
+        type: fieldType,
+        editor: (
+          <ValueEditor
+            testIO={{
+              typ: fieldType,
+              value: currentMap.get(fieldName)
+                ? { value: currentMap.get(fieldName)! }
+                : undefined,
+            }}
+            onValueChange={(newFieldTestIo) => {
+              if (newFieldTestIo.value) {
+                handleFieldChange(fieldName, newFieldTestIo.value.value);
+              }
+            }}
+          />
+        ),
+      };
+    }
+  );
+
   return (
     <div className="struct-editor struct-container">
       <div className="struct-name">{structDeclaration.struct_name}</div>
-      {Array.from(fields.entries()).map(([fieldName, fieldType]) => {
-        return (
-          <div className="struct-section">
-            <div className="struct-section-name">{fieldName}</div>
-            <div className="struct-section-value">
-              {/* Pass the field's ValueDef down */}
-              <ValueEditor
-                testIO={{
-                  typ: fieldType,
-                  value: currentMap.get(fieldName)
-                    ? { value: currentMap.get(fieldName)! } // Create a temporary ValueDef for the field
-                    : undefined,
-                }}
-                onValueChange={(newFieldTestIo) => {
-                  // newFieldTestIo contains the updated ValueDef for the field
-                  if (newFieldTestIo.value) {
-                    handleFieldChange(fieldName, newFieldTestIo.value.value); // Pass the RuntimeValue up
-                  }
-                  // Handle case where field value becomes undefined? Maybe delete from map?
-                }}
-              />
-            </div>
-          </div>
-        );
-      })}
+      <CompositeEditor items={editorItems} />
     </div>
   );
 }

@@ -604,6 +604,83 @@
   margin-top: 15px;
 }
 
+/* CompositeEditor styles */
+.composite-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simple-items-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.simple-item {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 8px;
+  min-width: 200px;
+  flex: 1 0 auto;
+}
+
+.item-label {
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--vscode-foreground);
+}
+
+.complex-items-container {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+}
+
+.tabs {
+  display: flex;
+  background-color: var(--vscode-sideBarSectionHeader-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.tab {
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--vscode-foreground);
+  opacity: 0.7;
+}
+
+.tab.active {
+  opacity: 1;
+  border-bottom: 2px solid var(--vscode-focusBorder);
+}
+
+.tab:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.tab-panel {
+  padding: 12px;
+}
+
+.tab-panel.hidden {
+  display: none;
+}
+
+.single-complex-item {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.no-items {
+  padding: 16px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
