@@ -4,22 +4,25 @@ import type { Typ } from '../generated/test_case';
 
 /**
  * Base for StructEditor and TestInputsEditor.
+ *
  * Those work in a fairly similar way (label/editor pairs
  * with display heuristics based on recursive array
  * nesting).
  *
  * Those heuristics are:
- * - items without any list nesting are presented first
+ * - Items without any list nesting are presented first
  * (arranged in a possibly 2D flexbox to use space efficiently,
  * and presented as 'cards')
- * - lists are presented in a tabbed view, one tab
+ * - Lists are presented in a tabbed view, one tab
  * per list (question: what if there is a single list,
  * and no other item with nested lists? In that case we
  * should probably display it as-is, without tabs? But we need a label still.)
- * - items that are not lists but contain (arbitrarily down)
+ * - Items that are not lists but contain (arbitrarily down)
  * nested lists, get one tab in the tabbed view; they
  * are shown as a recursive version of the top component
  * (first, items without list nesting, then tabbed view...)
+ * - When there are only simple items (no lists, no items containing
+ * nested lists) we arrange those vertically within a single card.
  */
 
 export type EditorItem = {
@@ -48,8 +51,20 @@ export function CompositeEditor({ items }: CompositeEditorProps): ReactElement {
 
   return (
     <div className="composite-editor">
-      {/* Simple items displayed in a flex layout */}
-      {simpleItems.length > 0 && (
+      {/* Simple items displayed vertically when no complex items */}
+      {simpleItems.length > 0 && complexItems.length === 0 && (
+        <div className="simple-items-vertical">
+          {simpleItems.map((item) => (
+            <div key={item.key} className="simple-item-vertical">
+              <div className="item-label">{item.label}</div>
+              <div className="item-editor">{item.editor}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Simple items in flex layout when there are complex items */}
+      {simpleItems.length > 0 && complexItems.length > 0 && (
         <div className="simple-items-container">
           {simpleItems.map((item) => (
             <div key={item.key} className="simple-item">
