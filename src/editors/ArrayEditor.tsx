@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import { getDefaultValue } from '../defaults';
 import type {
   RuntimeValue,
@@ -49,6 +49,48 @@ export function hasNestedArrays(typ: Typ): boolean {
     return typ.value.some(hasNestedArrays);
   }
   assertUnreachable(typ);
+}
+
+// Get a display name for a type that can be used in UI messages
+export function getTypeDisplayName(typ: Typ, intl: any): string {
+  switch (typ.kind) {
+    case 'TBool':
+      return intl.formatMessage({ id: 'type.boolean' });
+    case 'TInt':
+      return intl.formatMessage({ id: 'type.integer' });
+    case 'TRat':
+      return intl.formatMessage({ id: 'type.decimal' });
+    case 'TMoney':
+      return intl.formatMessage({ id: 'type.money' });
+    case 'TDate':
+      return intl.formatMessage({ id: 'type.date' });
+    case 'TDuration':
+      return intl.formatMessage({ id: 'type.duration' });
+    case 'TArray': {
+      const baseType = getTypeDisplayName(typ.value, intl);
+      return intl.formatMessage({ id: 'type.array' }, { baseType });
+    }
+    case 'TOption': {
+      const baseType = getTypeDisplayName(typ.value, intl);
+      return intl.formatMessage({ id: 'type.optional' }, { baseType });
+    }
+    case 'TTuple':
+      return intl.formatMessage({ id: 'type.tuple' });
+    case 'TStruct': {
+      // For structs, extract just the name part without the package
+      const fullName = typ.value.struct_name;
+      const nameParts = fullName.split('.');
+      return nameParts[nameParts.length - 1];
+    }
+    case 'TEnum': {
+      // For enums, extract just the name part without the package
+      const fullName = typ.value.enum_name;
+      const nameParts = fullName.split('.');
+      return nameParts[nameParts.length - 1];
+    }
+    default:
+      assertUnreachable(typ);
+  }
 }
 
 export function ArrayEditor(props: ArrayEditorProps): ReactElement {
@@ -105,11 +147,17 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
     updateParent(newArray);
   };
 
+  const intl = useIntl();
+  const elementTypeName = getTypeDisplayName(elementType, intl);
+
   return (
     <div className="array-editor">
       <button className="array-add" onClick={handleAdd}>
         <span className="codicon codicon-add"></span>
-        <FormattedMessage id="arrayEditor.addElement" />
+        <FormattedMessage
+          id="arrayEditor.addElement"
+          values={{ elementType: elementTypeName }}
+        />
       </button>
 
       <div
