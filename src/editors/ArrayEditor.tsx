@@ -107,6 +107,11 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   return (
     <div className="array-editor">
+      <button className="array-add" onClick={handleAdd}>
+        <span className="codicon codicon-add"></span>
+        <FormattedMessage id="arrayEditor.addElement" />
+      </button>
+
       <div
         className={`array-items ${hasNestedArrays(props.elementType) ? 'array-items-nested' : 'array-items-non-nested'}`}
       >
@@ -167,11 +172,6 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
             </div>
           );
         })}
-        {/* Note that the button is a peer of the array items (last element) */}
-        <button className="array-add" onClick={handleAdd}>
-          <span className="codicon codicon-add"></span>
-          <FormattedMessage id="arrayEditor.addElement" />
-        </button>
       </div>
     </div>
   );
