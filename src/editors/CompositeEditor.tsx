@@ -49,7 +49,7 @@ export function CompositeEditor({ items }: CompositeEditorProps): ReactElement {
 
   return (
     <div className="composite-editor">
-      {/* Simple items displayed in a grid layout */}
+      {/* Simple items displayed in a flex layout */}
       {simpleItems.length > 0 && (
         <div className="simple-items-container">
           {simpleItems.map((item) => (

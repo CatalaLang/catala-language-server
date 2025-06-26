@@ -160,9 +160,6 @@
   font-size: 13px;
 }
 
-.int-editor .int-input {
-  width: 100px;
-}
 
 .int-editor .invalid-int {
   border-color: var(--vscode-inputValidation-errorBorder) !important;
@@ -621,8 +618,8 @@
   border: 1px solid var(--vscode-panel-border);
   border-radius: 4px;
   padding: 8px;
-  min-width: 200px;
-  max-width: 300px;
+  min-width: 150px;
+  max-width: 250px;
 }
 
 .item-label {
@@ -630,10 +627,9 @@
   font-weight: 500;
   margin-bottom: 6px;
   color: var(--vscode-foreground);
-  text-overflow: ellipsis;
-  overflow: hidden;
 }
 
+/* tabbed */
 .complex-items-container {
   border: 1px solid var(--vscode-panel-border);
   border-radius: 4px;
