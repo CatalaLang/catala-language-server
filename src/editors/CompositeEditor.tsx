@@ -1,5 +1,4 @@
 import { useState, type ReactElement } from 'react';
-import { FormattedMessage } from 'react-intl';
 import { hasNestedArrays } from './ArrayEditor';
 import type { Typ } from '../generated/test_case';
 
@@ -90,20 +89,10 @@ export function CompositeEditor({ items }: CompositeEditorProps): ReactElement {
 
       {/* Single complex item displayed directly */}
       {singleComplexItem && (
-        <div className="single-complex-item">
+        <>
           <div className="item-label">{complexItems[0].label}</div>
           <div className="item-editor">{complexItems[0].editor}</div>
-        </div>
-      )}
-
-      {/* Show a message if no items */}
-      {items.length === 0 && (
-        <div className="no-items">
-          <FormattedMessage
-            id="compositeEditor.noItems"
-            defaultMessage="No items to display"
-          />
-        </div>
+        </>
       )}
     </div>
   );
