@@ -1,4 +1,0 @@
-(lang dune 3.0)
-(name catala_test_case_parser)
-(version v0.1)
-(implicit_transitive_deps true)
