@@ -1,0 +1,77 @@
+.array-editor {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 8px;
+  display: flex;
+}
+
+.array-items {
+  margin-bottom: 8px;
+}
+
+.array-items-non-nested {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* for array elements that contain other arrays */
+.array-items-nested {
+  flex-wrap: nowrap;
+  flex-direction: column;
+}
+
+.array-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+}
+
+.array-item:last-child {
+  border-bottom: none;
+}
+
+.array-item-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.array-item-controls button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-editor-foreground);
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.array-item-controls button:hover {
+  opacity: 1;
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.array-item-controls button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.array-add {
+  background-color: transparent;
+  color: var(--vscode-button-foreground);
+  border: 1px dashed var(--vscode-button-background);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.array-add:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
