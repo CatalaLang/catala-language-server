@@ -30,10 +30,19 @@
   "results.failure": "❌",
   "results.expected": "expected",
   "results.butGot": "but got",
-  "arrayEditor.addElement": "Add element",
+  "arrayEditor.addElement": "Add {elementType}",
   "false": "false",
   "true": "true",
   "durationEditor.years": "Years:",
   "durationEditor.months": "Months:",
-  "durationEditor.days": "Days:"
+  "durationEditor.days": "Days:",
+  "type.boolean": "boolean",
+  "type.integer": "integer",
+  "type.decimal": "decimal",
+  "type.money": "money",
+  "type.date": "date",
+  "type.duration": "duration",
+  "type.tuple": "tuple",
+  "type.array": "{baseType} array",
+  "type.optional": "optional {baseType}"
 }
