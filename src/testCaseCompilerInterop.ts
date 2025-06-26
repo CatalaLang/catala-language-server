@@ -23,7 +23,8 @@ function pathFromConfig(confId: string, defaultCmd: string): string {
   const confPath = vscode.workspace
     .getConfiguration('catala')
     .get<string>(confId);
-  if (confPath === undefined || confPath.trim() === '') return defaultCmd;
+  if (confPath === undefined || confPath === null || confPath.trim() === '')
+    return defaultCmd;
   if (!fs.existsSync(confPath)) {
     vscode.window.showWarningMessage(
       `Could not find executable for ${confId} at ${confPath}, falling back to default`
