@@ -667,12 +667,6 @@
   display: none;
 }
 
-.single-complex-item {
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 4px;
-  padding: 12px;
-}
-
 .no-items {
   padding: 16px;
   text-align: center;
