@@ -13,6 +13,7 @@ import {
 import { logger } from './logger';
 import { Uri, window, workspace } from 'vscode';
 import path from 'path';
+import fs from 'fs';
 
 function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
@@ -23,6 +24,12 @@ function pathFromConfig(confId: string, defaultCmd: string): string {
     .getConfiguration('catala')
     .get<string>(confId);
   if (confPath === undefined || confPath.trim() === '') return defaultCmd;
+  if (!fs.existsSync(confPath)) {
+    vscode.window.showWarningMessage(
+      `Could not find executable for ${confId} at ${confPath}, falling back to default`
+    );
+    return defaultCmd;
+  }
   return confPath;
 }
 
