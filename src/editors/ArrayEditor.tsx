@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
+import { useState } from 'react';
 import { getDefaultValue } from '../defaults';
 import type {
   RuntimeValue,
@@ -52,7 +53,10 @@ export function hasNestedArrays(typ: Typ): boolean {
 }
 
 // Get a display name for a type that can be used in UI messages
-export function getTypeDisplayName(typ: Typ, intl: any): string {
+export function getTypeDisplayName(
+  typ: Typ,
+  intl: ReturnType<typeof useIntl>
+): string {
   switch (typ.kind) {
     case 'TBool':
       return intl.formatMessage({ id: 'type.boolean' });
@@ -150,6 +154,61 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   const intl = useIntl();
   const elementTypeName = getTypeDisplayName(elementType, intl);
 
+  // State for drag and drop
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Handle drag start
+  const handleDragStart = (e: React.DragEvent, index: number): void => {
+    // Check if the drag started from the controls area but not from a button
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'BUTTON' || target.closest('button')) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedIndex(index);
+    // Set a ghost drag image
+    if (e.dataTransfer) {
+      const dragElement = document.createElement('div');
+      dragElement.textContent = `Item ${index + 1}`;
+      dragElement.style.padding = '4px 8px';
+      dragElement.style.background = 'var(--vscode-editor-background)';
+      dragElement.style.border = '1px solid var(--vscode-panel-border)';
+      dragElement.style.borderRadius = '4px';
+      dragElement.style.position = 'absolute';
+      dragElement.style.top = '-1000px';
+      document.body.appendChild(dragElement);
+      e.dataTransfer.setDragImage(dragElement, 0, 0);
+      setTimeout(() => {
+        document.body.removeChild(dragElement);
+      }, 0);
+    }
+  };
+
+  // Handle drag over
+  const handleDragOver = (e: React.DragEvent, index: number): void => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  // Handle drop
+  const handleDrop = (e: React.DragEvent, index: number): void => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      handleMove(draggedIndex, index);
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+    }
+  };
+
+  // Handle drag end
+  const handleDragEnd = (): void => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   return (
     <div className="array-editor">
       <button className="array-add" onClick={handleAdd}>
@@ -177,8 +236,18 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
           }
 
           return (
-            <div key={itemKey} className="array-item">
-              <div className="array-item-controls">
+            <div
+              key={itemKey}
+              className={`array-item ${dragOverIndex === index ? 'drag-over' : ''} ${draggedIndex === index ? 'dragging' : ''}`}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDrop={(e) => handleDrop(e, index)}
+              onDragEnd={handleDragEnd}
+            >
+              <div
+                className="array-item-controls"
+                draggable
+                onDragStart={(e) => handleDragStart(e, index)}
+              >
                 <button
                   className="array-move-up"
                   onClick={() => handleMove(index, index - 1)}
@@ -203,20 +272,22 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                   <span className="codicon codicon-trash"></span>
                 </button>
               </div>
-              {/* Pass the element's ValueDef down */}
-              <ValueEditor
-                testIO={{
-                  typ: elementType,
-                  value: { value: item }, // Create temporary ValueDef for the element
-                }}
-                onValueChange={(newItemTestIo) => {
-                  // newItemTestIo contains the updated ValueDef for the element
-                  if (newItemTestIo.value) {
-                    handleUpdate(index, newItemTestIo.value.value); // Pass the RuntimeValue up
-                  }
-                  // Handle case where element value becomes undefined? Maybe delete?
-                }}
-              />
+              <div className="array-item-content">
+                {/* Pass the element's ValueDef down */}
+                <ValueEditor
+                  testIO={{
+                    typ: elementType,
+                    value: { value: item }, // Create temporary ValueDef for the element
+                  }}
+                  onValueChange={(newItemTestIo) => {
+                    // newItemTestIo contains the updated ValueDef for the element
+                    if (newItemTestIo.value) {
+                      handleUpdate(index, newItemTestIo.value.value); // Pass the RuntimeValue up
+                    }
+                    // Handle case where element value becomes undefined? Maybe delete?
+                  }}
+                />
+              </div>
             </div>
           );
         })}
