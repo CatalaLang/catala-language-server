@@ -121,54 +121,6 @@
   padding: 8px;
 }
 
-.modal-content .selected-file {
-  background-color: var(--vscode-editor-inactiveSelectionBackground);
-  border-radius: 3px;
-  padding: 6px 10px;
-  margin-bottom: 16px;
-  font-family: var(--vscode-editor-font-family);
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  position: relative;
-  word-break: break-all;
-}
-
-.modal-content .selected-file .codicon-file {
-  margin-right: 6px;
-  color: var(--vscode-symbolIcon-fileForeground);
-}
-
-.modal-step-indicator {
-  display: flex;
-  margin-bottom: 20px;
-  gap: 2px;
-}
-
-.modal-step {
-  flex: 1;
-  height: 4px;
-  background-color: var(--vscode-button-secondaryBackground);
-  opacity: 0.5;
-  border-radius: 2px;
-}
-
-.modal-step.active {
-  background-color: var(--vscode-button-background);
-  opacity: 1;
-}
-
-.modal-title-with-step {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.modal-step-count {
-  color: var(--vscode-descriptionForeground);
-  font-size: 12px;
-}
 
 /* File and scope selection wizard styling */
 .file-select-button {
