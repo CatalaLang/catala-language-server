@@ -24,6 +24,11 @@ module Scan_item : sig
 end
 
 module ScanItemFiles : Set.S with type elt = Clerk_scan.item
+module ModuleMap : Map.S with type key = string
+
+module Project_graph : sig
+  type t
+end
 
 type project_file = {
   file : Clerk_scan.item;
@@ -42,6 +47,8 @@ type project = {
   project_dir : string;
   project_kind : project_kind;
   project_files : project_file Doc_id.Map.t;
+  project_graph : Project_graph.t;
+  known_modules : ScanItemFiles.t ModuleMap.t;
 }
 
 module Projects : Set.S with type elt = project
@@ -74,3 +81,19 @@ val find_or_populate_project :
   Doc_id.t ->
   Projects.t ->
   project_file * Projects.elt * [> `Changed of Projects.t | `Unchanged ]
+
+type update_result = {
+  projects : projects;
+  project : project;
+  possibly_affected_files : Doc_id.Set.t;
+}
+
+val update_project_file :
+  ?project:project ->
+  notify_back:Linol_lwt.Jsonrpc2.notify_back ->
+  ignored_documents:Doc_id.Set.t ->
+  Doc_id.doc_id ->
+  projects ->
+  update_result
+
+val is_an_included_file : Doc_id.doc_id -> project -> bool
