@@ -111,3 +111,11 @@
 .array-item.drag-over {
   border: 1px dashed var(--vscode-button-background);
 }
+
+.array-item-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vscode-editor-foreground);
+  margin-bottom: 8px;
+  padding: 4px 0;
+}
