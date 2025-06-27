@@ -574,7 +574,6 @@ function StructEditor(props: StructEditorProps): ReactElement {
 
   return (
     <div className="struct-editor struct-container">
-      <div className="struct-name">{structDeclaration.struct_name}</div>
       <CompositeEditor items={editorItems} />
     </div>
   );
