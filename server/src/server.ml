@@ -23,8 +23,6 @@ module SState = Server_state
 let ( let*? ) v f =
   Lwt.bind v @@ function None -> Lwt.return_none | Some x -> f x
 
-let f (_ : Doc_id.t) = assert false
-
 exception ServerError of string
 
 let lookup_project ~notify_back doc_id projects =
@@ -114,8 +112,6 @@ let unlocked_send_all_diagnostics =
           else Doc_id.Map.add doc_id RangeMap.empty acc)
         !previous_faulty_documents Doc_id.Map.empty
     in
-    previous_faulty_documents :=
-      Doc_id.Set.of_list (Doc_id.Map.keys all_diagnostics);
     let all_diagnostics =
       Doc_id.Map.union
         (fun _ _ _ -> assert false)
@@ -135,9 +131,21 @@ let send_all_diagnostics ~notify_back server_state =
   @@ fun unlocked_sstate ->
   unlocked_send_all_diagnostics ~notify_back unlocked_sstate
 
-let rec unlocked_process_file
+let unlocked_process_document document :
+    State.file * State.file SState.document_state =
+  Log.info (fun m ->
+      m "Processing document %s" (document.SState.document_id :> string));
+  let new_file =
+    State.process_document ?contents:document.SState.contents document
+  in
+  let errors = State.all_diagnostics new_file in
+  let document = { document with errors } in
+  if Option.is_some new_file.result then
+    new_file, { document with last_valid_result = Some new_file }
+  else new_file, document
+
+let unlocked_process_file
     ?contents
-    ?lightweight
     ~is_saved
     ~notify_back
     doc_id
@@ -146,7 +154,7 @@ let rec unlocked_process_file
   let document, projects =
     Doc_id.Map.find_opt doc_id open_documents
     |> function
-    | Some document -> document, projects
+    | Some document -> { document with saved = is_saved; contents }, projects
     | None ->
       let (project_file, project), new_projects_opt =
         lookup_project ~notify_back doc_id projects
@@ -156,68 +164,69 @@ let rec unlocked_process_file
           project_file,
         projects )
   in
-  let new_file = State.process_document ?contents ?lightweight document in
-  let open_documents =
-    let last_valid_result =
-      match new_file.result with
-      | None -> document.last_valid_result
-      | Some _ -> Some new_file
+  let new_file, new_document =
+    unlocked_process_document { document with contents }
+  in
+  let is_valid = Option.is_some new_file.result in
+  let open_documents = Doc_id.Map.add doc_id new_document open_documents in
+  if is_saved && is_valid then (
+    (* Check project files for potential errors *)
+    let () =
+      Log.debug (fun m ->
+          m "File %a modified, checking project" Doc_id.format doc_id)
     in
-    let errors = State.all_diagnostics new_file in
-    Doc_id.Map.add doc_id
-      { document with last_valid_result; errors }
-      open_documents
-  in
-  (* We trigger project rescan if we saved the document & its processing is
-     valid *)
-  let* new_state =
-    if is_saved && Option.is_some new_file.result then
-      let () = Log.info (fun m -> m "rescanning project") in
-      let project, projects =
-        Projects.reload_project ~notify_back document.project projects
-      in
-      let open_documents =
-        (* Update existing documents with the freshly scanned project *)
-        Doc_id.Map.filter_map
-          (fun _ document ->
-            Doc_id.Map.find_opt document.SState.document_id
-              project.Projects.project_files
-            |> function
-            | None -> (* Remove unknown documents *) None
-            | Some project_file -> Some { document with project_file; project })
-          open_documents
-      in
-      let* (), sstate =
-        unlocked_process_project ~notify_back project
-          { SState.projects; open_documents }
-      in
-      Lwt.return sstate
-    else Lwt.return { SState.projects; open_documents }
-  in
-  Lwt.return (new_file, new_state)
-
-and unlocked_process_project
-    ~notify_back
-    (project : Projects.project)
-    ({ SState.open_documents; _ } as sstate) :
-    (unit * 'a SState.server_state) Lwt.t =
-  Log.debug (fun m -> m "processing whole project");
-  let* (sstate : 'a SState.server_state) =
-    Doc_id.Map.fold
-      (fun doc_id _project_file acc ->
-        let* projects = acc in
-        let contents =
-          Doc_id.Map.find_opt doc_id open_documents
-          |> function None -> None | Some doc -> doc.contents
-        in
-        let* _, projects =
-          unlocked_process_file ?contents ~lightweight:true ~is_saved:false
-            ~notify_back doc_id projects
-        in
-        Lwt.return projects)
-      project.project_files (Lwt.return sstate)
-  in
-  Lwt.return ((), sstate)
+    let ignored_documents =
+      Doc_id.Map.fold
+        (fun doc_id { SState.saved; _ } s ->
+          if not saved then Doc_id.Set.add doc_id s else s)
+        open_documents Doc_id.Set.empty
+    in
+    let { Projects.project; projects; possibly_affected_files } =
+      Projects.update_project_file ~notify_back ~ignored_documents
+        ~project:document.project doc_id projects
+    in
+    Log.debug (fun m ->
+        match Doc_id.Set.elements possibly_affected_files with
+        | [] -> ()
+        | l ->
+          m "Files to reprocess: %a"
+            Format.(
+              pp_print_list ~pp_sep:pp_print_space (fun fmt (s : Doc_id.t) ->
+                  pp_print_string fmt (s :> string)))
+            l);
+    let modified_documents =
+      Doc_id.Set.fold
+        (fun doc_id documents ->
+          if Projects.is_an_included_file doc_id project then
+            (* We do not consider included files *)
+            documents
+          else
+            (* Affected files are necessarily present in the project *)
+            let project_file =
+              Option.get @@ Projects.find_file_in_project doc_id project
+            in
+            let document =
+              match Doc_id.Map.find_opt doc_id open_documents with
+              | None ->
+                SState.make_document ?contents:None ~saved:true doc_id project
+                  project_file
+              | Some document -> document
+            in
+            let _processed_file, document =
+              unlocked_process_document document
+            in
+            Doc_id.Map.add doc_id document documents)
+        possibly_affected_files Doc_id.Map.empty
+    in
+    let open_documents =
+      Doc_id.Map.union
+        (fun _ modified_doc _ -> Some modified_doc)
+        modified_documents open_documents
+    in
+    Lwt.return (new_file, SState.{ projects; open_documents }))
+  else
+    (* Unsaved or invalid : return without scanning files *)
+    Lwt.return (new_file, { SState.projects; open_documents })
 
 let process_file ?contents ~is_saved ~notify_back server_state doc_id =
   SState.use_and_update server_state
@@ -227,11 +236,6 @@ let process_file ?contents ~is_saved ~notify_back server_state doc_id =
       unlocked_server_state
   in
   Lwt.return (new_file, new_state)
-
-let process_project ~notify_back project server_state =
-  SState.use_and_update server_state
-  @@ fun unlocked_server_state ->
-  unlocked_process_project ~notify_back project unlocked_server_state
 
 class catala_lsp_server =
   let open Linol_lwt in
