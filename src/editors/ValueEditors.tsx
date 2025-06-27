@@ -173,9 +173,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
         value={displayValue}
         onChange={handleChange}
         onBlur={handleBlur}
-        className={`int-input ${
-          displayValue && !isValidInt(displayValue) ? 'invalid-int' : ''
-        }`}
+        className={displayValue && !isValidInt(displayValue) ? 'invalid' : ''}
         placeholder="0"
       />
     </div>
@@ -321,9 +319,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
         value={displayValue}
         onChange={handleChange}
         onBlur={handleBlur}
-        className={`rat-input ${
-          displayValue && !isValidRat(displayValue) ? 'invalid-rat' : ''
-        }`}
+        className={displayValue && !isValidRat(displayValue) ? 'invalid' : ''}
         placeholder="0.0"
       />
     </div>
@@ -514,9 +510,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         required
         value={displayValue}
         onChange={handleChange}
-        className={`money-input ${
-          displayValue && !isValidMoney(displayValue) ? 'invalid-money' : ''
-        }`}
+        className={displayValue && !isValidMoney(displayValue) ? 'invalid' : ''}
         placeholder="0.00"
       />
     </div>
