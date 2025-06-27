@@ -30,9 +30,18 @@
 
 /* Value editor container */
 .value-editor {
-  padding: 2px 4px;
   text-align: left;
   vertical-align: top;
+}
+
+.enum-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.enum-payload-editor {
+  width: 100%;
 }
 
 /* Identifier text */
@@ -46,7 +55,6 @@
   color: var(--vscode-symbolIcon-variableForeground);
 }
 
-/* Duration editor specific styles */
 .duration-fields {
   display: flex;
   gap: 10px;
