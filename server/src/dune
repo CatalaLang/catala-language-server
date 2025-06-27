@@ -24,7 +24,7 @@
   re)
  (modules
   (:standard \ Main))
- (flags (:standard)))
+ (flags (:standard -open Clerk_lib)))
 
 (alias
  (name lsp)

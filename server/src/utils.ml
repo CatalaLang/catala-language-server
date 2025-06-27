@@ -16,10 +16,18 @@
 
 open Lsp.Types
 open Catala_utils
+open Server_types
 
 let pp_opt pp fmt =
   let open Format in
   function None -> fprintf fmt "<none>" | Some v -> fprintf fmt "%a" pp v
+
+let pp_list pp fmt =
+  let open Format in
+  fprintf fmt "[@ %a@ ]"
+    (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt " ;@ ") pp)
+
+let pp_string_list fmt = pp_list Format.pp_print_string fmt
 
 let is_included (p : Pos.t) p' =
   (* true if p is included in p' *)
@@ -29,13 +37,26 @@ let is_included (p : Pos.t) p' =
   && Pos.get_start_column p >= Pos.get_start_column p'
   && Pos.get_end_column p <= Pos.get_end_column p'
 
+module RangeMap = Stdlib.Map.Make (struct
+  type t = Range.t
+
+  let compare = compare
+end)
+
+let dummy_range =
+  Range.create
+    ~start:{ line = 0; character = 0 }
+    ~end_:{ line = 0; character = 0 }
+
 let lsp_pos line character = Lsp.Types.Position.create ~line ~character
 let lsp_range start end_ = Lsp.Types.Range.create ~start ~end_
 let start_pos = lsp_pos 1 1
 let start_range = lsp_range start_pos start_pos
 
-let pos_of_range file ({ start; end_ } : Range.t) : Pos.t =
-  Pos.from_info file (succ start.line) (succ start.character) (succ end_.line)
+let pos_of_range doc_id ({ start; end_ } : Range.t) : Pos.t =
+  Pos.from_info
+    (doc_id :> File.t)
+    (succ start.line) (succ start.character) (succ end_.line)
     (succ end_.character)
 
 let pos_to_loc (pos : Pos.t) : Linol_lwt.Position.t * Linol_lwt.Position.t =
@@ -50,6 +71,11 @@ let pos_to_loc (pos : Pos.t) : Linol_lwt.Position.t * Linol_lwt.Position.t =
 let range_of_pos (pos : Pos.t) : Range.t =
   let start, end_ = pos_to_loc pos in
   { Range.start; end_ }
+
+let location_of_pos (pos : Pos.t) : Location.t =
+  let start, end_ = pos_to_loc pos in
+  let range = { Range.start; end_ } in
+  Location.create ~range ~uri:(DocumentUri.of_path (Pos.get_file pos))
 
 let unclosed_range_of_pos (pos : Pos.t) : Range.t =
   let start, end_ = pos_to_loc pos in
@@ -107,9 +133,10 @@ let lookup_catala_format_config_path
   in
   r
 
-let try_format_document ~notify_back ~doc_content ~doc_path :
+let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
     TextEdit.t list option Lwt.t =
   let open Lwt.Syntax in
+  let doc_path = (doc_id :> File.t) in
   Lwt.catch
     (fun () ->
       let language =
@@ -199,9 +226,9 @@ let try_format_document ~notify_back ~doc_content ~doc_path :
           Lwt.return_none)
     (fun _ -> Lwt.return_none)
 
-let try_format_document ~notify_back ~doc_content ~doc_path =
+let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) =
   Lwt.catch
-    (fun () -> try_format_document ~notify_back ~doc_content ~doc_path)
+    (fun () -> try_format_document ~notify_back ~doc_content doc_id)
     (fun exn ->
       let open Lwt.Syntax in
       let* () =
@@ -225,3 +252,49 @@ let join_paths ?(abs = true) dir path =
   loop [] (dir, path)
   |> List.rev
   |> List.fold_left ( / ) (if abs then "/" else "")
+
+let lookup_clerk_toml (path : string) =
+  let from_dir =
+    if Sys.is_directory path then path else Filename.dirname path
+  in
+  let open Catala_utils in
+  let find_in_parents cwd predicate =
+    let home = try Sys.getenv "HOME" with Not_found -> "" in
+    let rec lookup dir =
+      if predicate dir then Some dir
+      else if dir = home then None
+      else
+        let parent = Filename.dirname dir in
+        if parent = dir then None else lookup parent
+    in
+    match lookup cwd with Some rel -> Some rel | None -> None
+  in
+  try
+    begin
+      match
+        find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
+      with
+      | None ->
+        Log.debug (fun m -> m "no 'clerk.toml' config file found");
+        None
+      | Some dir -> (
+        Log.debug (fun m ->
+            m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
+        try
+          let config = Clerk_config.read File.(dir / "clerk.toml") in
+          let include_dirs =
+            List.map (fun p -> join_paths dir p) config.global.include_dirs
+          in
+          let config =
+            { config with global = { config.global with include_dirs } }
+          in
+          Some (config, dir)
+        with Message.CompilerError c ->
+          Log.err (fun m ->
+              let pp fmt = Message.Content.emit ~ppf:fmt c Error in
+              m "error while parsing config file: %t" pp);
+          None)
+    end
+  with _ ->
+    Log.err (fun m -> m "failed to lookup config file");
+    None
