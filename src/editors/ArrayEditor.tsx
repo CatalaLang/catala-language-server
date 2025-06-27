@@ -25,7 +25,7 @@ type ArrayEditorProps = {
 // otherwise, we arrange elements vertically to keep horizontal
 // space for further nesting.
 //
-// It is exported as this introspection capability
+// `hasNestedArrays` is exported as this introspection capability
 // is also needed by CompositeEditor
 export function hasNestedArrays(typ: Typ): boolean {
   if (typ.kind === 'TArray') {
@@ -273,6 +273,16 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 </button>
               </div>
               <div className="array-item-content">
+                {/* We only show the element type and index for complex
+                    (nested subarrays) elements, because they are laid
+                    out vertically so a reminder of the type and index
+                    helps
+                */}
+                {hasNestedArrays(elementType) && (
+                  <div className="array-item-header">
+                    {getTypeDisplayName(elementType, intl)} {index + 1}
+                  </div>
+                )}
                 {/* Pass the element's ValueDef down */}
                 <ValueEditor
                   testIO={{
