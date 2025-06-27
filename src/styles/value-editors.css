@@ -2,9 +2,7 @@
 .value-editor select,
 .struct-editor input,
 .struct-editor select {
-  width: auto;
-  min-width: 80px;
-  max-width: 200px;
+  width: 130px;
   padding: 4px 8px;
   border: 1px solid var(--vscode-input-border);
   background-color: var(--vscode-input-background);
@@ -57,11 +55,11 @@
 }
 
 .duration-fields input {
-  width: 60px;
+  width: 130px;
 }
 
 .rat-editor .rat-input {
-  width: 100px;
+  width: 130px;
   padding: 4px 8px;
   border: 1px solid var(--vscode-input-border);
   border-radius: 2px;
@@ -81,7 +79,7 @@
 }
 
 .money-editor .money-input {
-  width: 100px;
+  width: 130px;
   padding: 4px 8px;
   border: 1px solid var(--vscode-input-border);
   border-radius: 2px;
