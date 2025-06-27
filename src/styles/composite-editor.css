@@ -75,9 +75,3 @@
   display: none;
 }
 
-.no-items {
-  padding: 16px;
-  text-align: center;
-  color: var(--vscode-descriptionForeground);
-  font-style: italic;
-}
