@@ -87,7 +87,7 @@
 
 .array-add {
   background-color: transparent;
-  color: var(--vscode-button-foreground);
+  color: var(--vscode-editor-foreground);
   border: 1px dashed var(--vscode-button-background);
   padding: 4px 8px;
   border-radius: 4px;
