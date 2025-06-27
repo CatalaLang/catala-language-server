@@ -248,22 +248,45 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 draggable
                 onDragStart={(e) => handleDragStart(e, index)}
               >
-                <button
-                  className="array-move-up"
-                  onClick={() => handleMove(index, index - 1)}
-                  disabled={index === 0}
-                  title="Move element up"
-                >
-                  <span className="codicon codicon-arrow-up"></span>
-                </button>
-                <button
-                  className="array-move-down"
-                  onClick={() => handleMove(index, index + 1)}
-                  disabled={index === currentArray.length - 1}
-                  title="Move element down"
-                >
-                  <span className="codicon codicon-arrow-down"></span>
-                </button>
+                {hasNestedArrays(elementType) ? (
+                  <>
+                    <button
+                      className="array-move-up"
+                      onClick={() => handleMove(index, index - 1)}
+                      disabled={index === 0}
+                      title="Move element up"
+                    >
+                      <span className="codicon codicon-arrow-up"></span>
+                    </button>
+                    <button
+                      className="array-move-down"
+                      onClick={() => handleMove(index, index + 1)}
+                      disabled={index === currentArray.length - 1}
+                      title="Move element down"
+                    >
+                      <span className="codicon codicon-arrow-down"></span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="array-move-left"
+                      onClick={() => handleMove(index, index - 1)}
+                      disabled={index === 0}
+                      title="Move element left"
+                    >
+                      <span className="codicon codicon-arrow-left"></span>
+                    </button>
+                    <button
+                      className="array-move-right"
+                      onClick={() => handleMove(index, index + 1)}
+                      disabled={index === currentArray.length - 1}
+                      title="Move element right"
+                    >
+                      <span className="codicon codicon-arrow-right"></span>
+                    </button>
+                  </>
+                )}
                 <button
                   className="array-delete"
                   onClick={() => handleDelete(index)}

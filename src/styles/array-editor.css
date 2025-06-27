@@ -50,14 +50,43 @@
 
 .array-item-controls {
   display: flex;
-  flex-direction: column;
   gap: 4px;
   padding: 8px 4px;
   background-color: var(--vscode-editor-inactiveSelectionBackground);
   border-right: 1px solid var(--vscode-panel-border);
   border-radius: 3px 0 0 3px;
-  justify-content: center; /* Center the buttons vertically */
-  position: relative; /* For the drag handle */
+  justify-content: center;
+  position: relative;
+}
+
+.array-items-nested .array-item-controls {
+  flex-direction: column;
+}
+
+.array-items-non-nested .array-item-controls {
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-right: 1px solid var(--vscode-panel-border);
+  border-radius: 3px 0 0 3px;
+}
+
+.array-items-non-nested .array-item {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.array-items-non-nested .array-item-content {
+  flex: 1;
+  padding: 8px;
+}
+
+.array-move-prev,
+.array-move-next {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .array-item-controls button {
