@@ -11,6 +11,8 @@ const { PurgeCSS } = require('purgecss');
 const glob = require('glob');
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+let hasUnused = false;
+
 async function findUnusedCSS() {
   console.log('Analyzing unused CSS with PurgeCSS...');
 
@@ -65,6 +67,7 @@ async function findUnusedCSS() {
           100
         ).toFixed(2);
         console.log(`Percentage of unused selectors: ${unusedPercent}%`);
+        hasUnused = true;
       } else {
         console.log('\nNo unused CSS selectors found.');
       }
@@ -74,4 +77,17 @@ async function findUnusedCSS() {
   }
 }
 
-findUnusedCSS();
+findUnusedCSS()
+  .then(() => {
+    if (hasUnused) {
+      console.error('\nError: Unused CSS selectors found');
+      process.exit(1);
+    } else {
+      console.log('\nSuccess: No unused CSS selectors found');
+      process.exit(0);
+    }
+  })
+  .catch((error) => {
+    console.error('Error during analysis:', error);
+    process.exit(1);
+  });
