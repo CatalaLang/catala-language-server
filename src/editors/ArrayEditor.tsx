@@ -251,18 +251,20 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 {hasNestedArrays(elementType) ? (
                   <>
                     <button
-                      className="array-move-up"
+                      className="array-move-prev"
                       onClick={() => handleMove(index, index - 1)}
                       disabled={index === 0}
-                      title="Move element up"
+                      title={intl.formatMessage({
+                        id: 'arrayEditor.movePrevious',
+                      })}
                     >
                       <span className="codicon codicon-arrow-up"></span>
                     </button>
                     <button
-                      className="array-move-down"
+                      className="array-move-next"
                       onClick={() => handleMove(index, index + 1)}
                       disabled={index === currentArray.length - 1}
-                      title="Move element down"
+                      title={intl.formatMessage({ id: 'arrayEditor.moveNext' })}
                     >
                       <span className="codicon codicon-arrow-down"></span>
                     </button>
@@ -270,18 +272,20 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 ) : (
                   <>
                     <button
-                      className="array-move-left"
+                      className="array-move-prev"
                       onClick={() => handleMove(index, index - 1)}
                       disabled={index === 0}
-                      title="Move element left"
+                      title={intl.formatMessage({
+                        id: 'arrayEditor.movePrevious',
+                      })}
                     >
                       <span className="codicon codicon-arrow-left"></span>
                     </button>
                     <button
-                      className="array-move-right"
+                      className="array-move-next"
                       onClick={() => handleMove(index, index + 1)}
                       disabled={index === currentArray.length - 1}
-                      title="Move element right"
+                      title={intl.formatMessage({ id: 'arrayEditor.moveNext' })}
                     >
                       <span className="codicon codicon-arrow-right"></span>
                     </button>
