@@ -303,7 +303,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 */}
                 {hasNestedArrays(elementType) && (
                   <div className="array-item-header">
-                    {getTypeDisplayName(elementType, intl)} {index + 1}
+                    {getTypeDisplayName(elementType, intl)}
                   </div>
                 )}
                 {/* Pass the element's ValueDef down */}
