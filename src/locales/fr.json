@@ -44,5 +44,7 @@
   "type.duration": "durée",
   "type.tuple": "tuple",
   "type.array": "tableau de {baseType}",
-  "type.optional": "{baseType} optionnel"
+  "type.optional": "{baseType} optionnel",
+  "arrayEditor.movePrevious": "Déplacer l'élément à la position précédente",
+  "arrayEditor.moveNext": "Déplacer l'élément à la position suivante"
 }
