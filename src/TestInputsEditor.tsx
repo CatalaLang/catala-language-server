@@ -31,7 +31,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
 
   return (
     <div className="test-inputs data-card">
-      <CompositeEditor items={editorItems} />
+      <CompositeEditor items={editorItems} atomicElements={true} />
     </div>
   );
 }

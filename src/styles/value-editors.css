@@ -3,11 +3,11 @@
 .value-editor select,
 .struct-editor input,
 .struct-editor select {
-  width: 130px;
-  padding: 4px 8px;
-  border: 1px solid var(--vscode-input-border);
-  background-color: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--control-border);
+  background-color: var(--control-background);
+  color: var(--control-text);
   box-sizing: border-box;
   border-radius: 2px;
   font-size: 13px;
@@ -18,7 +18,7 @@
 .struct-editor input:focus,
 .struct-editor select:focus {
   outline: none;
-  border-color: var(--vscode-focusBorder);
+  border-color: var(--tab-active-border);
 }
 
 /* Invalid state for all inputs */
@@ -32,6 +32,8 @@
 .value-editor {
   text-align: left;
   vertical-align: top;
+  width: 100%;
+  max-width: 250px;
 }
 
 .enum-editor {
@@ -42,6 +44,7 @@
 
 .enum-payload-editor {
   width: 100%;
+  margin-top: 8px;
 }
 
 .duration-fields {
@@ -52,6 +55,12 @@
 .duration-fields label {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+}
+
+/* Date inputs */
+.value-editor input[type='date'] {
+  width: 100%;
 }
 
 .assertion-value-editor {

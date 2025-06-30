@@ -34,12 +34,13 @@ export type EditorItem = {
 
 type CompositeEditorProps = {
   items: EditorItem[];
+  atomicElements?: boolean;
 };
 
-export function CompositeEditor({ items }: CompositeEditorProps): ReactElement {
+export function CompositeEditor(props: CompositeEditorProps): ReactElement {
   // Separate items into those with and without nested arrays
-  const simpleItems = items.filter((item) => !hasNestedArrays(item.type));
-  const complexItems = items.filter((item) => hasNestedArrays(item.type));
+  const simpleItems = props.items.filter((item) => !hasNestedArrays(item.type));
+  const complexItems = props.items.filter((item) => hasNestedArrays(item.type));
 
   // For tabbed view of complex items
   const [activeTab, setActiveTab] = useState(
@@ -55,7 +56,10 @@ export function CompositeEditor({ items }: CompositeEditorProps): ReactElement {
       {simpleItems.length > 0 && complexItems.length === 0 && (
         <div className="simple-items-vertical">
           {simpleItems.map((item) => (
-            <div key={item.key} className="simple-item-vertical">
+            <div
+              key={item.key}
+              className={`simple-item-vertical ${props.atomicElements ? 'atomic-element' : ''}`}
+            >
               <div className="item-label">{item.label}</div>
               <div className="item-editor">{item.editor}</div>
             </div>
@@ -67,7 +71,10 @@ export function CompositeEditor({ items }: CompositeEditorProps): ReactElement {
       {simpleItems.length > 0 && complexItems.length > 0 && (
         <div className="simple-items-container">
           {simpleItems.map((item) => (
-            <div key={item.key} className="simple-item">
+            <div
+              key={item.key}
+              className={`simple-item ${props.atomicElements ? 'atomic-element' : ''}`}
+            >
               <div className="item-label">{item.label}</div>
               <div className="item-editor">{item.editor}</div>
             </div>
