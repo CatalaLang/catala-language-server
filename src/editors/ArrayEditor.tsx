@@ -294,7 +294,9 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 <button
                   className="array-delete"
                   onClick={() => handleDelete(index)}
-                  title="Delete element"
+                  title={intl.formatMessage({
+                    id: 'arrayEditor.deleteElement',
+                  })}
                 >
                   <span className="codicon codicon-trash"></span>
                 </button>

@@ -46,5 +46,6 @@
   "type.array": "{baseType} array",
   "type.optional": "optional {baseType}",
   "arrayEditor.movePrevious": "Move element to previous position",
-  "arrayEditor.moveNext": "Move element to next position"
+  "arrayEditor.moveNext": "Move element to next position",
+  "arrayEditor.deleteElement": "Delete element"
 }
