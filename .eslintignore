@@ -2,5 +2,6 @@ src/generated
 dist/
 server/_build
 server/vendors
+_opam
 .eslintrc.js
 webpack.config.js

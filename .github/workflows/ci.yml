@@ -5,6 +5,8 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -22,11 +24,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: |
           opam install . --deps-only --with-test
           npm ci
+
+      - name: Lint
+        run: npm run lint
 
       - name: Build project
         run: |
@@ -38,3 +44,76 @@ jobs:
         run: |
           opam exec -- dune runtest
           xvfb-run -a npm run test
+
+  release:
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.0.x'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          opam install . --deps-only
+
+      - name: Build extension
+        run: |
+          opam exec -- dune build @lsp
+          npm run package
+
+      - name: Determine if prerelease
+        id: check_prerelease
+        run: |
+          if [[ ${{ github.event.release.prerelease }} == true ]]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify version matches
+        id: package_version
+        run: |
+          # Extract version from package.json
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$PKG_VERSION" >> $GITHUB_OUTPUT
+          
+          # Extract version from GitHub release tag (remove 'v' prefix if present)
+          TAG_VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')
+          
+          # Verify versions match
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Version mismatch! package.json version ($PKG_VERSION) does not match release tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Publish to VS Code Marketplace (Pre-release)
+        if: steps.check_prerelease.outputs.IS_PRERELEASE == 'true'
+        run: npx @vscode/vsce publish --pre-release
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to VS Code Marketplace (Release)
+        if: steps.check_prerelease.outputs.IS_PRERELEASE == 'false'
+        run: npx @vscode/vsce publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Upload VSIX as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: catala-${{ steps.package_version.outputs.VERSION }}.vsix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
