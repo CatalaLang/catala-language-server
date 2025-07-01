@@ -23,7 +23,6 @@
  (embed_in_plugin_libraries
    otoml
    catala.clerk_lib
-   yojson
    atdgen-runtime
    test_case_parser_lib))
 
