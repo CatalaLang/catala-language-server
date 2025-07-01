@@ -133,3 +133,37 @@ When developing on the "front" (typescript side) of the extension, you may invok
 All the code contained in this repository is released under the Apache
 license (version 2) unless another license is explicited for a
 sub-directory.
+
+## Release Process
+
+This extension is automatically published to the VS Code Marketplace when a new GitHub release is created.
+
+### Creating a New Release
+
+1. **Update Version in package.json**:
+
+   - Update the version number in `package.json`
+   - Commit and push this change to the repository
+
+2. **Create a GitHub Release**:
+
+   - Go to the repository on GitHub and click on "Releases" in the right sidebar
+   - Click "Draft a new release"
+   - Create a new tag with the SAME version number as in package.json (e.g., `v0.23.0` or just `0.23.0`)
+   - Add a title and release notes
+   - For pre-releases, check the "This is a pre-release" option
+   - For stable releases, leave the pre-release option unchecked
+   - Click "Publish release"
+
+3. **Automated Process**:
+   The CI/CD workflow automatically:
+
+   - Verifies the release tag version matches package.json version
+   - Builds and packages the extension
+   - Publishes to VS Code Marketplace
+   - Attaches the VSIX file to the GitHub release
+
+4. **Verification**:
+   - Check GitHub Actions to monitor the workflow
+   - Verify the extension appears in the VS Code Marketplace
+   - Confirm the VSIX file is attached to the GitHub release
