@@ -63,10 +63,6 @@ jobs:
         run: |
           npm ci
 
-      - name: Build extension
-        run: |
-          npm run package
-
       - name: Determine if prerelease
         id: check_prerelease
         run: |
@@ -91,6 +87,10 @@ jobs:
             echo "::error::Version mismatch! package.json version ($PKG_VERSION) does not match release tag ($TAG_VERSION)"
             exit 1
           fi
+
+      - name: Build extension
+        run: |
+          npx @vscode/vsce package
 
       - name: Publish to VS Code Marketplace (Pre-release)
         if: steps.check_prerelease.outputs.IS_PRERELEASE == 'true'
