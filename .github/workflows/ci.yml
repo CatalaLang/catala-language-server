@@ -71,7 +71,6 @@ jobs:
 
       - name: Build extension
         run: |
-          opam exec -- dune build @lsp
           npm run package
 
       - name: Determine if prerelease
