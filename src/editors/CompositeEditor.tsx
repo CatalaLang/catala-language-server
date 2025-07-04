@@ -42,6 +42,32 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
   const simpleItems = props.items.filter((item) => !hasNestedArrays(item.type));
   const complexItems = props.items.filter((item) => hasNestedArrays(item.type));
 
+  // Helper function to get tab display name with count for arrays
+  function getTabDisplayName(item: EditorItem): string {
+    // Check if this is an array type
+    if (item.type.kind === 'TArray') {
+      // Try to extract array length from the editor props
+      const editorProps = (
+        item.editor as {
+          props: {
+            testIO?: {
+              value?: { value?: { value?: { kind?: string; value?: any } } };
+            };
+          };
+        }
+      ).props;
+
+      // Look for testIO prop which might contain our array value
+      if (editorProps?.testIO?.value?.value?.value?.kind === 'Array') {
+        const arrayValue = editorProps.testIO.value.value.value.value;
+        return `${item.label} (${arrayValue.length})`;
+      }
+    }
+
+    // For non-array types or arrays without accessible length, just return the label
+    return item.label;
+  }
+
   // For tabbed view of complex items
   const [activeTab, setActiveTab] = useState(
     complexItems.length > 0 ? complexItems[0].key : ''
@@ -92,7 +118,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
                 className={`tab ${activeTab === item.key ? 'active' : ''}`}
                 onClick={() => setActiveTab(item.key)}
               >
-                {item.label}
+                {getTabDisplayName(item)}
               </button>
             ))}
           </div>
