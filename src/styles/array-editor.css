@@ -132,10 +132,32 @@
   box-shadow: 0 0 0 2px var(--button-primary-background);
 }
 
+.array-item-controls {
+  cursor: grab;
+}
+
+.array-item-controls:active {
+  cursor: grabbing;
+}
+
+.array-item-controls button {
+  cursor: pointer;
+}
+
 .array-item-header {
   font-size: var(--field-label-font-size);
   font-weight: var(--field-label-font-weight);
   color: var(--field-label-color);
   margin-bottom: 8px;
   padding: 4px 0;
+}
+
+/* Drag ghost element styling */
+.drag-ghost {
+  padding: 4px 8px;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  position: absolute;
+  top: -1000px;
 }

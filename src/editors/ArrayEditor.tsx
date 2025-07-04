@@ -171,12 +171,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
     if (e.dataTransfer) {
       const dragElement = document.createElement('div');
       dragElement.textContent = `Item ${index + 1}`;
-      dragElement.style.padding = '4px 8px';
-      dragElement.style.background = 'var(--vscode-editor-background)';
-      dragElement.style.border = '1px solid var(--vscode-panel-border)';
-      dragElement.style.borderRadius = '4px';
-      dragElement.style.position = 'absolute';
-      dragElement.style.top = '-1000px';
+      dragElement.className = 'drag-ghost';
       document.body.appendChild(dragElement);
       e.dataTransfer.setDragImage(dragElement, 0, 0);
       setTimeout(() => {
@@ -238,7 +233,9 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
           return (
             <div
               key={itemKey}
-              className={`array-item ${dragOverIndex === index ? 'drag-over' : ''} ${draggedIndex === index ? 'dragging' : ''}`}
+              className={`array-item ${
+                dragOverIndex === index ? 'drag-over' : ''
+              } ${draggedIndex === index ? 'dragging' : ''}`}
               onDragOver={(e) => handleDragOver(e, index)}
               onDrop={(e) => handleDrop(e, index)}
               onDragEnd={handleDragEnd}
