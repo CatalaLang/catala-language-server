@@ -1,0 +1,9 @@
+/* Main CSS file that imports all modules */
+@import './theme-variables.css';
+@import './test-editor.css';
+@import './value-editors.css';
+@import './composite-editor.css';
+@import './array-editor.css';
+@import './struct-editor.css';
+@import './modal.css';
+@import './misc.css';

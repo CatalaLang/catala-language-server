@@ -1,0 +1,94 @@
+/* Common input styles */
+.value-editor input,
+.value-editor select,
+.struct-editor input,
+.struct-editor select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--control-border);
+  background-color: var(--control-background);
+  color: var(--control-text);
+  box-sizing: border-box;
+  border-radius: 2px;
+  font-size: 13px;
+}
+
+.value-editor input:focus,
+.value-editor select:focus,
+.struct-editor input:focus,
+.struct-editor select:focus {
+  outline: none;
+  border-color: var(--tab-active-border);
+}
+
+/* Invalid state for all inputs */
+.value-editor input.invalid,
+.value-editor select.invalid {
+  border-color: var(--vscode-inputValidation-errorBorder) !important;
+  background-color: var(--vscode-inputValidation-errorBackground) !important;
+}
+
+/* Value editor container */
+.value-editor {
+  text-align: left;
+  vertical-align: top;
+  width: 100%;
+  max-width: 250px;
+}
+
+.enum-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.enum-payload-editor {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.duration-fields {
+  display: flex;
+  gap: 10px;
+}
+
+.duration-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Date inputs */
+.value-editor input[type='date'] {
+  width: 100%;
+}
+
+.assertion-value-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.assertion-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-editor-foreground);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s ease-in-out;
+  flex-shrink: 0;
+}
+
+.assertion-delete:hover {
+  opacity: 1;
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.assertion-delete .codicon {
+  font-size: 14px;
+}

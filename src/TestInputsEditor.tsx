@@ -1,8 +1,7 @@
-import { type ReactElement, useState } from 'react';
+import { type ReactElement } from 'react';
 import type { TestInputs, TestIo } from './generated/test_case';
-import ValueEditor from './ValueEditors';
-import CollapsibleRow from './CollapsibleRow';
-import { isCollapsible } from './ValueEditors';
+import ValueEditor from './editors/ValueEditors';
+import { CompositeEditor, type EditorItem } from './editors/CompositeEditor';
 
 type Props = {
   test_inputs: TestInputs;
@@ -10,41 +9,29 @@ type Props = {
 };
 
 export default function TestInputsEditor(props: Props): ReactElement {
+  // Create editor items for CompositeEditor
+  const editorItems: EditorItem[] = Array.from(props.test_inputs.entries()).map(
+    ([inputName, testIo]) => {
+      function onTestInputChange(newValue: TestIo): void {
+        props.onTestInputsChange(
+          new Map([...props.test_inputs, [inputName, newValue]])
+        );
+      }
+
+      return {
+        key: inputName,
+        label: inputName,
+        type: testIo.typ,
+        editor: (
+          <ValueEditor testIO={testIo} onValueChange={onTestInputChange} />
+        ),
+      };
+    }
+  );
+
   return (
-    <>
-      <table className="test-inputs-table">
-        <tbody>
-          {Array.from(props.test_inputs, ([inputName, testIo]) => {
-            const [isCollapsed, setIsCollapsed] = useState(false);
-
-            function onTestInputChange(newValue: TestIo): void {
-              props.onTestInputsChange(
-                new Map([...props.test_inputs, [inputName, newValue]])
-              );
-            }
-
-            return (
-              <CollapsibleRow
-                key={inputName}
-                label={inputName}
-                isCollapsed={
-                  isCollapsible(testIo.typ) ? isCollapsed : undefined
-                }
-                onToggleCollapse={
-                  isCollapsible(testIo.typ)
-                    ? () => setIsCollapsed(!isCollapsed)
-                    : undefined
-                }
-              >
-                <ValueEditor
-                  testIO={testIo}
-                  onValueChange={onTestInputChange}
-                />
-              </CollapsibleRow>
-            );
-          })}
-        </tbody>
-      </table>
-    </>
+    <div className="test-inputs data-card">
+      <CompositeEditor items={editorItems} atomicElements={true} />
+    </div>
   );
 }

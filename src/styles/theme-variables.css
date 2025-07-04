@@ -1,0 +1,51 @@
+:root {
+  /* Semantic color variables that map to VS Code theme colors */
+  --card-background: var(--vscode-editor-background);
+  --card-background-alt: var(--vscode-sideBarSectionHeader-background);
+  --card-border: var(--vscode-panel-border);
+  --card-border-light: var(--vscode-input-border);
+
+  --tab-active-border: var(--vscode-focusBorder);
+  --tab-hover-background: var(--vscode-toolbar-hoverBackground);
+
+  --control-background: var(--vscode-input-background);
+  --control-border: var(--vscode-input-border);
+  --control-text: var(--vscode-input-foreground);
+
+  --button-primary-background: var(--vscode-button-background);
+  --button-primary-foreground: var(--vscode-button-foreground);
+  --button-primary-hover: var(--vscode-button-hoverBackground);
+
+  --button-secondary-background: var(--vscode-button-secondaryBackground);
+  --button-secondary-foreground: var(--vscode-button-secondaryForeground);
+  --button-secondary-hover: var(--vscode-button-secondaryHoverBackground);
+
+  /* Even-odd nesting system */
+  --level-1-background: var(--vscode-editor-background);
+  --level-2-background: var(
+    --vscode-sideBarSectionHeader-background,
+    rgba(128, 128, 128, 0.05)
+  );
+  --level-3-background: var(--vscode-editor-background);
+
+  /* Section headers */
+  --section-header-color: var(--vscode-foreground);
+  --section-header-font-weight: 600;
+  --section-header-font-size: 14px;
+  --section-header-margin: 0 0 16px 0;
+
+  /* Field labels */
+  --field-label-color: var(--vscode-descriptionForeground, rgba(0, 0, 0, 0.7));
+  --field-label-font-weight: 500;
+  --field-label-font-size: 12px;
+
+  /* Controls bar */
+  --controls-background: var(
+    --vscode-editorWidget-background,
+    rgba(128, 128, 128, 0.1)
+  );
+  --controls-separator: var(
+    --vscode-editorWidget-border,
+    rgba(128, 128, 128, 0.2)
+  );
+}

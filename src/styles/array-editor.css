@@ -1,0 +1,163 @@
+.array-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.array-items {
+  display: flex;
+  gap: 16px;
+}
+
+.array-items-nested {
+  flex-direction: column;
+}
+
+.array-items-non-nested {
+  flex-wrap: wrap;
+}
+
+/* for array elements that contain other arrays */
+.array-items-nested {
+  flex-wrap: nowrap;
+  flex-direction: column;
+}
+
+.array-item {
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  background-color: var(--level-3-background);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.array-items-non-nested .array-item {
+  flex: 0 0 auto;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.array-item-content {
+  flex: 1;
+  padding: 12px;
+}
+
+.array-item-controls {
+  display: flex;
+  gap: 2px;
+  padding: 8px 4px;
+  background-color: var(--controls-background);
+  justify-content: center;
+  position: relative;
+  box-shadow: 1px 0 0 var(--controls-separator);
+}
+
+.array-items-nested .array-item-controls {
+  flex-direction: column;
+}
+
+.array-items-non-nested .array-item-controls {
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 3px 0 0 3px;
+}
+
+.array-items-non-nested .array-item {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.array-items-non-nested .array-item-content {
+  flex: 1;
+  padding: 8px;
+}
+
+.array-item-controls button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-editor-foreground);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s ease-in-out;
+  position: relative;
+  z-index: 2;
+  border-radius: 2px;
+}
+
+.array-item-controls button:hover {
+  opacity: 1;
+  background-color: var(--tab-hover-background);
+}
+
+.array-item-controls button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.array-add {
+  color: var(--button-primary-foreground);
+  background-color: var(--button-primary-background);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-bottom: 8px;
+  border: none;
+  font-size: 13px;
+}
+
+.array-add:hover {
+  background-color: var(--button-primary-hover);
+}
+
+/* Drag and drop styles */
+.array-item.dragging {
+  opacity: 0.5;
+}
+
+.array-item.drag-over {
+  box-shadow: 0 0 0 2px var(--button-primary-background);
+}
+
+.array-item-controls {
+  cursor: grab;
+}
+
+.array-item-controls:active {
+  cursor: grabbing;
+}
+
+.array-item-controls button {
+  cursor: pointer;
+}
+
+.array-item-header {
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  color: var(--field-label-color);
+  margin-bottom: 8px;
+  padding: 4px 0;
+}
+
+/* Drag ghost element styling */
+.drag-ghost {
+  padding: 4px 8px;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  position: absolute;
+  top: -1000px;
+}

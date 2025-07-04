@@ -1,10 +1,8 @@
-import { type ReactElement, useState } from 'react';
+import { type ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
 import type { Test, TestIo } from './generated/test_case';
 import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
-import CollapsibleRow from './CollapsibleRow';
-import { isCollapsible } from './ValueEditors';
 
 type Props = {
   test: Test;
@@ -69,47 +67,34 @@ export default function TestOutputsEditor({
 
   return (
     <div className="test-outputs-editor">
-      <table className="test-outputs-table">
-        <tbody>
-          {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {
-            const outputData = test_outputs.get(outputName);
-            const isCollapsibleValue =
-              outputData?.value && isCollapsible(outputData.typ);
-            const [isCollapsed, setIsCollapsed] = useState(false);
+      <div className="test-outputs data-card">
+        {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {
+          const outputData = test_outputs.get(outputName);
 
-            return (
-              <CollapsibleRow
-                key={outputName}
-                label={outputName}
-                isCollapsed={isCollapsibleValue ? isCollapsed : undefined}
-                onToggleCollapse={
-                  isCollapsibleValue
-                    ? () => setIsCollapsed(!isCollapsed)
-                    : undefined
-                }
-              >
-                {outputData?.value ? (
-                  <AssertionValueEditor
-                    testIO={outputData}
-                    onValueChange={(newValue) =>
-                      onAssertValueChange(outputName, newValue)
-                    }
-                    onAssertionDeletion={() => onAssertDelete(outputName)}
-                  />
-                ) : (
-                  <button
-                    className="test-editor-run"
-                    onClick={() => onAssertAdd(outputName)}
-                  >
-                    <span className="codicon codicon-add"></span>
-                    <FormattedMessage id="testOutputs.addExpectedValue" />
-                  </button>
-                )}
-              </CollapsibleRow>
-            );
-          })}
-        </tbody>
-      </table>
+          return (
+            <>
+              <label>{outputName}</label>
+              {outputData?.value ? (
+                <AssertionValueEditor
+                  testIO={outputData}
+                  onValueChange={(newValue) =>
+                    onAssertValueChange(outputName, newValue)
+                  }
+                  onAssertionDeletion={() => onAssertDelete(outputName)}
+                />
+              ) : (
+                <button
+                  className="test-editor-run"
+                  onClick={() => onAssertAdd(outputName)}
+                >
+                  <span className="codicon codicon-add"></span>
+                  <FormattedMessage id="testOutputs.addExpectedValue" />
+                </button>
+              )}
+            </>
+          );
+        })}
+      </div>
     </div>
   );
 }
