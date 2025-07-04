@@ -5,19 +5,3 @@
 .struct-container {
   width: 100%;
 }
-
-.struct-field {
-  margin-bottom: 12px;
-}
-
-.struct-field-label {
-  font-weight: var(--field-label-font-weight);
-  margin-bottom: 6px;
-  display: block;
-  color: var(--field-label-color);
-  font-size: var(--field-label-font-size);
-}
-
-.struct-field-content {
-  width: 100%;
-}
