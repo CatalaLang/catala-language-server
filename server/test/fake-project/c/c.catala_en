@@ -1,0 +1,12 @@
+> Using B
+
+```catala
+declaration enumeration T:
+  -- A
+
+declaration scope X:
+  output x content boolean
+
+scope X:
+  definition x equals A = A
+```
