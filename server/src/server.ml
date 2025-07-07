@@ -245,6 +245,10 @@ class catala_lsp_server =
     inherit Linol_lwt.Jsonrpc2.server as super
     method spawn_query_handler = Lwt.async
 
+    val mutable initialize_params : InitializeParams.t =
+      (* Placeholder overwrote in [on_req_initialize] *)
+      InitializeParams.create ~capabilities:(ClientCapabilities.create ()) ()
+
     (* Extra-configurations *)
     method! config_code_action_provider = `Bool true
     method! config_completion = Some (CompletionOptions.create ())
@@ -266,12 +270,12 @@ class catala_lsp_server =
     (* Server state *)
     val server_state : State.file SState.locked_server_state = SState.make ()
 
-    method! on_req_initialize ~notify_back (i : InitializeParams.t) =
-      set_log_level i.trace;
+    method! on_req_initialize
+        ~notify_back:_
+        (i : InitializeParams.t)
+        : InitializeResult.t t =
       Logs.app (fun m -> m "Starting lsp server");
-      SState.use_and_update server_state
-      @@ fun { projects = _; open_documents } ->
-      let projects = Projects.init ~notify_back i in
+      initialize_params <- i;
       let sync_opts = self#config_sync_opts in
       let capabilities =
         ServerCapabilities.create
@@ -291,9 +295,7 @@ class catala_lsp_server =
           ~workspaceSymbolProvider:self#config_workspace_symbol
           ?typeDefinitionProvider:self#config_type_definition ()
       in
-      Lwt.return
-        ( InitializeResult.create ~capabilities (),
-          { SState.projects; open_documents } )
+      Lwt.return (InitializeResult.create ~capabilities ())
 
     method private use_or_process_file ~notify_back ~is_saved doc_id =
       let* (doc_opt : State.file SState.document_state option) =
@@ -380,6 +382,39 @@ class catala_lsp_server =
           | Deleted -> self#on_doc_did_close ~notify_back doc_id)
         changes
 
+    method private scan_project ~notify_back { SState.projects; open_documents }
+        =
+      let open_documents =
+        Projects.Projects.fold
+          (fun project documents ->
+            Doc_id.Map.fold
+              (fun doc_id _ documents ->
+                if Projects.is_an_included_file doc_id project then
+                  (* We do not consider included files *)
+                  documents
+                else
+                  (* Affected files are necessarily present in the project *)
+                  let project_file =
+                    Option.get @@ Projects.find_file_in_project doc_id project
+                  in
+                  let document =
+                    match Doc_id.Map.find_opt doc_id documents with
+                    | None ->
+                      SState.make_document ?contents:None ~saved:true doc_id
+                        project project_file
+                    | Some document -> document
+                  in
+                  let _processed_file, document =
+                    unlocked_process_document document
+                  in
+                  Doc_id.Map.add doc_id document documents)
+              project.project_files documents)
+          projects open_documents
+      in
+      let sstate = { SState.projects; open_documents } in
+      let* () = unlocked_send_all_diagnostics ~notify_back sstate in
+      Lwt.return sstate
+
     method! on_notification_unhandled
         ~notify_back
         (n : Lsp.Client_notification.t) =
@@ -419,7 +454,16 @@ class catala_lsp_server =
             in
             Lwt.return_unit
         in
-        Lwt.return_unit
+        set_log_level initialize_params.trace;
+        SState.use_and_update server_state
+        @@ fun sstate ->
+        let projects = Projects.init ~notify_back initialize_params in
+        let sstate = { sstate with projects } in
+        let* sstate =
+          if !scan_project_config then self#scan_project ~notify_back sstate
+          else Lwt.return sstate
+        in
+        Lwt.return ((), sstate)
       | _ -> Lwt.return_unit
 
     method! on_request_unhandled : type r.
