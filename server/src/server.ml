@@ -46,6 +46,8 @@ let set_log_level =
     Logs.set_level (Some Debug);
     Logs.app (fun m -> m "switching log level to [verbose]")
 
+let scan_project_config = ref true
+
 let protect_project_not_found f =
   Lwt.catch f (function
     | Projects.Project_not_found -> Lwt.return_unit
@@ -169,7 +171,7 @@ let unlocked_process_file
   in
   let is_valid = Option.is_some new_file.result in
   let open_documents = Doc_id.Map.add doc_id new_document open_documents in
-  if is_saved && is_valid then (
+  if is_saved && is_valid && !scan_project_config then (
     (* Check project files for potential errors *)
     let () =
       Log.debug (fun m ->
@@ -271,26 +273,14 @@ class catala_lsp_server =
       @@ fun { projects = _; open_documents } ->
       let projects = Projects.init ~notify_back i in
       let sync_opts = self#config_sync_opts in
-      let* documentFormattingProvider =
-        let* available = Utils.check_catala_format_availability () in
-        if available then Lwt.return (`Bool true)
-        else
-          let* () =
-            Utils.send_notification ~type_:MessageType.Warning ~notify_back
-              "Could not find 'catala-format', code formatting is unavailable.\n\
-               Follow the instructions in the \
-               [README](https://github.com/CatalaLang/catala-language-server?tab=readme-ov-file#code-formatting) \
-               to setup code formatting."
-          in
-          Lwt.return (`Bool false)
-      in
       let capabilities =
         ServerCapabilities.create
           ?codeLensProvider:self#config_code_lens_options
           ~codeActionProvider:self#config_code_action_provider
           ~executeCommandProvider:
             (ExecuteCommandOptions.create ~commands:self#config_list_commands ())
-          ~documentFormattingProvider ?completionProvider:self#config_completion
+          ~documentFormattingProvider:(`Bool true)
+          ?completionProvider:self#config_completion
           ?definitionProvider:self#config_definition
           ?declarationProvider:self#config_declaration
           ?referencesProvider:self#config_references
@@ -403,6 +393,33 @@ class catala_lsp_server =
         Lwt.return_unit
       | DidChangeWatchedFiles { changes } ->
         self#on_notif_did_change_watched_files ~notify_back changes
+      | Initialized ->
+        let* () =
+          let* project_scanning_enabled =
+            lookup_catala_enable_project_scan ~notify_back
+          in
+          Lwt.return
+          @@
+          match project_scanning_enabled with
+          | None -> scan_project_config := true
+          | Some b -> scan_project_config := b
+        in
+        let* () =
+          let* available =
+            Utils.check_catala_format_availability ~notify_back
+          in
+          if available then Lwt.return_unit
+          else
+            let* () =
+              Utils.send_notification ~type_:MessageType.Warning ~notify_back
+                "Could not find 'catala-format', code formatting is unavailable.\n\
+                 Follow the instructions in the \
+                 [README](https://github.com/CatalaLang/catala-language-server?tab=readme-ov-file#code-formatting) \
+                 to setup code formatting."
+            in
+            Lwt.return_unit
+        in
+        Lwt.return_unit
       | _ -> Lwt.return_unit
 
     method! on_request_unhandled : type r.

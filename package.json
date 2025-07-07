@@ -37,6 +37,11 @@
           ],
           "default": "messages"
         },
+        "catala-lsp.enableProjectScan": {
+          "description": "Controls whether the LSP server should actively scan through the project to detect dependency breakage. This may be ressource-intensive on large projects. Switching this parameter requires a reload of VSCode to become effective.",
+          "type": "boolean",
+          "default": "true"
+        },
         "catala.lspServerPath": {
           "type": "string",
           "default": null,
