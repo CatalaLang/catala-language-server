@@ -269,6 +269,8 @@ let find_module_candidate
       (Lwt.async
       @@ fun () ->
       let diag = Diagnostic.error_p ~related mod_use_pos (`String msg) in
+      (* FIXME: this diagnostic isn't properly removed when the error gets
+         fixed. *)
       notify_back#set_uri
         (Linol_lwt.DocumentUri.of_path file.Clerk_scan.file_name);
       notify_back#send_diagnostic [diag]);
