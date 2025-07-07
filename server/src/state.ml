@@ -372,13 +372,13 @@ let process_document ?contents (document : file Server_state.document_state) : t
             |> List.map (fun { Clerk_scan.file_name; _ } -> file_name)));
       let including_file = S.choose including_files in
       if S.cardinal including_files > 1 then
-        (* TODO: also handle multiple file processing *)
         Log.info (fun m -> m "found multiple document inclusion");
       Log.info (fun m ->
           m "found document inclusion in %s - processing this one instead"
             including_file.file_name);
       let resolve_included_file path =
-        if File.equal path file then input_src else Global.FileName path
+        if File.equal path file then input_src
+        else Global.FileName (File.clean_path path)
       in
       FileName including_file.file_name, Some resolve_included_file
     end
