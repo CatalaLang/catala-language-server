@@ -94,13 +94,37 @@ let send_notification ?(type_ = MessageType.Warning) ~notify_back message =
   let notif = Lsp.Server_notification.ShowMessage { message; type_ } in
   notify_back#send_notification notif
 
-let check_catala_format_availability () =
-  let open Lwt.Infix in
+let lookup_catala_format_config_path
+    (notify_back : Linol_lwt.Jsonrpc2.notify_back) =
+  let open Lwt.Syntax in
+  let r, w = Lwt.task () in
+  let param =
+    ConfigurationParams.create
+      ~items:[ConfigurationItem.create ~section:"catala.catalaFormatPath" ()]
+  in
+  let* _req_id =
+    notify_back#send_request (Lsp.Server_request.WorkspaceConfiguration param)
+      (fun e ->
+        match e with
+        | Ok (`String x :: _) ->
+          Lwt.wakeup w (Some x);
+          Lwt.return_unit
+        | Ok _ | Error _ ->
+          Lwt.wakeup w None;
+          Lwt.return_unit)
+  in
+  r
+
+let check_catala_format_availability ~notify_back =
+  let open Lwt.Syntax in
   Lwt.catch
     (fun () ->
-      Lwt_process.exec ~stdout:`Dev_null ~stderr:`Dev_null
-        ("", [| "catala-format" |])
-      >>= function
+      let* path_opt = lookup_catala_format_config_path notify_back in
+      let path = Option.value ~default:"catala-format" path_opt in
+      let* status =
+        Lwt_process.exec ~stdout:`Dev_null ~stderr:`Dev_null ("", [| path |])
+      in
+      match status with
       | WEXITED 2 -> Lwt.return true
       | WEXITED 127 (* Not found *) | WEXITED _ -> Lwt.return false
       | WSIGNALED _ -> Lwt.return_false
@@ -118,19 +142,20 @@ let write_string oc s =
   in
   inner 0 0 (String.length s)
 
-let lookup_catala_format_config_path
-    (notify_back : Linol_lwt.Jsonrpc2.notify_back) =
+let lookup_catala_enable_project_scan
+    ~(notify_back : Linol_lwt.Jsonrpc2.notify_back) : bool option Lwt.t =
   let open Lwt.Syntax in
   let r, w = Lwt.task () in
   let param =
     ConfigurationParams.create
-      ~items:[ConfigurationItem.create ~section:"catala.catalaFormatPath" ()]
+      ~items:
+        [ConfigurationItem.create ~section:"catala-lsp.enableProjectScan" ()]
   in
   let* _req_id =
     notify_back#send_request (Lsp.Server_request.WorkspaceConfiguration param)
       (fun e ->
         match e with
-        | Ok (`String x :: _) ->
+        | Ok (`Bool x :: _) ->
           Lwt.wakeup w (Some x);
           Lwt.return_unit
         | Ok _ | Error _ ->
