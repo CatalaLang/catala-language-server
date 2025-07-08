@@ -96,4 +96,11 @@ val update_project_file :
   projects ->
   update_result
 
+val remove_project_file :
+  notify_back:Linol_lwt.Jsonrpc2.notify_back ->
+  Doc_id.doc_id ->
+  project ->
+  t ->
+  update_result
+
 val is_an_included_file : Doc_id.doc_id -> project -> bool
