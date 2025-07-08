@@ -91,6 +91,35 @@ module Project_graph = struct
         g)
       project_files G.empty
 
+  let remove_vertex
+      ~(item : Clerk_scan.item)
+      ~(compute_using_modules : Doc_id.t -> ScanItemFiles.t)
+      g : t * Doc_id.Set.t (* returns (new graph * affected docs) *) =
+    let deleted_doc_id = to_doc_id item in
+    assert (G.mem_vertex g deleted_doc_id);
+    let pred_documents =
+      List.filter_map
+        (function v, Including, _ -> Some v | _ -> None)
+        (G.pred_e g deleted_doc_id)
+    in
+    let using_documents =
+      List.filter_map
+        (function _, Used_by, v -> Some v | _ -> None)
+        (G.succ_e g deleted_doc_id)
+    in
+    (* module using this module should also try to relink to possible modules *)
+    let g = G.remove_vertex g deleted_doc_id in
+    let g =
+      List.fold_left
+        (fun g d ->
+          let modules = compute_using_modules d in
+          ScanItemFiles.fold
+            (fun item g -> G.add_edge_e g (to_doc_id item, Used_by, d))
+            modules g)
+        g using_documents
+    in
+    g, Doc_id.Set.of_list (pred_documents @ using_documents)
+
   let update_vertex
       ~(prev_item : Clerk_scan.item)
       ~(new_item : Clerk_scan.item)
@@ -141,9 +170,9 @@ module Project_graph = struct
         List.fold_left loop (visited, affected_files) fwd_deps
     in
     let _, affected_files =
+      (* [doc_id] may be part of the processed files, let's remove it *)
       loop (Doc_id.Set.remove doc_id ignored_documents, Doc_id.Set.empty) doc_id
     in
-    (* [doc_id] may be part of the processed files *)
     affected_files
 
   let is_an_included_file vertex g =
@@ -269,8 +298,6 @@ let find_module_candidate
       (Lwt.async
       @@ fun () ->
       let diag = Diagnostic.error_p ~related mod_use_pos (`String msg) in
-      (* FIXME: this diagnostic isn't properly removed when the error gets
-         fixed. *)
       notify_back#set_uri
         (Linol_lwt.DocumentUri.of_path file.Clerk_scan.file_name);
       notify_back#send_diagnostic [diag]);
@@ -625,7 +652,84 @@ let update_project_file
                ~pp_sep:(fun fmt () -> fprintf fmt ",@ ")
                Doc_id.format)
             (Doc_id.Set.elements possibly_affected_files));
+      let projects = Projects.add project projects in
       { projects; project; possibly_affected_files }
 
 let is_an_included_file doc_id project =
   Project_graph.is_an_included_file doc_id project.project_graph
+
+let remove_project_file ~notify_back doc_id project projects =
+  Log.debug (fun m ->
+      m "Deleting document %a from project" Doc_id.format doc_id);
+  match find_file_in_project doc_id project with
+  | None ->
+    Log.debug (fun m ->
+        m "Did not find project for removed file %a, doing nothing"
+          Doc_id.format doc_id);
+    (* File did not previously exist: let's rescan everything *)
+    { projects; project; possibly_affected_files = Doc_id.Set.empty }
+  | Some project_file ->
+    (* Let's gather the dependencies and retrieve the affected files *)
+    let item = project_file.file in
+    let known_modules =
+      (* Start by removing the known modules *)
+      match item.Clerk_scan.module_def with
+      | None -> project.known_modules
+      | Some mod_def ->
+        ModuleMap.update (Mark.remove mod_def)
+          (function
+            | None -> None
+            | Some s ->
+              let s = ScanItemFiles.remove item s in
+              if ScanItemFiles.is_empty s then None else Some s)
+          project.known_modules
+    in
+    let includes =
+      match project.project_kind with
+      | Clerk { clerk_config; _ } -> clerk_config.global.include_dirs
+      | No_clerk -> []
+    in
+    let project_files =
+      (* We also remove existing [used_by] relations *)
+      let used_by_files =
+        let open Project_graph in
+        List.filter_map
+          (function
+            | l, Used_by, _ -> find_file_in_project l project | _ -> None)
+          (G.pred_e project.project_graph doc_id)
+      in
+      List.fold_left
+        (fun project_files (f : project_file) ->
+          Doc_id.Map.update (to_doc_id f.file)
+            (fun _ ->
+              Some { f with used_by = ScanItemFiles.remove item f.used_by })
+            project_files)
+        project.project_files used_by_files
+    in
+    let compute_using_modules doc_id =
+      match Doc_id.Map.find_opt doc_id project.project_files with
+      | None -> ScanItemFiles.empty
+      | Some { file; _ } ->
+        List.filter_map
+          (fun mod_use ->
+            Log.debug (fun m ->
+                m "lookup module candidate for %a" Doc_id.format doc_id);
+            find_module_candidate ~notify_back ~includes file known_modules
+              mod_use)
+          file.used_modules
+        |> ScanItemFiles.of_list
+    in
+    let project_graph, possibly_affected_files =
+      Project_graph.remove_vertex ~item ~compute_using_modules
+        project.project_graph
+    in
+    let project =
+      { project with project_files; known_modules; project_graph }
+    in
+    Log.debug (fun m ->
+        let open Format in
+        m "Possibly affected files: %a"
+          (pp_print_list ~pp_sep:pp_print_space Doc_id.format)
+          (Doc_id.Set.elements possibly_affected_files));
+    let projects = Projects.add project projects in
+    { projects; project; possibly_affected_files }

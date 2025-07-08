@@ -93,11 +93,16 @@ let retrieve_existing_document doc_id server_state =
 
 let unlocked_send_all_diagnostics =
   let previous_faulty_documents = ref Doc_id.Set.empty in
-  fun ~notify_back { SState.open_documents; _ } ->
+  fun ?doc_id ~notify_back { SState.open_documents; _ } ->
     let open Lwt.Syntax in
     let send_diagnostics (doc_id, diags) =
       notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
       notify_back#send_diagnostic diags
+    in
+    let diags =
+      match doc_id with
+      | None -> Doc_id.Map.empty
+      | Some doc_id -> Doc_id.Map.singleton doc_id RangeMap.empty
     in
     let all_diagnostics : Diagnostic.t RangeMap.t Doc_id.Map.t =
       Doc_id.Map.fold
@@ -105,7 +110,7 @@ let unlocked_send_all_diagnostics =
           Doc_id.Map.union
             (fun _ l r -> Some (RangeMap.union (fun _ l _ -> Some l) l r))
             doc_state.SState.errors acc)
-        open_documents Doc_id.Map.empty
+        open_documents diags
     in
     let extra_diagnostics =
       Doc_id.Set.fold
@@ -128,10 +133,10 @@ let unlocked_send_all_diagnostics =
         send_diagnostics (doc_id, diags))
       all_diagnostics Lwt.return_unit
 
-let send_all_diagnostics ~notify_back server_state =
+let send_all_diagnostics ?doc_id ~notify_back server_state =
   SState.use_now server_state
   @@ fun unlocked_sstate ->
-  unlocked_send_all_diagnostics ~notify_back unlocked_sstate
+  unlocked_send_all_diagnostics ?doc_id ~notify_back unlocked_sstate
 
 let unlocked_process_document document :
     State.file * State.file SState.document_state =
@@ -216,6 +221,14 @@ let unlocked_process_file
             in
             let _processed_file, document =
               unlocked_process_document document
+            in
+            let document =
+              if Doc_id.Map.is_empty document.errors then
+                let errors =
+                  Doc_id.Map.singleton document.document_id RangeMap.empty
+                in
+                { document with errors }
+              else document
             in
             Doc_id.Map.add doc_id document documents)
         possibly_affected_files Doc_id.Map.empty
@@ -338,7 +351,7 @@ class catala_lsp_server =
           let* _file =
             process_file ?contents ~is_saved ~notify_back server_state doc_id
           in
-          send_all_diagnostics ~notify_back server_state
+          send_all_diagnostics ~doc_id ~notify_back server_state
 
     method on_notif_doc_did_open ~notify_back d ~content =
       let doc_id = Doc_id.of_lsp_uri d.uri in
@@ -357,7 +370,9 @@ class catala_lsp_server =
           unlocked_process_file ?contents:new_content ~is_saved:false
             ~notify_back doc_id state
         in
-        let* () = unlocked_send_all_diagnostics ~notify_back new_state in
+        let* () =
+          unlocked_send_all_diagnostics ~doc_id ~notify_back new_state
+        in
         Lwt.return new_state
 
     method on_notif_doc_did_change
@@ -372,14 +387,70 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri d.textDocument.uri in
       self#process_document ~notify_back ~is_saved:true doc_id None
 
+    method private on_doc_delete ~notify_back (doc_id : Doc_id.doc_id) =
+      if should_ignore doc_id then Lwt.return_unit
+      else
+        protect_project_not_found
+        @@ fun () ->
+        SState.use_and_update server_state
+        @@ fun ({ projects; open_documents } as sstate) ->
+        match Projects.lookup_project doc_id projects with
+        | None ->
+          (* Shouldn't happen but nothing to do otherwise *)
+          Lwt.return ((), sstate)
+        | Some project ->
+          let { Projects.projects; project; possibly_affected_files } =
+            Projects.remove_project_file ~notify_back doc_id project projects
+          in
+          let ignored_documents =
+            Doc_id.Map.fold
+              (fun doc_id { SState.saved; _ } s ->
+                if not saved then Doc_id.Set.add doc_id s else s)
+              open_documents Doc_id.Set.empty
+          in
+          let open_documents =
+            Doc_id.Set.fold
+              (fun doc_id documents ->
+                if
+                  Projects.is_an_included_file doc_id project
+                  || Doc_id.Set.mem doc_id ignored_documents
+                then (* We do not consider included files *)
+                  documents
+                else
+                  (* Affected files are necessarily present in the project *)
+                  let project_file =
+                    Option.get @@ Projects.find_file_in_project doc_id project
+                  in
+                  let document =
+                    match Doc_id.Map.find_opt doc_id open_documents with
+                    | None ->
+                      SState.make_document ?contents:None ~saved:true doc_id
+                        project project_file
+                    | Some document -> document
+                  in
+                  let _processed_file, document =
+                    unlocked_process_document document
+                  in
+                  Doc_id.Map.add doc_id document documents)
+              possibly_affected_files open_documents
+          in
+          let new_state = { SState.projects; open_documents } in
+          let* () = unlocked_send_all_diagnostics ~notify_back new_state in
+          Lwt.return ((), new_state)
+
     method private on_notif_did_change_watched_files ~notify_back changes =
       (* Triggers even on save.. *)
       Lwt_list.iter_p
         (fun { FileEvent.uri; type_ } ->
           let doc_id = Doc_id.of_lsp_uri uri in
           match type_ with
-          | Created | Changed -> self#document_changed ~notify_back doc_id
-          | Deleted -> self#on_doc_did_close ~notify_back doc_id)
+          | Created ->
+            self#process_document ~notify_back ~is_open:true ~is_saved:true
+              doc_id None
+          | Changed -> self#document_changed ~notify_back doc_id
+          | Deleted ->
+            let* () = self#on_doc_delete ~notify_back doc_id in
+            self#on_doc_did_close ~notify_back doc_id)
         changes
 
     method private scan_project ~notify_back { SState.projects; open_documents }
