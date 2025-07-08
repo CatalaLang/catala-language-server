@@ -196,6 +196,7 @@ end)
 
 type projects = Projects.t
 type t = projects
+type error_handler = Doc_id.t * Lsp.Types.Range.t * Diagnostic.t -> unit
 
 let empty = Projects.empty
 
@@ -260,7 +261,7 @@ let clean_item ({ Clerk_scan.file_name; included_files; _ } as item) :
   }
 
 let find_module_candidate
-    ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
+    ~(on_error : error_handler)
     ~includes
     (file : Scan_item.t)
     (known_modules : ScanItemFiles.t ModuleMap.t)
@@ -295,16 +296,13 @@ let find_module_candidate
               modul.Clerk_scan.module_def)
           l
       in
-      (Lwt.async
-      @@ fun () ->
       let diag = Diagnostic.error_p ~related mod_use_pos (`String msg) in
-      notify_back#set_uri
-        (Linol_lwt.DocumentUri.of_path file.Clerk_scan.file_name);
-      notify_back#send_diagnostic [diag]);
+      on_error (to_doc_id file, Utils.range_of_pos mod_use_pos, diag);
+      (* TODO: handle the multiple case list *)
       None)
 
 let retrieve_project_files
-    ~notify_back
+    ~on_error
     (clerk_config : Clerk_config.t)
     clerk_root_dir =
   let open Clerk_scan in
@@ -385,7 +383,7 @@ let retrieve_project_files
         (* Update used-by files *)
         List.fold_left
           (fun g (used_module : string Mark.pos) ->
-            find_module_candidate ~notify_back
+            find_module_candidate ~on_error
               ~includes:clerk_config.global.include_dirs item known_modules
               used_module
             |> function
@@ -410,14 +408,13 @@ let retrieve_project_files
   in
   project_files, known_modules
 
-let project_of_folder ~notify_back project_dir =
+let project_of_folder ~on_error project_dir =
   match Utils.lookup_clerk_toml project_dir with
   | None ->
     Log.warn (fun m ->
         m "no clerk config file found, assuming default configuration");
     let project_files, known_modules =
-      retrieve_project_files ~notify_back Clerk_config.default_config
-        project_dir
+      retrieve_project_files ~on_error Clerk_config.default_config project_dir
     in
     let project_kind = No_clerk in
     let project_graph = Project_graph.build_graph project_files in
@@ -428,21 +425,21 @@ let project_of_folder ~notify_back project_dir =
     (* We also consider Catala files that may be upper in the hierarchy but
        under the discovered "clerk.toml" scope *)
     let project_files, known_modules =
-      retrieve_project_files ~notify_back clerk_config clerk_root_dir
+      retrieve_project_files ~on_error clerk_config clerk_root_dir
     in
     let project_graph = Project_graph.build_graph project_files in
     { project_dir; project_kind; project_files; project_graph; known_modules }
 
-let project_of_workspace_folder ~notify_back workspace_folder =
+let project_of_workspace_folder ~on_error workspace_folder =
   (* Normalize path *)
   let project_dir =
     Uri.pct_decode
       (Linol_lwt.DocumentUri.to_path
          workspace_folder.Linol_lwt.WorkspaceFolder.uri)
   in
-  project_of_folder ~notify_back project_dir
+  project_of_folder ~on_error project_dir
 
-let init ~notify_back (params : Linol_lwt.InitializeParams.t) : projects =
+let init ~on_error (params : Linol_lwt.InitializeParams.t) : projects =
   let ( let*? ) (x, err_msg) f =
     match x with
     | None ->
@@ -463,7 +460,7 @@ let init ~notify_back (params : Linol_lwt.InitializeParams.t) : projects =
   let*? workspace_folders = workspace_folders, no_workspace_folder_provided in
   List.fold_left
     (fun projects workspace_folder ->
-      let project = project_of_workspace_folder ~notify_back workspace_folder in
+      let project = project_of_workspace_folder ~on_error workspace_folder in
       Log.app (fun m -> m "project %s loaded" project.project_dir);
       Log.debug (fun m -> m "@[<v 2>Projects:@ %a@]" format_project project);
       Projects.add project projects)
@@ -472,16 +469,16 @@ let init ~notify_back (params : Linol_lwt.InitializeParams.t) : projects =
 let find_file_in_project doc_id (project : project) =
   Doc_id.(Map.find_opt doc_id project.project_files)
 
-let reload_project ~notify_back project projects =
-  let project = project_of_folder ~notify_back project.project_dir in
+let reload_project ~on_error project projects =
+  let project = project_of_folder ~on_error project.project_dir in
   project, Projects.add project projects
 
 exception Project_not_found
 
-let find_or_populate_project ~notify_back (doc_id : Doc_id.t) projects =
+let find_or_populate_project ~on_error (doc_id : Doc_id.t) projects =
   let scan_dir () =
     let new_project =
-      project_of_folder ~notify_back (Filename.dirname (doc_id :> File.t))
+      project_of_folder ~on_error (Filename.dirname (doc_id :> File.t))
     in
     match find_file_in_project doc_id new_project with
     | None ->
@@ -566,7 +563,7 @@ type update_result = {
 
 let update_project_file
     ?project
-    ~notify_back
+    ~on_error
     ~(ignored_documents : Doc_id.Set.t)
     (doc_id : Doc_id.t)
     projects =
@@ -574,7 +571,7 @@ let update_project_file
     match project with
     | None -> (
       let _project_file, project, r =
-        find_or_populate_project ~notify_back doc_id projects
+        find_or_populate_project ~on_error doc_id projects
       in
       match r with
       | `Unchanged -> project, projects
@@ -591,7 +588,7 @@ let update_project_file
   | None ->
     Log.debug (fun m -> m "Did not find file %a " Doc_id.format doc_id);
     (* File did not previously exist: let's rescan everything *)
-    let project, projects = reload_project ~notify_back project projects in
+    let project, projects = reload_project ~on_error project projects in
     let possibly_affected_files =
       Project_graph.all_affected_files ~ignored_documents doc_id
         project.project_graph
@@ -634,8 +631,8 @@ let update_project_file
                     clerk_config.global.include_dirs
                   | No_clerk -> []
                 in
-                find_module_candidate ~notify_back ~includes new_item
-                  known_modules mod_use)
+                find_module_candidate ~on_error ~includes new_item known_modules
+                  mod_use)
               new_item.used_modules
             |> ScanItemFiles.of_list)
           project.project_graph
@@ -658,7 +655,7 @@ let update_project_file
 let is_an_included_file doc_id project =
   Project_graph.is_an_included_file doc_id project.project_graph
 
-let remove_project_file ~notify_back doc_id project projects =
+let remove_project_file ~on_error doc_id project projects =
   Log.debug (fun m ->
       m "Deleting document %a from project" Doc_id.format doc_id);
   match find_file_in_project doc_id project with
@@ -714,8 +711,7 @@ let remove_project_file ~notify_back doc_id project projects =
           (fun mod_use ->
             Log.debug (fun m ->
                 m "lookup module candidate for %a" Doc_id.format doc_id);
-            find_module_candidate ~notify_back ~includes file known_modules
-              mod_use)
+            find_module_candidate ~on_error ~includes file known_modules mod_use)
           file.used_modules
         |> ScanItemFiles.of_list
     in

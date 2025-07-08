@@ -55,29 +55,22 @@ module Projects : Set.S with type elt = project
 
 type projects = Projects.t
 type t = projects
+type error_handler = Doc_id.t * Lsp.Types.Range.t * Diagnostic.t -> unit
 
 val empty : projects
 val format_project : Format.formatter -> project -> unit
 val format_projects : Format.formatter -> Projects.t -> unit
 val lookup_project : Doc_id.t -> Projects.t -> Projects.elt option
-
-val init :
-  notify_back:Linol_lwt.Jsonrpc2.notify_back ->
-  Linol_lwt.InitializeParams.t ->
-  projects
-
+val init : on_error:error_handler -> Linol_lwt.InitializeParams.t -> projects
 val find_file_in_project : Doc_id.t -> project -> project_file option
 
 val reload_project :
-  notify_back:Linol_lwt.Jsonrpc2.notify_back ->
-  project ->
-  Projects.t ->
-  project * Projects.t
+  on_error:error_handler -> project -> Projects.t -> project * Projects.t
 
 exception Project_not_found
 
 val find_or_populate_project :
-  notify_back:Linol_lwt.Jsonrpc2.notify_back ->
+  on_error:error_handler ->
   Doc_id.t ->
   Projects.t ->
   project_file * Projects.elt * [> `Changed of Projects.t | `Unchanged ]
@@ -90,17 +83,13 @@ type update_result = {
 
 val update_project_file :
   ?project:project ->
-  notify_back:Linol_lwt.Jsonrpc2.notify_back ->
+  on_error:error_handler ->
   ignored_documents:Doc_id.Set.t ->
   Doc_id.doc_id ->
   projects ->
   update_result
 
 val remove_project_file :
-  notify_back:Linol_lwt.Jsonrpc2.notify_back ->
-  Doc_id.doc_id ->
-  project ->
-  t ->
-  update_result
+  on_error:error_handler -> Doc_id.doc_id -> project -> t -> update_result
 
 val is_an_included_file : Doc_id.doc_id -> project -> bool
