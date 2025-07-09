@@ -1,0 +1,11 @@
+{
+  "build": { "dockerfile": "Dockerfile" },
+  "postCreateCommand": "npm install && npm run compile && opam install -y .",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "catala.enableCustomTestCaseEditor": true
+      }
+    }
+  }
+}
