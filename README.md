@@ -1,5 +1,7 @@
 # Catala VSCode extension and LSP server
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/CatalaLang/catala-language-server?quickstart=1)
+
 ## Disclaimer
 
 Be advised that this is a work in progress repository and is not yet
