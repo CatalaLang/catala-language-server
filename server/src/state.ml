@@ -18,22 +18,25 @@ open Utils
 open Diagnostic
 open Linol_lwt
 open Catala_utils
-open Clerk_lib
+open Server_types
+open Shared_ast
 
-module RangeMap = Stdlib.Map.Make (struct
-  type t = Range.t
+let ( let*? ) = Option.bind
+let ( let*?! ) (x, default) f = match x with None -> default | Some x -> f x
 
-  let compare = compare
-end)
-
-module UriMap = Map.Make (String)
+type processing_result = {
+  prg : typed Scopelang.Ast.program;
+  used_modules : ModuleName.t File.Map.t;
+  included_files : Doc_id.Set.t;
+  jump_table : Jump_table.t Lazy.t;
+}
 
 type file = {
-  uri : string;
+  doc_id : Doc_id.t;
   locale : Catala_utils.Global.backend_lang;
-  scopelang_prg : Shared_ast.typed Scopelang.Ast.program option;
-  jump_table : Jump.t option;
-  errors : (Range.t * Catala_utils.Message.lsp_error) RangeMap.t UriMap.t;
+  result : processing_result option;
+  errors :
+    (Range.t * Catala_utils.Message.lsp_error) Utils.RangeMap.t Doc_id.Map.t;
 }
 
 type t = file
@@ -50,18 +53,17 @@ let pp_range fmt { Range.start; end_ } =
   in
   fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
 
-let create ?prog uri =
-  {
-    uri;
-    locale = Catala_utils.Cli.file_lang uri;
-    errors = UriMap.empty;
-    scopelang_prg = prog;
-    jump_table = None;
-  }
+let create (doc_id : Doc_id.t) ?locale result =
+  let locale =
+    match locale with
+    | Some x -> x
+    | None -> Catala_utils.Cli.file_lang (doc_id :> File.t)
+  in
+  { doc_id; locale; result; errors = Doc_id.Map.empty }
 
-let add_suggestions file uri range err =
+let add_suggestions file doc_id range err =
   let errors =
-    UriMap.update uri
+    Doc_id.Map.update doc_id
       (function
         | None -> Some (RangeMap.singleton range (range, err))
         | Some rmap -> Some (RangeMap.add range (range, err) rmap))
@@ -70,7 +72,7 @@ let add_suggestions file uri range err =
   { file with errors }
 
 let lookup_suggestions file range =
-  Option.bind (UriMap.find_opt file.uri file.errors)
+  Option.bind (Doc_id.Map.find_opt file.doc_id file.errors)
   @@ fun rmap ->
   RangeMap.find_opt range rmap
   |> function
@@ -88,18 +90,18 @@ let lookup_suggestions_by_pos file pos =
    all processed symbols in LSP. Useful to determine which expression wasn't
    properly handled. *)
 let all_symbols_as_warning file =
-  match file.jump_table with
+  match file.result with
   | None -> []
-  | Some { variables; lookup_table } ->
+  | Some { jump_table = (lazy { variables; lookup_table }); _ } ->
     (* Displays the full position map in logs *)
-    (* Log.info (fun m -> m "%a@." Jump.PMap.pp variables); *)
+    (* Log.info (fun m -> m "%a@." Jump_table.PMap.pp variables); *)
     (* Generates warning diagnostic for each symbol *)
     [
-      ( file.uri,
-        Jump.LTable.bindings lookup_table
+      ( file.doc_id,
+        Jump_table.LTable.bindings lookup_table
         |> List.map snd
         |> List.concat_map
-             (fun { Jump.declaration; definitions; usages; types } ->
+             (fun { Jump_table.declaration; definitions; usages; types } ->
                let build r = diag_r Warning (range_of_pos r) (`String "abc") in
                let declaration = Option.map (fun x -> [x]) declaration in
                [declaration; definitions; usages; types]
@@ -107,97 +109,102 @@ let all_symbols_as_warning file =
                     | None -> None
                     | Some r -> (
                       List.filter
-                        (fun r -> Catala_utils.Pos.get_file r = file.uri)
+                        (fun r ->
+                          Catala_utils.Pos.get_file r = (file.doc_id :> File.t))
                         r
                       |> function [] -> None | r -> Some r))
                |> List.concat
                |> List.map build) );
     ]
     @ [
-        ( file.uri,
-          Jump.PMap.fold_on_file file.uri
+        ( file.doc_id,
+          Jump_table.PMap.fold_on_file file.doc_id
             (fun r v acc ->
               let msg =
                 Format.asprintf "%a : @[<h>%a@]"
-                  Format.(pp_print_list ~pp_sep:pp_print_space Jump.pp_var)
-                  (Jump.PMap.DS.elements v) Catala_utils.Pos.format_loc_text r
+                  Format.(
+                    pp_print_list ~pp_sep:pp_print_space Jump_table.pp_var)
+                  (Jump_table.PMap.DS.elements v)
+                  Catala_utils.Pos.format_loc_text r
               in
               diag_r Warning (range_of_pos r) (`String msg) :: acc)
             variables [] );
       ]
 
-let all_diagnostics file =
+let all_diagnostics file : Diagnostic.t RangeMap.t Doc_id.Map.t =
   let open Catala_utils.Message in
-  let errs = UriMap.bindings file.errors in
-  List.map
-    (fun (uri, rmap) ->
-      ( uri,
-        List.map
-          (fun (range, (_range, err)) ->
-            let severity = err_severity err.kind in
-            let message =
-              try Format.asprintf "%t" err.message
-              with exn ->
-                (* FIXME: the pretty-printer crashes due to shady UTF-8 byte
-                   access *)
-                Log.warn (fun m ->
-                    m "exception during error message decoding: %s"
-                      (Printexc.to_string exn));
-                "Cannot display the error description, save the file first."
-            in
-            diag_r severity range (`String message))
-          (RangeMap.bindings rmap) ))
-    errs
+  Doc_id.Map.map
+    (fun rmap ->
+      RangeMap.mapi
+        (fun range (_range, err) ->
+          let severity = err_severity err.kind in
+          let message =
+            try Format.asprintf "%t" err.message
+            with exn ->
+              (* FIXME: the pretty-printer crashes due to shady UTF-8 byte
+                 access *)
+              Log.warn (fun m ->
+                  m "exception during error message decoding: %s"
+                    (Printexc.to_string exn));
+              "Cannot display the error description, save the file first."
+          in
+          diag_r severity range (`String message))
+        rmap)
+    file.errors
 
 let of_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
 
-let generic_lookup ?uri { uri = file_uri; jump_table; _ } (p : Position.t) f =
+let generic_lookup
+    ?doc_id
+    file
+    (p : Position.t)
+    (f : Jump_table.lookup_entry -> 'a option) =
+  let*? { jump_table = (lazy jt); _ } = file.result in
   let open Option in
-  let uri = Option.value uri ~default:file_uri in
-  let p = Utils.(lsp_range p p |> pos_of_range uri) in
-  let open Jump in
-  let ( let* ) = Option.bind in
-  let* jump_table = jump_table in
-  let l = lookup jump_table p in
+  let uri = Option.value doc_id ~default:file.doc_id in
+  let p = Utils.(lsp_range p p |> pos_of_range (uri :> File.t)) in
+  let open Jump_table in
+  let l = lookup jt p in
   List.filter_map f l |> List.concat |> function [] -> None | l -> Some l
 
-let lookup_declaration ?uri f p =
-  generic_lookup ?uri f p (fun { declaration; _ } ->
+let lookup_declaration ?doc_id f p =
+  generic_lookup ?doc_id f p (fun { declaration; _ } ->
       Option.map (fun x -> [x]) declaration)
   |> Option.map (List.map of_position)
 
-let lookup_def ?uri f p =
-  generic_lookup ?uri f p (fun { definitions; _ } -> definitions)
+let lookup_def ~doc_id f p =
+  generic_lookup ~doc_id f p (fun { definitions; _ } -> definitions)
   |> Option.map (List.map of_position)
   |> function
   | Some l -> Some l
   | None ->
     (* If no definition is found, we default to referencing the declaration. In
        most case, it is relevant hence a better UX. *)
-    lookup_declaration ?uri f p
+    lookup_declaration ~doc_id f p
 
-let lookup_usages ?uri f p =
-  generic_lookup ?uri f p (fun { usages; _ } -> usages)
+let lookup_usages ?doc_id f p =
+  generic_lookup ?doc_id f p (fun { usages; _ } -> usages)
   |> Option.map (List.map of_position)
 
 let lookup_type f p =
-  let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
-  let ( let* ) = Option.bind in
-  let* jt = f.jump_table in
-  let prg = f.scopelang_prg in
-  let* r, lookup_s = Jump.lookup_type jt p in
-  let kind = try Jump.Ord_lookup.max_elt lookup_s with _ -> assert false in
-  let md = Type_printing.typ_to_markdown ?prg f.locale kind in
+  let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
+  let*? { jump_table = (lazy jt); prg; _ } = f.result in
+  let*? r, lookup_s = Jump_table.lookup_type jt p in
+  let kind =
+    try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
+  in
+  let md = Type_printing.typ_to_markdown ~prg f.locale kind in
   Some (r, md)
 
 let lookup_type_declaration f p =
-  let p = Utils.(lsp_range p p |> pos_of_range f.uri) in
-  let ( let* ) = Option.bind in
-  let* jt = f.jump_table in
-  let* _r, lookup_s = Jump.lookup_type jt p in
+  let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
+  let*? { jump_table = (lazy jt); _ } = f.result in
+  let*? _r, lookup_s = Jump_table.lookup_type jt p in
   let open Shared_ast in
-  let elt = try Jump.Ord_lookup.max_elt lookup_s with _ -> assert false in
-  match (elt : Jump.type_lookup) with
+  let elt =
+    try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
+  in
+  match (elt : Jump_table.type_lookup) with
   | Expr (TStruct s, _) | Type (TStruct s, _) ->
     let _, pos = StructName.get_info s in
     Some (of_position pos)
@@ -211,67 +218,31 @@ let lookup_type_declaration f p =
   | Expr _ | Type _ -> None
 
 let lookup_document_symbols file =
-  let variables =
-    Option.bind file.jump_table @@ fun tbl -> Some tbl.variables
-  in
-  match variables with
-  | None -> []
-  | Some variables ->
-    Jump.PMap.fold_on_file file.uri
-      (fun p vl acc ->
-        Jump.PMap.DS.fold
-          (fun v acc ->
-            match Jump.var_to_symbol p v with None -> acc | Some v -> v :: acc)
-          vl acc)
-      variables []
+  let*?! { jump_table = (lazy jt); _ } = file.result, [] in
+  Jump_table.PMap.fold_on_file file.doc_id
+    (fun p vl acc ->
+      Jump_table.PMap.DS.fold
+        (fun v acc ->
+          match Jump_table.var_to_symbol p v with
+          | None -> acc
+          | Some v -> v :: acc)
+        vl acc)
+    jt.variables []
 
-let lookup_clerk_toml (path : string) =
-  let from_dir = Filename.dirname path in
-  let open Catala_utils in
-  let find_in_parents cwd predicate =
-    let home = try Sys.getenv "HOME" with Not_found -> "" in
-    let rec lookup dir =
-      if predicate dir then Some dir
-      else if dir = home then None
-      else
-        let parent = Filename.dirname dir in
-        if parent = dir then None else lookup parent
-    in
-    match lookup cwd with Some rel -> Some rel | None -> None
-  in
-  try
-    begin
-      match
-        find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
-      with
-      | None ->
-        Log.debug (fun m -> m "no 'clerk.toml' config file found");
-        None
-      | Some dir -> (
-        Log.debug (fun m ->
-            m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
-        try
-          let config = Clerk_config.read File.(dir / "clerk.toml") in
-          let include_dirs =
-            let cwd = Sys.getcwd () in
-            List.map
-              (fun p -> Utils.join_paths cwd p)
-              config.global.include_dirs
-          in
-          let config =
-            { config with global = { config.global with include_dirs } }
-          in
-          Some (config, dir)
-        with Message.CompilerError c ->
-          Log.err (fun m ->
-              let pp fmt = Message.Content.emit ~ppf:fmt c Error in
-              m "error while parsing config file: %t" pp);
-          None)
-    end
-  with _ ->
-    Log.err (fun m -> m "failed to lookup config file");
-    None
+exception Failed_to_load_interface of Surface.Ast.module_use
 
+let module_usage_error ({ mod_use_name; _ } : Surface.Ast.module_use) =
+  let pos = Mark.get mod_use_name in
+  let module_name = Mark.remove mod_use_name in
+  {
+    Message.kind = Generic;
+    message =
+      (fun fmt -> Format.fprintf fmt "Failed to parse module %s" module_name);
+    pos = Some pos;
+    suggestion = None;
+  }
+
+(* TODO: memoize module interfaces - invalidate them on save *)
 let load_module_interfaces config_dir includes program =
   (* Recurse into program modules, looking up files in [using] and loading
      them *)
@@ -334,7 +305,8 @@ let load_module_interfaces config_dir includes program =
              directory *)
           let f_path = Utils.join_paths config_dir f in
           let module_content =
-            Surface.Parser_driver.load_interface (Global.FileName f_path)
+            try Surface.Parser_driver.load_interface (Global.FileName f_path)
+            with _ -> raise (Failed_to_load_interface use)
           in
           let modname =
             ModuleName.fresh module_content.module_modname.module_name
@@ -370,98 +342,57 @@ let load_module_interfaces config_dir includes program =
           ModuleName.Map.add mname (intf, use_map) acc)
       file_module_map ModuleName.Map.empty
   in
-  root_uses, modules
-
-let find_inclusion (config_opt : (Clerk_config.t * string) option) file =
-  let open Catala_utils in
-  match config_opt with
-  | None -> None
-  | Some (config, config_dir) ->
-    List.fold_left
-      (fun acc ({ Clerk_config.name = mod_name; includes; _ } as modul) ->
-        if acc <> None then acc
-        else
-          let is_present =
-            List.exists
-              (fun included_file ->
-                File.equal (Filename.concat config_dir included_file) file)
-              includes
-          in
-          if is_present then Some (mod_name, modul) else None)
-      None config.modules
-
-let convert_meta_module
-    ~config_dir
-    (meta_module_name, (modul : Clerk_config.module_)) :
-    string Catala_utils.Global.input_src =
-  let language =
-    (* The language is the same as the included files or module used. *)
-    List.fold_left
-      (function
-        | None -> (
-          fun f -> try Some (Catala_utils.Cli.file_lang f) with _ -> None)
-        | acc -> fun _ -> acc)
-      None
-      (modul.includes
-      @ List.map
-          (function `Simple s | `With_alias (s, _) -> s)
-          modul.module_uses)
-    |> Option.value ~default:Catala_utils.Global.En
+  let file_map =
+    File.Map.filter_map
+      (fun _ -> function None -> None | Some (mname, _, _) -> Some mname)
+      file_module_map
   in
-  let pp_module
-      ppf
-      { Clerk_config.name = _; module_uses; includes : string list } =
-    let open Format in
-    let use_kwd, alias_kwd, include_kwd, module_kwd =
-      match language with
-      | Pl | En -> "Using", "as", "Include:", "Module"
-      | Fr -> "Usage de", "en tant que", "Inclusion:", "Module"
-    in
-    let pp_use ppf = function
-      | `Simple mod_name -> fprintf ppf "> %s %s" use_kwd mod_name
-      | `With_alias (mod_name, alias) ->
-        fprintf ppf "> %s %s %s %s" use_kwd mod_name alias_kwd alias
-    in
-    let pp_include ppf mod_path = fprintf ppf "> %s %s" include_kwd mod_path in
-    fprintf ppf "@[<v>@[<v>%a@]@ > %s %s@ @[<v>%a@]@]"
-      (pp_print_list ~pp_sep:pp_print_cut pp_use)
-      module_uses module_kwd meta_module_name
-      (pp_print_list ~pp_sep:pp_print_cut pp_include)
-      includes
-  in
-  Log.info (fun m -> m "generated meta-module:@\n%a@." pp_module modul);
-  Catala_utils.Global.Contents
-    ( Format.asprintf "%a" pp_module modul,
-      Filename.concat config_dir
-        (meta_module_name ^ ".catala_" ^ Catala_utils.Cli.language_code language)
-    )
+  root_uses, modules, file_map
 
-let process_document ?previous_file ?contents (uri : string) : t =
+let process_document ?contents (document : file Server_state.document_state) : t
+    =
   let open Catala_utils in
-  Log.info (fun m -> m "processing document '%s'" uri);
-  let uri = Uri.pct_decode uri in
+  let { Server_state.document_id = doc_id; project; project_file; _ } =
+    document
+  in
+  let file = (doc_id :> File.t) in
+  let locale = Catala_utils.Cli.file_lang file in
   let input_src =
     match contents with
-    | None -> Global.FileName uri
-    | Some c -> Contents (c, uri)
+    | None -> Global.FileName file
+    | Some c -> Contents (c, file)
   in
-  let config_opt = lookup_clerk_toml uri in
   let input_src, resolve_included_file =
-    match config_opt, find_inclusion config_opt uri with
-    | Some (_, config_dir), Some i ->
+    let { Projects.file = _; including_files; _ } = project_file in
+    let module S = Projects.ScanItemFiles in
+    if S.is_empty including_files then input_src, None
+    else begin
       Log.info (fun m ->
-          m "found document included as part of a meta-module: generating it.");
+          m "found document included in files: %a" Utils.pp_string_list
+            (S.elements including_files
+            |> List.map (fun { Clerk_scan.file_name; _ } -> file_name)));
+      let including_file = S.choose including_files in
+      if S.cardinal including_files > 1 then
+        Log.info (fun m -> m "found multiple document inclusion");
+      Log.info (fun m ->
+          m "found document inclusion in %s - processing this one instead"
+            including_file.file_name);
       let resolve_included_file path =
-        if File.equal path uri then input_src else Global.FileName path
+        if File.equal path file then input_src
+        else Global.FileName (File.clean_path path)
       in
-      convert_meta_module ~config_dir i, Some resolve_included_file
-    | _ -> input_src, None
+      FileName including_file.file_name, Some resolve_included_file
+    end
   in
   let _ = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
-  let on_error e = l := e :: !l in
+  let on_error e =
+    match e with
+    | { Message.kind = Generic; pos = None; _ } -> ()
+    | _ -> l := e :: !l
+  in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
-  let errors, prog, jump_table =
+  let errors, result =
     try
       (* Resets the lexing context to a fresh one *)
       Surface.Lexer_common.context := Law;
@@ -471,21 +402,22 @@ let process_document ?previous_file ?contents (uri : string) : t =
       in
       let (prg as surface) = prg in
       let open Catala_utils in
-      let ctx, modules_contents =
-        let mod_uses, modules =
-          match config_opt with
-          | None -> String.Map.empty, Uid.Module.Map.empty
-          | Some (config, config_dir) ->
-            load_module_interfaces config_dir config.global.include_dirs prg
-        in
-        let ctx =
-          Desugared.Name_resolution.form_context (prg, mod_uses) modules
-        in
-        let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
-          Uid.Module.Map.map (fun elt -> fst elt) modules
-        in
-        ctx, modules_content
+      let root_dir, clerk_config =
+        match project.project_kind with
+        | Clerk { clerk_root_dir; clerk_config } -> clerk_root_dir, clerk_config
+        | No_clerk -> project.project_dir, Clerk_config.default_config
       in
+      let mod_uses, modules, used_modules =
+        try load_module_interfaces root_dir clerk_config.global.include_dirs prg
+        with e -> raise e
+      in
+      let ctx =
+        Desugared.Name_resolution.form_context (prg, mod_uses) modules
+      in
+      let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
+        Uid.Module.Map.map (fun elt -> fst elt) modules
+      in
+      let ctx, modules_contents = ctx, modules_content in
       let prg =
         Desugared.From_surface.translate_program ctx modules_contents prg
       in
@@ -499,25 +431,51 @@ let process_document ?previous_file ?contents (uri : string) : t =
         (* If the module is external, we skip it as the translation from
            desugared would trigger an error *)
         Log.debug (fun m -> m "skipping external module interface");
-        [], None, None
+        [], None
       | _ ->
         let prg =
           Scopelang.From_desugared.translate_program prg exceptions_graphs
+          |> Scopelang.Ast.type_program
         in
-        let _type_ordering =
-          Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
-            prg.program_ctx.ctx_enums
+        let () =
+          let _type_ordering =
+            Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+              prg.program_ctx.ctx_enums
+          in
+          let _type_ordering =
+            Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+              prg.program_ctx.ctx_enums
+          in
+          let prg = Scopelang.Ast.type_program prg in
+          let prg = Dcalc.From_scopelang.translate_program prg in
+          ignore @@ Typing.program ~internal_check:true prg
         in
-        let prg = Scopelang.Ast.type_program prg in
         let jump_table =
-          Jump.populate input_src ctx modules_contents surface prg
+          lazy (Jump_table.populate input_src ctx modules_contents surface prg)
         in
-        !l, Some prg, Some jump_table
+        let included_files =
+          let scan_item = Clerk_scan.catala_file (doc_id :> File.t) locale in
+          List.map
+            (fun f ->
+              let file = Mark.remove f |> File.clean_path in
+              assert (not (Filename.is_relative file));
+              Doc_id.of_file file)
+            scan_item.included_files
+          |> Doc_id.Set.of_list
+        in
+        let result = { prg; used_modules; included_files; jump_table } in
+        Log.info (fun m -> m "successful validation of %a" Doc_id.format doc_id);
+        !l, Some result
     with e ->
       let errors =
+        let e = match e with Fun.Finally_raised e -> e | e -> e in
         match e with
         | Catala_utils.Message.CompilerError er -> [er]
         | Catala_utils.Message.CompilerErrors er_l -> er_l
+        | Failed_to_load_interface mod_use ->
+          let lsp_err = module_usage_error mod_use in
+          on_error lsp_err;
+          []
         | e ->
           on_error
             {
@@ -546,30 +504,17 @@ let process_document ?previous_file ?contents (uri : string) : t =
             Log.debug (fun m -> m "error (%d/%d): %t" (succ i) err_len pp_err)
           else Log.debug (fun m -> m "error: %t" pp_err))
         errors;
-
-      List.rev !l, None, None
+      List.rev !l, None
   in
-  let file = create ?prog uri in
-  let file =
-    match previous_file, jump_table with
-    | Some { jump_table = Some jump_table; scopelang_prg; _ }, None ->
-      { file with jump_table = Some jump_table; scopelang_prg }
-    | _, Some jump_table -> { file with jump_table = Some jump_table }
-    | (None | Some _), None -> file
-  in
+  let file = create doc_id result in
   List.fold_left
     (fun f (err : Catala_utils.Message.lsp_error) ->
-      let dummy_range =
-        Range.create
-          ~start:{ line = 0; character = 0 }
-          ~end_:{ line = 0; character = 0 }
-      in
       let uri, range =
         match err.pos, err.kind with
-        | None, _ -> uri, dummy_range
+        | None, _ -> doc_id, dummy_range
         | Some pos, Lexing ->
-          Catala_utils.Pos.get_file pos, unclosed_range_of_pos pos
-        | Some pos, _ -> Catala_utils.Pos.get_file pos, range_of_pos pos
+          Doc_id.of_catala_pos pos, unclosed_range_of_pos pos
+        | Some pos, _ -> Doc_id.of_catala_pos pos, range_of_pos pos
       in
       add_suggestions f uri range err)
     file errors

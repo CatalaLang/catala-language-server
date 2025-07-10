@@ -1,0 +1,24 @@
+> Module A
+
+```catala-metadata
+
+declaration structure StructA:
+  data x content integer
+  data y content boolean
+
+declaration scope ScopeA:
+  input output s_in content StructA
+  output s_out content StructA
+```
+
+```catala
+
+scope ScopeA:
+
+  definition s_out equals
+    StructA {
+      -- x: 3
+      # -- x : s_in.x
+      -- y: false
+    }
+```

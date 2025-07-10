@@ -26,6 +26,22 @@
           "default": false,
           "description": "Enable the custom test case editor for Catala test files"
         },
+        "catala-lsp.trace.server": {
+          "description": "Controls the logging output of the language server. Valid settings are `off`, `messages`, or `verbose`.",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "compact",
+            "verbose"
+          ],
+          "default": "messages"
+        },
+        "catala-lsp.enableProjectScan": {
+          "description": "Controls whether the LSP server should actively scan through the project to detect dependency breakage. This may be ressource-intensive on large projects. Switching this parameter requires a reload of VSCode to become effective.",
+          "type": "boolean",
+          "default": "true"
+        },
         "catala.lspServerPath": {
           "type": "string",
           "default": null,
@@ -144,6 +160,11 @@
       }
     }
   },
+  "activationEvents": [
+    "workspaceContains:**/clerk.toml",
+    "workspaceContains:**/*.catala_en",
+    "workspaceContains:**/*.catala_fr"
+  ],
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "opam exec -- dune build @lsp; webpack --mode development",

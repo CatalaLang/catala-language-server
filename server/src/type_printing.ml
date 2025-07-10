@@ -344,7 +344,7 @@ let module_type locale ?alias (module_content : Surface.Ast.module_content) =
   in
   MarkupContent.create ~kind:Markdown ~value:typ_s
 
-let typ_to_markdown ?prg locale (kind : Jump.type_lookup) =
+let typ_to_markdown ?prg locale (kind : Jump_table.type_lookup) =
   match prg, kind with
   | Some prg, Type typ -> data_type prg locale typ
   | _, (Type typ | Expr typ) -> expr_type locale typ

@@ -1,0 +1,22 @@
+> Module B
+
+> Using A
+
+```catala-metadata
+declaration scope ScopeB':
+  output out content A.StructA
+```
+
+```catala
+scope ScopeB':
+  definition out equals
+    (
+      output of A.ScopeA with {
+        -- s_in:
+          A.StructA {
+            -- x: 3
+            -- y: false
+          }
+      }
+    ).s_out
+```
