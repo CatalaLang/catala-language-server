@@ -242,6 +242,7 @@ let module_usage_error ({ mod_use_name; _ } : Surface.Ast.module_use) =
     suggestion = None;
   }
 
+(* TODO: memoize module interfaces - invalidate them on save *)
 let load_module_interfaces config_dir includes program =
   (* Recurse into program modules, looking up files in [using] and loading
      them *)
