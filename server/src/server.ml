@@ -168,6 +168,8 @@ let merge_errors m1 m2 =
 let add_doc_errors doc errs =
   SState.{ doc with errors = merge_errors errs doc.errors }
 
+(* FIXME: projects errors (e.g., ambiguous module usage) will be discarded when
+   reprocessing a file as we do not pass through the dependency check. *)
 let unlocked_process_file
     ?contents
     ~is_saved
