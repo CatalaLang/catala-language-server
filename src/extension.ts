@@ -12,7 +12,7 @@ import { logger } from './logger';
 import * as fs from 'fs';
 import * as cmd_exists from 'command-exists';
 
-let client: LanguageClient;
+export let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext): void {
   const lsp_server_config_path = vscode.workspace

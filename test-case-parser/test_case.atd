@@ -151,3 +151,18 @@ type down_message = [
   | TestRunResults of test_run_results
   | FileSelectedForNewTest of file_selection
 ]
+
+type lsp_method = [ | Testcase ]
+
+type file_and_scope_args = { file : string ; scope : string ; }
+type read_args = { buffer_path : string ; payload : string }
+type write_args = { lang : string ; tests: test list }
+type list_scopes_args = { file : string }
+
+type lsp_request = [
+  | Generate of file_and_scope_args
+  | Run of file_and_scope_args
+  | Read of read_args
+  | Write of write_args
+  | List_scopes of list_scopes_args
+]

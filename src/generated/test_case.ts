@@ -152,6 +152,35 @@ export type DownMessage =
 | { kind: 'TestRunResults'; value: TestRunResults }
 | { kind: 'FileSelectedForNewTest'; value: FileSelection }
 
+export type LspMethod =
+| { kind: 'Testcase' }
+
+export type FileAndScopeArgs = {
+  file: string;
+  scope: string;
+}
+
+export type ReadArgs = {
+  buffer_path: string;
+  payload: string;
+}
+
+export type WriteArgs = {
+  lang: string;
+  tests: Test[];
+}
+
+export type ListScopesArgs = {
+  file: string;
+}
+
+export type LspRequest =
+| { kind: 'Generate'; value: FileAndScopeArgs }
+| { kind: 'Run'; value: FileAndScopeArgs }
+| { kind: 'Read'; value: ReadArgs }
+| { kind: 'Write'; value: WriteArgs }
+| { kind: 'List_scopes'; value: ListScopesArgs }
+
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
     case 'TBool':
@@ -675,6 +704,111 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
       return { kind: 'FileSelectedForNewTest', value: readFileSelection(x[1], x) }
     default:
       _atd_bad_json('DownMessage', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeLspMethod(x: LspMethod, context: any = x): any {
+  switch (x.kind) {
+    case 'Testcase':
+      return 'Testcase'
+  }
+}
+
+export function readLspMethod(x: any, context: any = x): LspMethod {
+  switch (x) {
+    case 'Testcase':
+      return { kind: 'Testcase' }
+    default:
+      _atd_bad_json('LspMethod', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeFileAndScopeArgs(x: FileAndScopeArgs, context: any = x): any {
+  return {
+    'file': _atd_write_required_field('FileAndScopeArgs', 'file', _atd_write_string, x.file, x),
+    'scope': _atd_write_required_field('FileAndScopeArgs', 'scope', _atd_write_string, x.scope, x),
+  };
+}
+
+export function readFileAndScopeArgs(x: any, context: any = x): FileAndScopeArgs {
+  return {
+    file: _atd_read_required_field('FileAndScopeArgs', 'file', _atd_read_string, x['file'], x),
+    scope: _atd_read_required_field('FileAndScopeArgs', 'scope', _atd_read_string, x['scope'], x),
+  };
+}
+
+export function writeReadArgs(x: ReadArgs, context: any = x): any {
+  return {
+    'buffer_path': _atd_write_required_field('ReadArgs', 'buffer_path', _atd_write_string, x.buffer_path, x),
+    'payload': _atd_write_required_field('ReadArgs', 'payload', _atd_write_string, x.payload, x),
+  };
+}
+
+export function readReadArgs(x: any, context: any = x): ReadArgs {
+  return {
+    buffer_path: _atd_read_required_field('ReadArgs', 'buffer_path', _atd_read_string, x['buffer_path'], x),
+    payload: _atd_read_required_field('ReadArgs', 'payload', _atd_read_string, x['payload'], x),
+  };
+}
+
+export function writeWriteArgs(x: WriteArgs, context: any = x): any {
+  return {
+    'lang': _atd_write_required_field('WriteArgs', 'lang', _atd_write_string, x.lang, x),
+    'tests': _atd_write_required_field('WriteArgs', 'tests', _atd_write_array(writeTest), x.tests, x),
+  };
+}
+
+export function readWriteArgs(x: any, context: any = x): WriteArgs {
+  return {
+    lang: _atd_read_required_field('WriteArgs', 'lang', _atd_read_string, x['lang'], x),
+    tests: _atd_read_required_field('WriteArgs', 'tests', _atd_read_array(readTest), x['tests'], x),
+  };
+}
+
+export function writeListScopesArgs(x: ListScopesArgs, context: any = x): any {
+  return {
+    'file': _atd_write_required_field('ListScopesArgs', 'file', _atd_write_string, x.file, x),
+  };
+}
+
+export function readListScopesArgs(x: any, context: any = x): ListScopesArgs {
+  return {
+    file: _atd_read_required_field('ListScopesArgs', 'file', _atd_read_string, x['file'], x),
+  };
+}
+
+export function writeLspRequest(x: LspRequest, context: any = x): any {
+  switch (x.kind) {
+    case 'Generate':
+      return ['Generate', writeFileAndScopeArgs(x.value, x)]
+    case 'Run':
+      return ['Run', writeFileAndScopeArgs(x.value, x)]
+    case 'Read':
+      return ['Read', writeReadArgs(x.value, x)]
+    case 'Write':
+      return ['Write', writeWriteArgs(x.value, x)]
+    case 'List_scopes':
+      return ['List_scopes', writeListScopesArgs(x.value, x)]
+  }
+}
+
+export function readLspRequest(x: any, context: any = x): LspRequest {
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'Generate':
+      return { kind: 'Generate', value: readFileAndScopeArgs(x[1], x) }
+    case 'Run':
+      return { kind: 'Run', value: readFileAndScopeArgs(x[1], x) }
+    case 'Read':
+      return { kind: 'Read', value: readReadArgs(x[1], x) }
+    case 'Write':
+      return { kind: 'Write', value: readWriteArgs(x[1], x) }
+    case 'List_scopes':
+      return { kind: 'List_scopes', value: readListScopesArgs(x[1], x) }
+    default:
+      _atd_bad_json('LspRequest', x, context)
       throw new Error('impossible')
   }
 }

@@ -21,7 +21,7 @@ let cmd_generate =
           "Generate the test structure from the given scope in the given \
            program, and print it to stdout in JSON.")
     Term.(
-      const (Lib.generate_test ?testing_scope:None)
+      const Lib.generate_test_cmd
       $ Cli.Flags.ex_scope
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options)
@@ -34,7 +34,7 @@ let cmd_read =
           "Read the existing tests from the given catala test file, and print \
            them to stdout in JSON.")
     Term.(
-      const Lib.read_test
+      const Lib.read_test_cmd
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
       $ buffer_path)
@@ -49,7 +49,7 @@ let cmd_run =
            as $(b,read)). Exits with 1 in case the test results differ from \
            what was expected, 10 if the test could not be run.")
     Term.(
-      const Lib.run_test
+      const Lib.run_test_cmd
       $ Cli.Flags.ex_scope
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options)
@@ -61,7 +61,8 @@ let cmd_write =
         ~doc:
           "Read a test structure in JSON from stdin, and output a \
            corresponding Catala file.")
-    Term.(const Lib.write_catala $ Cli.Flags.Global.flags $ Cli.Flags.output)
+    Term.(
+      const Lib.write_catala_cmd $ Cli.Flags.Global.flags $ Cli.Flags.output)
 
 let cmd_list_scopes =
   Cmd.v
@@ -69,7 +70,9 @@ let cmd_list_scopes =
       info "list-scopes"
         ~doc:"List the scopes exposed of a module for a given Catala file.")
     Term.(
-      const Lib.list_scopes $ Cli.Flags.include_dirs $ Cli.Flags.Global.options)
+      const Lib.list_scopes_cmd
+      $ Cli.Flags.include_dirs
+      $ Cli.Flags.Global.options)
 
 let man =
   [
@@ -83,14 +86,8 @@ let man =
 let register () =
   Driver.Plugin.register_subcommands "testcase"
     ~doc:"Catala plugin for the handling of scope test cases" ~man
-    [cmd_generate; cmd_read; cmd_run; cmd_write; cmd_list_scopes];
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"] ~contexts:[Desugared.Name_resolution.Expression]
-    @@ (fun ~pos:_ value -> match value with
-    | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.Uid s)
-    | _ -> failwith "unexpected UID value");
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"] ~contexts:[Desugared.Name_resolution.ScopeDecl]
-    @@ fun ~pos:_ value -> match value with
-    | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestDescription s)
-    | _ -> failwith "unexpected test description"
+    [cmd_generate; cmd_read; cmd_run; cmd_write; cmd_list_scopes]
 
-let () = register ()
+let () =
+  register ();
+  Lib.register_attributes ()

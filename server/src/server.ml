@@ -586,7 +586,27 @@ class catala_lsp_server =
             ~pos:params.position ()
         | TextDocumentFormatting params ->
           self#on_req_document_formatting ~notify_back params
-        | _ -> super#on_request_unhandled ~notify_back ~id r
+        | _ ->
+          Format.eprintf "%s@." __LOC__;
+          super#on_request_unhandled ~notify_back ~id r
+
+    method! on_unknown_request
+        ~notify_back:_
+        ~server_request:_
+        ~id:_
+        meth
+        (params : Jsonrpc.Structured.t option)
+        : Yojson.Safe.t Lwt.t =
+      let open Test_case_handler in
+      let r =
+        Result.bind (parse_request ~meth ~params)
+        @@ fun request -> handle_request request
+      in
+      match r with
+      | Error s ->
+        Log.err (fun m -> m "%s" s);
+        Lwt.return @@ `Assoc ["error", `String s]
+      | Ok json -> Lwt.return json
 
     method private on_doc_did_close ~notify_back:_ (doc_id : Doc_id.t) =
       if should_ignore doc_id then Lwt.return_unit

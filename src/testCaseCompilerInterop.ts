@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
-import type { ScopeDefList, TestGenerateResults } from './generated/test_case';
+import type { LspMethod, ScopeDefList, TestGenerateResults } from './generated/test_case';
 import {
   readScopeDefList,
   readTest,
@@ -9,11 +9,18 @@ import {
   type ParseResults,
   type TestList,
   type TestRunResults,
+  type LspRequest,
+  type ReadArgs,
+  writeReadArgs,
+  writeLspRequest,
+  writeLspMethod
 } from './generated/test_case';
 import { logger } from './logger';
 import { Uri, window, workspace } from 'vscode';
-import path from 'path';
+import path, { resolve } from 'path';
 import fs from 'fs';
+
+import { client } from './extension'
 
 function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
@@ -46,6 +53,15 @@ export function parseTestFile(
   bufferPath: string
 ): ParseResults {
   const cwd = getCwd(bufferPath);
+  let readargs: ReadArgs = { buffer_path: bufferPath, payload: content };
+  let lspRequest: LspRequest = { kind: 'Read', value: readargs };
+  let lspMethod: LspMethod = { kind: 'Testcase' };
+  let p: Promise<any> =
+   client.sendRequest(JSON.stringify(writeLspMethod(lspMethod)),
+      JSON.stringify(writeLspRequest(lspRequest)));
+  (async () => {
+    await p.then((r) => logger.log("LSP responded with " + JSON.stringify(r)));
+  })();
 
   // TODO we could revisit this to make the parsing async
   try {

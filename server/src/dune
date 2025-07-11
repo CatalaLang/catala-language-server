@@ -20,6 +20,7 @@
   catala.driver
   catala.surface
   catala.clerk_lib
+  test_case_parser_lib
   uri
   re)
  (modules

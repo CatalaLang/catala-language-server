@@ -16,6 +16,7 @@ open Catala_utils
 open Shared_ast
 module I = Desugared.Ast
 module O = Test_case_t
+module J = Test_case_j
 
 let to_relative (p : File.t) =
   let cwd = File.path_to_list (Sys.getcwd ()) in
@@ -350,8 +351,7 @@ let write_stdout f arg =
   f buf arg;
   Buffer.output_buffer stdout buf
 
-let print_test test = write_stdout Test_case_j.write_test test
-let print_tests test = write_stdout Test_case_j.write_test_list test
+let print_test test = write_stdout J.write_test test
 let read_program includes options = Driver.Passes.desugared options ~includes
 
 let generate_test
@@ -366,11 +366,14 @@ let generate_test
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
   in
+  get_scope_test prg testing_scope tested_scope
+    ~tested_module:(Option.map fst prg.I.program_module_name)
+
+let generate_test_cmd tested_scope include_dirs options =
   let test =
-    get_scope_test prg testing_scope tested_scope
-      ~tested_module:(Option.map fst prg.I.program_module_name)
+    generate_test tested_scope ?testing_scope:None include_dirs options
   in
-  print_tests [test]
+  print_test test
 
 exception InvalidTestingScope of string
 
@@ -529,8 +532,11 @@ let read_test include_dirs (options : Global.options) buffer_path =
     else include_dirs
   in
   let prg = read_program include_dirs options in
-  let tests = import_catala_tests prg in
-  write_stdout Test_case_j.write_test_list tests
+  import_catala_tests prg
+
+let read_test_cmd include_dirs (options : Global.options) buffer_path =
+  let tests = read_test include_dirs (options : Global.options) buffer_path in
+  write_stdout J.write_test_list tests
 
 type lang_strings = {
   declaration_scope : string;
@@ -739,50 +745,45 @@ let write_catala_test ppf t lang =
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
-let write_catala options outfile =
+let write_catala lang tests ppf =
+  ignore
+  @@ List.fold_left
+       (fun opened test ->
+         Format.pp_open_vbox ppf 0;
+         let opened =
+           let modules_to_open =
+             Ident.Set.(
+               diff
+                 (of_list
+                    (test.O.tested_scope.module_name
+                    :: test.O.tested_scope.module_deps))
+                 opened)
+           in
+           Ident.Set.iter
+             (fun modname ->
+               Format.fprintf ppf "> %s %s@,"
+                 (get_lang_strings lang).using_module modname)
+             modules_to_open;
+           String.Set.union modules_to_open opened
+         in
+         write_catala_test ppf test lang;
+         Format.pp_close_box ppf ();
+         opened)
+       String.Set.empty tests
+
+let write_catala_cmd options outfile =
   let tests =
-    Test_case_j.read_test_list (Yojson.init_lexer ())
-      (Lexing.from_channel stdin)
+    J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
   in
+  let source_file = Global.Stdin "" in
   let lang =
-    Catala_utils.Cli.file_lang
-      (match options.Global.input_src with
-      | Global.FileName f -> f
-      | Global.Contents (_, f) -> f
-      | Global.Stdin _ -> "")
+    match Global.options.language with Some x -> x | None -> Global.En
   in
   let _fname, with_out =
-    File.get_main_out_formatter () ~source_file:(Global.Stdin "")
+    File.get_main_out_formatter () ~source_file
       ~output_file:(Option.map options.Global.path_rewrite outfile)
   in
-  with_out
-  @@ fun ppf ->
-  let _opened =
-    List.fold_left
-      (fun opened test ->
-        Format.pp_open_vbox ppf 0;
-        let opened =
-          let modules_to_open =
-            Ident.Set.(
-              diff
-                (of_list
-                   (test.O.tested_scope.module_name
-                   :: test.O.tested_scope.module_deps))
-                opened)
-          in
-          Ident.Set.iter
-            (fun modname ->
-              Format.fprintf ppf "> %s %s@,"
-                (get_lang_strings lang).using_module modname)
-            modules_to_open;
-          String.Set.union modules_to_open opened
-        in
-        write_catala_test ppf test lang;
-        Format.pp_close_box ppf ();
-        opened)
-      String.Set.empty tests
-  in
-  ()
+  with_out @@ fun ppf -> write_catala lang tests ppf
 
 let run_test testing_scope include_dirs options =
   let include_dirs =
@@ -868,10 +869,11 @@ let run_test testing_scope include_dirs options =
           } ))
       results
   in
-  let test = { test with test_outputs } in
-  write_stdout Test_case_j.write_test test
+  { test with test_outputs }
 
-let print_scopes scopes = write_stdout Test_case_j.write_scope_def_list scopes
+let run_test_cmd testing_scope include_dirs options =
+  let test = run_test testing_scope include_dirs options in
+  write_stdout J.write_test test
 
 let list_scopes include_dirs options =
   let include_dirs =
@@ -884,19 +886,34 @@ let list_scopes include_dirs options =
     | Some (mn, _) -> mn
   in
   let modul = prg.program_root in
-  let filtered_scopes =
-    ScopeName.Map.filter_map
-      (fun _sn -> function
-        | { I.scope_visibility = Private; _ } -> None
-        | sc -> (
-          if scope_inputs prg.program_ctx sc = [] then
-            (* We do not consider no-input scopes *)
-            None
-          else
-            try Some (get_scope_def prg sc ~tested_module:module_name)
-            with _ -> None))
-      modul.module_scopes
-    |> ScopeName.Map.bindings
-    |> List.map snd
-  in
-  print_scopes filtered_scopes
+  ScopeName.Map.filter_map
+    (fun _sn -> function
+      | { I.scope_visibility = Private; _ } -> None
+      | sc -> (
+        if scope_inputs prg.program_ctx sc = [] then
+          (* We do not consider no-input scopes *)
+          None
+        else
+          try Some (get_scope_def prg sc ~tested_module:module_name)
+          with _ -> None))
+    modul.module_scopes
+  |> ScopeName.Map.bindings
+  |> List.map snd
+
+let list_scopes_cmd include_dirs options =
+  let scopes = list_scopes include_dirs options in
+  write_stdout Test_case_j.write_scope_def_list scopes
+
+let register_attributes () =
+  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
+     ~contexts:[Desugared.Name_resolution.Expression]
+  @@ fun ~pos:_ value ->
+  match value with
+  | Shared_ast.String (s, _pos) -> Some (Uid s)
+  | _ -> failwith "unexpected UID value");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
+    ~contexts:[Desugared.Name_resolution.ScopeDecl]
+  @@ fun ~pos:_ value ->
+  match value with
+  | Shared_ast.String (s, _pos) -> Some (TestDescription s)
+  | _ -> failwith "unexpected test description"
