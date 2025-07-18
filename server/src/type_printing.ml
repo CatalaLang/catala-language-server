@@ -20,9 +20,9 @@ open Catala_utils
 open Shared_ast
 open Format
 
-let any = function
-  | Global.En -> "any"
-  | Fr -> "n'importe quel"
+let for_all = function
+  | Global.En -> "anything of type"
+  | Fr -> "n'importe quel de type"
   | Pl -> assert false
 
 let list_of = function
@@ -95,7 +95,10 @@ let pp_typ locale fmt (ty : typ) =
   let rec pp_typ fmt ty =
     match Mark.remove ty with
     | TLit l -> pp_lit locale fmt l
-    | TAny -> fprintf fmt "%s" (any locale)
+    | TVar v -> pp_print_string fmt (Bindlib.name_of v)
+    | TForAll b ->
+      let _, typ = Bindlib.unmbind b in
+      fprintf fmt "@[<hov 2>%s %a@]" (for_all locale) pp_typ typ
     | TArrow ([t1], t2) -> fprintf fmt "@[<hov>%a@ →@ %a@]" pp_typ t1 pp_typ t2
     | TArrow (t1, t2) ->
       fprintf fmt "@[<hov>(%a)@ →@ %a@]"
@@ -119,7 +122,10 @@ let pp_typ_no_box locale fmt (ty : typ) =
   let rec pp_typ fmt ty =
     match Mark.remove ty with
     | TLit l -> pp_lit locale fmt l
-    | TAny -> fprintf fmt "%s" (any locale)
+    | TVar v -> pp_print_string fmt (Bindlib.name_of v)
+    | TForAll b ->
+      let _, typ = Bindlib.unmbind b in
+      fprintf fmt "%s %a" (for_all locale) pp_typ typ
     | TArrow ([t1], t2) -> fprintf fmt "%a@ →@ %a" pp_typ t1 pp_typ t2
     | TArrow (t1, t2) ->
       fprintf fmt "(%a)@ →@ %a"
@@ -207,7 +213,8 @@ let data_type
   match Mark.remove typ with
   | TLit _
   | TArrow (_, _)
-  | TTuple _ | TOption _ | TArray _ | TDefault _ | TAny | TClosureEnv ->
+  | TTuple _ | TOption _ | TArray _ | TDefault _ | TForAll _ | TVar _
+  | TClosureEnv ->
     expr_type locale typ
   | TStruct sname -> (
     let struct_ctx = ctx.ctx_structs in

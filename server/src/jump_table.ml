@@ -121,7 +121,7 @@ let pp_var ppf =
   | Declaration { name; hash; _ } -> fprintf ppf "declaration: %s#%d" name hash
   | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
   | Type { name; hash; _ } -> fprintf ppf "type: %s#%d" name hash
-  | Literal typ -> fprintf ppf "literal: %a" Print.typ_debug typ
+  | Literal typ -> fprintf ppf "literal: %a" Print.typ typ
   | Scope_decl { name; hash; _ } -> fprintf ppf "scope_decl: %s#%d" name hash
   | Scope_def { name; hash; _ } -> fprintf ppf "scope_def: %s#%d" name hash
   | Module_use mjump -> fprintf ppf "mod_usage: %a" pp_module_jump mjump
@@ -349,7 +349,7 @@ let rec traverse_typ
   | TOption typ | TArray typ | TDefault typ ->
     traverse_typ ctx module_lookup typ m
   | TLit _lit -> PMap.add pos (Literal (typ, pos)) m
-  | TAny | TClosureEnv -> m
+  | TForAll _ | TVar _ | TClosureEnv -> m
 
 let traverse_expr
     (ctx : Desugared.Name_resolution.context)

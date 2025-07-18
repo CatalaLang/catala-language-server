@@ -8,6 +8,9 @@ declaration scope A:
 ```
 
 ```catala
+declaration f content list of anything of type t depends on x content list of anything of type t
+  equals  x
+
 scope A:
   definition out equals x
   exception definition out under condition add_meaning_of_life consequence equals x + 42
