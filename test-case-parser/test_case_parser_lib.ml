@@ -135,7 +135,8 @@ let rec get_typ ?module_name decl_ctx = function
   | TArray ty, _ -> O.TArray (get_typ ?module_name decl_ctx ty)
   | TArrow _, _ -> raise (Unsupported "function type")
   | TDefault _, _ -> raise (Unsupported "default type")
-  | TAny, _ -> raise (Unsupported "wildcard type")
+  | TForAll _, _ -> raise (Unsupported "wildcard type")
+  | TVar _, _ -> raise (Unsupported "type variable")
   | TClosureEnv, _ -> raise (Unsupported "closure type")
 
 and get_struct ?module_name decl_ctx struct_name =
@@ -291,7 +292,8 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
     | TArray ty -> process_typ acc ty
     | TArrow _ -> raise (Unsupported "function type")
     | TDefault _ -> raise (Unsupported "default type")
-    | TAny -> raise (Unsupported "wildcard type")
+    | TForAll _ -> raise (Unsupported "wildcard type")
+    | TVar _ -> raise (Unsupported "type variable")
     | TClosureEnv -> raise (Unsupported "closure type")
   in
   List.fold_left process_typ ModuleName.Set.empty input_typs

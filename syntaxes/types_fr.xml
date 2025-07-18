@@ -30,7 +30,7 @@
         </dict>
         <dict>
           <key>match</key>
-          <string>\b(unit|entier|booléen|date|durée|argent|décimal|n\&apos;importe\s+quel|liste\s+de)\b</string>
+          <string>\b(unit|entier|booléen|date|durée|argent|décimal|n\&apos;importe\s+quel\s+de\s+type|liste\s+de)\b</string>
           <key>name</key>
           <string>support.type.catala_type_fr</string>
         </dict>

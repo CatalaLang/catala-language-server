@@ -4,12 +4,17 @@
 #[test]
 #[testcase.test_description = ""]
 déclaration champ d'application A_test:
+  interne x contenu liste de entier
   résultat a champ d'application Bool.A
   
 ```
 
 ```catala
+déclaration f contenu liste de n'importe quel de type t dépend de x contenu liste de n'importe quel de type t
+  égal à x
+
 champ d'application A_test:
+  définition x égal à f de [3]
   définition a.x égal à 22
   définition a.add_meaning_of_life égal à vrai
 ```
