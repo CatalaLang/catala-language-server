@@ -135,6 +135,7 @@ type test_generate_results = [
 
 type test_run_request = {
   scope: string;
+  reset_outputs: bool;
 }
 
 type test_generate_request = {
@@ -149,7 +150,7 @@ type file_selection = {
 
 type up_message = [
   | Ready
-  | GuiEdit of (test_list * bool) (* bool: may be batched? *)
+  | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
   | OpenInTextEditor
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request

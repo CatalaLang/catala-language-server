@@ -197,8 +197,8 @@ export default function TestFileEditor({
     [state, vscode]
   );
 
-  const onTestRun = useCallback(
-    (testScope: string): void => {
+  const _onTestRun = (resetOutputs: boolean) => {
+    return (testScope: string): void => {
       setTestRunState((prev) => ({
         ...prev,
         [testScope]: { status: 'running' },
@@ -208,12 +208,17 @@ export default function TestFileEditor({
           kind: 'TestRunRequest',
           value: {
             scope: testScope,
+            reset_outputs: resetOutputs,
           },
         })
       );
-    },
-    [vscode]
-  );
+    };
+  };
+
+  // The 'run test' and 'reset test outputs' commands are
+  // very similar, so we factor them
+  const onTestRun = useCallback(_onTestRun(false), [vscode]);
+  const onTestOutputsReset = useCallback(_onTestRun(true), [vscode]);
 
   const onAddNewTest = useCallback((): void => {
     setModalState({
@@ -350,6 +355,7 @@ export default function TestFileEditor({
               onTestChange={onTestChange}
               onTestDelete={onTestDelete}
               onTestRun={onTestRun}
+              onTestOutputsReset={onTestOutputsReset}
               runState={testRunState[test.testing_scope]}
             />
           ))}

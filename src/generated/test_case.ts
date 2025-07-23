@@ -137,6 +137,7 @@ export type TestGenerateResults =
 
 export type TestRunRequest = {
   scope: string;
+  reset_outputs: boolean;
 }
 
 export type TestGenerateRequest = {
@@ -607,12 +608,14 @@ export function readTestGenerateResults(x: any, context: any = x): TestGenerateR
 export function writeTestRunRequest(x: TestRunRequest, context: any = x): any {
   return {
     'scope': _atd_write_required_field('TestRunRequest', 'scope', _atd_write_string, x.scope, x),
+    'reset_outputs': _atd_write_required_field('TestRunRequest', 'reset_outputs', _atd_write_bool, x.reset_outputs, x),
   };
 }
 
 export function readTestRunRequest(x: any, context: any = x): TestRunRequest {
   return {
     scope: _atd_read_required_field('TestRunRequest', 'scope', _atd_read_string, x['scope'], x),
+    reset_outputs: _atd_read_required_field('TestRunRequest', 'reset_outputs', _atd_read_bool, x['reset_outputs'], x),
   };
 }
 
