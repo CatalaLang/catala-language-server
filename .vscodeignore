@@ -21,5 +21,8 @@ test-case-parser/
 Makefile
 dune-project
 catala-lsp.opam
+purgecss-check.js
+clerk.toml
 .aider*
 .aider.tags.cache.v*/
+.devcontainer/
