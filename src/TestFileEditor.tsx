@@ -208,6 +208,7 @@ export default function TestFileEditor({
           kind: 'TestRunRequest',
           value: {
             scope: testScope,
+            reset_outputs: false,
           },
         })
       );
