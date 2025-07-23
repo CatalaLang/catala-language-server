@@ -78,10 +78,10 @@ jobs:
           # Extract version from package.json
           PKG_VERSION=$(node -p "require('./package.json').version")
           echo "VERSION=$PKG_VERSION" >> $GITHUB_OUTPUT
-          
+
           # Extract version from GitHub release tag (remove 'v' prefix if present)
           TAG_VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')
-          
+
           # Verify versions match
           if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
             echo "::error::Version mismatch! package.json version ($PKG_VERSION) does not match release tag ($TAG_VERSION)"
