@@ -371,7 +371,7 @@ export default function TestFileEditor({
               onTestChange={onTestChange}
               onTestDelete={onTestDelete}
               onTestRun={onTestRun}
-              //onTestOutputsReset={onTestOutputsReset}
+              onTestOutputsReset={onTestOutputsReset}
               runState={testRunState[test.testing_scope]}
             />
           ))}

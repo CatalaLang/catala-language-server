@@ -199,8 +199,8 @@ export class TestCaseEditorProvider
 
           if (reset_outputs) {
             // reset assertions in the document model, update UI
-            if(results.kind === "Ok"){
-              document.scheduleTestOutputsReset(scope, results.value);
+            if (results.kind === 'Ok') {
+              document.resetTestOutputs(scope, results.value);
             }
           }
           break;

@@ -138,11 +138,8 @@ export class CatalaTestCaseDocument
     this._editManager.scheduleChange(tests, mayBeBatched);
   }
 
-  public scheduleTestOutputsReset(
-    testingScope: string,
-    outputs: TestOutputs
-  ): void {
-    this._editManager.scheduleTestOutputsReset(testingScope, outputs);
+  public resetTestOutputs(testingScope: string, outputs: TestOutputs): void {
+    this._editManager.resetTestOutputs(testingScope, outputs);
   }
 
   // 'makeEdit' in sample
@@ -217,12 +214,9 @@ class EditManager {
     }
   }
 
-  public scheduleTestOutputsReset(
-    testingScope: string,
-    outputs: TestOutputs
-  ): void {
+  public resetTestOutputs(testingScope: string, outputs: TestOutputs): void {
     this.sync();
-    // TODO
+
     const parseResults = this._doc.parseResults;
     // Problem? We need to forbid UI changes until this
     // state has been propagated to the UI through an Update message?
@@ -249,8 +243,6 @@ class EditManager {
     const newValue = testList.toSpliced(idx, 1, updatedTest);
 
     this._doc._setContents(newValue);
-
-    throw new Error('unimplemented');
   }
 
   // force immediate applying of the latest version, e.g. when saving
