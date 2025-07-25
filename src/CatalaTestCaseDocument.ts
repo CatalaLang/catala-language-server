@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
-import type { ParseResults, TestList } from './generated/test_case';
+import type { ParseResults, TestList, TestOutputs } from './generated/test_case';
 import { atdToCatala } from './testCaseCompilerInterop';
 import { parseContents, getLanguageFromUri } from './testCaseEditor';
+import { logger } from './logger';
+import { integer } from 'vscode-languageclient';
 
 /**
  * Custom document.
@@ -131,6 +133,10 @@ export class CatalaTestCaseDocument
     this._editManager.scheduleChange(tests, mayBeBatched);
   }
 
+  public scheduleTestOutputsReset(testingScope: string, outputs: TestOutputs): void {
+    this._editManager.scheduleTestOutputsReset(testingScope, outputs);
+  }
+
   // 'makeEdit' in sample
   _setContents(tests: TestList): void {
     const lastRev = this._parseResults;
@@ -201,6 +207,28 @@ class EditManager {
       this._currentChange = testList;
       this._timeout = setTimeout(this.applyCurrentChange.bind(this), 350);
     }
+  }
+
+  public scheduleTestOutputsReset(testingScope: string, outputs: TestOutputs): void {
+    this.sync();
+    // TODO
+    const parseResults = this._doc.parseResults;
+    // Problem? We need to forbid UI changes until this
+    // state has been propagated to the UI through an Update message?
+    if(parseResults.kind !== "Results"){
+      logger.log("Unexpected invalid test file while resetting assertions");
+      return;
+    }
+    const testList = parseResults.value;
+    // find affected test
+    const idx: integer = testList.findIndex((test => test.testing_scope === testingScope));
+    if(idx === -1){
+      logger.log(`While resetting assertions: could not find testing scope ${testingScope}`);
+    }
+    // replace outputs
+    // 
+
+    throw new Error("unimplemented");
   }
 
   // force immediate applying of the latest version, e.g. when saving
