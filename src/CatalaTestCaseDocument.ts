@@ -140,6 +140,8 @@ export class CatalaTestCaseDocument
 
   public resetTestOutputs(testingScope: string, outputs: TestOutputs): void {
     this._editManager.resetTestOutputs(testingScope, outputs);
+    //???
+    this._onDidChangeDocument.fire({ document: this });
   }
 
   // 'makeEdit' in sample
@@ -220,6 +222,7 @@ class EditManager {
     const parseResults = this._doc.parseResults;
     // Problem? We need to forbid UI changes until this
     // state has been propagated to the UI through an Update message?
+    // Also, should we clear the undo stack at this point?
     if (parseResults.kind !== 'Results') {
       logger.log('Unexpected invalid test file while resetting assertions');
       return;
