@@ -1,9 +1,14 @@
 import * as vscode from 'vscode';
-import type { ParseResults, TestList, TestOutputs } from './generated/test_case';
+import type {
+  ParseResults,
+  Test,
+  TestList,
+  TestOutputs,
+} from './generated/test_case';
 import { atdToCatala } from './testCaseCompilerInterop';
 import { parseContents, getLanguageFromUri } from './testCaseEditor';
 import { logger } from './logger';
-import { integer } from 'vscode-languageclient';
+import type { integer } from 'vscode-languageclient';
 
 /**
  * Custom document.
@@ -133,7 +138,10 @@ export class CatalaTestCaseDocument
     this._editManager.scheduleChange(tests, mayBeBatched);
   }
 
-  public scheduleTestOutputsReset(testingScope: string, outputs: TestOutputs): void {
+  public scheduleTestOutputsReset(
+    testingScope: string,
+    outputs: TestOutputs
+  ): void {
     this._editManager.scheduleTestOutputsReset(testingScope, outputs);
   }
 
@@ -209,26 +217,40 @@ class EditManager {
     }
   }
 
-  public scheduleTestOutputsReset(testingScope: string, outputs: TestOutputs): void {
+  public scheduleTestOutputsReset(
+    testingScope: string,
+    outputs: TestOutputs
+  ): void {
     this.sync();
     // TODO
     const parseResults = this._doc.parseResults;
     // Problem? We need to forbid UI changes until this
     // state has been propagated to the UI through an Update message?
-    if(parseResults.kind !== "Results"){
-      logger.log("Unexpected invalid test file while resetting assertions");
+    if (parseResults.kind !== 'Results') {
+      logger.log('Unexpected invalid test file while resetting assertions');
       return;
     }
     const testList = parseResults.value;
     // find affected test
-    const idx: integer = testList.findIndex((test => test.testing_scope === testingScope));
-    if(idx === -1){
-      logger.log(`While resetting assertions: could not find testing scope ${testingScope}`);
+    const idx: integer = testList.findIndex(
+      (test) => test.testing_scope === testingScope
+    );
+    if (idx === -1) {
+      logger.log(
+        `While resetting assertions: could not find testing scope ${testingScope}`
+      );
     }
     // replace outputs
-    // 
+    const updatedTest: Test = {
+      ...testList[idx],
+      test_outputs: outputs,
+    };
 
-    throw new Error("unimplemented");
+    const newValue = testList.toSpliced(idx, 1, updatedTest);
+
+    this._doc._setContents(newValue);
+
+    throw new Error('unimplemented');
   }
 
   // force immediate applying of the latest version, e.g. when saving
