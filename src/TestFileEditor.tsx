@@ -216,6 +216,26 @@ export default function TestFileEditor({
     [vscode]
   );
 
+  // TODO: factor out with `onTestRun` above
+  const onTestOutputsReset = useCallback(
+    (testScope: string): void => {
+      setTestRunState((prev) => ({
+        ...prev,
+        [testScope]: { status: 'running' },
+      }));
+      vscode.postMessage(
+        writeUpMessage({
+          kind: 'TestRunRequest',
+          value: {
+            scope: testScope,
+            reset_outputs: true,
+          },
+        })
+      );
+    },
+    [vscode]
+  );
+
   const onAddNewTest = useCallback((): void => {
     setModalState({
       isOpen: true,
@@ -351,6 +371,7 @@ export default function TestFileEditor({
               onTestChange={onTestChange}
               onTestDelete={onTestDelete}
               onTestRun={onTestRun}
+              //onTestOutputsReset={onTestOutputsReset}
               runState={testRunState[test.testing_scope]}
             />
           ))}

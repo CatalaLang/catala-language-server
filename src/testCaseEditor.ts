@@ -2,7 +2,11 @@ import * as vscode from 'vscode';
 import { logger } from './logger';
 import { assertUnreachable } from './util';
 
-import type { ParseResults, UpMessage } from './generated/test_case';
+import type {
+  ParseResults,
+  TestRunResults,
+  UpMessage,
+} from './generated/test_case';
 import {
   type DownMessage,
   readUpMessage,
@@ -145,12 +149,11 @@ export class TestCaseEditorProvider
       webviewPanel.webview.postMessage(writeDownMessage(message));
     }
 
-    async function runTest(fileName: string, scope: string): Promise<void> {
-      const results = runTestScope(fileName, scope);
-      postMessageToWebView({
-        kind: 'TestRunResults',
-        value: results,
-      });
+    async function runTest(
+      fileName: string,
+      scope: string
+    ): Promise<TestRunResults> {
+      return runTestScope(fileName, scope);
     }
 
     function applyGuiEdit(
@@ -177,8 +180,27 @@ export class TestCaseEditorProvider
           break;
         }
         case 'TestRunRequest': {
-          const { scope } = typed_msg.value;
-          this.testQueue.add(() => runTest(document.uri.fsPath, scope)); // assumes that the document is local (fsPath)
+          const { scope, reset_outputs } = typed_msg.value;
+          if (reset_outputs) {
+            await vscode.window.showInformationMessage(
+              'Reset test outputs. Are you sure?',
+              { modal: true },
+              'Reset'
+            );
+          }
+          const results = await this.testQueue.add(() =>
+            runTest(document.uri.fsPath, scope)
+          ); // assumes that the document is local (fsPath)
+
+          postMessageToWebView({
+            kind: 'TestRunResults',
+            value: results,
+          });
+
+          if (reset_outputs) {
+            // reset assertions in the document model, update UI
+            // TODO
+          }
           break;
         }
         case 'TestGenerateRequest': {
