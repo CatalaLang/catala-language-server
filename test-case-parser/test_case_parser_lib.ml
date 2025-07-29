@@ -164,8 +164,14 @@ and get_struct ?module_name decl_ctx struct_name =
 and get_enum ?module_name decl_ctx enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
   let module_name =
-    if EnumName.path enum_name = [] then module_name
-    else Some (Uid.Path.to_string (EnumName.path enum_name))
+    if EnumName.path enum_name = [] then (
+      Format.eprintf "%s@." __LOC__;
+      module_name)
+    else (
+      Format.eprintf "GET ENUM SOME FOR %s: %s@."
+        (EnumName.to_string enum_name)
+        (Uid.Path.to_string (EnumName.path enum_name));
+      Some (Uid.Path.to_string (EnumName.path enum_name)))
   in
   let constructors =
     List.map
@@ -612,24 +618,26 @@ let print_attrs ppf (attrs : O.attr_def list) =
         fprintf ppf "#[testcase.test_description = %s]@\n" (String.quote s))
     ppf attrs
 
-let rec print_catala_value ~lang ppf (v : O.runtime_value) =
+let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
+    =
   let open Format in
   let strings = get_value_strings lang in
   print_attrs ppf v.attrs;
-  match v.value with
-  | O.Bool b ->
+  match typ, v.value with
+  | _, O.Bool b ->
     pp_print_string ppf (if b then strings.true_str else strings.false_str)
-  | O.Money m -> fprintf ppf strings.money_fmt (m / 100) (m mod 100)
-  | O.Integer i -> pp_print_int ppf i
-  | O.Decimal f ->
+  | _, O.Money m -> fprintf ppf strings.money_fmt (m / 100) (m mod 100)
+  | _, O.Integer i -> pp_print_int ppf i
+  | _, O.Decimal f ->
     let s = sprintf "%g" f in
     let s = if String.contains s '.' then s else sprintf "%.0f." f in
     pp_print_string ppf
       (String.map (function '.' -> strings.decimal_sep | c -> c) s)
-  | O.Date { year; month; day } -> fprintf ppf "|%04d-%02d-%02d|" year month day
-  | O.Duration { years = 0; months = 0; days = 0 } ->
+  | _, O.Date { year; month; day } ->
+    fprintf ppf "|%04d-%02d-%02d|" year month day
+  | _, O.Duration { years = 0; months = 0; days = 0 } ->
     fprintf ppf "0 %s" strings.duration_units.day
-  | O.Duration { years; months; days } ->
+  | _, O.Duration { years; months; days } ->
     pp_print_list
       ~pp_sep:(fun ppf () -> fprintf ppf " +@ ")
       (fun ppf t -> t ppf)
@@ -651,20 +659,40 @@ let rec print_catala_value ~lang ppf (v : O.runtime_value) =
                 (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day)
             else None);
          ])
-  | O.Enum (en, (constr, Some v)) ->
+  | Some (TEnum { enum_name; constructors }), O.Enum (_en, (constr, Some v)) ->
+    fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
+      (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
+      v
+  | _, O.Enum (en, (constr, Some v)) ->
     fprintf ppf "@[<hv 2>%s.%s %s %a@]" en.enum_name constr strings.content_str
-      (print_catala_value ~lang) v
-  | O.Enum (en, (constr, None)) -> fprintf ppf "%s.%s" en.enum_name constr
-  | O.Struct (st, fields) ->
+      (print_catala_value ~typ:None ~lang)
+      v
+  | Some (TEnum { enum_name; _ }), O.Enum (_en, (constr, None)) ->
+    fprintf ppf "%s.%s" enum_name constr
+  | _, O.Enum (en, (constr, None)) -> fprintf ppf "%s.%s" en.enum_name constr
+  | Some (O.TStruct sdecl), O.Struct (st, fields) ->
+    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
+      (pp_print_list ~pp_sep:pp_print_space (fun ppf (typ, (fld, v)) ->
+           fprintf ppf "-- %s: %a@," fld
+             (print_catala_value ~typ:(Some typ) ~lang)
+             v))
+      (List.combine (List.map snd sdecl.fields) fields)
+  | _, O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
-           fprintf ppf "-- %s: %a@," fld (print_catala_value ~lang) v))
+           fprintf ppf "-- %s: %a@," fld (print_catala_value ~typ:None ~lang) v))
       fields
-  | O.Array vl ->
+  | Some (O.TArray t), O.Array vl ->
     fprintf ppf "@[<hov 1>[%a]@]"
       (pp_print_seq
          ~pp_sep:(fun ppf () -> fprintf ppf ";@ ")
-         (print_catala_value ~lang))
+         (print_catala_value ~typ:(Some t) ~lang))
+      (Array.to_seq vl)
+  | _, O.Array vl ->
+    fprintf ppf "@[<hov 1>[%a]@]"
+      (pp_print_seq
+         ~pp_sep:(fun ppf () -> fprintf ppf ";@ ")
+         (print_catala_value ~typ:None ~lang))
       (Array.to_seq vl)
 
 let rec generate_default_value (typ : O.typ) : O.runtime_value =
@@ -728,7 +756,7 @@ let write_catala_test ppf t lang =
     (fun (tvar, t_in) ->
       fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition sscope_var
         tvar strings.equals
-        (print_catala_value_opt ~lang)
+        (print_catala_value_opt ~typ:None ~lang)
         t_in)
     t.test_inputs;
   List.iter
@@ -737,7 +765,9 @@ let write_catala_test ppf t lang =
       | None -> ()
       | Some { value; _ } ->
         fprintf ppf "@,%s (@[<hv>%s.%s =@ %a)@]" strings.assertion sscope_var
-          tvar (print_catala_value ~lang) value)
+          tvar
+          (print_catala_value ~typ:(Some t_out.typ) ~lang)
+          value)
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
