@@ -18,6 +18,55 @@
   },
   "main": "./dist/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "catala.startDebug",
+        "title": "XXX Run the Catala debugger XXX"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "catala.startDebug",
+          "when": "resourceLangId == catala_en || resourceLangId == catala_fr",
+          "group": "navigation"
+        }
+      ]
+    },
+    "debuggers": [
+      {
+        "type": "catala-debugger",
+        "label": "Catala Debug",
+        "configurationAttributes": {
+          "attach": {
+            "required": [
+              "port"
+            ],
+            "properties": {
+              "host": {
+                "type": "string",
+                "default": "localhost",
+                "description": "Catala LSP debugger address"
+              },
+              "port": {
+                "type": "number",
+                "default": 8730,
+                "description": "Catala LSP debugger port"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "name": "Catala Debugger",
+            "type": "catala-debugger",
+            "request": "attach",
+            "host": "localhost",
+            "port": 8730
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "Catala",
       "properties": {
@@ -183,12 +232,16 @@
     "@types/react-dom": "^18.3.0",
     "@types/vscode-webview": "^1.57.5",
     "@vscode/codicons": "^0.0.36",
+    "@vscode/debugadapter": "^1.68.0",
+    "@vscode/debugprotocol": "^1.68.0",
     "command-exists": "^1.2.9",
     "microdiff": "^1.4.0",
     "p-queue": "^6.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-intl": "^7.1.9",
+    "vscode-debugadapter": "^1.51.0",
+    "vscode-debugprotocol": "^1.51.0",
     "vscode-languageclient": "^8.0.2"
   },
   "devDependencies": {

@@ -4,7 +4,11 @@
         { "type": "extensionHost",
           "request": "launch",
           "name": "Launch Client",
-
+        },
+        {
+          "name": "Catala Debugger",
+          "type": "catala-debugger",
+          "request": "attach"
         }
     ]
 }

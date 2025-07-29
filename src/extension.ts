@@ -15,6 +15,39 @@ import * as cmd_exists from 'command-exists';
 let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext): void {
+  const factory: vscode.DebugAdapterDescriptorFactory = {
+    createDebugAdapterDescriptor(
+      _session: vscode.DebugSession,
+      _executable: vscode.DebugAdapterExecutable | undefined
+    ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
+      return new vscode.DebugAdapterServer(8730, 'localhost');
+    },
+  };
+
+  context.subscriptions.push(
+    vscode.debug.registerDebugAdapterDescriptorFactory(
+      'catala-debugger',
+      factory
+    )
+  );
+
+  const startDebugCmd = vscode.commands.registerCommand(
+    'catala.startDebug',
+    async () => {
+      const folder = vscode.workspace.workspaceFolders?.[0];
+      const config: vscode.DebugConfiguration = {
+        type: 'catala-debugger',
+        request: 'attach',
+        name: 'Attach to debugger',
+      };
+      const success = await vscode.debug.startDebugging(folder, config);
+      if (!success) {
+        vscode.window.showErrorMessage('Fail to start a debugging session');
+      }
+    }
+  );
+  context.subscriptions.push(startDebugCmd);
+
   const lsp_server_config_path = vscode.workspace
     .getConfiguration('catala')
     .get<string>('lspServerPath');
