@@ -1,7 +1,7 @@
 // Editors for a single value type (grouped with a factory function)
 
 import { type ReactElement, useState, useEffect } from 'react';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import type {
   Option,
   TestIo,
@@ -457,6 +457,7 @@ type MoneyEditorProps = {
 };
 
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
+  const intl = useIntl();
   const runtimeValue = props.valueDef?.value;
   const initialValue = // in cents
     runtimeValue?.value.kind === 'Money' ? runtimeValue.value.value : undefined;
@@ -502,8 +503,14 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     }
   };
 
+  // Determine currency style based on locale
+  const locale = intl.locale;
+  const currencyClass = locale.startsWith('fr')
+    ? 'currency-eur'
+    : 'currency-usd';
+
   return (
-    <div className="value-editor money-editor">
+    <div className={`value-editor money-editor ${currencyClass}`}>
       <input
         type="text"
         pattern={MONEY_PATTERN.source}
