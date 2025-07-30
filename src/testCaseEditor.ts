@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
 import { assertUnreachable } from './util';
+import { getLocalizedMessages } from './i18n/messages';
 
 import type {
   ParseResults,
@@ -182,10 +183,12 @@ export class TestCaseEditorProvider
         case 'TestRunRequest': {
           const { scope, reset_outputs } = typed_msg.value;
           if (reset_outputs) {
+            const messages = getLocalizedMessages(vscode.env.language);
+
             const confirmation = await vscode.window.showInformationMessage(
-              'Replace expected outputs with test run results. Are you sure?',
+              messages.resetOutputsConfirmation,
               { modal: true },
-              { title: 'Reset', action: 'Reset' }
+              { title: messages.resetButton, action: 'Reset' }
             );
 
             if (confirmation?.action !== 'Reset') {

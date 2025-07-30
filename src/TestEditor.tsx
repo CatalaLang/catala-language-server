@@ -139,7 +139,7 @@ export default function TestEditor(props: Props): ReactElement {
               <FormattedMessage id="testEditor.expectedValues" />
               <button
                 className="reset-expected-values"
-                title="Reset Expected Values"
+                title={intl.formatMessage({ id: 'testEditor.resetExpected' })}
                 onClick={() => {
                   props.onTestOutputsReset(props.test.testing_scope);
                 }}
