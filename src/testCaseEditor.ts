@@ -185,10 +185,10 @@ export class TestCaseEditorProvider
             const confirmation = await vscode.window.showInformationMessage(
               'Replace expected outputs with test run results. Are you sure?',
               { modal: true },
-              'Reset'
+              { title: 'Reset', action: 'Reset' }
             );
 
-            if (confirmation !== 'Reset') {
+            if (confirmation?.action !== 'Reset') {
               // the user has requested an outputs reset but
               // did not confirm -- we do not need to run the
               // test at all.
