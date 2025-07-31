@@ -32,6 +32,8 @@ let () =
     Logs.format_reporter ~pp_header ~app:Format.err_formatter
       ~dst:Format.err_formatter ()
   in
+  (* TODO: figure out how to combine two sources.. *)
+  ignore Debug_rpc.log_src;
   Logs.set_reporter err_std;
   ()
 
@@ -45,11 +47,51 @@ let () =
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
     ~contexts:[Desugared.Name_resolution.ScopeDecl] (fun ~pos:_ _ -> Some Nil)
 
+let start_debug_server () =
+  let open Lwt.Syntax in
+  let port = 8730 in
+  let addr = Unix.(ADDR_INET (inet_addr_loopback, port)) in
+  let on_connection client_addr (in_, out) =
+    Log.debug (fun m ->
+        m "Debug connection established with %s"
+          (match client_addr with
+          | Unix.ADDR_UNIX s -> s
+          | ADDR_INET (addr, p) ->
+            Format.sprintf "%s:%i" (Unix.string_of_inet_addr addr) p));
+    Lwt.async (fun () ->
+        let rpc = Debug_rpc.create ~in_ ~out () in
+        Debug_rpc.set_command_handler rpc
+          (module Debug_protocol.Initialize_command)
+          (fun _ -> Lwt.return @@ Debug_protocol.Capabilities.make ());
+        Lwt.finalize
+          (fun () -> Debug_rpc.start rpc)
+          (fun () ->
+            Log.debug (fun m -> m "Debug connection ended");
+            Lwt.return_unit));
+    Lwt.return_unit
+  in
+  Log.debug (fun m -> m "Launching debugging server");
+  let _ =
+    Lwt.catch
+      (fun () ->
+        let* _ =
+          Lwt_io.establish_server_with_client_address addr on_connection
+        in
+        Lwt.return_unit)
+      (fun e ->
+        Log.err (fun m ->
+            m "Error at debug server launch: %s" (Printexc.to_string e));
+        Lwt.return_unit)
+  in
+  Log.debug (fun m -> m "Debugging server established");
+  ()
+
 let run () =
   Log.debug (fun m ->
       m "Command: %a"
         Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
         (Array.to_list Sys.argv));
+  let () = start_debug_server () in
   let s = new Server.catala_lsp_server in
   let server = Linol_lwt.Jsonrpc2.create_stdio s in
   let task = Linol_lwt.Jsonrpc2.run (server ~env:()) in
