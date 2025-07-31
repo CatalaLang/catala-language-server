@@ -107,14 +107,23 @@ export function runTestScope(
    * these could be handled externally as well)
    */
 
-  const args = ['testcase', 'run', '--scope', testScope, filename];
+  const args = [
+    'testcase',
+    'run',
+    '--scope',
+    testScope,
+    '--no-fail-on-assert',
+    filename,
+  ];
   logger.log(`Exec: ${catalaPath} ${args.join(' ')}`);
   try {
     //compile dependencies (hack)
     const cwd = getCwd(filename);
     if (cwd) {
       const relFilename = path.relative(cwd, filename);
-      execFileSync(clerkPath, ['run', relFilename], { cwd });
+      execFileSync(clerkPath, ['run', relFilename, '-c--no-fail-on-assert'], {
+        cwd,
+      });
     }
     const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
     const test = readTest(JSON.parse(result.toString()));

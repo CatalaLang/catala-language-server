@@ -1,8 +1,13 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
 import { assertUnreachable } from './util';
+import { getLocalizedMessages } from './i18n/messages';
 
-import type { ParseResults, UpMessage } from './generated/test_case';
+import type {
+  ParseResults,
+  TestRunResults,
+  UpMessage,
+} from './generated/test_case';
 import {
   type DownMessage,
   readUpMessage,
@@ -145,12 +150,11 @@ export class TestCaseEditorProvider
       webviewPanel.webview.postMessage(writeDownMessage(message));
     }
 
-    async function runTest(fileName: string, scope: string): Promise<void> {
-      const results = runTestScope(fileName, scope);
-      postMessageToWebView({
-        kind: 'TestRunResults',
-        value: results,
-      });
+    async function runTest(
+      fileName: string,
+      scope: string
+    ): Promise<TestRunResults> {
+      return runTestScope(fileName, scope);
     }
 
     function applyGuiEdit(
@@ -177,8 +181,39 @@ export class TestCaseEditorProvider
           break;
         }
         case 'TestRunRequest': {
-          const { scope } = typed_msg.value;
-          this.testQueue.add(() => runTest(document.uri.fsPath, scope)); // assumes that the document is local (fsPath)
+          const { scope, reset_outputs } = typed_msg.value;
+          if (reset_outputs) {
+            const messages = getLocalizedMessages(vscode.env.language);
+
+            const confirmation = await vscode.window.showInformationMessage(
+              messages.resetOutputsConfirmation,
+              { modal: true },
+              { title: messages.resetButton, action: 'Reset' }
+            );
+
+            if (confirmation?.action !== 'Reset') {
+              // the user has requested an outputs reset but
+              // did not confirm -- we do not need to run the
+              // test at all.
+              return;
+            }
+          }
+
+          const results = await this.testQueue.add(() =>
+            runTest(document.uri.fsPath, scope)
+          ); // assumes that the document is local (fsPath)
+
+          postMessageToWebView({
+            kind: 'TestRunResults',
+            value: results,
+          });
+
+          if (reset_outputs) {
+            // reset assertions in the document model, update UI
+            if (results.kind === 'Ok') {
+              document.resetTestOutputs(scope, results.value);
+            }
+          }
           break;
         }
         case 'TestGenerateRequest': {

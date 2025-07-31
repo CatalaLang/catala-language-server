@@ -16,6 +16,7 @@ type Props = {
   onTestChange(newValue: Test, mayBeBatched: boolean): void;
   onTestDelete(testScope: string): void;
   onTestRun(testScope: string): void;
+  onTestOutputsReset(testScope: string): void;
   runState?: {
     status: 'running' | 'success' | 'error';
     results?: TestRunResults;
@@ -127,7 +128,10 @@ export default function TestEditor(props: Props): ReactElement {
               <FormattedMessage id="testEditor.expectedValues" />
               <button
                 className="reset-expected-values"
-                title="Reset Expected Values"
+                title={intl.formatMessage({ id: 'testEditor.resetExpected' })}
+                onClick={() => {
+                  props.onTestOutputsReset(props.test.testing_scope);
+                }}
               >
                 <span className="codicon codicon-refresh"></span>
               </button>
