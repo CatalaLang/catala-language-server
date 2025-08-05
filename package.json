@@ -18,21 +18,6 @@
   },
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "catala.startDebug",
-        "title": "XXX Run the Catala debugger XXX"
-      }
-    ],
-    "menus": {
-      "editor/title": [
-        {
-          "command": "catala.startDebug",
-          "when": "resourceLangId == catala_en || resourceLangId == catala_fr",
-          "group": "navigation"
-        }
-      ]
-    },
     "debuggers": [
       {
         "type": "catala-debugger",

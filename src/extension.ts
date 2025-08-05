@@ -10,9 +10,31 @@ import * as path from 'path';
 import { TestCaseEditorProvider } from './testCaseEditor';
 import { logger } from './logger';
 import * as fs from 'fs';
-import * as cmd_exists from 'command-exists';
+import cmd_exists from 'command-exists';
 
 let client: LanguageClient;
+
+function getCwd(bufferPath: string): string | undefined {
+  return vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(bufferPath))?.uri
+    ?.fsPath;
+}
+
+function pathFromConfig(confId: string, defaultCmd: string): string {
+  const confPath = vscode.workspace
+    .getConfiguration('catala')
+    .get<string>(confId);
+  if (confPath === undefined || confPath === null || confPath.trim() === '')
+    return defaultCmd;
+  if (!fs.existsSync(confPath)) {
+    vscode.window.showWarningMessage(
+      `Could not find executable for ${confId} at ${confPath}, falling back to default`
+    );
+    return defaultCmd;
+  }
+  return confPath;
+}
+
+const clerkPath: string = pathFromConfig('clerkPath', 'clerk');
 
 export function activate(context: vscode.ExtensionContext): void {
   const factory: vscode.DebugAdapterDescriptorFactory = {
@@ -31,22 +53,34 @@ export function activate(context: vscode.ExtensionContext): void {
     )
   );
 
-  const startDebugCmd = vscode.commands.registerCommand(
-    'catala.startDebug',
-    async () => {
-      const folder = vscode.workspace.workspaceFolders?.[0];
-      const config: vscode.DebugConfiguration = {
-        type: 'catala-debugger',
-        request: 'attach',
-        name: 'Attach to debugger',
-      };
-      const success = await vscode.debug.startDebugging(folder, config);
-      if (!success) {
-        vscode.window.showErrorMessage('Fail to start a debugging session');
-      }
+  vscode.commands.registerCommand('catala.debugScope', async (args) => {
+    const file = args.uri;
+    const scope = args.scope;
+    const workspace = vscode.workspace.getWorkspaceFolder(
+      vscode.Uri.parse(file)
+    );
+    const config: vscode.DebugConfiguration = {
+      type: 'catala-debugger',
+      request: 'attach',
+      name: `Debug: ${scope}`,
+      args,
+    };
+    const success = await vscode.debug.startDebugging(workspace, config);
+    if (!success) {
+      vscode.window.showErrorMessage('Fail to start a debugging session');
     }
-  );
-  context.subscriptions.push(startDebugCmd);
+  });
+
+  vscode.commands.registerCommand('catala.runScope', async (args) => {
+    const file = args.uri;
+    const scope = args.scope;
+    const cwd = getCwd(file);
+    const termName = `${scope} execution`;
+    let term = vscode.window.terminals.find((t) => t.name === termName);
+    if (!term) term = vscode.window.createTerminal({ name: termName, cwd });
+    term.show();
+    term.sendText([clerkPath, 'run', file, '--scope', scope].join(' ')); // TODO: output in termninal to get fancy colors !
+  });
 
   const lsp_server_config_path = vscode.workspace
     .getConfiguration('catala')
