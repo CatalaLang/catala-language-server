@@ -108,14 +108,7 @@ export function runTestScope(
    * these could be handled externally as well)
    */
 
-  const args = [
-    'testcase',
-    'run',
-    '--scope',
-    testScope,
-    '--no-fail-on-assert',
-    filename,
-  ];
+  const args = ['testcase', 'run', '--scope', testScope, filename];
   logger.log(`Exec: ${catalaPath} ${args.join(' ')}`);
   try {
     const cwd = getCwd(filename);
