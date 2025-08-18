@@ -796,22 +796,6 @@ let run_test testing_scope include_dirs options =
     else []
   in
   let desugared_prg, naming_ctx = read_program include_dirs options in
-  let desugared_prg =
-    (* Remove assertion, the diff will be performed by the GUI *)
-    let open Desugared.Ast in
-    let module_scopes =
-      ScopeName.Map.map
-        (fun scope ->
-          {
-            scope with
-            scope_assertions = AssertionName.Map.empty;
-            scope_meta_assertions = [];
-          })
-        desugared_prg.program_root.module_scopes
-    in
-    let program_root = { desugared_prg.program_root with module_scopes } in
-    { desugared_prg with program_root }
-  in
   let testing_scope_name =
     match
       Ident.Map.find_opt testing_scope
@@ -847,14 +831,14 @@ let run_test testing_scope include_dirs options =
   let on_assert_failures e =
     match e with
     | { Message.kind = AssertFailure; _ } ->
-      failed_asserts := e :: !failed_asserts
-    | _ -> () in
-  let () = Catala_utils.Message.register_lsp_error_notifier on_assert_failures in
+      failed_asserts := e :: !failed_asserts;
+      false (* absorb error *)
+    | _ -> true (* propagate error and crash *) in
+  let () = Catala_utils.Message.register_lsp_error_absorber on_assert_failures in
   let result_struct =
     Message.with_delayed_errors
     @@ fun () ->
-    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr
-  in
+    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr in
   let results, out_struct =
     match result_struct with
     | EStruct { fields; _ }, _ -> (
