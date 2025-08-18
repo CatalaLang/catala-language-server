@@ -108,21 +108,16 @@ export function runTestScope(
    * these could be handled externally as well)
    */
 
-  const args = [
-    'testcase',
-    'run',
-    '--no-fail-on-assert',
-    '--scope',
-    testScope,
-    filename,
-  ];
+  const args = ['testcase', 'run', '--scope', testScope, filename];
   logger.log(`Exec: ${catalaPath} ${args.join(' ')}`);
   try {
-    //compile dependencies (hack), do not fail on asserts
     const cwd = getCwd(filename);
     if (cwd) {
       const relFilename = path.relative(cwd, filename);
-      execFileSync(clerkPath, ['run', relFilename], { cwd });
+      //compile dependencies (hack), do not fail on asserts
+      execFileSync(clerkPath, ['run', '--no-fail-on-assert', relFilename], {
+        cwd,
+      });
     }
     // Here we *do* want to fail on asserts, as we catch failures through
     // the `register_lsp_error_notifier` hook.
