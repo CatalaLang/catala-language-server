@@ -101,6 +101,11 @@ type test = {
   description: string;
 }
 
+type test_run = {
+  test: test;
+  assert_failures: bool;
+}
+
 type test_list = test list
 
 type scope_def_list = scope_def list

@@ -108,6 +108,11 @@ export type Test = {
   description: string;
 }
 
+export type TestRun = {
+  test: Test;
+  assert_failures: boolean;
+}
+
 export type TestList = Test[]
 
 export type ScopeDefList = ScopeDef[]
@@ -468,6 +473,20 @@ export function readTest(x: any, context: any = x): Test {
     test_inputs: _atd_read_required_field('Test', 'test_inputs', readTestInputs, x['test_inputs'], x),
     test_outputs: _atd_read_required_field('Test', 'test_outputs', readTestOutputs, x['test_outputs'], x),
     description: _atd_read_required_field('Test', 'description', _atd_read_string, x['description'], x),
+  };
+}
+
+export function writeTestRun(x: TestRun, context: any = x): any {
+  return {
+    'test': _atd_write_required_field('TestRun', 'test', writeTest, x.test, x),
+    'assert_failures': _atd_write_required_field('TestRun', 'assert_failures', _atd_write_bool, x.assert_failures, x),
+  };
+}
+
+export function readTestRun(x: any, context: any = x): TestRun {
+  return {
+    test: _atd_read_required_field('TestRun', 'test', readTest, x['test'], x),
+    assert_failures: _atd_read_required_field('TestRun', 'assert_failures', _atd_read_bool, x['assert_failures'], x),
   };
 }
 
