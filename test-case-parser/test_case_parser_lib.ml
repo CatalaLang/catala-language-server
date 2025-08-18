@@ -786,6 +786,7 @@ let write_catala options outfile =
   in
   ()
 
+
 let run_test testing_scope include_dirs options =
   let include_dirs =
     if include_dirs = [] then
@@ -842,6 +843,13 @@ let run_test testing_scope include_dirs options =
     | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
     | _ -> assert false
   in
+  let failed_asserts = ref [] in
+  let on_assert_failures e =
+    match e with
+    | { Message.kind = AssertFailure; _ } ->
+      failed_asserts := e :: !failed_asserts
+    | _ -> () in
+  let () = Catala_utils.Message.register_lsp_error_notifier on_assert_failures in
   let result_struct =
     Message.with_delayed_errors
     @@ fun () ->
@@ -871,7 +879,8 @@ let run_test testing_scope include_dirs options =
       results
   in
   let test = { test with test_outputs } in
-  write_stdout Test_case_j.write_test test
+  let test_run = { O.test = test; O.assert_failures = not (!failed_asserts = []) } in
+  write_stdout Test_case_j.write_test_run test_run
 
 let print_scopes scopes = write_stdout Test_case_j.write_scope_def_list scopes
 

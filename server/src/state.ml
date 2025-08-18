@@ -42,7 +42,7 @@ type file = {
 type t = file
 
 let err_severity = function
-  | Catala_utils.Message.Lexing | Parsing | Typing | Generic ->
+  | Catala_utils.Message.Lexing | Parsing | Typing | Generic | AssertFailure ->
     DiagnosticSeverity.Error
   | Warning -> Warning
 
