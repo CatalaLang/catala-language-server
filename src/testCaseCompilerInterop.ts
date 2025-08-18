@@ -98,7 +98,8 @@ export function runTestScope(
    * - when parsing / generating tests, we operate on the current text buffer
    * in the editor through `stdin`. Here, we run the actual file on disk.
    * Should we produce an error if they are not identical? (i.e. the buffer
-   * is dirty)?
+   * is dirty)? -- no: a better behavior would be to prompt the user to save
+   * and to abort the test run if the user refuses
    * - security: fileName should be provided by the editor, so it should be
    * trustworthy: check?
    * - Users should probably have a command that interrupts a running test
@@ -107,15 +108,24 @@ export function runTestScope(
    * these could be handled externally as well)
    */
 
-  const args = ['testcase', 'run', '--scope', testScope, filename];
+  const args = [
+    'testcase',
+    'run',
+    '--no-fail-on-assert',
+    '--scope',
+    testScope,
+    filename,
+  ];
   logger.log(`Exec: ${catalaPath} ${args.join(' ')}`);
   try {
-    //compile dependencies (hack)
+    //compile dependencies (hack), do not fail on asserts
     const cwd = getCwd(filename);
     if (cwd) {
       const relFilename = path.relative(cwd, filename);
       execFileSync(clerkPath, ['run', relFilename], { cwd });
     }
+    // Here we *do* want to fail on asserts, as we catch failures through
+    // the `register_lsp_error_notifier` hook.
     const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
     const test = readTest(JSON.parse(result.toString()));
     return {
