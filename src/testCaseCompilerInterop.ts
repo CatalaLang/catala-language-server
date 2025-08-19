@@ -3,8 +3,8 @@ import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type { ScopeDefList, TestGenerateResults } from './generated/test_case';
 import {
   readScopeDefList,
-  readTest,
   readTestList,
+  readTestRun,
   writeTestList,
   type ParseResults,
   type TestList,
@@ -122,10 +122,10 @@ export function runTestScope(
     // Here we *do* want to fail on asserts, as we catch failures through
     // the `register_lsp_error_notifier` hook.
     const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
-    const test = readTest(JSON.parse(result.toString()));
+    const testRun = readTestRun(JSON.parse(result.toString()));
     return {
       kind: 'Ok',
-      value: test.test_outputs,
+      value: testRun.test.test_outputs,
     };
   } catch (error) {
     const errorMsg = String(
