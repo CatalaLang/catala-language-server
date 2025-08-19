@@ -118,9 +118,14 @@ type parse_results = [
   | Results of test_list (* may be empty, that's fine as long as the buffer is empty too *)
 ]
 
+type test_run_output = {
+  test_outputs: test_outputs;
+  assert_failures: bool;
+}
+
 type test_run_results = [
   | Error of string
-  | Ok of test_outputs
+  | Ok of test_run_output
 ]
 
 type test_generate_results = [
