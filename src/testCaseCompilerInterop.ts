@@ -115,7 +115,7 @@ export function runTestScope(
     if (cwd) {
       const relFilename = path.relative(cwd, filename);
       //compile dependencies (hack), do not fail on asserts
-      execFileSync(clerkPath, ['run', '--no-fail-on-assert', relFilename], {
+      execFileSync(clerkPath, ['run', '-c--no-fail-on-assert', relFilename], {
         cwd,
       });
     }
@@ -125,7 +125,10 @@ export function runTestScope(
     const testRun = readTestRun(JSON.parse(result.toString()));
     return {
       kind: 'Ok',
-      value: testRun.test.test_outputs,
+      value: {
+        test_outputs: testRun.test.test_outputs,
+        assert_failures: testRun.assert_failures,
+      },
     };
   } catch (error) {
     const errorMsg = String(

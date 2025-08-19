@@ -122,9 +122,14 @@ export type ParseResults =
 | { kind: 'EmptyTestListMismatch' }
 | { kind: 'Results'; value: TestList }
 
+export type TestRunOutput = {
+  test_outputs: TestOutputs;
+  assert_failures: boolean;
+}
+
 export type TestRunResults =
 | { kind: 'Error'; value: string }
-| { kind: 'Ok'; value: TestOutputs }
+| { kind: 'Ok'; value: TestRunOutput }
 
 export type TestGenerateResults =
 | { kind: 'Error'; value: string }
@@ -541,12 +546,26 @@ export function readParseResults(x: any, context: any = x): ParseResults {
   }
 }
 
+export function writeTestRunOutput(x: TestRunOutput, context: any = x): any {
+  return {
+    'test_outputs': _atd_write_required_field('TestRunOutput', 'test_outputs', writeTestOutputs, x.test_outputs, x),
+    'assert_failures': _atd_write_required_field('TestRunOutput', 'assert_failures', _atd_write_bool, x.assert_failures, x),
+  };
+}
+
+export function readTestRunOutput(x: any, context: any = x): TestRunOutput {
+  return {
+    test_outputs: _atd_read_required_field('TestRunOutput', 'test_outputs', readTestOutputs, x['test_outputs'], x),
+    assert_failures: _atd_read_required_field('TestRunOutput', 'assert_failures', _atd_read_bool, x['assert_failures'], x),
+  };
+}
+
 export function writeTestRunResults(x: TestRunResults, context: any = x): any {
   switch (x.kind) {
     case 'Error':
       return ['Error', _atd_write_string(x.value, x)]
     case 'Ok':
-      return ['Ok', writeTestOutputs(x.value, x)]
+      return ['Ok', writeTestRunOutput(x.value, x)]
   }
 }
 
@@ -556,7 +575,7 @@ export function readTestRunResults(x: any, context: any = x): TestRunResults {
     case 'Error':
       return { kind: 'Error', value: _atd_read_string(x[1], x) }
     case 'Ok':
-      return { kind: 'Ok', value: readTestOutputs(x[1], x) }
+      return { kind: 'Ok', value: readTestRunOutput(x[1], x) }
     default:
       _atd_bad_json('TestRunResults', x, context)
       throw new Error('impossible')

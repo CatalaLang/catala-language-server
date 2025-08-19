@@ -74,10 +74,14 @@ export default function TestEditor(props: Props): ReactElement {
           <b>{props.test.testing_scope}</b> ➛{' '}
           {String(props.test.tested_scope.name)}
         </span>
-        {props.runState?.status === 'success' && (
-          <span className="test-run-success">Passed</span>
-        )}
-        {props.runState?.status === 'error' && (
+        {props.runState?.status === 'success' &&
+          props.runState?.results?.kind === 'Ok' &&
+          !props.runState.results.value.assert_failures && (
+            <span className="test-run-success">Passed</span>
+          )}
+        {(props.runState?.status === 'error' ||
+          (props.runState?.results?.kind === 'Ok' &&
+            props.runState.results.value.assert_failures)) && (
           <span className="test-run-error">Failed</span>
         )}
         <button
@@ -151,7 +155,7 @@ export default function TestEditor(props: Props): ReactElement {
                 <Results
                   {...select(
                     props.test.test_outputs,
-                    props.runState.results.value
+                    props.runState.results.value.test_outputs
                   )}
                 />
               </div>
