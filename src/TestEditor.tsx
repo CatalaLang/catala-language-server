@@ -77,12 +77,19 @@ export default function TestEditor(props: Props): ReactElement {
         {props.runState?.status === 'success' &&
           props.runState?.results?.kind === 'Ok' &&
           !props.runState.results.value.assert_failures && (
-            <span className="test-run-success">Passed</span>
+            <span className="test-run-success">
+              <FormattedMessage
+                id="testEditor.passed"
+                defaultMessage="Passed"
+              />
+            </span>
           )}
         {(props.runState?.status === 'error' ||
           (props.runState?.results?.kind === 'Ok' &&
             props.runState.results.value.assert_failures)) && (
-          <span className="test-run-error">Failed</span>
+          <span className="test-run-error">
+            <FormattedMessage id="testEditor.failed" defaultMessage="Failed" />
+          </span>
         )}
         <button
           className="test-editor-delete"
