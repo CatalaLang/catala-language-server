@@ -33,9 +33,11 @@ type UIState =
   | { state: 'emptyTestListMismatch' }
   | { state: 'success'; tests: TestList };
 
+export type TestRunStatus = 'running' | 'success' | 'error' | 'cancelled';
+
 type TestRunState = {
   [scope: string]: {
-    status: 'running' | 'success' | 'error';
+    status: TestRunStatus;
     results?: TestRunResults;
   };
 };
@@ -263,6 +265,16 @@ export default function TestFileEditor({
     }));
   }, []);
 
+  function _resultsToStatus(results: TestRunResults): TestRunStatus {
+    if (results.kind === 'Ok') {
+      return 'success';
+    } else if (results.kind === 'Cancelled') {
+      return 'cancelled';
+    } else {
+      return 'error';
+    }
+  }
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
       const message = readDownMessage(event.data);
@@ -274,13 +286,14 @@ export default function TestFileEditor({
           const results = message.value;
           setTestRunState((prev) => {
             const updatedScope = Object.keys(prev).find(
+              //TODO test below seems fragile: improve
               (scope) => prev[scope].status === 'running'
             );
             if (updatedScope) {
               return {
                 ...prev,
                 [updatedScope]: {
-                  status: results.kind === 'Ok' ? 'success' : 'error',
+                  status: _resultsToStatus(results),
                   results,
                 },
               };
