@@ -184,7 +184,11 @@ export class TestCaseEditorProvider
           const shouldProceed = await promptSaveBeforeTest(document.uri);
 
           if (!shouldProceed) {
-            return; // User cancelled
+            // User cancelled
+            postMessageToWebView({
+              kind: 'TestRunResults',
+              value: { kind: 'Cancelled' },
+            });
           }
 
           const { scope, reset_outputs } = typed_msg.value;
@@ -201,7 +205,10 @@ export class TestCaseEditorProvider
               // the user has requested an outputs reset but
               // did not confirm -- we do not need to run the
               // test at all.
-              return;
+              postMessageToWebView({
+                kind: 'TestRunResults',
+                value: { kind: 'Cancelled' },
+              });
             }
           }
           const results = await this.testQueue.add(() =>
