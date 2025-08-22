@@ -405,25 +405,27 @@ async function promptSaveBeforeTest(documentUri: vscode.Uri): Promise<boolean> {
     return true; // No unsaved changes, proceed
   }
 
+  const messages = getLocalizedMessages(vscode.env.language);
+
   const choice = await vscode.window.showWarningMessage(
-    'The file has unsaved changes. Save before running test?',
+    messages.unsavedChangesWarning,
     { modal: true },
-    'Save and Run',
-    'Run Without Saving'
+    { title: messages.saveAndRun, action: 'SaveAndRun' },
+    { title: messages.runWithoutSaving, action: 'RunWithoutSaving' }
   );
 
-  switch (choice) {
-    case 'Save and Run':
+  switch (choice?.action) {
+    case 'SaveAndRun':
       await saveSpecificDocument(documentUri);
       return true;
 
-    case 'Run Without Saving': {
+    case 'RunWithoutSaving': {
       const confirmed = await vscode.window.showWarningMessage(
-        'Test will run against the saved file content, not your current changes.',
+        messages.runAgainstSavedContent,
         { modal: true },
-        'Continue'
+        { title: messages.continue, action: 'Continue' }
       );
-      return confirmed === 'Continue';
+      return confirmed?.action === 'Continue';
     }
     default:
       return false;
