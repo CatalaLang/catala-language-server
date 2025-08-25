@@ -348,6 +348,28 @@ export function getLanguageFromUri(uri: vscode.Uri): string {
 }
 
 /**
+ * Find the tab for a custom document
+ * @param uri The URI of the custom document
+ * @returns The tab for the custom document
+ * @throws Error if no tab is found for the given URI
+ */
+function findCustomDocumentTab(uri: vscode.Uri): vscode.Tab {
+  const tab = vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .find(
+      (tab) =>
+        tab.input instanceof vscode.TabInputCustom &&
+        tab.input.uri.toString() === uri.toString()
+    );
+
+  if (!tab) {
+    throw new Error(`No tab found for custom document: ${uri.toString()}`);
+  }
+
+  return tab;
+}
+
+/**
  * Check if a custom document has unsaved changes.
  * Workaround using the tab API because vs code does not
  * expose the dirty state of a custom document even though
@@ -357,18 +379,7 @@ export function getLanguageFromUri(uri: vscode.Uri): string {
  * @throws Error if no tab is found for the given URI
  */
 function isCustomDocumentDirty(uri: vscode.Uri): boolean {
-  const tab = vscode.window.tabGroups.all
-    .flatMap((group) => group.tabs)
-    .find(
-      (tab) =>
-        tab.input instanceof vscode.TabInputCustom &&
-        tab.input.uri.toString() === uri.toString()
-    );
-
-  if (!tab) {
-    throw new Error(`No tab found for custom document: ${uri.toString()}`);
-  }
-
+  const tab = findCustomDocumentTab(uri);
   return tab.isDirty;
 }
 
@@ -378,17 +389,7 @@ function isCustomDocumentDirty(uri: vscode.Uri): boolean {
  */
 async function saveSpecificDocument(uri: vscode.Uri): Promise<void> {
   // Verify the tab exists first
-  const tab = vscode.window.tabGroups.all
-    .flatMap((group) => group.tabs)
-    .find(
-      (tab) =>
-        tab.input instanceof vscode.TabInputCustom &&
-        tab.input.uri.toString() === uri.toString()
-    );
-
-  if (!tab) {
-    throw new Error(`No tab found for custom document: ${uri.toString()}`);
-  }
+  findCustomDocumentTab(uri);
 
   // Now save the active document (since we clicked on the run button
   // we assume that the active document is the right one)
