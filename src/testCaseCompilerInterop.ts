@@ -95,11 +95,6 @@ export function runTestScope(
 ): TestRunResults {
   /*
    * Notes:
-   * - when parsing / generating tests, we operate on the current text buffer
-   * in the editor through `stdin`. Here, we run the actual file on disk.
-   * Should we produce an error if they are not identical? (i.e. the buffer
-   * is dirty)? -- no: a better behavior would be to prompt the user to save
-   * and to abort the test run if the user refuses
    * - security: fileName should be provided by the editor, so it should be
    * trustworthy: check?
    * - Users should probably have a command that interrupts a running test
