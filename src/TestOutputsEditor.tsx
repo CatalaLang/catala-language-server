@@ -24,9 +24,6 @@ type Props = {
    This component aggregates all outputs (assertions)
    for a single test and offers an interface for CRUD operations
    on assertions.
-
-   We will also need a 'reset assertions to current output value'
-   which will run the test and fill assertions values with the scope output.
 */
 
 export default function TestOutputsEditor({

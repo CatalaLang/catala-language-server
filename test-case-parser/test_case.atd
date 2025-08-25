@@ -124,8 +124,9 @@ type test_run_output = {
 }
 
 type test_run_results = [
-  | Error of string
-  | Ok of test_run_output
+  | Error of string (* System error while attempting to run the test *)
+  | Ok of test_run_output (* Ok means 'the test was run' -- there could be assertion failures *)
+  | Cancelled
 ]
 
 type test_generate_results = [

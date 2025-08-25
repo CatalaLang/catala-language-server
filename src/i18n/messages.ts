@@ -7,11 +7,25 @@ export const messages = {
     resetOutputsConfirmation:
       'Replace expected outputs with test run results. Are you sure?',
     resetButton: 'Replace',
+    unsavedChangesWarning:
+      'The file has unsaved changes. Save before running test?',
+    saveAndRun: 'Save and Run',
+    runWithoutSaving: 'Run Without Saving',
+    runAgainstSavedContent:
+      'Test will run against the saved file content, not your current changes.',
+    continue: 'Continue',
   },
   fr: {
     resetOutputsConfirmation:
       "Remplacer les sorties attendues par le résultat de l'exécution du test ?",
     resetButton: 'Remplacer',
+    unsavedChangesWarning:
+      "Le fichier contient des modifications non enregistrées. Enregistrer avant d'exécuter le test ?",
+    saveAndRun: 'Enregistrer et exécuter',
+    runWithoutSaving: 'Exécuter sans enregistrer',
+    runAgainstSavedContent:
+      "Le test s'exécutera sur la version enregistrée du fichier, pas sur vos modifications actuelles.",
+    continue: 'Continuer',
   },
 };
 

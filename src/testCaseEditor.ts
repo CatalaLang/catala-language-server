@@ -181,6 +181,16 @@ export class TestCaseEditorProvider
           break;
         }
         case 'TestRunRequest': {
+          const shouldProceed = await promptSaveBeforeTest(document.uri);
+
+          if (!shouldProceed) {
+            // User cancelled
+            postMessageToWebView({
+              kind: 'TestRunResults',
+              value: { kind: 'Cancelled' },
+            });
+          }
+
           const { scope, reset_outputs } = typed_msg.value;
           if (reset_outputs) {
             const messages = getLocalizedMessages(vscode.env.language);
@@ -195,10 +205,12 @@ export class TestCaseEditorProvider
               // the user has requested an outputs reset but
               // did not confirm -- we do not need to run the
               // test at all.
-              return;
+              postMessageToWebView({
+                kind: 'TestRunResults',
+                value: { kind: 'Cancelled' },
+              });
             }
           }
-
           const results = await this.testQueue.add(() =>
             runTest(document.uri.fsPath, scope)
           ); // assumes that the document is local (fsPath)
@@ -214,6 +226,7 @@ export class TestCaseEditorProvider
               document.resetTestOutputs(scope, results.value.test_outputs);
             }
           }
+
           break;
         }
         case 'TestGenerateRequest': {
@@ -332,4 +345,90 @@ export function getLanguageFromUri(uri: vscode.Uri): string {
     return match[1];
   }
   throw new Error(`Unable to determine language from file name: ${uri}`);
+}
+
+/**
+ * Find the tab for a custom document
+ * @param uri The URI of the custom document
+ * @returns The tab for the custom document
+ * @throws Error if no tab is found for the given URI
+ */
+function findCustomDocumentTab(uri: vscode.Uri): vscode.Tab {
+  const tab = vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .find(
+      (tab) =>
+        tab.input instanceof vscode.TabInputCustom &&
+        tab.input.uri.toString() === uri.toString()
+    );
+
+  if (!tab) {
+    throw new Error(`No tab found for custom document: ${uri.toString()}`);
+  }
+
+  return tab;
+}
+
+/**
+ * Check if a custom document has unsaved changes.
+ * Workaround using the tab API because vs code does not
+ * expose the dirty state of a custom document even though
+ * the indicator correctly displays it.
+ * @param uri The URI of the custom document
+ * @returns true if the document has unsaved changes, false otherwise
+ * @throws Error if no tab is found for the given URI
+ */
+function isCustomDocumentDirty(uri: vscode.Uri): boolean {
+  const tab = findCustomDocumentTab(uri);
+  return tab.isDirty;
+}
+
+/**
+ * Save a specific custom document
+ * @param uri The URI of the document to save
+ */
+async function saveSpecificDocument(uri: vscode.Uri): Promise<void> {
+  // Verify the tab exists first
+  findCustomDocumentTab(uri);
+
+  // Now save the active document (since we clicked on the run button
+  // we assume that the active document is the right one)
+  await vscode.commands.executeCommand('workbench.action.files.save');
+}
+
+/**
+ * Prompt user to save before running test if document is dirty
+ * @param documentUri The URI of the document to check
+ * @returns Promise<boolean> true if should proceed with test, false if cancelled
+ */
+async function promptSaveBeforeTest(documentUri: vscode.Uri): Promise<boolean> {
+  if (!isCustomDocumentDirty(documentUri)) {
+    return true; // No unsaved changes, proceed
+  }
+
+  const messages = getLocalizedMessages(vscode.env.language);
+
+  const choice = await vscode.window.showWarningMessage(
+    messages.unsavedChangesWarning,
+    { modal: true },
+    { title: messages.saveAndRun, action: 'SaveAndRun' },
+    { title: messages.runWithoutSaving, action: 'RunWithoutSaving' }
+  );
+
+  switch (choice?.action) {
+    case 'SaveAndRun':
+      await saveSpecificDocument(documentUri);
+      return true;
+
+    case 'RunWithoutSaving': {
+      const confirmed = await vscode.window.showWarningMessage(
+        messages.runAgainstSavedContent,
+        { modal: true },
+        { title: messages.continue, action: 'Continue' }
+      );
+      return confirmed?.action === 'Continue';
+    }
+    default:
+      return false;
+  }
 }

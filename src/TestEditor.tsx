@@ -10,6 +10,7 @@ import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
 import Results from './Results';
 import { select } from './testCaseUtils';
+import { type TestRunStatus } from './TestFileEditor';
 
 type Props = {
   test: Test;
@@ -18,7 +19,7 @@ type Props = {
   onTestRun(testScope: string): void;
   onTestOutputsReset(testScope: string): void;
   runState?: {
-    status: 'running' | 'success' | 'error';
+    status: TestRunStatus;
     results?: TestRunResults;
   };
 };
