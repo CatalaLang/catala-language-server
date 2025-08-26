@@ -164,14 +164,8 @@ and get_struct ?module_name decl_ctx struct_name =
 and get_enum ?module_name decl_ctx enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
   let module_name =
-    if EnumName.path enum_name = [] then (
-      Format.eprintf "%s@." __LOC__;
-      module_name)
-    else (
-      Format.eprintf "GET ENUM SOME FOR %s: %s@."
-        (EnumName.to_string enum_name)
-        (Uid.Path.to_string (EnumName.path enum_name));
-      Some (Uid.Path.to_string (EnumName.path enum_name)))
+    if EnumName.path enum_name = [] then module_name
+    else Some (Uid.Path.to_string (EnumName.path enum_name))
   in
   let constructors =
     List.map
