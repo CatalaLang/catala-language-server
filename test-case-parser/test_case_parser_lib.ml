@@ -810,6 +810,138 @@ let write_catala options outfile =
   in
   ()
 
+let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program) :
+    (StructField.t * (dcalc, typed) gexpr) list =
+  let get_expected_value (assert_e : (dcalc, typed) gexpr) =
+    match Mark.remove assert_e with
+    | EAssert (EAppOp { args = [(EStructAccess { field; _ }, _); v]; _ }, _) ->
+      field, v
+    | _ -> assert false
+  in
+  let code_items = dcalc_prg.code_items |> BoundList.to_seq |> List.of_seq in
+  List.fold_left
+    (fun acc -> function
+      | _, Topdef _ -> acc
+      | _, ScopeDef (_, body) ->
+        let _, body_list = Bindlib.unbind body.scope_body_expr in
+        let scope_lets : (dcalc, typed) gexpr scope_let list =
+          body_list |> BoundList.to_seq |> List.of_seq |> List.map snd
+        in
+        List.filter_map
+          (function
+            | { scope_let_kind = Assertion; scope_let_expr; _ } ->
+              Some (get_expected_value scope_let_expr)
+            | _ -> None)
+          scope_lets)
+    [] code_items
+
+type path = SField of StructField.t | ListIdx of int | TupIdx of int
+
+type diff = {
+  path : path list;
+  expected : (dcalc, typed) gexpr;
+  actual : (dcalc, typed) gexpr;
+}
+
+let pp_diff fmt { path; expected; actual } =
+  let open Format in
+  let pp_path fmt = function
+    | SField sf -> fprintf fmt "<%a>" StructField.format sf
+    | ListIdx i -> fprintf fmt "[%d]" i
+    | TupIdx i -> fprintf fmt "(%d)" i
+  in
+  fprintf fmt "@[<v 2>Diff on %a:@ expected: %a@ actual: %a@]"
+    (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "→") pp_path)
+    path (Print.expr ()) expected (Print.expr ()) actual
+
+let rec compute_diff
+    curr_rev_path
+    (expected_result : (dcalc, typed) gexpr)
+    (actual_result : (dcalc, typed) gexpr) : diff list =
+  let l, r = Mark.remove expected_result, Mark.remove actual_result in
+  (* Infix operator to chain comparisons lexicographically. *)
+  let mk_diff ?path expected actual =
+    {
+      path =
+        List.rev
+          (match path with
+          | None -> curr_rev_path
+          | Some path -> path :: curr_rev_path);
+      expected;
+      actual;
+    }
+  in
+  let eempty : (dcalc, typed) gexpr =
+    Mark.add
+      (Typed { pos = Pos.void; ty = Mark.add Pos.void (TLit TUnit) })
+      EEmpty
+  in
+  match l, r with
+  | ELit l1, ELit l2 ->
+    if Expr.compare_lit l1 l2 = 0 then []
+    else [mk_diff expected_result actual_result]
+  | EApp _, EApp _ -> assert false
+  | EAppOp _, EAppOp _ -> assert false
+  | EArray a1, EArray a2 ->
+    let rec loop i = function
+      | [], [] -> []
+      | [], h :: t -> mk_diff ~path:(ListIdx i) eempty h :: loop (succ i) ([], t)
+      | h :: t, [] -> mk_diff ~path:(ListIdx i) h eempty :: loop (succ i) (t, [])
+      | h :: t, h' :: t' ->
+        compute_diff (ListIdx i :: curr_rev_path) h h' @ loop (succ i) (t, t')
+    in
+    loop 0 (a1, a2)
+  | ETuple es1, ETuple es2 ->
+    let es1 = List.mapi (fun i x -> i, x) es1 in
+    List.concat_map
+      (fun ((i, e1), e2) -> compute_diff (TupIdx i :: curr_rev_path) e1 e2)
+      (List.combine es1 es2)
+  | ( EStruct { name = _; fields = field_map1 },
+      EStruct { name = _; fields = field_map2 } ) ->
+    let lb, rb =
+      StructField.Map.bindings field_map1, StructField.Map.bindings field_map2
+    in
+    List.map2
+      (fun (sf, e) (_, e') -> compute_diff (SField sf :: curr_rev_path) e e')
+      lb rb
+    |> List.concat
+  | EVar _, EVar _ -> assert false
+  | EExternal _, EExternal _ -> assert false
+  | EAbs _, EAbs _ -> assert false
+  | EIfThenElse _, EIfThenElse _ -> assert false
+  | EStructAccess _, EStructAccess _ -> assert false
+  | EMatch _, EMatch _ -> assert false
+  | ETupleAccess _, ETupleAccess _ -> assert false
+  | ( EInj { e = e1; name = _name1; cons = cons1 },
+      EInj { e = e2; name = _name2; cons = cons2 } ) ->
+    if EnumConstructor.equal cons1 cons2 then compute_diff curr_rev_path e1 e2
+    else [mk_diff expected_result actual_result]
+  | EPos p1, EPos p2 ->
+    if Pos.compare p1 p2 = 0 then []
+    else [mk_diff expected_result actual_result]
+  | EEmpty, EEmpty -> []
+  | EAssert _, EAssert _ -> assert false
+  | EFatalError _, EFatalError _ -> assert false
+  | EDefault _, EDefault _ -> assert false
+  | EPureDefault _, EPureDefault _ -> assert false
+  | EErrorOnEmpty _, EErrorOnEmpty _ -> assert false
+  | _ -> assert false
+
+let compute_diff
+    (expected_results : (StructField.t * (dcalc, typed) gexpr) list)
+    (actual_results : (StructField.t * (dcalc, typed) gexpr) list) : diff list =
+  let expected_results =
+    List.sort (fun (l, _) (r, _) -> StructField.compare l r) expected_results
+  in
+  let actual_results =
+    List.sort (fun (l, _) (r, _) -> StructField.compare l r) actual_results
+    |> List.filter (fun (f, _) -> List.mem_assoc f expected_results)
+  in
+  assert (List.length expected_results = List.length actual_results);
+  List.map2
+    (fun (_, e) (_, a) -> compute_diff [] e a)
+    expected_results actual_results
+  |> List.concat
 
 let run_test testing_scope include_dirs options =
   let include_dirs =
@@ -829,7 +961,7 @@ let run_test testing_scope include_dirs options =
     | _ -> Message.error "No scope %S was found in the program" testing_scope
   in
   let test = get_catala_test (desugared_prg, naming_ctx) testing_scope_name in
-  let dcalc_prg =
+  let dcalc_prg : ((dcalc, dcalc, typed) base_gexpr * typed mark) program =
     let prg =
       Scopelang.From_desugared.(
         translate_program desugared_prg (build_exceptions_graph desugared_prg))
@@ -839,7 +971,7 @@ let run_test testing_scope include_dirs options =
   in
   Interpreter.load_runtime_modules
     ~hashf:Hash.(finalise ~monomorphize_types:false)
-    dcalc_prg;
+    (dcalc_prg : typed Dcalc.Ast.program);
   let program_fun = Expr.unbox (Program.to_expr dcalc_prg testing_scope_name) in
   let program_fun =
     Message.with_delayed_errors
@@ -857,22 +989,34 @@ let run_test testing_scope include_dirs options =
     | { Message.kind = AssertFailure; _ } ->
       failed_asserts := e :: !failed_asserts;
       false (* absorb error *)
-    | _ -> true (* propagate error and crash *) in
-  let () = Catala_utils.Message.register_lsp_error_absorber on_assert_failures in
+    | _ -> true (* propagate error and crash *)
+  in
+  let () =
+    Catala_utils.Message.register_lsp_error_absorber on_assert_failures
+  in
   let result_struct =
     Message.with_delayed_errors
     @@ fun () ->
-    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr in
-  let results, out_struct =
+    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr
+  in
+  let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
+      =
     match result_struct with
     | EStruct { fields; _ }, _ -> (
       match StructField.Map.choose fields with
       | _, (EStruct { fields; name }, _) ->
-        ( StructField.Map.bindings fields,
+        let b = StructField.Map.bindings fields in
+        ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
           StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
       | _ -> assert false)
     | _ -> assert false
   in
+  let expected_results = retrieve_assertions_values dcalc_prg in
+  let diff_list = compute_diff expected_results actual_results in
+  Format.(
+    eprintf "@[<v 2>Diffs:@ %a@]@."
+      (pp_print_list ~pp_sep:pp_print_cut pp_diff)
+      diff_list);
   let test_outputs =
     List.map
       (fun (field, value_expr) ->
@@ -884,10 +1028,10 @@ let run_test testing_scope include_dirs options =
             typ =
               get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
           } ))
-      results
+      actual_results
   in
   let test = { test with test_outputs } in
-  let test_run = { O.test = test; O.assert_failures = not (!failed_asserts = []) } in
+  let test_run = { O.test; O.assert_failures = not (!failed_asserts = []) } in
   write_stdout Test_case_j.write_test_run test_run
 
 let print_scopes scopes = write_stdout Test_case_j.write_scope_def_list scopes
