@@ -132,9 +132,10 @@ type parse_results = [
   | Results of test_list (* may be empty, that's fine as long as the buffer is empty too *)
 ]
 
-type test_run_output = {
+type test_run_output = { (* do we need that type at all when the difference with `test_run` is minimal? *)
   test_outputs: test_outputs;
   assert_failures: bool;
+  diffs: diff list;
 }
 
 type test_run_results = [
