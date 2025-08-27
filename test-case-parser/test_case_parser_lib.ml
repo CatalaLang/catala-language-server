@@ -943,6 +943,16 @@ let compute_diff
     expected_results actual_results
   |> List.concat
 
+let proj_diff get_value ({ path; expected; actual } : diff) : O.diff =
+  let proj_path : path -> O.path_segment = function
+    | SField sf -> `StructField (StructField.to_string sf)
+    | ListIdx i -> `ListIndex i
+    | TupIdx i -> `TupleIndex i
+  in
+  let expected = get_value expected in
+  let actual = get_value actual in
+  { O.path = List.map proj_path path; expected; actual }
+
 let run_test testing_scope include_dirs options =
   let include_dirs =
     if include_dirs = [] then
@@ -1012,11 +1022,10 @@ let run_test testing_scope include_dirs options =
     | _ -> assert false
   in
   let expected_results = retrieve_assertions_values dcalc_prg in
-  let diff_list = compute_diff expected_results actual_results in
-  Format.(
-    eprintf "@[<v 2>Diffs:@ %a@]@."
-      (pp_print_list ~pp_sep:pp_print_cut pp_diff)
-      diff_list);
+  let diffs =
+    compute_diff expected_results actual_results
+    |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
+  in
   let test_outputs =
     List.map
       (fun (field, value_expr) ->
@@ -1031,7 +1040,8 @@ let run_test testing_scope include_dirs options =
       actual_results
   in
   let test = { test with test_outputs } in
-  let test_run = { O.test; O.assert_failures = not (!failed_asserts = []) } in
+  let assert_failures = not (!failed_asserts = []) in
+  let test_run = { O.test; O.assert_failures; O.diffs } in
   write_stdout Test_case_j.write_test_run test_run
 
 let print_scopes scopes = write_stdout Test_case_j.write_scope_def_list scopes
