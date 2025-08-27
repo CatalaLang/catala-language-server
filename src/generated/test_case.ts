@@ -111,11 +111,23 @@ export type Test = {
 export type TestRun = {
   test: Test;
   assert_failures: boolean;
+  diffs: Diff[];
 }
 
 export type TestList = Test[]
 
 export type ScopeDefList = ScopeDef[]
+
+export type PathSegment =
+| { kind: 'StructField'; value: string }
+| { kind: 'ListIndex'; value: number /*int*/ }
+| { kind: 'TupleIndex'; value: number /*int*/ }
+
+export type Diff = {
+  path: PathSegment[];
+  expected: RuntimeValue;
+  actual: RuntimeValue;
+}
 
 export type ParseResults =
 | { kind: 'ParseError'; value: string }
@@ -125,6 +137,7 @@ export type ParseResults =
 export type TestRunOutput = {
   test_outputs: TestOutputs;
   assert_failures: boolean;
+  diffs: Diff[];
 }
 
 export type TestRunResults =
@@ -487,6 +500,7 @@ export function writeTestRun(x: TestRun, context: any = x): any {
   return {
     'test': _atd_write_required_field('TestRun', 'test', writeTest, x.test, x),
     'assert_failures': _atd_write_required_field('TestRun', 'assert_failures', _atd_write_bool, x.assert_failures, x),
+    'diffs': _atd_write_required_field('TestRun', 'diffs', _atd_write_array(writeDiff), x.diffs, x),
   };
 }
 
@@ -494,6 +508,7 @@ export function readTestRun(x: any, context: any = x): TestRun {
   return {
     test: _atd_read_required_field('TestRun', 'test', readTest, x['test'], x),
     assert_failures: _atd_read_required_field('TestRun', 'assert_failures', _atd_read_bool, x['assert_failures'], x),
+    diffs: _atd_read_required_field('TestRun', 'diffs', _atd_read_array(readDiff), x['diffs'], x),
   };
 }
 
@@ -511,6 +526,48 @@ export function writeScopeDefList(x: ScopeDefList, context: any = x): any {
 
 export function readScopeDefList(x: any, context: any = x): ScopeDefList {
   return _atd_read_array(readScopeDef)(x, context);
+}
+
+export function writePathSegment(x: PathSegment, context: any = x): any {
+  switch (x.kind) {
+    case 'StructField':
+      return ['StructField', _atd_write_string(x.value, x)]
+    case 'ListIndex':
+      return ['ListIndex', _atd_write_int(x.value, x)]
+    case 'TupleIndex':
+      return ['TupleIndex', _atd_write_int(x.value, x)]
+  }
+}
+
+export function readPathSegment(x: any, context: any = x): PathSegment {
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'StructField':
+      return { kind: 'StructField', value: _atd_read_string(x[1], x) }
+    case 'ListIndex':
+      return { kind: 'ListIndex', value: _atd_read_int(x[1], x) }
+    case 'TupleIndex':
+      return { kind: 'TupleIndex', value: _atd_read_int(x[1], x) }
+    default:
+      _atd_bad_json('PathSegment', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeDiff(x: Diff, context: any = x): any {
+  return {
+    'path': _atd_write_required_field('Diff', 'path', _atd_write_array(writePathSegment), x.path, x),
+    'expected': _atd_write_required_field('Diff', 'expected', writeRuntimeValue, x.expected, x),
+    'actual': _atd_write_required_field('Diff', 'actual', writeRuntimeValue, x.actual, x),
+  };
+}
+
+export function readDiff(x: any, context: any = x): Diff {
+  return {
+    path: _atd_read_required_field('Diff', 'path', _atd_read_array(readPathSegment), x['path'], x),
+    expected: _atd_read_required_field('Diff', 'expected', readRuntimeValue, x['expected'], x),
+    actual: _atd_read_required_field('Diff', 'actual', readRuntimeValue, x['actual'], x),
+  };
 }
 
 export function writeParseResults(x: ParseResults, context: any = x): any {
@@ -552,6 +609,7 @@ export function writeTestRunOutput(x: TestRunOutput, context: any = x): any {
   return {
     'test_outputs': _atd_write_required_field('TestRunOutput', 'test_outputs', writeTestOutputs, x.test_outputs, x),
     'assert_failures': _atd_write_required_field('TestRunOutput', 'assert_failures', _atd_write_bool, x.assert_failures, x),
+    'diffs': _atd_write_required_field('TestRunOutput', 'diffs', _atd_write_array(writeDiff), x.diffs, x),
   };
 }
 
@@ -559,6 +617,7 @@ export function readTestRunOutput(x: any, context: any = x): TestRunOutput {
   return {
     test_outputs: _atd_read_required_field('TestRunOutput', 'test_outputs', readTestOutputs, x['test_outputs'], x),
     assert_failures: _atd_read_required_field('TestRunOutput', 'assert_failures', _atd_read_bool, x['assert_failures'], x),
+    diffs: _atd_read_required_field('TestRunOutput', 'diffs', _atd_read_array(readDiff), x['diffs'], x),
   };
 }
 
