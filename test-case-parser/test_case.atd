@@ -104,11 +104,25 @@ type test = {
 type test_run = {
   test: test;
   assert_failures: bool;
+  diffs: diff list;
 }
 
 type test_list = test list
 
 type scope_def_list = scope_def list
+
+(* Diffing *)
+type path_segment = [
+  | StructField of string
+  | ListIndex of int
+  | TupleIndex of int
+]
+
+type diff = {
+  path: path_segment list;
+  expected: runtime_value;
+  actual: runtime_value;
+}
 
 (* Message exchange within extension (shell <-> webview) *)
 
