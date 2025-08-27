@@ -121,8 +121,10 @@ export function runTestScope(
     return {
       kind: 'Ok',
       value: {
+        // TODO remove type TestRunOutput?
         test_outputs: testRun.test.test_outputs,
         assert_failures: testRun.assert_failures,
+        diffs: testRun.diffs,
       },
     };
   } catch (error) {
