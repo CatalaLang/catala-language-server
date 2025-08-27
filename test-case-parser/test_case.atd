@@ -120,8 +120,8 @@ type path_segment = [
 
 type diff = {
   path: path_segment list;
-  expected: runtime_value_raw;
-  actual: runtime_value_raw;
+  expected: runtime_value;
+  actual: runtime_value;
 }
 
 (* Message exchange within extension (shell <-> webview) *)
