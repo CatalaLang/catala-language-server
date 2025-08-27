@@ -8,8 +8,6 @@ import {
 } from './generated/test_case';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
-import Results from './Results';
-import { select } from './testCaseUtils';
 import { type TestRunStatus } from './TestFileEditor';
 
 type Props = {
@@ -156,23 +154,6 @@ export default function TestEditor(props: Props): ReactElement {
             }}
           />
         </div>
-        {props.runState?.status === 'success' &&
-          props.runState?.results &&
-          props.runState?.results?.kind === 'Ok' && (
-            <div className="test-section">
-              <div className="test-section-header">
-                <h2 className="test-section-title">
-                  <FormattedMessage id="testEditor.results" />
-                </h2>
-                <Results
-                  {...select(
-                    props.test.test_outputs,
-                    props.runState.results.value.test_outputs
-                  )}
-                />
-              </div>
-            </div>
-          )}
       </div>
     </div>
   );
