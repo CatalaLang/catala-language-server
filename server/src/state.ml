@@ -351,7 +351,6 @@ let load_module_interfaces config_dir includes program =
 
 let process_document ?contents (document : file Server_state.document_state) : t
     =
-  let open Catala_utils in
   let { Server_state.document_id = doc_id; project; project_file; _ } =
     document
   in
@@ -401,31 +400,6 @@ let process_document ?contents (document : file Server_state.document_state) : t
           input_src
       in
       let (prg as surface) = prg in
-      let open Catala_utils in
-      let root_dir, clerk_config =
-        match project.project_kind with
-        | Clerk { clerk_root_dir; clerk_config } -> clerk_root_dir, clerk_config
-        | No_clerk -> project.project_dir, Clerk_config.default_config
-      in
-      let mod_uses, modules, used_modules =
-        try load_module_interfaces root_dir clerk_config.global.include_dirs prg
-        with e -> raise e
-      in
-      let ctx =
-        Desugared.Name_resolution.form_context (prg, mod_uses) modules
-      in
-      let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
-        Uid.Module.Map.map (fun elt -> fst elt) modules
-      in
-      let ctx, modules_contents = ctx, modules_content in
-      let prg =
-        Desugared.From_surface.translate_program ctx modules_contents prg
-      in
-      let prg = Desugared.Disambiguate.program prg in
-      let () = Desugared.Linting.lint_program prg in
-      let exceptions_graphs =
-        Scopelang.From_desugared.build_exceptions_graph prg
-      in
       match surface.Surface.Ast.program_module with
       | Some { module_external = true; _ } ->
         (* If the module is external, we skip it as the translation from
@@ -433,6 +407,32 @@ let process_document ?contents (document : file Server_state.document_state) : t
         Log.debug (fun m -> m "skipping external module interface");
         [], None
       | _ ->
+        let root_dir, clerk_config =
+          match project.project_kind with
+          | Clerk { clerk_root_dir; clerk_config } ->
+            clerk_root_dir, clerk_config
+          | No_clerk -> project.project_dir, Clerk_config.default_config
+        in
+        let mod_uses, modules, used_modules =
+          try
+            load_module_interfaces root_dir clerk_config.global.include_dirs prg
+          with e -> raise e
+        in
+        let ctx =
+          Desugared.Name_resolution.form_context (prg, mod_uses) modules
+        in
+        let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
+          Uid.Module.Map.map (fun elt -> fst elt) modules
+        in
+        let ctx, modules_contents = ctx, modules_content in
+        let prg =
+          Desugared.From_surface.translate_program ctx modules_contents prg
+        in
+        let prg = Desugared.Disambiguate.program prg in
+        let () = Desugared.Linting.lint_program prg in
+        let exceptions_graphs =
+          Scopelang.From_desugared.build_exceptions_graph prg
+        in
         let prg =
           Scopelang.From_desugared.translate_program prg exceptions_graphs
           |> Scopelang.Ast.type_program
