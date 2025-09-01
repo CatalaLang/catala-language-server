@@ -233,7 +233,8 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
       O.Enum
         ( get_enum decl_ctx name,
           (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
-    | _ -> Message.error ~pos "This test value is not a literal."
+    | EEmpty -> O.Empty
+    | _ -> Message.error ~pos "This test value is not a literal: %a." Expr.format e
   in
   { O.value; attrs }
 
@@ -693,6 +694,7 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
          ~pp_sep:(fun ppf () -> fprintf ppf ";@ ")
          (print_catala_value ~typ:None ~lang))
       (Array.to_seq vl)
+  | _, O.Empty -> assert false
 
 let rec generate_default_value (typ : O.typ) : O.runtime_value =
   let value =
@@ -944,7 +946,9 @@ let compute_diff
   in
   assert (List.length expected_results = List.length actual_results);
   List.map2
-    (fun (_, e) (_, a) -> compute_diff [] e a)
+    (fun (field, e) (_, a) -> 
+      (* Start the path with the field name *)
+      compute_diff [SField field] e a)
     expected_results actual_results
   |> List.concat
 

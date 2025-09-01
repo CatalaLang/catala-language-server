@@ -12,6 +12,8 @@ import type {
   EnumDeclaration,
   Typ,
   ValueDef,
+  PathSegment,
+  Diff,
 } from '../generated/test_case';
 import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../util';
@@ -32,6 +34,10 @@ export function createRuntimeValue(
 type Props = {
   testIO: TestIo;
   onValueChange(newValue: TestIo): void;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
+  currentPath: PathSegment[];
+  diffs: Diff[];
+  editable?: boolean;
 };
 
 export function isCollapsible(typ: Typ): boolean {
@@ -39,10 +45,19 @@ export function isCollapsible(typ: Typ): boolean {
 }
 
 export default function ValueEditor(props: Props): ReactElement {
-  const { testIO, onValueChange } = props;
+  const {
+    testIO,
+    onValueChange,
+    editorHook = (editor): ReactElement => editor,
+    currentPath,
+    editable = true,
+  } = props;
   const { typ, value: valueDef } = testIO;
 
   const handleValueChange = (newRuntimeValue: RuntimeValue): void => {
+    if (!editable) {
+      throw new Error('Attempted to change a read-only value');
+    }
     onValueChange({
       typ,
       value: {
@@ -51,61 +66,111 @@ export default function ValueEditor(props: Props): ReactElement {
     });
   };
 
+  let editor: ReactElement;
+
   switch (typ.kind) {
     case 'TInt':
-      return (
-        <IntEditor valueDef={valueDef} onValueChange={handleValueChange} />
+      editor = (
+        <IntEditor
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
+          editable={editable}
+        />
       );
+      break;
     case 'TBool':
-      return (
-        <BoolEditor valueDef={valueDef} onValueChange={handleValueChange} />
+      editor = (
+        <BoolEditor
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
+          editable={editable}
+        />
       );
+      break;
     case 'TStruct':
-      return (
+      editor = (
         <StructEditor
           structDeclaration={typ.value}
           valueDef={valueDef}
           onValueChange={handleValueChange}
+          editorHook={editorHook}
+          currentPath={currentPath}
+          diffs={props.diffs}
+          editable={editable}
         />
       );
+      break;
     case 'TRat':
-      return (
-        <RatEditor valueDef={valueDef} onValueChange={handleValueChange} />
+      editor = (
+        <RatEditor
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
+          editable={editable}
+        />
       );
+      break;
     case 'TDate':
-      return (
-        <DateEditor valueDef={valueDef} onValueChange={handleValueChange} />
+      editor = (
+        <DateEditor
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
+          editable={editable}
+        />
       );
+      break;
     case 'TDuration':
-      return (
-        <DurationEditor valueDef={valueDef} onValueChange={handleValueChange} />
+      editor = (
+        <DurationEditor
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
+          editable={editable}
+        />
       );
+      break;
     case 'TMoney':
-      return (
-        <MoneyEditor valueDef={valueDef} onValueChange={handleValueChange} />
+      editor = (
+        <MoneyEditor
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
+          editable={editable}
+        />
       );
+      break;
     case 'TEnum':
-      return (
+      editor = (
         <EnumEditor
           enumDeclaration={typ.value}
           valueDef={valueDef}
           onValueChange={handleValueChange}
+          editorHook={editorHook}
+          currentPath={currentPath}
+          diffs={props.diffs}
+          editable={editable}
         />
       );
+      break;
     case 'TArray':
-      return (
+      editor = (
         <ArrayEditor
           elementType={typ.value}
           valueDef={valueDef}
           onValueChange={handleValueChange}
+          editorHook={editorHook}
+          currentPath={currentPath}
+          diffs={props.diffs}
+          editable={editable}
         />
       );
+      break;
     case 'TTuple':
     case 'TOption':
-      return <i>Unimplemented Editor</i>;
+      editor = <i>Unimplemented Editor</i>;
+      break;
     default:
       assertUnreachable(typ);
   }
+
+  return editorHook(editor, currentPath);
 }
 
 const INT_PATTERN = /^-?\d+$/;
@@ -117,6 +182,7 @@ function isValidInt(value: string): boolean {
 type IntEditorProps = {
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editable?: boolean;
 };
 
 function IntEditor(props: IntEditorProps): ReactElement {
@@ -175,6 +241,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
         onBlur={handleBlur}
         className={displayValue && !isValidInt(displayValue) ? 'invalid' : ''}
         placeholder="0"
+        disabled={props.editable === false}
       />
     </div>
   );
@@ -183,6 +250,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
 type DateEditorProps = {
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editable?: boolean;
 };
 
 function DateEditor(props: DateEditorProps): ReactElement {
@@ -240,7 +308,12 @@ function DateEditor(props: DateEditorProps): ReactElement {
 
   return (
     <div className="value-editor">
-      <input type="date" value={internalValue} onChange={handleChange} />
+      <input
+        type="date"
+        value={internalValue}
+        onChange={handleChange}
+        disabled={props.editable === false}
+      />
     </div>
   );
 }
@@ -254,6 +327,7 @@ function isValidRat(value: string): boolean {
 type RatEditorProps = {
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editable?: boolean;
 };
 
 function RatEditor(props: RatEditorProps): ReactElement {
@@ -321,6 +395,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
         onBlur={handleBlur}
         className={displayValue && !isValidRat(displayValue) ? 'invalid' : ''}
         placeholder="0.0"
+        disabled={props.editable === false}
       />
     </div>
   );
@@ -329,6 +404,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
 type BoolEditorProps = {
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editable?: boolean;
 };
 
 function BoolEditor(props: BoolEditorProps): ReactElement {
@@ -344,7 +420,11 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
 
   return (
     <div className="value-editor">
-      <select value={currentValue.toString()} onChange={handleChange}>
+      <select
+        value={currentValue.toString()}
+        onChange={handleChange}
+        disabled={props.editable === false}
+      >
         <option value="false">
           <FormattedMessage id="false" />
         </option>
@@ -359,6 +439,7 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
 type DurationEditorProps = {
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editable?: boolean;
 };
 
 function DurationEditor(props: DurationEditorProps): ReactElement {
@@ -417,6 +498,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
             min="0"
             value={years}
             onChange={(e) => handleChange('years', parseInt(e.target.value))}
+            disabled={props.editable === false}
           />
         </label>
         <label>
@@ -429,6 +511,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
             min="0"
             value={months}
             onChange={(e) => handleChange('months', parseInt(e.target.value))}
+            disabled={props.editable === false}
           />
         </label>
         <label>
@@ -438,6 +521,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
             min="0"
             value={days}
             onChange={(e) => handleChange('days', parseInt(e.target.value))}
+            disabled={props.editable === false}
           />
         </label>
       </div>
@@ -454,6 +538,7 @@ function isValidMoney(value: string): boolean {
 type MoneyEditorProps = {
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editable?: boolean;
 };
 
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
@@ -519,6 +604,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         onChange={handleChange}
         className={displayValue && !isValidMoney(displayValue) ? 'invalid' : ''}
         placeholder="0.00"
+        disabled={props.editable === false}
       />
     </div>
   );
@@ -528,10 +614,21 @@ type StructEditorProps = {
   structDeclaration: StructDeclaration;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
+  currentPath: PathSegment[];
+  diffs: Diff[];
+  editable?: boolean;
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
-  const { structDeclaration, valueDef, onValueChange } = props;
+  const {
+    structDeclaration,
+    valueDef,
+    onValueChange,
+    editorHook,
+    currentPath,
+    editable,
+  } = props;
   const runtimeValue = valueDef?.value;
   const fields = structDeclaration.fields;
   const currentStructData =
@@ -573,6 +670,13 @@ function StructEditor(props: StructEditorProps): ReactElement {
                 handleFieldChange(fieldName, newFieldTestIo.value.value);
               }
             }}
+            editorHook={editorHook}
+            currentPath={[
+              ...currentPath,
+              { kind: 'StructField', value: fieldName },
+            ]}
+            diffs={props.diffs}
+            editable={editable}
           />
         ),
       };
@@ -590,10 +694,21 @@ type EnumEditorProps = {
   enumDeclaration: EnumDeclaration;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
+  currentPath: PathSegment[];
+  diffs: Diff[];
+  editable?: boolean;
 };
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
-  const { enumDeclaration, valueDef, onValueChange } = props;
+  const {
+    enumDeclaration,
+    valueDef,
+    onValueChange,
+    editorHook,
+    currentPath,
+    editable,
+  } = props;
   const runtimeValue = valueDef?.value;
   const currentEnumData =
     runtimeValue?.value.kind === 'Enum' ? runtimeValue.value.value : undefined;
@@ -608,6 +723,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   const handleCtorChange = (
     event: React.ChangeEvent<HTMLSelectElement>
   ): void => {
+    if (editable === false) return;
     const newCtor = event.target.value;
     const newCtorType = enumDeclaration.constructors.get(newCtor);
 
@@ -641,7 +757,11 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
   return (
     <div className="value-editor enum-editor">
-      <select onChange={handleCtorChange} value={currentCtor}>
+      <select
+        onChange={handleCtorChange}
+        value={currentCtor}
+        disabled={editable === false}
+      >
         {Array.from(enumDeclaration.constructors.keys()).map((ctorName) => (
           <option key={ctorName} value={ctorName}>
             {ctorName}
@@ -659,6 +779,13 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
                 : undefined,
             }}
             onValueChange={handlePayloadChange}
+            editorHook={editorHook}
+            currentPath={[
+              ...currentPath,
+              { kind: 'EnumPayload', value: currentCtor },
+            ]}
+            diffs={props.diffs}
+            editable={editable}
           />
         </div>
       )}

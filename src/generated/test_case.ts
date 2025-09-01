@@ -76,6 +76,7 @@ export type RuntimeValueRaw =
 | { kind: 'Enum'; value: [EnumDeclaration, [string, Option<RuntimeValue>]] }
 | { kind: 'Struct'; value: [StructDeclaration, Map<string, RuntimeValue>] }
 | { kind: 'Array'; value: RuntimeValue[] }
+| { kind: 'Empty' }
 
 export type AttrDef =
 | { kind: 'TestDescription'; value: string }
@@ -122,6 +123,7 @@ export type PathSegment =
 | { kind: 'StructField'; value: string }
 | { kind: 'ListIndex'; value: number /*int*/ }
 | { kind: 'TupleIndex'; value: number /*int*/ }
+| { kind: 'EnumPayload'; value: string }
 
 export type Diff = {
   path: PathSegment[];
@@ -164,6 +166,12 @@ export type FileSelection = {
   available_scopes: ScopeDefList;
 }
 
+export type TestRunResultsMsg = {
+  scope: string;
+  reset_outputs: boolean;
+  results: TestRunResults;
+}
+
 export type UpMessage =
 | { kind: 'Ready' }
 | { kind: 'GuiEdit'; value: [TestList, boolean] }
@@ -174,7 +182,7 @@ export type UpMessage =
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
-| { kind: 'TestRunResults'; value: TestRunResults }
+| { kind: 'TestRunResults'; value: TestRunResultsMsg }
 | { kind: 'FileSelectedForNewTest'; value: FileSelection }
 
 export function writeTyp(x: Typ, context: any = x): any {
@@ -366,33 +374,46 @@ export function writeRuntimeValueRaw(x: RuntimeValueRaw, context: any = x): any 
       return ['Struct', ((x, context) => [writeStructDeclaration(x[0], x), _atd_write_assoc_map_to_object(writeRuntimeValue)(x[1], x)])(x.value, x)]
     case 'Array':
       return ['Array', _atd_write_array(writeRuntimeValue)(x.value, x)]
+    case 'Empty':
+      return 'Empty'
   }
 }
 
 export function readRuntimeValueRaw(x: any, context: any = x): RuntimeValueRaw {
-  _atd_check_json_tuple(2, x, context)
-  switch (x[0]) {
-    case 'Bool':
-      return { kind: 'Bool', value: _atd_read_bool(x[1], x) }
-    case 'Money':
-      return { kind: 'Money', value: _atd_read_int(x[1], x) }
-    case 'Integer':
-      return { kind: 'Integer', value: _atd_read_int(x[1], x) }
-    case 'Decimal':
-      return { kind: 'Decimal', value: _atd_read_float(x[1], x) }
-    case 'Date':
-      return { kind: 'Date', value: readDate(x[1], x) }
-    case 'Duration':
-      return { kind: 'Duration', value: readDuration(x[1], x) }
-    case 'Enum':
-      return { kind: 'Enum', value: ((x, context): [EnumDeclaration, [string, Option<RuntimeValue>]] => { _atd_check_json_tuple(2, x, context); return [readEnumDeclaration(x[0], x), ((x, context): [string, Option<RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [_atd_read_string(x[0], x), _atd_read_option(readRuntimeValue)(x[1], x)] })(x[1], x)] })(x[1], x) }
-    case 'Struct':
-      return { kind: 'Struct', value: ((x, context): [StructDeclaration, Map<string, RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [readStructDeclaration(x[0], x), _atd_read_assoc_object_into_map(readRuntimeValue)(x[1], x)] })(x[1], x) }
-    case 'Array':
-      return { kind: 'Array', value: _atd_read_array(readRuntimeValue)(x[1], x) }
-    default:
-      _atd_bad_json('RuntimeValueRaw', x, context)
-      throw new Error('impossible')
+  if (typeof x === 'string') {
+    switch (x) {
+      case 'Empty':
+        return { kind: 'Empty' }
+      default:
+        _atd_bad_json('RuntimeValueRaw', x, context)
+        throw new Error('impossible')
+    }
+  }
+  else {
+    _atd_check_json_tuple(2, x, context)
+    switch (x[0]) {
+      case 'Bool':
+        return { kind: 'Bool', value: _atd_read_bool(x[1], x) }
+      case 'Money':
+        return { kind: 'Money', value: _atd_read_int(x[1], x) }
+      case 'Integer':
+        return { kind: 'Integer', value: _atd_read_int(x[1], x) }
+      case 'Decimal':
+        return { kind: 'Decimal', value: _atd_read_float(x[1], x) }
+      case 'Date':
+        return { kind: 'Date', value: readDate(x[1], x) }
+      case 'Duration':
+        return { kind: 'Duration', value: readDuration(x[1], x) }
+      case 'Enum':
+        return { kind: 'Enum', value: ((x, context): [EnumDeclaration, [string, Option<RuntimeValue>]] => { _atd_check_json_tuple(2, x, context); return [readEnumDeclaration(x[0], x), ((x, context): [string, Option<RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [_atd_read_string(x[0], x), _atd_read_option(readRuntimeValue)(x[1], x)] })(x[1], x)] })(x[1], x) }
+      case 'Struct':
+        return { kind: 'Struct', value: ((x, context): [StructDeclaration, Map<string, RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [readStructDeclaration(x[0], x), _atd_read_assoc_object_into_map(readRuntimeValue)(x[1], x)] })(x[1], x) }
+      case 'Array':
+        return { kind: 'Array', value: _atd_read_array(readRuntimeValue)(x[1], x) }
+      default:
+        _atd_bad_json('RuntimeValueRaw', x, context)
+        throw new Error('impossible')
+    }
   }
 }
 
@@ -536,6 +557,8 @@ export function writePathSegment(x: PathSegment, context: any = x): any {
       return ['ListIndex', _atd_write_int(x.value, x)]
     case 'TupleIndex':
       return ['TupleIndex', _atd_write_int(x.value, x)]
+    case 'EnumPayload':
+      return ['EnumPayload', _atd_write_string(x.value, x)]
   }
 }
 
@@ -548,6 +571,8 @@ export function readPathSegment(x: any, context: any = x): PathSegment {
       return { kind: 'ListIndex', value: _atd_read_int(x[1], x) }
     case 'TupleIndex':
       return { kind: 'TupleIndex', value: _atd_read_int(x[1], x) }
+    case 'EnumPayload':
+      return { kind: 'EnumPayload', value: _atd_read_string(x[1], x) }
     default:
       _atd_bad_json('PathSegment', x, context)
       throw new Error('impossible')
@@ -720,6 +745,22 @@ export function readFileSelection(x: any, context: any = x): FileSelection {
   };
 }
 
+export function writeTestRunResultsMsg(x: TestRunResultsMsg, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('TestRunResultsMsg', 'scope', _atd_write_string, x.scope, x),
+    'reset_outputs': _atd_write_required_field('TestRunResultsMsg', 'reset_outputs', _atd_write_bool, x.reset_outputs, x),
+    'results': _atd_write_required_field('TestRunResultsMsg', 'results', writeTestRunResults, x.results, x),
+  };
+}
+
+export function readTestRunResultsMsg(x: any, context: any = x): TestRunResultsMsg {
+  return {
+    scope: _atd_read_required_field('TestRunResultsMsg', 'scope', _atd_read_string, x['scope'], x),
+    reset_outputs: _atd_read_required_field('TestRunResultsMsg', 'reset_outputs', _atd_read_bool, x['reset_outputs'], x),
+    results: _atd_read_required_field('TestRunResultsMsg', 'results', readTestRunResults, x['results'], x),
+  };
+}
+
 export function writeUpMessage(x: UpMessage, context: any = x): any {
   switch (x.kind) {
     case 'Ready':
@@ -772,7 +813,7 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
     case 'Update':
       return ['Update', writeParseResults(x.value, x)]
     case 'TestRunResults':
-      return ['TestRunResults', writeTestRunResults(x.value, x)]
+      return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
     case 'FileSelectedForNewTest':
       return ['FileSelectedForNewTest', writeFileSelection(x.value, x)]
   }
@@ -784,7 +825,7 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
     case 'Update':
       return { kind: 'Update', value: readParseResults(x[1], x) }
     case 'TestRunResults':
-      return { kind: 'TestRunResults', value: readTestRunResults(x[1], x) }
+      return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
     case 'FileSelectedForNewTest':
       return { kind: 'FileSelectedForNewTest', value: readFileSelection(x[1], x) }
     default:
