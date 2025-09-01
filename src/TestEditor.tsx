@@ -62,7 +62,7 @@ export default function TestEditor(props: Props): ReactElement {
         </button>
         <button
           className={`test-editor-run ${props.runState?.status ?? ''}`}
-          title="Run test"
+          title={intl.formatMessage({ id: 'testEditor.run' })}
           onClick={() => props.onTestRun(props.test.testing_scope)}
           disabled={props.runState?.status === 'running'}
         >
@@ -152,6 +152,16 @@ export default function TestEditor(props: Props): ReactElement {
             onTestChange={(test) => {
               props.onTestChange(test, false);
             }}
+            diffs={
+              props.runState?.results?.kind === 'Ok'
+                ? props.runState.results.value.diffs
+                : []
+            }
+            actualOutputs={
+              props.runState?.results?.kind === 'Ok'
+                ? props.runState.results.value.test_outputs
+                : undefined
+            }
           />
         </div>
       </div>

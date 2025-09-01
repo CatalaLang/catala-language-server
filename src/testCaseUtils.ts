@@ -4,12 +4,9 @@ import type {
   TestOutputs,
   TestIo,
   RuntimeValue,
-  StructDeclaration,
-  EnumDeclaration,
-  Option,
+  Diff,
   RuntimeValueRaw,
 } from './generated/test_case';
-import { assertUnreachable } from './util';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -65,163 +62,92 @@ export function omitPositionInfo(testOutputs: TestOutputs): TestOutputs {
 }
 
 /**
- * Looks at a list of expected results (assertions) and a superset
- * list of actual results, and returns the actual results for which
- * an expectation is defined. Position information is omitted from
- * the diff (revisit later?)
- * @param expected
- * @param actual
- * @returns the actual results for which an expectation is defined
+ * Renders a runtime value as a string for display purposes.
+ *
+ * Note: this function only handles basic atomic values and doesn't
+ * properly format complex types. When complex types are displayed
+ * in a diff view, we use an expected/actual split pane rather
+ * than an inline display (this function is only used for inline
+ * displaying of simple values)
  */
-export function select(
-  expected: TestOutputs,
-  actual: TestOutputs
-): { expected: TestOutputs; actual: TestOutputs } {
-  expected = omitPositionInfo(expected);
-  actual = omitPositionInfo(actual);
-
-  const selectedActual: TestOutputs = new Map();
-
-  for (const [key, expectedValue] of expected.entries()) {
-    if (!actual.has(key)) {
-      throw new Error(
-        `Expected output '${key}' is not present in actual results`
-      );
-    }
-
-    const actualValue = actual.get(key)!;
-    selectedActual.set(key, selectTestIo(expectedValue, actualValue));
-  }
-
-  return { expected, actual: selectedActual };
-}
-
-function selectTestIo(expected: TestIo, actual: TestIo): TestIo {
-  if (!expected.value) {
-    return { typ: expected.typ };
-  }
-
-  if (!actual.value) {
-    throw new Error(`Expected value is defined, but actual value is not`);
-  }
-
-  return {
-    typ: expected.typ,
-    value: {
-      value: selectRuntimeValue(expected.value.value, actual.value.value),
-      pos: actual.value.pos,
-    },
-  };
-}
-
-/*
- * side-effect: strips attributes
- */
-function selectRuntimeValue(
-  expected: RuntimeValue,
-  actual: RuntimeValue
-): RuntimeValue {
-  const selected = selectRuntimeValueRaw(expected.value, actual.value);
-  return {
-    value: selected,
-    attrs: [],
-  };
-}
-
-function selectRuntimeValueRaw(
-  expected: RuntimeValueRaw,
-  actual: RuntimeValueRaw
-): RuntimeValueRaw {
-  if (expected.kind !== actual.kind) {
-    throw new Error(
-      `Mismatch in type: expected ${expected.kind}, got ${actual.kind}`
-    );
-  }
-
-  switch (expected.kind) {
+export function renderAtomicValue(value: RuntimeValue): string {
+  const raw = value.value;
+  switch (raw.kind) {
     case 'Bool':
-    case 'Money':
+      return raw.value ? 'true' : 'false';
     case 'Integer':
+      return raw.value.toString();
     case 'Decimal':
-    case 'Date':
-    case 'Duration':
-      return actual;
-    case 'Enum': {
-      const actualValue = actual.value as [
-        EnumDeclaration,
-        [string, Option<RuntimeValue>],
-      ]; //XXX type coercion
-      if (expected.value[1][0] !== actualValue[1][0]) {
-        throw new Error(
-          `Mismatch in enum constructor: expected ${expected.value[1][0]}, got ${actualValue[1][0]}`
-        );
-      }
-      if (expected.value[1][1] && actualValue[1][1]) {
-        return {
-          kind: 'Enum',
-          value: [
-            actualValue[0],
-            [
-              actualValue[1][0],
-              {
-                value: selectRuntimeValue(
-                  expected.value[1][1].value,
-                  actualValue[1][1].value
-                ),
-              },
-            ],
-          ],
-        };
-      }
-      return actual;
+      return raw.value.toString();
+    case 'Money':
+      return (raw.value / 100).toFixed(2);
+    case 'Date': {
+      const date = raw.value;
+      return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
     }
-    case 'Struct': {
-      const actualValue = actual.value as [
-        StructDeclaration,
-        Map<string, RuntimeValue>,
-      ]; //XXX type coercion
-      return {
-        kind: 'Struct',
-        value: [
-          actualValue[0],
-          selectStruct(expected.value[0], expected.value[1], actualValue[1]),
-        ],
-      };
+    case 'Duration': {
+      const d = raw.value;
+      return `${d.years}y ${d.months}m ${d.days}d`;
     }
+    // Enums get their label and value if the underlying value type
+    // is atomic, otherwise just their label
+    case 'Enum':
+      if (
+        raw.value[1][1] == undefined ||
+        !isAtomicRaw(raw.value[1][1].value.value)
+      ) {
+        return `${raw.value[1][0]}`;
+      } else {
+        return `${raw.value[1][0]} ➡ ${renderAtomicValue(raw.value[1][1].value)}  `;
+      }
+    // Complex types just get a placeholder or name
+    case 'Struct':
+      return raw.value[0].struct_name;
     case 'Array':
-      return {
-        kind: 'Array',
-        value: actual.value as RuntimeValue[],
-      };
+      return `Array(${raw.value.length})`;
     default:
-      assertUnreachable(expected);
+      return 'Unknown value';
   }
+} /**
+ * Tells whether the diff is elemental (inline-displayable).
+ * Rules:
+ * - Empty vs atomic -> elemental
+ * - Same kind and atomic on both sides -> elemental
+ * - Otherwise -> non-elemental (complex)
+ */
+
+export function isElemental(diff: Diff): boolean {
+  const e = diff.expected.value;
+  const a = diff.actual.value;
+
+  // If one side is Empty and the other is atomic, treat as elemental
+  if (e.kind === 'Empty' && a.kind !== 'Empty') {
+    return isAtomicRaw(a);
+  }
+  if (a.kind === 'Empty' && e.kind !== 'Empty') {
+    return isAtomicRaw(e);
+  }
+
+  // Different kinds (not an Empty vs atomic case) -> complex
+  if (e.kind !== a.kind) {
+    return false;
+  }
+
+  // Same kind: elemental only if atomic
+  return isAtomicRaw(e) && isAtomicRaw(a);
 }
-
-function selectStruct(
-  structDecl: StructDeclaration,
-  expected: Map<string, RuntimeValue>,
-  actual: Map<string, RuntimeValue>
-): Map<string, RuntimeValue> {
-  const selectedStruct = new Map<string, RuntimeValue>();
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const [fieldName, _fieldType] of structDecl.fields.entries()) {
-    const expectedField = expected.get(fieldName);
-    const actualField = actual.get(fieldName);
-
-    if (expectedField) {
-      if (!actualField) {
-        throw new Error(
-          `Expected field '${fieldName}' is not present in actual results`
-        );
-      }
-      selectedStruct.set(
-        fieldName,
-        selectRuntimeValue(expectedField, actualField)
-      );
-    }
+export function isAtomicRaw(value: RuntimeValueRaw): boolean {
+  // Atomic kinds are everything except containers;
+  // Enums are atomic if their paylod is atomic.
+  if (!['Enum', 'Struct', 'Array', 'Tuple'].includes(value.kind)) {
+    return true;
   }
-
-  return selectedStruct;
+  if (value.kind === 'Enum') {
+    const payload = value.value[1][1];
+    if (payload === null) {
+      return true;
+    }
+    return isAtomicRaw(payload.value.value);
+  }
+  return false;
 }
