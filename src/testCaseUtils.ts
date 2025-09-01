@@ -152,6 +152,7 @@ function selectRuntimeValueRaw(
         [string, Option<RuntimeValue>],
       ]; //XXX type coercion
       if (expected.value[1][0] !== actualValue[1][0]) {
+        //??? is that right?
         throw new Error(
           `Mismatch in enum constructor: expected ${expected.value[1][0]}, got ${actualValue[1][0]}`
         );
