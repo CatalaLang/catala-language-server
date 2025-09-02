@@ -71,20 +71,6 @@ function createDiffHighlightHook(
   };
 }
 
-/**
- * Creates a path segment for a struct field
- */
-function createStructFieldSegment(fieldName: string): PathSegment {
-  return { kind: 'StructField', value: fieldName };
-}
-
-/**
- * Creates a path segment for an array index
- */
-function createArrayIndexSegment(index: number): PathSegment {
-  return { kind: 'ListIndex', value: index };
-}
-
 export default function AssertionValueEditor({
   testIO,
   onValueChange,
@@ -114,9 +100,4 @@ export default function AssertionValueEditor({
   );
 }
 
-// Export these utility functions for use in other components
-export {
-  createDiffHighlightHook,
-  createStructFieldSegment,
-  createArrayIndexSegment,
-};
+export { createDiffHighlightHook };
