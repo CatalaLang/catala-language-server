@@ -4,12 +4,7 @@ import type {
   TestOutputs,
   TestIo,
   RuntimeValue,
-  StructDeclaration,
-  EnumDeclaration,
-  Option,
-  RuntimeValueRaw,
 } from './generated/test_case';
-import { assertUnreachable } from './util';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -65,15 +60,6 @@ export function omitPositionInfo(testOutputs: TestOutputs): TestOutputs {
 }
 
 /**
- * Looks at a list of expected results (assertions) and a superset
- * list of actual results, and returns the actual results for which
- * an expectation is defined. Position information is omitted from
- * the diff (revisit later?)
- * @param expected
- * @param actual
- * @returns the actual results for which an expectation is defined
- */
-/**
  * WARNING: This function needs significant improvement!
  * It only handles basic atomic values and doesn't properly format complex types.
  *
@@ -108,158 +94,4 @@ export function renderAtomicValue(value: RuntimeValue): string {
     default:
       return 'Unknown value';
   }
-}
-
-export function select(
-  expected: TestOutputs,
-  actual: TestOutputs
-): { expected: TestOutputs; actual: TestOutputs } {
-  expected = omitPositionInfo(expected);
-  actual = omitPositionInfo(actual);
-
-  const selectedActual: TestOutputs = new Map();
-
-  for (const [key, expectedValue] of expected.entries()) {
-    if (!actual.has(key)) {
-      throw new Error(
-        `Expected output '${key}' is not present in actual results`
-      );
-    }
-
-    const actualValue = actual.get(key)!;
-    selectedActual.set(key, selectTestIo(expectedValue, actualValue));
-  }
-
-  return { expected, actual: selectedActual };
-}
-
-function selectTestIo(expected: TestIo, actual: TestIo): TestIo {
-  if (!expected.value) {
-    return { typ: expected.typ };
-  }
-
-  if (!actual.value) {
-    throw new Error(`Expected value is defined, but actual value is not`);
-  }
-
-  return {
-    typ: expected.typ,
-    value: {
-      value: selectRuntimeValue(expected.value.value, actual.value.value),
-      pos: actual.value.pos,
-    },
-  };
-}
-
-/*
- * side-effect: strips attributes
- */
-function selectRuntimeValue(
-  expected: RuntimeValue,
-  actual: RuntimeValue
-): RuntimeValue {
-  const selected = selectRuntimeValueRaw(expected.value, actual.value);
-  return {
-    value: selected,
-    attrs: [],
-  };
-}
-
-function selectRuntimeValueRaw(
-  expected: RuntimeValueRaw,
-  actual: RuntimeValueRaw
-): RuntimeValueRaw {
-  if (expected.kind !== actual.kind) {
-    throw new Error(
-      `Mismatch in type: expected ${expected.kind}, got ${actual.kind}`
-    );
-  }
-
-  switch (expected.kind) {
-    case 'Bool':
-    case 'Money':
-    case 'Integer':
-    case 'Decimal':
-    case 'Date':
-    case 'Duration':
-      return actual;
-    case 'Enum': {
-      const actualValue = actual.value as [
-        EnumDeclaration,
-        [string, Option<RuntimeValue>],
-      ]; //XXX type coercion
-      if (expected.value[1][0] !== actualValue[1][0]) {
-        //??? is that right?
-        throw new Error(
-          `Mismatch in enum constructor: expected ${expected.value[1][0]}, got ${actualValue[1][0]}`
-        );
-      }
-      if (expected.value[1][1] && actualValue[1][1]) {
-        return {
-          kind: 'Enum',
-          value: [
-            actualValue[0],
-            [
-              actualValue[1][0],
-              {
-                value: selectRuntimeValue(
-                  expected.value[1][1].value,
-                  actualValue[1][1].value
-                ),
-              },
-            ],
-          ],
-        };
-      }
-      return actual;
-    }
-    case 'Struct': {
-      const actualValue = actual.value as [
-        StructDeclaration,
-        Map<string, RuntimeValue>,
-      ]; //XXX type coercion
-      return {
-        kind: 'Struct',
-        value: [
-          actualValue[0],
-          selectStruct(expected.value[0], expected.value[1], actualValue[1]),
-        ],
-      };
-    }
-    case 'Array':
-      return {
-        kind: 'Array',
-        value: actual.value as RuntimeValue[],
-      };
-    default:
-      assertUnreachable(expected);
-  }
-}
-
-function selectStruct(
-  structDecl: StructDeclaration,
-  expected: Map<string, RuntimeValue>,
-  actual: Map<string, RuntimeValue>
-): Map<string, RuntimeValue> {
-  const selectedStruct = new Map<string, RuntimeValue>();
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const [fieldName, _fieldType] of structDecl.fields.entries()) {
-    const expectedField = expected.get(fieldName);
-    const actualField = actual.get(fieldName);
-
-    if (expectedField) {
-      if (!actualField) {
-        throw new Error(
-          `Expected field '${fieldName}' is not present in actual results`
-        );
-      }
-      selectedStruct.set(
-        fieldName,
-        selectRuntimeValue(expectedField, actualField)
-      );
-    }
-  }
-
-  return selectedStruct;
 }
