@@ -939,7 +939,9 @@ let compute_diff
   in
   assert (List.length expected_results = List.length actual_results);
   List.map2
-    (fun (_, e) (_, a) -> compute_diff [] e a)
+    (fun (field, e) (_, a) -> 
+      (* Start the path with the field name *)
+      compute_diff [SField field] e a)
     expected_results actual_results
   |> List.concat
 
