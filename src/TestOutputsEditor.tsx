@@ -1,9 +1,7 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
 import type { Test, TestIo, Diff } from './generated/test_case';
-import AssertionValueEditor, {
-  createStructFieldSegment,
-} from './AssertionValueEditor';
+import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
 
 type Props = {
@@ -84,7 +82,7 @@ export default function TestOutputsEditor({
                   onAssertionDeletion={() => onAssertDelete(outputName)}
                   diffs={diffs}
                   // The path starts with the output field name
-                  currentPath={[createStructFieldSegment(outputName)]}
+                  currentPath={[{ kind: 'StructField', value: outputName }]}
                 />
               ) : (
                 <button
