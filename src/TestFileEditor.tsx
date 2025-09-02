@@ -90,7 +90,9 @@ export default function TestFileEditor({
           tabIndex={-1}
           onKeyDown={handleKeyDown}
         >
-          <h2>Add New Test</h2>
+          <h2>
+            <FormattedMessage id="testFile.addNewTest" />
+          </h2>
 
           {modalState.step === 'selectFile' && (
             <>
