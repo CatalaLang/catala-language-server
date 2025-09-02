@@ -76,6 +76,7 @@ export type RuntimeValueRaw =
 | { kind: 'Enum'; value: [EnumDeclaration, [string, Option<RuntimeValue>]] }
 | { kind: 'Struct'; value: [StructDeclaration, Map<string, RuntimeValue>] }
 | { kind: 'Array'; value: RuntimeValue[] }
+| { kind: 'Empty' }
 
 export type AttrDef =
 | { kind: 'TestDescription'; value: string }
@@ -366,33 +367,46 @@ export function writeRuntimeValueRaw(x: RuntimeValueRaw, context: any = x): any 
       return ['Struct', ((x, context) => [writeStructDeclaration(x[0], x), _atd_write_assoc_map_to_object(writeRuntimeValue)(x[1], x)])(x.value, x)]
     case 'Array':
       return ['Array', _atd_write_array(writeRuntimeValue)(x.value, x)]
+    case 'Empty':
+      return 'Empty'
   }
 }
 
 export function readRuntimeValueRaw(x: any, context: any = x): RuntimeValueRaw {
-  _atd_check_json_tuple(2, x, context)
-  switch (x[0]) {
-    case 'Bool':
-      return { kind: 'Bool', value: _atd_read_bool(x[1], x) }
-    case 'Money':
-      return { kind: 'Money', value: _atd_read_int(x[1], x) }
-    case 'Integer':
-      return { kind: 'Integer', value: _atd_read_int(x[1], x) }
-    case 'Decimal':
-      return { kind: 'Decimal', value: _atd_read_float(x[1], x) }
-    case 'Date':
-      return { kind: 'Date', value: readDate(x[1], x) }
-    case 'Duration':
-      return { kind: 'Duration', value: readDuration(x[1], x) }
-    case 'Enum':
-      return { kind: 'Enum', value: ((x, context): [EnumDeclaration, [string, Option<RuntimeValue>]] => { _atd_check_json_tuple(2, x, context); return [readEnumDeclaration(x[0], x), ((x, context): [string, Option<RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [_atd_read_string(x[0], x), _atd_read_option(readRuntimeValue)(x[1], x)] })(x[1], x)] })(x[1], x) }
-    case 'Struct':
-      return { kind: 'Struct', value: ((x, context): [StructDeclaration, Map<string, RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [readStructDeclaration(x[0], x), _atd_read_assoc_object_into_map(readRuntimeValue)(x[1], x)] })(x[1], x) }
-    case 'Array':
-      return { kind: 'Array', value: _atd_read_array(readRuntimeValue)(x[1], x) }
-    default:
-      _atd_bad_json('RuntimeValueRaw', x, context)
-      throw new Error('impossible')
+  if (typeof x === 'string') {
+    switch (x) {
+      case 'Empty':
+        return { kind: 'Empty' }
+      default:
+        _atd_bad_json('RuntimeValueRaw', x, context)
+        throw new Error('impossible')
+    }
+  }
+  else {
+    _atd_check_json_tuple(2, x, context)
+    switch (x[0]) {
+      case 'Bool':
+        return { kind: 'Bool', value: _atd_read_bool(x[1], x) }
+      case 'Money':
+        return { kind: 'Money', value: _atd_read_int(x[1], x) }
+      case 'Integer':
+        return { kind: 'Integer', value: _atd_read_int(x[1], x) }
+      case 'Decimal':
+        return { kind: 'Decimal', value: _atd_read_float(x[1], x) }
+      case 'Date':
+        return { kind: 'Date', value: readDate(x[1], x) }
+      case 'Duration':
+        return { kind: 'Duration', value: readDuration(x[1], x) }
+      case 'Enum':
+        return { kind: 'Enum', value: ((x, context): [EnumDeclaration, [string, Option<RuntimeValue>]] => { _atd_check_json_tuple(2, x, context); return [readEnumDeclaration(x[0], x), ((x, context): [string, Option<RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [_atd_read_string(x[0], x), _atd_read_option(readRuntimeValue)(x[1], x)] })(x[1], x)] })(x[1], x) }
+      case 'Struct':
+        return { kind: 'Struct', value: ((x, context): [StructDeclaration, Map<string, RuntimeValue>] => { _atd_check_json_tuple(2, x, context); return [readStructDeclaration(x[0], x), _atd_read_assoc_object_into_map(readRuntimeValue)(x[1], x)] })(x[1], x) }
+      case 'Array':
+        return { kind: 'Array', value: _atd_read_array(readRuntimeValue)(x[1], x) }
+      default:
+        _atd_bad_json('RuntimeValueRaw', x, context)
+        throw new Error('impossible')
+    }
   }
 }
 
