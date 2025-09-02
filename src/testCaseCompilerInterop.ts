@@ -118,6 +118,7 @@ export function runTestScope(
     // the `register_lsp_error_notifier` hook.
     const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
     const testRun = readTestRun(JSON.parse(result.toString()));
+    logger.log(`diffs: ${JSON.stringify(testRun.diffs)}`);
     return {
       kind: 'Ok',
       value: {
