@@ -15,6 +15,7 @@ type ArrayEditorProps = {
   elementType: Typ;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editorHook?: (editor: ReactElement) => ReactElement;
 };
 
 // We introspect the array type to understand whether
@@ -98,7 +99,7 @@ export function getTypeDisplayName(
 }
 
 export function ArrayEditor(props: ArrayEditorProps): ReactElement {
-  const { elementType, valueDef, onValueChange } = props;
+  const { elementType, valueDef, onValueChange, editorHook } = props;
   const runtimeValue = valueDef?.value;
   const currentArray =
     runtimeValue?.value.kind === 'Array' ? runtimeValue.value.value : [];
@@ -322,6 +323,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                     }
                     // Handle case where element value becomes undefined? Maybe delete?
                   }}
+                  editorHook={editorHook}
                 />
               </div>
             </div>

@@ -32,6 +32,7 @@ export function createRuntimeValue(
 type Props = {
   testIO: TestIo;
   onValueChange(newValue: TestIo): void;
+  editorHook?: (editor: ReactElement) => ReactElement;
 };
 
 export function isCollapsible(typ: Typ): boolean {
@@ -39,7 +40,7 @@ export function isCollapsible(typ: Typ): boolean {
 }
 
 export default function ValueEditor(props: Props): ReactElement {
-  const { testIO, onValueChange } = props;
+  const { testIO, onValueChange, editorHook = (editor) => editor } = props;
   const { typ, value: valueDef } = testIO;
 
   const handleValueChange = (newRuntimeValue: RuntimeValue): void => {
@@ -51,61 +52,78 @@ export default function ValueEditor(props: Props): ReactElement {
     });
   };
 
+  let editor: ReactElement;
+
   switch (typ.kind) {
     case 'TInt':
-      return (
+      editor = (
         <IntEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
+      break;
     case 'TBool':
-      return (
+      editor = (
         <BoolEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
+      break;
     case 'TStruct':
-      return (
+      editor = (
         <StructEditor
           structDeclaration={typ.value}
           valueDef={valueDef}
           onValueChange={handleValueChange}
+          editorHook={editorHook}
         />
       );
+      break;
     case 'TRat':
-      return (
+      editor = (
         <RatEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
+      break;
     case 'TDate':
-      return (
+      editor = (
         <DateEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
+      break;
     case 'TDuration':
-      return (
+      editor = (
         <DurationEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
+      break;
     case 'TMoney':
-      return (
+      editor = (
         <MoneyEditor valueDef={valueDef} onValueChange={handleValueChange} />
       );
+      break;
     case 'TEnum':
-      return (
+      editor = (
         <EnumEditor
           enumDeclaration={typ.value}
           valueDef={valueDef}
           onValueChange={handleValueChange}
+          editorHook={editorHook}
         />
       );
+      break;
     case 'TArray':
-      return (
+      editor = (
         <ArrayEditor
           elementType={typ.value}
           valueDef={valueDef}
           onValueChange={handleValueChange}
+          editorHook={editorHook}
         />
       );
+      break;
     case 'TTuple':
     case 'TOption':
-      return <i>Unimplemented Editor</i>;
+      editor = <i>Unimplemented Editor</i>;
+      break;
     default:
       assertUnreachable(typ);
   }
+
+  return editorHook(editor);
 }
 
 const INT_PATTERN = /^-?\d+$/;
@@ -528,10 +546,11 @@ type StructEditorProps = {
   structDeclaration: StructDeclaration;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editorHook?: (editor: ReactElement) => ReactElement;
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
-  const { structDeclaration, valueDef, onValueChange } = props;
+  const { structDeclaration, valueDef, onValueChange, editorHook } = props;
   const runtimeValue = valueDef?.value;
   const fields = structDeclaration.fields;
   const currentStructData =
@@ -573,6 +592,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
                 handleFieldChange(fieldName, newFieldTestIo.value.value);
               }
             }}
+            editorHook={editorHook}
           />
         ),
       };
@@ -590,10 +610,11 @@ type EnumEditorProps = {
   enumDeclaration: EnumDeclaration;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
+  editorHook?: (editor: ReactElement) => ReactElement;
 };
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
-  const { enumDeclaration, valueDef, onValueChange } = props;
+  const { enumDeclaration, valueDef, onValueChange, editorHook } = props;
   const runtimeValue = valueDef?.value;
   const currentEnumData =
     runtimeValue?.value.kind === 'Enum' ? runtimeValue.value.value : undefined;
@@ -659,6 +680,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
                 : undefined,
             }}
             onValueChange={handlePayloadChange}
+            editorHook={editorHook}
           />
         </div>
       )}
