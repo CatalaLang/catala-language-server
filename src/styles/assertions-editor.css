@@ -1,0 +1,38 @@
+/* Diff highlighting styles */
+.diff-highlight {
+  position: relative;
+  border: 1px solid var(--vscode-editorError-foreground, #f14c4c);
+  padding: 8px;
+  margin: 4px 0;
+  border-radius: 4px;
+}
+
+.atomic-diff {
+  background-color: var(
+    --vscode-diffEditor-removedLineBackground,
+    rgba(255, 0, 0, 0.1)
+  );
+}
+
+.container-diff {
+  background-color: var(
+    --vscode-diffEditor-diagonalFill,
+    rgba(255, 0, 0, 0.05)
+  );
+}
+
+.diff-expected,
+.diff-actual {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  padding: 2px 4px;
+  margin-bottom: 4px;
+}
+
+.diff-expected {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
+}
+
+.diff-actual {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
+}

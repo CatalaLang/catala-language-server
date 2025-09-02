@@ -152,6 +152,11 @@ export default function TestEditor(props: Props): ReactElement {
             onTestChange={(test) => {
               props.onTestChange(test, false);
             }}
+            diffs={
+              props.runState?.results?.kind === 'Ok'
+                ? props.runState.results.value.diffs
+                : []
+            }
           />
         </div>
       </div>

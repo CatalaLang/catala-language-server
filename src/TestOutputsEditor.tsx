@@ -1,12 +1,15 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
-import type { Test, TestIo } from './generated/test_case';
-import AssertionValueEditor from './AssertionValueEditor';
+import type { Test, TestIo, Diff } from './generated/test_case';
+import AssertionValueEditor, {
+  createStructFieldSegment,
+} from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
 
 type Props = {
   test: Test;
   onTestChange(newValue: Test): void;
+  diffs?: Diff[];
 };
 
 /* An editor for test outputs. Outputs are named and typed, and
@@ -29,6 +32,7 @@ type Props = {
 export default function TestOutputsEditor({
   test,
   onTestChange: onTestAssertsChange,
+  diffs = [],
 }: Props): ReactElement {
   const { test_outputs, tested_scope } = test;
 
@@ -78,6 +82,9 @@ export default function TestOutputsEditor({
                     onAssertValueChange(outputName, newValue)
                   }
                   onAssertionDeletion={() => onAssertDelete(outputName)}
+                  diffs={diffs}
+                  // The path starts with the output field name
+                  currentPath={[createStructFieldSegment(outputName)]}
                 />
               ) : (
                 <button

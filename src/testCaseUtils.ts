@@ -73,6 +73,43 @@ export function omitPositionInfo(testOutputs: TestOutputs): TestOutputs {
  * @param actual
  * @returns the actual results for which an expectation is defined
  */
+/**
+ * WARNING: This function needs significant improvement!
+ * It only handles basic atomic values and doesn't properly format complex types.
+ *
+ * Renders a runtime value as a string for display purposes.
+ */
+export function renderAtomicValue(value: RuntimeValue): string {
+  const raw = value.value;
+  switch (raw.kind) {
+    case 'Bool':
+      return raw.value ? 'true' : 'false';
+    case 'Integer':
+      return raw.value.toString();
+    case 'Decimal':
+      return raw.value.toString();
+    case 'Money':
+      return (raw.value / 100).toFixed(2);
+    case 'Date': {
+      const date = raw.value;
+      return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
+    }
+    case 'Duration': {
+      const d = raw.value;
+      return `${d.years}y ${d.months}m ${d.days}d`;
+    }
+    // Complex types just get a placeholder
+    case 'Enum':
+      return `${raw.value[1][0]}`;
+    case 'Struct':
+      return 'Struct value';
+    case 'Array':
+      return `Array(${raw.value.length})`;
+    default:
+      return 'Unknown value';
+  }
+}
+
 export function select(
   expected: TestOutputs,
   actual: TestOutputs
