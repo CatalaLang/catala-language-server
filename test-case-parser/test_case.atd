@@ -65,6 +65,7 @@ type runtime_value_raw = [
   | Enum of (enum_declaration * (string * runtime_value option))
   | Struct of (struct_declaration * (string * runtime_value) list <json repr="object"> <ts repr="map">)
   | Array of runtime_value list <ocaml repr="array">
+  | Empty (* for diffs *)
 ] <ocaml repr="classic">
 
 (* to be extended with free-form descriptions, etc. *)
