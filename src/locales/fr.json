@@ -47,5 +47,7 @@
   "type.optional": "{baseType} optionnel",
   "arrayEditor.movePrevious": "Déplacer l'élément à la position précédente",
   "arrayEditor.moveNext": "Déplacer l'élément à la position suivante",
-  "arrayEditor.deleteElement": "Supprimer l'élément"
+  "arrayEditor.deleteElement": "Supprimer l'élément",
+  "diff.expected": "Attendu",
+  "diff.actual": "Obtenu"
 }

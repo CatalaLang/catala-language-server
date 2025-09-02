@@ -1,4 +1,5 @@
 import { type ReactElement } from 'react';
+import { FormattedMessage } from 'react-intl';
 import type { TestIo, Diff, PathSegment } from './generated/test_case';
 import ValueEditor from './editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
@@ -51,10 +52,12 @@ function createDiffHighlightHook(
       return (
         <div className="diff-highlight atomic-diff">
           <div className="diff-expected">
-            Expected: {renderAtomicValue(matchingDiff.expected)}
+            <FormattedMessage id="diff.expected" />:{' '}
+            {renderAtomicValue(matchingDiff.expected)}
           </div>
           <div className="diff-actual">
-            Actual: {renderAtomicValue(matchingDiff.actual)}
+            <FormattedMessage id="diff.actual" />:{' '}
+            {renderAtomicValue(matchingDiff.actual)}
           </div>
           {editor}
         </div>
