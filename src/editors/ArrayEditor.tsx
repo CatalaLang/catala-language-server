@@ -7,6 +7,7 @@ import type {
   RuntimeValueRaw,
   Typ,
   ValueDef,
+  PathSegment,
 } from '../generated/test_case';
 import ValueEditor, { createRuntimeValue } from './ValueEditors';
 import { assertUnreachable } from '../util';
@@ -15,7 +16,8 @@ type ArrayEditorProps = {
   elementType: Typ;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
-  editorHook?: (editor: ReactElement) => ReactElement;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
+  currentPath: PathSegment[];
 };
 
 // We introspect the array type to understand whether
@@ -99,7 +101,8 @@ export function getTypeDisplayName(
 }
 
 export function ArrayEditor(props: ArrayEditorProps): ReactElement {
-  const { elementType, valueDef, onValueChange, editorHook } = props;
+  const { elementType, valueDef, onValueChange, editorHook, currentPath } =
+    props;
   const runtimeValue = valueDef?.value;
   const currentArray =
     runtimeValue?.value.kind === 'Array' ? runtimeValue.value.value : [];
@@ -324,6 +327,10 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                     // Handle case where element value becomes undefined? Maybe delete?
                   }}
                   editorHook={editorHook}
+                  currentPath={[
+                    ...currentPath,
+                    { kind: 'ListIndex', value: index },
+                  ]}
                 />
               </div>
             </div>
