@@ -123,6 +123,7 @@ export type PathSegment =
 | { kind: 'StructField'; value: string }
 | { kind: 'ListIndex'; value: number /*int*/ }
 | { kind: 'TupleIndex'; value: number /*int*/ }
+| { kind: 'EnumPayload'; value: string }
 
 export type Diff = {
   path: PathSegment[];
@@ -550,6 +551,8 @@ export function writePathSegment(x: PathSegment, context: any = x): any {
       return ['ListIndex', _atd_write_int(x.value, x)]
     case 'TupleIndex':
       return ['TupleIndex', _atd_write_int(x.value, x)]
+    case 'EnumPayload':
+      return ['EnumPayload', _atd_write_string(x.value, x)]
   }
 }
 
@@ -562,6 +565,8 @@ export function readPathSegment(x: any, context: any = x): PathSegment {
       return { kind: 'ListIndex', value: _atd_read_int(x[1], x) }
     case 'TupleIndex':
       return { kind: 'TupleIndex', value: _atd_read_int(x[1], x) }
+    case 'EnumPayload':
+      return { kind: 'EnumPayload', value: _atd_read_string(x[1], x) }
     default:
       _atd_bad_json('PathSegment', x, context)
       throw new Error('impossible')
