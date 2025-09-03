@@ -12,6 +12,7 @@ import type {
   EnumDeclaration,
   Typ,
   ValueDef,
+  PathSegment,
 } from '../generated/test_case';
 import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../util';
@@ -32,7 +33,8 @@ export function createRuntimeValue(
 type Props = {
   testIO: TestIo;
   onValueChange(newValue: TestIo): void;
-  editorHook?: (editor: ReactElement) => ReactElement;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
+  currentPath: PathSegment[];
 };
 
 export function isCollapsible(typ: Typ): boolean {
@@ -40,7 +42,12 @@ export function isCollapsible(typ: Typ): boolean {
 }
 
 export default function ValueEditor(props: Props): ReactElement {
-  const { testIO, onValueChange, editorHook = (editor) => editor } = props;
+  const {
+    testIO,
+    onValueChange,
+    editorHook = (editor): ReactElement => editor,
+    currentPath,
+  } = props;
   const { typ, value: valueDef } = testIO;
 
   const handleValueChange = (newRuntimeValue: RuntimeValue): void => {
@@ -72,6 +79,7 @@ export default function ValueEditor(props: Props): ReactElement {
           valueDef={valueDef}
           onValueChange={handleValueChange}
           editorHook={editorHook}
+          currentPath={currentPath}
         />
       );
       break;
@@ -102,6 +110,7 @@ export default function ValueEditor(props: Props): ReactElement {
           valueDef={valueDef}
           onValueChange={handleValueChange}
           editorHook={editorHook}
+          currentPath={currentPath}
         />
       );
       break;
@@ -112,6 +121,7 @@ export default function ValueEditor(props: Props): ReactElement {
           valueDef={valueDef}
           onValueChange={handleValueChange}
           editorHook={editorHook}
+          currentPath={currentPath}
         />
       );
       break;
@@ -123,7 +133,7 @@ export default function ValueEditor(props: Props): ReactElement {
       assertUnreachable(typ);
   }
 
-  return editorHook(editor);
+  return editorHook(editor, currentPath);
 }
 
 const INT_PATTERN = /^-?\d+$/;
@@ -546,11 +556,18 @@ type StructEditorProps = {
   structDeclaration: StructDeclaration;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
-  editorHook?: (editor: ReactElement) => ReactElement;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
+  currentPath: PathSegment[];
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
-  const { structDeclaration, valueDef, onValueChange, editorHook } = props;
+  const {
+    structDeclaration,
+    valueDef,
+    onValueChange,
+    editorHook,
+    currentPath,
+  } = props;
   const runtimeValue = valueDef?.value;
   const fields = structDeclaration.fields;
   const currentStructData =
@@ -593,6 +610,10 @@ function StructEditor(props: StructEditorProps): ReactElement {
               }
             }}
             editorHook={editorHook}
+            currentPath={[
+              ...currentPath,
+              { kind: 'StructField', value: fieldName },
+            ]}
           />
         ),
       };
@@ -610,11 +631,13 @@ type EnumEditorProps = {
   enumDeclaration: EnumDeclaration;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
-  editorHook?: (editor: ReactElement) => ReactElement;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
+  currentPath: PathSegment[];
 };
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
-  const { enumDeclaration, valueDef, onValueChange, editorHook } = props;
+  const { enumDeclaration, valueDef, onValueChange, editorHook, currentPath } =
+    props;
   const runtimeValue = valueDef?.value;
   const currentEnumData =
     runtimeValue?.value.kind === 'Enum' ? runtimeValue.value.value : undefined;
@@ -681,6 +704,10 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
             }}
             onValueChange={handlePayloadChange}
             editorHook={editorHook}
+            currentPath={[
+              ...currentPath,
+              { kind: 'EnumPayload', value: currentCtor },
+            ]}
           />
         </div>
       )}
