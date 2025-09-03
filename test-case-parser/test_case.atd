@@ -117,6 +117,7 @@ type path_segment = [
   | StructField of string
   | ListIndex of int
   | TupleIndex of int
+  | EnumPayload of string
 ]
 
 type diff = {

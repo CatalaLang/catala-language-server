@@ -10,22 +10,19 @@ type Props = {
   onValueChange: (newValue: TestIo) => void;
   onAssertionDeletion: () => void;
   diffs?: Diff[];
-  currentPath?: PathSegment[];
+  currentPath: PathSegment[];
 };
 
 /**
  * Creates a hook function that highlights editors with diffs
  */
-function createDiffHighlightHook(
-  diffs: Diff[],
-  currentPath: PathSegment[] = []
-) {
-  return (editor: ReactElement): ReactElement => {
+function createDiffHighlightHook(diffs: Diff[]) {
+  return (editor: ReactElement, path: PathSegment[]): ReactElement => {
     // Check if current path matches any diff path
     const matchingDiff = diffs.find((diff) => {
       // For exact path match (atomic values)
-      if (diff.path.length === currentPath.length) {
-        return currentPath.every(
+      if (diff.path.length === path.length) {
+        return path.every(
           (segment, i) =>
             JSON.stringify(segment) === JSON.stringify(diff.path[i])
         );
@@ -38,8 +35,8 @@ function createDiffHighlightHook(
       !matchingDiff &&
       diffs.some((diff) => {
         // If the diff path is longer than current path, check if current path is a prefix
-        if (diff.path.length > currentPath.length) {
-          return currentPath.every(
+        if (diff.path.length > path.length) {
+          return path.every(
             (segment, i) =>
               JSON.stringify(segment) === JSON.stringify(diff.path[i])
           );
@@ -76,11 +73,11 @@ export default function AssertionValueEditor({
   onValueChange,
   onAssertionDeletion,
   diffs = [],
-  currentPath = [],
+  currentPath,
 }: Props): ReactElement {
   // Create the diff highlight hook if we have diffs
   const editorHook =
-    diffs.length > 0 ? createDiffHighlightHook(diffs, currentPath) : undefined;
+    diffs.length > 0 ? createDiffHighlightHook(diffs) : undefined;
 
   return (
     <div className="assertion-value-editor">
@@ -88,6 +85,7 @@ export default function AssertionValueEditor({
         testIO={testIO}
         onValueChange={onValueChange}
         editorHook={editorHook}
+        currentPath={currentPath}
       />
       <button
         className="assertion-delete"
@@ -99,5 +97,3 @@ export default function AssertionValueEditor({
     </div>
   );
 }
-
-export { createDiffHighlightHook };
