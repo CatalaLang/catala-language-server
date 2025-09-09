@@ -160,6 +160,14 @@ export default function TestFileEditor({
         const newTestState = [...state.tests];
         newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
 
+        // Reset test run state when any change happens to the test
+        // This ensures stale results aren't shown after modifying expected outputs
+        setTestRunState((prev) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [newValue.testing_scope]: _, ...rest } = prev;
+          return rest;
+        });
+
         // optimistic update
         setState({ state: 'success', tests: newTestState });
 
@@ -171,7 +179,7 @@ export default function TestFileEditor({
         );
       }
     },
-    [state, vscode]
+    [state, vscode, setTestRunState]
   );
 
   const onTestDelete = useCallback(
