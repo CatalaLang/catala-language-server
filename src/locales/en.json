@@ -49,5 +49,7 @@
   "arrayEditor.moveNext": "Move element to next position",
   "arrayEditor.deleteElement": "Delete element",
   "diff.expected": "Expected",
-  "diff.actual": "Actual"
+  "diff.actual": "Actual",
+  "diff.emptyExpected": "Expected Empty",
+  "diff.emptyActual": "Missing"
 }

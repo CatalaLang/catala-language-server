@@ -36,3 +36,37 @@
 .diff-actual {
   color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
 }
+
+.empty-value-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 8px;
+  margin: 4px 0;
+  border-radius: 4px;
+  position: relative;
+}
+
+.empty-value-indicator::before {
+  content: '⊘';
+  font-size: 24px;
+  margin-right: 8px;
+}
+
+.empty-value-indicator.expected {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
+  background-color: var(
+    --vscode-diffEditor-insertedLineBackground,
+    rgba(0, 255, 0, 0.1)
+  );
+}
+
+.empty-value-indicator.actual {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
+  background-color: var(
+    --vscode-diffEditor-removedLineBackground,
+    rgba(255, 0, 0, 0.1)
+  );
+}
