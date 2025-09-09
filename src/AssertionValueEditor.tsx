@@ -1,6 +1,11 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
-import type { TestIo, Diff, PathSegment } from './generated/test_case';
+import type {
+  TestIo,
+  Diff,
+  PathSegment,
+  RuntimeValue,
+} from './generated/test_case';
 import ValueEditor from './editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
 import './styles/assertions-editor.css';
@@ -12,6 +17,29 @@ type Props = {
   diffs?: Diff[];
   currentPath: PathSegment[];
 };
+
+/**
+ * Renders an empty value indicator for array elements
+ */
+function renderEmptyValueIndicator(isExpected: boolean): ReactElement {
+  return (
+    <div
+      className={`empty-value-indicator ${isExpected ? 'expected' : 'actual'}`}
+    >
+      <FormattedMessage
+        id={isExpected ? 'diff.emptyExpected' : 'diff.emptyActual'}
+        defaultMessage="Empty"
+      />
+    </div>
+  );
+}
+
+/**
+ * Checks if a runtime value represents an empty value
+ */
+function isEmptyValue(value: RuntimeValue): boolean {
+  return value.value.kind === 'Empty';
+}
 
 /**
  * Creates a hook function that highlights editors with diffs
@@ -45,20 +73,48 @@ function createDiffHighlightHook(diffs: Diff[]) {
       });
 
     if (matchingDiff) {
-      // For atomic values, show expected vs actual
-      return (
-        <div className="diff-highlight atomic-diff">
-          <div className="diff-expected">
-            <FormattedMessage id="diff.expected" />:{' '}
-            {renderAtomicValue(matchingDiff.expected)}
+      const expectedIsEmpty = isEmptyValue(matchingDiff.expected);
+      const actualIsEmpty = isEmptyValue(matchingDiff.actual);
+
+      if (expectedIsEmpty || actualIsEmpty) {
+        return (
+          <div className="diff-highlight atomic-diff">
+            {expectedIsEmpty ? (
+              <>
+                {renderEmptyValueIndicator(true)}
+                <div className="diff-actual">
+                  <FormattedMessage id="diff.actual" />:{' '}
+                  {renderAtomicValue(matchingDiff.actual)}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="diff-expected">
+                  <FormattedMessage id="diff.expected" />:{' '}
+                  {renderAtomicValue(matchingDiff.expected)}
+                </div>
+                {renderEmptyValueIndicator(false)}
+              </>
+            )}
+            {editor}
           </div>
-          <div className="diff-actual">
-            <FormattedMessage id="diff.actual" />:{' '}
-            {renderAtomicValue(matchingDiff.actual)}
+        );
+      } else {
+        // For regular atomic values, show expected vs actual
+        return (
+          <div className="diff-highlight atomic-diff">
+            <div className="diff-expected">
+              <FormattedMessage id="diff.expected" />:{' '}
+              {renderAtomicValue(matchingDiff.expected)}
+            </div>
+            <div className="diff-actual">
+              <FormattedMessage id="diff.actual" />:{' '}
+              {renderAtomicValue(matchingDiff.actual)}
+            </div>
+            {editor}
           </div>
-          {editor}
-        </div>
-      );
+        );
+      }
     } else if (isParentOfDiff) {
       // For containers that have diffs somewhere inside them
       return <div className="diff-highlight container-diff">{editor}</div>;
