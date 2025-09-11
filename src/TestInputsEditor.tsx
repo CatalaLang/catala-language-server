@@ -27,6 +27,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
             testIO={testIo}
             onValueChange={onTestInputChange}
             currentPath={[{ kind: 'StructField', value: inputName }]}
+            diffs={[]}
           />
         ),
       };
