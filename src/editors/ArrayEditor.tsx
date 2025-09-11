@@ -8,16 +8,24 @@ import type {
   Typ,
   ValueDef,
   PathSegment,
+  Diff,
 } from '../generated/test_case';
 import ValueEditor, { createRuntimeValue } from './ValueEditors';
 import { assertUnreachable } from '../util';
 
+/**
+ * Diffs are consumed only by ArrayEditor to compute “phantom” indices
+ * (expected Empty vs actual Something). We do NOT propagate diffs into
+ * phantom children (we pass [] there) so recursion stops at the first
+ * Empty-vs-Actual boundary.
+ */
 type ArrayEditorProps = {
   elementType: Typ;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
   currentPath: PathSegment[];
+  diffs: Diff[];
 };
 
 // We introspect the array type to understand whether
@@ -53,6 +61,14 @@ export function hasNestedArrays(typ: Typ): boolean {
     return typ.value.some(hasNestedArrays);
   }
   assertUnreachable(typ);
+}
+
+/**
+ * Checks if a runtime value represents an empty value
+ * (aligned with AssertionValueEditor logic).
+ */
+function isEmptyValue(value: RuntimeValue): boolean {
+  return value.value.kind === 'Empty';
 }
 
 // Get a display name for a type that can be used in UI messages
@@ -221,121 +237,198 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
       <div
         className={`array-items ${hasNestedArrays(props.elementType) ? 'array-items-nested' : 'array-items-non-nested'}`}
       >
-        {currentArray.map((item, index) => {
-          // Find the UID attribute for the key
-          const uidAttr = item.attrs?.find((attr) => attr.kind === 'Uid');
-          let itemKey: string | number;
-          if (uidAttr?.kind === 'Uid') {
-            itemKey = uidAttr.value;
-          } else {
-            console.warn(
-              `Array item at index ${index} is missing a UID attribute. Falling back to index key.`
-            );
-            itemKey = index; // Fallback to index if UID is not found
-          }
-
-          return (
-            <div
-              key={itemKey}
-              className={`array-item ${
-                dragOverIndex === index ? 'drag-over' : ''
-              } ${draggedIndex === index ? 'dragging' : ''}`}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDrop={(e) => handleDrop(e, index)}
-              onDragEnd={handleDragEnd}
-            >
-              <div
-                className="array-item-controls"
-                draggable
-                onDragStart={(e) => handleDragStart(e, index)}
-              >
-                {hasNestedArrays(elementType) ? (
-                  <>
-                    <button
-                      className="array-move-prev"
-                      onClick={() => handleMove(index, index - 1)}
-                      disabled={index === 0}
-                      title={intl.formatMessage({
-                        id: 'arrayEditor.movePrevious',
-                      })}
-                    >
-                      <span className="codicon codicon-arrow-up"></span>
-                    </button>
-                    <button
-                      className="array-move-next"
-                      onClick={() => handleMove(index, index + 1)}
-                      disabled={index === currentArray.length - 1}
-                      title={intl.formatMessage({ id: 'arrayEditor.moveNext' })}
-                    >
-                      <span className="codicon codicon-arrow-down"></span>
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      className="array-move-prev"
-                      onClick={() => handleMove(index, index - 1)}
-                      disabled={index === 0}
-                      title={intl.formatMessage({
-                        id: 'arrayEditor.movePrevious',
-                      })}
-                    >
-                      <span className="codicon codicon-arrow-left"></span>
-                    </button>
-                    <button
-                      className="array-move-next"
-                      onClick={() => handleMove(index, index + 1)}
-                      disabled={index === currentArray.length - 1}
-                      title={intl.formatMessage({ id: 'arrayEditor.moveNext' })}
-                    >
-                      <span className="codicon codicon-arrow-right"></span>
-                    </button>
-                  </>
-                )}
-                <button
-                  className="array-delete"
-                  onClick={() => handleDelete(index)}
-                  title={intl.formatMessage({
-                    id: 'arrayEditor.deleteElement',
-                  })}
-                >
-                  <span className="codicon codicon-trash"></span>
-                </button>
-              </div>
-              <div className="array-item-content">
-                {/* We only show the element type and index for complex
-                    (nested subarrays) elements, because they are laid
-                    out vertically so a reminder of the type and index
-                    helps
-                */}
-                {hasNestedArrays(elementType) && (
-                  <div className="array-item-header">
-                    {getTypeDisplayName(elementType, intl)}
-                  </div>
-                )}
-                {/* Pass the element's ValueDef down */}
-                <ValueEditor
-                  testIO={{
-                    typ: elementType,
-                    value: { value: item }, // Create temporary ValueDef for the element
-                  }}
-                  onValueChange={(newItemTestIo) => {
-                    // newItemTestIo contains the updated ValueDef for the element
-                    if (newItemTestIo.value) {
-                      handleUpdate(index, newItemTestIo.value.value); // Pass the RuntimeValue up
-                    }
-                    // Handle case where element value becomes undefined? Maybe delete?
-                  }}
-                  editorHook={editorHook}
-                  currentPath={[
-                    ...currentPath,
-                    { kind: 'ListIndex', value: index },
-                  ]}
-                />
-              </div>
-            </div>
+        {(() => {
+          const baseIndices = Array.from(
+            { length: currentArray.length },
+            (_, i) => i
           );
-        })}
+          const extraIndices = (props.diffs ?? [])
+            .filter(
+              (d) =>
+                d.path.length === currentPath.length + 1 &&
+                JSON.stringify(d.path.slice(0, currentPath.length)) ===
+                  JSON.stringify(currentPath) &&
+                d.path[currentPath.length].kind === 'ListIndex' &&
+                isEmptyValue(d.expected) &&
+                !isEmptyValue(d.actual)
+            )
+            .map((d) => (d.path[currentPath.length] as any).value as number);
+          const indicesToRender = Array.from(
+            new Set([...baseIndices, ...extraIndices])
+          ).sort((a, b) => a - b);
+
+          return indicesToRender.map((index) => {
+            const item = currentArray[index];
+            const isPhantom = item === undefined;
+
+            // Determine key
+            let itemKey: string | number;
+            if (!isPhantom) {
+              const uidAttr = item.attrs?.find((attr) => attr.kind === 'Uid');
+              if (uidAttr?.kind === 'Uid') {
+                itemKey = uidAttr.value;
+              } else {
+                console.warn(
+                  `Array item at index ${index} is missing a UID attribute. Falling back to index key.`
+                );
+                itemKey = index;
+              }
+            } else {
+              itemKey = `phantom-${index}`;
+            }
+
+            const phantomDiff = isPhantom
+              ? (props.diffs ?? []).find(
+                  (d) =>
+                    d.path.length === currentPath.length + 1 &&
+                    JSON.stringify(d.path.slice(0, currentPath.length)) ===
+                      JSON.stringify(currentPath) &&
+                    d.path[currentPath.length].kind === 'ListIndex' &&
+                    (d.path[currentPath.length] as any).value === index
+                )
+              : undefined;
+
+            return (
+              <div
+                key={itemKey}
+                className={`array-item ${
+                  dragOverIndex === index ? 'drag-over' : ''
+                } ${draggedIndex === index ? 'dragging' : ''}`}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={(e) => handleDrop(e, index)}
+                onDragEnd={handleDragEnd}
+              >
+                <div
+                  className="array-item-controls"
+                  draggable={!isPhantom}
+                  onDragStart={(e) => {
+                    if (!isPhantom) handleDragStart(e, index);
+                  }}
+                >
+                  {hasNestedArrays(elementType) ? (
+                    <>
+                      <button
+                        className="array-move-prev"
+                        onClick={() => handleMove(index, index - 1)}
+                        disabled={isPhantom || index === 0}
+                        title={intl.formatMessage({
+                          id: 'arrayEditor.movePrevious',
+                        })}
+                      >
+                        <span className="codicon codicon-arrow-up"></span>
+                      </button>
+                      <button
+                        className="array-move-next"
+                        onClick={() => handleMove(index, index + 1)}
+                        disabled={
+                          isPhantom || index === currentArray.length - 1
+                        }
+                        title={intl.formatMessage({
+                          id: 'arrayEditor.moveNext',
+                        })}
+                      >
+                        <span className="codicon codicon-arrow-down"></span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="array-move-prev"
+                        onClick={() => handleMove(index, index - 1)}
+                        disabled={isPhantom || index === 0}
+                        title={intl.formatMessage({
+                          id: 'arrayEditor.movePrevious',
+                        })}
+                      >
+                        <span className="codicon codicon-arrow-left"></span>
+                      </button>
+                      <button
+                        className="array-move-next"
+                        onClick={() => handleMove(index, index + 1)}
+                        disabled={
+                          isPhantom || index === currentArray.length - 1
+                        }
+                        title={intl.formatMessage({
+                          id: 'arrayEditor.moveNext',
+                        })}
+                      >
+                        <span className="codicon codicon-arrow-right"></span>
+                      </button>
+                    </>
+                  )}
+                  {!isPhantom && (
+                    <button
+                      className="array-delete"
+                      onClick={() => handleDelete(index)}
+                      title={intl.formatMessage({
+                        id: 'arrayEditor.deleteElement',
+                      })}
+                    >
+                      <span className="codicon codicon-trash"></span>
+                    </button>
+                  )}
+                </div>
+                <div className="array-item-content">
+                  {hasNestedArrays(elementType) && (
+                    <div className="array-item-header">
+                      {getTypeDisplayName(elementType, intl)}
+                    </div>
+                  )}
+                  {isPhantom &&
+                  phantomDiff &&
+                  isEmptyValue(phantomDiff.expected) &&
+                  !isEmptyValue(phantomDiff.actual) ? (
+                    <div className="diff-highlight atomic-diff">
+                      <div className="empty-value-indicator expected">
+                        <FormattedMessage
+                          id="diff.emptyExpected"
+                          defaultMessage="Empty"
+                        />
+                      </div>
+                      <div className="diff-actual" style={{ marginBottom: 8 }}>
+                        <FormattedMessage id="diff.actual" />:
+                      </div>
+                      <div style={{ pointerEvents: 'none' }}>
+                        <ValueEditor
+                          testIO={{
+                            typ: elementType,
+                            value: { value: phantomDiff.actual },
+                          }}
+                          onValueChange={() => {
+                            /* read-only */
+                          }}
+                          currentPath={[
+                            ...currentPath,
+                            { kind: 'ListIndex', value: index },
+                          ]}
+                          diffs={[]}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <ValueEditor
+                      testIO={{
+                        typ: elementType,
+                        value: { value: item as RuntimeValue },
+                      }}
+                      onValueChange={(newItemTestIo) => {
+                        if (newItemTestIo.value) {
+                          handleUpdate(index, newItemTestIo.value.value);
+                        }
+                      }}
+                      editorHook={editorHook}
+                      currentPath={[
+                        ...currentPath,
+                        { kind: 'ListIndex', value: index },
+                      ]}
+                      diffs={props.diffs}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          });
+        })()}
       </div>
     </div>
   );

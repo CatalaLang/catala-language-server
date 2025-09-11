@@ -42,35 +42,40 @@ function isEmptyValue(value: RuntimeValue): boolean {
 }
 
 /**
+ * Compare two paths for exact equality.
+ */
+function pathEquals(a: PathSegment[], b: PathSegment[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((seg, i) => JSON.stringify(seg) === JSON.stringify(b[i]))
+  );
+}
+
+/**
+ * Returns true if 'prefix' is a prefix of 'full'.
+ */
+function isPathPrefix(prefix: PathSegment[], full: PathSegment[]): boolean {
+  if (prefix.length > full.length) return false;
+  return prefix.every(
+    (seg, i) => JSON.stringify(seg) === JSON.stringify(full[i])
+  );
+}
+
+/**
  * Creates a hook function that highlights editors with diffs
  */
 function createDiffHighlightHook(diffs: Diff[]) {
   return (editor: ReactElement, path: PathSegment[]): ReactElement => {
-    // Check if current path matches any diff path
-    const matchingDiff = diffs.find((diff) => {
-      // For exact path match (atomic values)
-      if (diff.path.length === path.length) {
-        return path.every(
-          (segment, i) =>
-            JSON.stringify(segment) === JSON.stringify(diff.path[i])
-        );
-      }
-      return false;
-    });
+    // Check if current path matches any diff path (exact match)
+    const matchingDiff = diffs.find((diff) => pathEquals(diff.path, path));
 
     // Check if this is a parent of a diff path (for containers)
     const isParentOfDiff =
       !matchingDiff &&
-      diffs.some((diff) => {
-        // If the diff path is longer than current path, check if current path is a prefix
-        if (diff.path.length > path.length) {
-          return path.every(
-            (segment, i) =>
-              JSON.stringify(segment) === JSON.stringify(diff.path[i])
-          );
-        }
-        return false;
-      });
+      diffs.some(
+        (diff) =>
+          diff.path.length > path.length && isPathPrefix(path, diff.path)
+      );
 
     if (matchingDiff) {
       const expectedIsEmpty = isEmptyValue(matchingDiff.expected);
@@ -131,6 +136,8 @@ export default function AssertionValueEditor({
   diffs = [],
   currentPath,
 }: Props): ReactElement {
+  // Array item phantom rendering is handled inside ArrayEditor based on diffs.
+
   // Create the diff highlight hook if we have diffs
   const editorHook =
     diffs.length > 0 ? createDiffHighlightHook(diffs) : undefined;
@@ -142,6 +149,7 @@ export default function AssertionValueEditor({
         onValueChange={onValueChange}
         editorHook={editorHook}
         currentPath={currentPath}
+        diffs={diffs}
       />
       <button
         className="assertion-delete"
