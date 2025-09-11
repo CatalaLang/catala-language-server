@@ -13,6 +13,7 @@ import type {
   Typ,
   ValueDef,
   PathSegment,
+  Diff,
 } from '../generated/test_case';
 import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../util';
@@ -35,6 +36,7 @@ type Props = {
   onValueChange(newValue: TestIo): void;
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
   currentPath: PathSegment[];
+  diffs: Diff[];
 };
 
 export function isCollapsible(typ: Typ): boolean {
@@ -80,6 +82,7 @@ export default function ValueEditor(props: Props): ReactElement {
           onValueChange={handleValueChange}
           editorHook={editorHook}
           currentPath={currentPath}
+          diffs={props.diffs}
         />
       );
       break;
@@ -111,6 +114,7 @@ export default function ValueEditor(props: Props): ReactElement {
           onValueChange={handleValueChange}
           editorHook={editorHook}
           currentPath={currentPath}
+          diffs={props.diffs}
         />
       );
       break;
@@ -122,6 +126,7 @@ export default function ValueEditor(props: Props): ReactElement {
           onValueChange={handleValueChange}
           editorHook={editorHook}
           currentPath={currentPath}
+          diffs={props.diffs}
         />
       );
       break;
@@ -558,6 +563,7 @@ type StructEditorProps = {
   onValueChange(newValue: RuntimeValue): void;
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
   currentPath: PathSegment[];
+  diffs: Diff[];
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
@@ -614,6 +620,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
               ...currentPath,
               { kind: 'StructField', value: fieldName },
             ]}
+            diffs={props.diffs}
           />
         ),
       };
@@ -633,6 +640,7 @@ type EnumEditorProps = {
   onValueChange(newValue: RuntimeValue): void;
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
   currentPath: PathSegment[];
+  diffs: Diff[];
 };
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
@@ -708,6 +716,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
               ...currentPath,
               { kind: 'EnumPayload', value: currentCtor },
             ]}
+            diffs={props.diffs}
           />
         </div>
       )}
