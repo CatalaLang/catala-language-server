@@ -50,6 +50,6 @@
   "arrayEditor.deleteElement": "Supprimer l'élément",
   "diff.expected": "Attendu",
   "diff.actual": "Obtenu",
-  "diff.emptyExpected": "Élément vide attendu",
+  "diff.emptyExpected": "Aucun élément attendu",
   "diff.emptyActual": "Élément manquant"
 }
