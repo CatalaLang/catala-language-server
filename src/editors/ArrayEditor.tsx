@@ -26,6 +26,7 @@ type ArrayEditorProps = {
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
   currentPath: PathSegment[];
   diffs: Diff[];
+  editable?: boolean;
 };
 
 // We introspect the array type to understand whether
@@ -117,8 +118,14 @@ export function getTypeDisplayName(
 }
 
 export function ArrayEditor(props: ArrayEditorProps): ReactElement {
-  const { elementType, valueDef, onValueChange, editorHook, currentPath } =
-    props;
+  const {
+    elementType,
+    valueDef,
+    onValueChange,
+    editorHook,
+    currentPath,
+    editable = true,
+  } = props;
   const runtimeValue = valueDef?.value;
   const currentArray =
     runtimeValue?.value.kind === 'Array' ? runtimeValue.value.value : [];
@@ -226,13 +233,15 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   return (
     <div className="array-editor">
-      <button className="array-add" onClick={handleAdd}>
-        <span className="codicon codicon-add"></span>
-        <FormattedMessage
-          id="arrayEditor.addElement"
-          values={{ elementType: elementTypeName }}
-        />
-      </button>
+      {editable && (
+        <button className="array-add" onClick={handleAdd}>
+          <span className="codicon codicon-add"></span>
+          <FormattedMessage
+            id="arrayEditor.addElement"
+            values={{ elementType: elementTypeName }}
+          />
+        </button>
+      )}
 
       <div
         className={`array-items ${hasNestedArrays(props.elementType) ? 'array-items-nested' : 'array-items-non-nested'}`}
@@ -249,8 +258,8 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 JSON.stringify(d.path.slice(0, currentPath.length)) ===
                   JSON.stringify(currentPath) &&
                 d.path[currentPath.length].kind === 'ListIndex' &&
-                isEmptyValue(d.expected) &&
-                !isEmptyValue(d.actual)
+                ((isEmptyValue(d.expected) && !isEmptyValue(d.actual)) ||
+                  (isEmptyValue(d.actual) && !isEmptyValue(d.expected)))
             )
             .map((d) => (d.path[currentPath.length] as any).value as number);
           const indicesToRender = Array.from(
@@ -300,63 +309,64 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
               >
                 <div
                   className="array-item-controls"
-                  draggable={!isPhantom}
+                  draggable={editable && !isPhantom}
                   onDragStart={(e) => {
                     if (!isPhantom) handleDragStart(e, index);
                   }}
                 >
-                  {hasNestedArrays(elementType) ? (
-                    <>
-                      <button
-                        className="array-move-prev"
-                        onClick={() => handleMove(index, index - 1)}
-                        disabled={isPhantom || index === 0}
-                        title={intl.formatMessage({
-                          id: 'arrayEditor.movePrevious',
-                        })}
-                      >
-                        <span className="codicon codicon-arrow-up"></span>
-                      </button>
-                      <button
-                        className="array-move-next"
-                        onClick={() => handleMove(index, index + 1)}
-                        disabled={
-                          isPhantom || index === currentArray.length - 1
-                        }
-                        title={intl.formatMessage({
-                          id: 'arrayEditor.moveNext',
-                        })}
-                      >
-                        <span className="codicon codicon-arrow-down"></span>
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="array-move-prev"
-                        onClick={() => handleMove(index, index - 1)}
-                        disabled={isPhantom || index === 0}
-                        title={intl.formatMessage({
-                          id: 'arrayEditor.movePrevious',
-                        })}
-                      >
-                        <span className="codicon codicon-arrow-left"></span>
-                      </button>
-                      <button
-                        className="array-move-next"
-                        onClick={() => handleMove(index, index + 1)}
-                        disabled={
-                          isPhantom || index === currentArray.length - 1
-                        }
-                        title={intl.formatMessage({
-                          id: 'arrayEditor.moveNext',
-                        })}
-                      >
-                        <span className="codicon codicon-arrow-right"></span>
-                      </button>
-                    </>
-                  )}
-                  {!isPhantom && (
+                  {editable &&
+                    (hasNestedArrays(elementType) ? (
+                      <>
+                        <button
+                          className="array-move-prev"
+                          onClick={() => handleMove(index, index - 1)}
+                          disabled={isPhantom || index === 0}
+                          title={intl.formatMessage({
+                            id: 'arrayEditor.movePrevious',
+                          })}
+                        >
+                          <span className="codicon codicon-arrow-up"></span>
+                        </button>
+                        <button
+                          className="array-move-next"
+                          onClick={() => handleMove(index, index + 1)}
+                          disabled={
+                            isPhantom || index === currentArray.length - 1
+                          }
+                          title={intl.formatMessage({
+                            id: 'arrayEditor.moveNext',
+                          })}
+                        >
+                          <span className="codicon codicon-arrow-down"></span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="array-move-prev"
+                          onClick={() => handleMove(index, index - 1)}
+                          disabled={isPhantom || index === 0}
+                          title={intl.formatMessage({
+                            id: 'arrayEditor.movePrevious',
+                          })}
+                        >
+                          <span className="codicon codicon-arrow-left"></span>
+                        </button>
+                        <button
+                          className="array-move-next"
+                          onClick={() => handleMove(index, index + 1)}
+                          disabled={
+                            isPhantom || index === currentArray.length - 1
+                          }
+                          title={intl.formatMessage({
+                            id: 'arrayEditor.moveNext',
+                          })}
+                        >
+                          <span className="codicon codicon-arrow-right"></span>
+                        </button>
+                      </>
+                    ))}
+                  {editable && !isPhantom && (
                     <button
                       className="array-delete"
                       onClick={() => handleDelete(index)}
@@ -374,36 +384,37 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                       {getTypeDisplayName(elementType, intl)}
                     </div>
                   )}
-                  {isPhantom &&
-                  phantomDiff &&
-                  isEmptyValue(phantomDiff.expected) &&
-                  !isEmptyValue(phantomDiff.actual) ? (
-                    <div className="diff-highlight atomic-diff">
+                  {isPhantom && phantomDiff ? (
+                    isEmptyValue(phantomDiff.expected) &&
+                    !isEmptyValue(phantomDiff.actual) ? (
                       <div className="empty-value-indicator expected">
                         <FormattedMessage
                           id="diff.emptyExpected"
                           defaultMessage="Empty"
                         />
                       </div>
-                      <div className="diff-actual" style={{ marginBottom: 8 }}>
-                        <FormattedMessage id="diff.actual" />:
-                      </div>
-                      <div style={{ pointerEvents: 'none' }}>
-                        <ValueEditor
-                          testIO={{
-                            typ: elementType,
-                            value: { value: phantomDiff.actual },
-                          }}
-                          onValueChange={() => {
-                            /* read-only */
-                          }}
-                          currentPath={[
-                            ...currentPath,
-                            { kind: 'ListIndex', value: index },
-                          ]}
-                          diffs={[]}
+                    ) : isEmptyValue(phantomDiff.actual) &&
+                      !isEmptyValue(phantomDiff.expected) ? (
+                      <div className="empty-value-indicator actual">
+                        <FormattedMessage
+                          id="diff.emptyActual"
+                          defaultMessage="Empty"
                         />
                       </div>
+                    ) : (
+                      <div className="empty-value-indicator">
+                        <FormattedMessage
+                          id="diff.emptyActual"
+                          defaultMessage="Empty"
+                        />
+                      </div>
+                    )
+                  ) : item && item.value.kind === 'Empty' ? (
+                    <div className="empty-value-indicator">
+                      <FormattedMessage
+                        id="diff.emptyActual"
+                        defaultMessage="Empty"
+                      />
                     </div>
                   ) : (
                     <ValueEditor
@@ -422,6 +433,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                         { kind: 'ListIndex', value: index },
                       ]}
                       diffs={props.diffs}
+                      editable={editable}
                     />
                   )}
                 </div>
