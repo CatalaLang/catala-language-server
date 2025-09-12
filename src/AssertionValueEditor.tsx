@@ -9,6 +9,7 @@ import type {
 import ValueEditor from './editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
 import './styles/assertions-editor.css';
+import { pathEquals, isPathPrefix } from './diff/highlight';
 
 type Props = {
   testIO: TestIo;
@@ -16,6 +17,7 @@ type Props = {
   onAssertionDeletion: () => void;
   diffs?: Diff[];
   currentPath: PathSegment[];
+  highlightDiffs?: boolean;
 };
 
 /**
@@ -39,26 +41,6 @@ function renderEmptyValueIndicator(isExpected: boolean): ReactElement {
  */
 function isEmptyValue(value: RuntimeValue): boolean {
   return value.value.kind === 'Empty';
-}
-
-/**
- * Compare two paths for exact equality.
- */
-function pathEquals(a: PathSegment[], b: PathSegment[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((seg, i) => JSON.stringify(seg) === JSON.stringify(b[i]))
-  );
-}
-
-/**
- * Returns true if 'prefix' is a prefix of 'full'.
- */
-function isPathPrefix(prefix: PathSegment[], full: PathSegment[]): boolean {
-  if (prefix.length > full.length) return false;
-  return prefix.every(
-    (seg, i) => JSON.stringify(seg) === JSON.stringify(full[i])
-  );
 }
 
 /**
@@ -135,12 +117,15 @@ export default function AssertionValueEditor({
   onAssertionDeletion,
   diffs = [],
   currentPath,
+  highlightDiffs = true,
 }: Props): ReactElement {
   // Array item phantom rendering is handled inside ArrayEditor based on diffs.
 
   // Create the diff highlight hook if we have diffs
   const editorHook =
-    diffs.length > 0 ? createDiffHighlightHook(diffs) : undefined;
+    diffs.length > 0 && highlightDiffs
+      ? createDiffHighlightHook(diffs)
+      : undefined;
 
   return (
     <div className="assertion-value-editor">
