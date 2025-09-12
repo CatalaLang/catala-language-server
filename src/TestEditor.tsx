@@ -157,6 +157,11 @@ export default function TestEditor(props: Props): ReactElement {
                 ? props.runState.results.value.diffs
                 : []
             }
+            actualOutputs={
+              props.runState?.results?.kind === 'Ok'
+                ? props.runState.results.value.test_outputs
+                : undefined
+            }
           />
         </div>
       </div>

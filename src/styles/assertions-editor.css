@@ -70,3 +70,59 @@
     rgba(255, 0, 0, 0.1)
   );
 }
+
+/* Pane-scoped default styling for generic empty indicators (without explicit expected/actual class) */
+.pane-expected .empty-value-indicator {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
+  background-color: var(
+    --vscode-diffEditor-insertedLineBackground,
+    rgba(0, 255, 0, 0.1)
+  );
+}
+
+.pane-actual .empty-value-indicator {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
+  background-color: var(
+    --vscode-diffEditor-removedLineBackground,
+    rgba(255, 0, 0, 0.1)
+  );
+}
+
+/* Two-pane diff layout */
+.two-pane-diff {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.pane-expected,
+.pane-actual {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Make left pane resizable with a visible divider */
+.two-pane-diff .pane-expected {
+  resize: horizontal;
+  overflow: auto;
+  border-right: 1px solid var(--vscode-panel-border);
+}
+
+.pane-divider {
+  width: 6px;
+  min-width: 6px;
+  align-self: stretch;
+  background: var(--vscode-panel-border);
+  opacity: 0.6;
+  border-radius: 3px;
+  cursor: col-resize;
+}
+
+/* Make right pane highlights yellow/orange-toned */
+.pane-actual .diff-highlight {
+  background-color: var(
+    --vscode-editorWarning-background,
+    rgba(255, 165, 0, 0.12)
+  );
+  border-color: var(--vscode-editorWarning-foreground, #d19a66);
+}

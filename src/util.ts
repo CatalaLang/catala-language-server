@@ -6,28 +6,44 @@ export function assertUnreachable(x: never): never {
 }
 
 /**
- * Tells whether the diff is elemental, i.e.
- * not a whole structure, array or tuple
- * @param diff
+ * Tells whether the diff is elemental (inline-displayable).
+ * Rules:
+ * - Empty vs atomic -> elemental
+ * - Same kind and atomic on both sides -> elemental
+ * - Otherwise -> non-elemental (complex)
  */
 export function isElemental(diff: Diff): boolean {
-  if (diff.expected.value.kind !== diff.actual.value.kind) {
-    throw new Error('Type mismatch between expected and actual values');
+  const e = diff.expected.value;
+  const a = diff.actual.value;
+
+  // If one side is Empty and the other is atomic, treat as elemental
+  if (e.kind === 'Empty' && a.kind !== 'Empty') {
+    return isAtomicRaw(a);
+  }
+  if (a.kind === 'Empty' && e.kind !== 'Empty') {
+    return isAtomicRaw(e);
   }
 
-  return _isElemental(diff.expected.value) && _isElemental(diff.actual.value);
+  // Different kinds (not an Empty vs atomic case) -> complex
+  if (e.kind !== a.kind) {
+    return false;
+  }
+
+  // Same kind: elemental only if atomic
+  return isAtomicRaw(e) && isAtomicRaw(a);
 }
 
-function _isElemental(value: RuntimeValueRaw): boolean {
+function isAtomicRaw(value: RuntimeValueRaw): boolean {
+  // Atomic kinds are everything except containers; Enums are atomic only if no payload
   if (!['Enum', 'Struct', 'Array', 'Tuple'].includes(value.kind)) {
     return true;
-  } else if (value.kind === 'Enum') {
-    const underlying = value.value[1][1];
-    if (underlying === null) {
+  }
+  if (value.kind === 'Enum') {
+    const payload = value.value[1][1];
+    if (payload === null) {
       return true;
     }
-    return _isElemental(underlying.value.value);
+    return isAtomicRaw(payload.value.value);
   }
-
   return false;
 }
