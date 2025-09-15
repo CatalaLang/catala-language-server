@@ -329,3 +329,37 @@ let lookup_clerk_toml (path : string) =
   with _ ->
     Log.err (fun m -> m "failed to lookup config file");
     None
+
+let list_scopes file : Shared_ast.ScopeName.t list =
+  let open Shared_ast in
+  let open Surface.Ast in
+  let prg = Surface.Parser_driver.parse_top_level_file (Global.FileName file) in
+  let rec loop acc = function
+    | CodeBlock (code_block, _, _) ->
+      List.fold_left
+        (fun acc -> function
+          | ScopeDecl sdecl ->
+            let has_no_input =
+              List.for_all
+                (function
+                  | ContextData
+                      {
+                        scope_decl_context_item_attribute =
+                          { scope_decl_context_io_input = Input, _; _ };
+                        _;
+                      } ->
+                    false
+                  | _ -> true)
+                (List.map Mark.remove sdecl.scope_decl_context)
+            in
+            if has_no_input then
+              let scopename = Mark.remove sdecl.scope_decl_name in
+              ScopeName.fresh [] (scopename, Pos.void) :: acc
+            else acc
+          | _ -> acc)
+        acc
+        (List.map Mark.remove code_block)
+    | LawHeading (_, ls) -> List.fold_left loop acc ls
+    | _ -> acc
+  in
+  List.fold_left loop [] prg.program_items
