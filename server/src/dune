@@ -5,6 +5,13 @@
  (libraries lib)
  (modules Main_lsp)
  (flags (:standard -open Lib)))
+
+(executable
+ (name main_dap)
+ (package catala-lsp)
+ (public_name catala-dap)
+ (libraries lib)
+ (modules Main_dap)
  (flags (:standard) -open Lib))
 
 (library
@@ -15,18 +22,21 @@
   lsp
   linol
   linol-lwt
+  dap.rpc_lwt
   gen
   logs
   logs.fmt
   catala.driver
   catala.surface
   catala.clerk_lib
+  ptime.clock
   uri
   re)
  (modules
-  (:standard \ Main))
+  (:standard \ Main_lsp Main_dap))
+ (preprocess (pps ppx_deriving_yojson ppx_here ppx_deriving.make))
  (flags (:standard -open Clerk_lib)))
 
 (alias
  (name lsp)
- (deps main_lsp.exe))
+ (deps main_lsp.exe main_dap.exe))

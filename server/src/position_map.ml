@@ -62,6 +62,7 @@ module Make_trie (D : Data) = struct
     || (ln > li && ln = lj && n <= j)
     || (ln = li && ln < lj && i <= n)
 
+  let is_in_line ((li, _), (lj, _)) ln = ln >= li && ln <= lj
   let is_included itv (left, right) = is_in itv left && is_in itv right
 
   let rec lookup i trie =
@@ -81,6 +82,44 @@ module Make_trie (D : Data) = struct
       match lookup_with_range i children with
       | None -> Some (itv_to_range itv, data)
       | Some v -> Some v)
+
+  let all_nodes trie =
+    let rev_nodes = ref [] in
+    let rec loop (Node { children; _ } as x) =
+      rev_nodes := x :: !rev_nodes;
+      List.iter loop children
+    in
+    List.iter loop trie;
+    List.rev !rev_nodes
+
+  let lookup_on_line l trie =
+    List.find_all (fun (Node { itv; _ }) -> is_in_line itv l) trie
+    |> all_nodes
+    |> List.filter (fun (Node { itv = (li, _), (lj, _); _ }) ->
+           not (li <> l || lj <> l))
+    |> List.map (fun (Node { data; _ }) -> data)
+    |> function [] -> None | l -> Some l
+
+  let lookup_best_on_line (l : int) trie : DS.t option =
+    match List.find_all (fun (Node { itv; _ }) -> is_in_line itv l) trie with
+    | [] -> None
+    | candidates -> (
+      let compare_candidate
+          (Node { itv = (li, i), _; _ })
+          (Node { itv = (li', i'), _; _ }) =
+        (* hypothesis: contains [l] *)
+        let dist x =
+          let abs x = if x < 0 then -x else x in
+          abs (x - l)
+        in
+        if li = li' then compare i i' else compare (dist li) (dist li')
+      in
+      let sorted_candidates =
+        List.sort compare_candidate (all_nodes candidates)
+      in
+      match sorted_candidates with
+      | [] -> assert false
+      | Node { data; _ } :: _ -> Some data)
 
   let compare_itv (((li, i), (lj, j)) as itv) (((li', i'), (lj', j')) as itv') =
     if itv = itv' then `Equal
@@ -226,6 +265,18 @@ module Make (D : Data) = struct
     Trie.lookup_with_range
       (Pos.get_start_line pos, Pos.get_start_column pos)
       trie
+
+  let lookup_best_on_line doc_id l pmap =
+    let ( let* ) = Option.bind in
+    (* we assume that pos's start/end lines, start/end column are equal *)
+    let* trie = Doc_id.Map.find_opt doc_id pmap in
+    Trie.lookup_best_on_line l trie |> Option.map DS.choose
+
+  let lookup_on_line doc_id l pmap =
+    let ( let* ) = Option.bind in
+    (* we assume that pos's start/end lines, start/end column are equal *)
+    let* trie = Doc_id.Map.find_opt doc_id pmap in
+    Trie.lookup_on_line l trie |> Option.map (List.concat_map DS.elements)
 
   let fold f pmap acc =
     let rec fold (doc_id : Doc_id.t) trie acc =
