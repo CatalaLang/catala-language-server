@@ -574,6 +574,43 @@ class catala_lsp_server =
         Lwt.return ((), sstate)
       | _ -> Lwt.return_unit
 
+    method private on_req_get_all_scopes () : Yojson.Safe.t Lwt.t =
+      SState.use_now server_state
+      @@ fun { projects; _ } ->
+      let scopes =
+        Projects.Projects.fold
+          (fun ({ Projects.project_files; _ } as project) acc ->
+            Doc_id.Map.fold
+              (fun doc_id _f acc ->
+                if Projects.is_an_included_file doc_id project then acc
+                else
+                  match Utils.list_scopes (doc_id :> string) with
+                  | [] -> acc
+                  | scopes -> Doc_id.Map.add doc_id scopes acc)
+              project_files acc)
+          projects Doc_id.Map.empty
+      in
+      let json_list : Yojson.Safe.t =
+        `List
+          (Doc_id.Map.bindings scopes
+          |> List.map (fun ((doc_id : Doc_id.t), scopes) ->
+                 `Assoc
+                   [
+                     "path", `String (doc_id :> string);
+                     ( "scopes",
+                       `List
+                         (List.map
+                            (fun s ->
+                              `String (Shared_ast.ScopeName.to_string s))
+                            scopes) );
+                   ]))
+      in
+      Lwt.return json_list
+
+    method! on_unknown_request ~notify_back ~server_request:_ ~id meth params =
+      self#on_request_unhandled ~notify_back ~id
+        (Lsp.Client_request.UnknownRequest { meth; params })
+
     method! on_request_unhandled : type r.
         notify_back:_ -> id:_ -> r Lsp.Client_request.t -> r Lwt.t =
       (* Override to process other requests *)
@@ -590,6 +627,10 @@ class catala_lsp_server =
             ~pos:params.position ()
         | TextDocumentFormatting params ->
           self#on_req_document_formatting ~notify_back params
+        | UnknownRequest { meth = "catala.getRunnableScopes"; params = _ } ->
+          self#on_req_get_all_scopes ()
+        | UnknownRequest { meth; _ } ->
+          Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
     method private on_doc_did_close ~notify_back:_ (doc_id : Doc_id.t) =
