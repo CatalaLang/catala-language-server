@@ -292,6 +292,10 @@ class catala_lsp_server =
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
     method! config_symbol = Some (`Bool false)
+
+    method! config_code_lens_options : CodeLensOptions.t option =
+      Some { resolveProvider = Some true; workDoneProgress = None }
+
     method private config_workspace_symbol = `Bool false
     method private config_declaration = Some (`Bool true)
     method private config_references = Some (`Bool true)
@@ -800,6 +804,25 @@ class catala_lsp_server =
         let*? f = retrieve_existing_document doc_id server_state in
         let all_symbols = State.lookup_document_symbols f in
         Lwt.return_some (`SymbolInformation all_symbols)
+
+    method! on_req_code_lens
+        ~notify_back:_
+        ~id:_
+        ~uri
+        ~workDoneToken:_
+        ~partialResultToken:_
+        _doc_state
+        : CodeLens.t list Lwt.t =
+      let doc_id = Doc_id.of_lsp_uri uri in
+      if should_ignore doc_id then Lwt.return_nil
+      else
+        let* r =
+          protect_project_not_found_opt
+          @@ fun () ->
+          let*? f = retrieve_existing_document doc_id server_state in
+          Lwt.return (State.lookup_lenses f)
+        in
+        match r with None -> Lwt.return_nil | Some l -> Lwt.return l
 
     method private on_req_document_formatting
         ~notify_back
