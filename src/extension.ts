@@ -22,7 +22,7 @@ export function activate(context: vscode.ExtensionContext): void {
     lsp_server_config_path != undefined && lsp_server_config_path != '';
 
   const local_path = context.asAbsolutePath(
-    path.join('_build', 'default', 'server', 'src', 'main.exe')
+    path.join('_build', 'default', 'server', 'src', 'main_lsp.exe')
   );
   const lsp_binary_prefix = 'catala-lsp';
   let lsp_binary = lsp_binary_prefix;

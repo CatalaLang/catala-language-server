@@ -51,7 +51,9 @@ let run () =
         Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
         (Array.to_list Sys.argv));
   let s = new Server.catala_lsp_server in
-  let server = Linol_lwt.Jsonrpc2.create_stdio s in
+  let server =
+    Linol_lwt.Jsonrpc2.create_stdio (s :> Linol_lwt.Jsonrpc2.server)
+  in
   let task = Linol_lwt.Jsonrpc2.run (server ~env:()) in
   match Linol_lwt.run task with
   | () -> ()

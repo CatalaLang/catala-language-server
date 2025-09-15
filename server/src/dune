@@ -1,9 +1,10 @@
 (executable
- (name main)
+ (name main_lsp)
  (package catala-lsp)
  (public_name catala-lsp)
  (libraries lib)
- (modules Main)
+ (modules Main_lsp)
+ (flags (:standard -open Lib)))
  (flags (:standard) -open Lib))
 
 (library
@@ -28,4 +29,4 @@
 
 (alias
  (name lsp)
- (deps main.exe))
+ (deps main_lsp.exe))
