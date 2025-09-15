@@ -13,6 +13,7 @@ const glob = require('glob');
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 let hasUnused = false;
 
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 async function findUnusedCSS() {
   console.log('Analyzing unused CSS with PurgeCSS...');
 
