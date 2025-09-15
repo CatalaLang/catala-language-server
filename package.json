@@ -18,6 +18,110 @@
   },
   "main": "./dist/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "catala.selectScope",
+        "title": "Select scope"
+      },
+      {
+        "command": "catala.run",
+        "icon": "$(play)",
+        "title": "Run a scope"
+      },
+      {
+        "command": "catala.debug",
+        "icon": "$(debug-alt)",
+        "title": "Debug a scope"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "catala.run",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "group": "navigation@0"
+        },
+        {
+          "command": "catala.debug",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "breakpoints": [
+      {
+        "language": "catala_fr"
+      },
+      {
+        "language": "catala_en"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "catala-debugger",
+        "label": "Catala Debug",
+        "languages": [
+          "catala_en",
+          "catala_fr"
+        ],
+        "variables": {
+          "SpecifyScope": "catala.selectScope"
+        },
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "scope"
+            ],
+            "properties": {
+              "args": {
+                "type": "object",
+                "description": "Catala Debug arguments",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "description": "Path of a Catala program.",
+                    "default": ""
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "Scope name in the Catala program.",
+                    "default": ""
+                  }
+                },
+                "additionalProperties": false
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch.",
+                "default": true
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "catala-debugger",
+            "request": "launch",
+            "name": "Catala Debug",
+            "args": "${command:catala.selectScope}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Catala Debug: Launch",
+            "description": "New configuration for debugging a Catala program",
+            "body": {
+              "type": "catala-debugger",
+              "name": "Catala debug (Launch)",
+              "request": "launch",
+              "args": "^\"\\${command:SpecifyScope}\""
+            },
+            "trace": true
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "Catala",
       "properties": {
