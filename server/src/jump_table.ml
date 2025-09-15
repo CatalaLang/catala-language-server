@@ -93,6 +93,7 @@ type var =
   | Type of jump
   | Literal of typ
   | Scope_decl of sjump
+  | Scope_use of sjump
   | Scope_def of sjump
   | Module_def of mjump
   | Module_use of mjump
@@ -122,6 +123,7 @@ let pp_var ppf =
   | Usage { name; hash; _ } -> fprintf ppf "usage: %s#%d" name hash
   | Type { name; hash; _ } -> fprintf ppf "type: %s#%d" name hash
   | Literal typ -> fprintf ppf "literal: %a" Print.typ typ
+  | Scope_use { name; hash; _ } -> fprintf ppf "scope_use: %s#%d" name hash
   | Scope_decl { name; hash; _ } -> fprintf ppf "scope_decl: %s#%d" name hash
   | Scope_def { name; hash; _ } -> fprintf ppf "scope_def: %s#%d" name hash
   | Module_use mjump -> fprintf ppf "mod_usage: %a" pp_module_jump mjump
@@ -282,7 +284,7 @@ let populate_scopecall
       acc (ScopeName.path scope)
   in
   let sjump = ScopeName.Map.find scope scope_lookup in
-  let acc = PMap.add pos (Scope_def sjump) acc in
+  let acc = PMap.add pos (Scope_use sjump) acc in
   ScopeVar.Map.fold
     (fun scope_var (def_pos, e) acc ->
       let name = ScopeVar.to_string scope_var in
@@ -743,8 +745,10 @@ let populate
               | Declaration jump -> Some (add_decl p, jump.hash)
               | Usage jump -> Some (add_usage p, jump.hash)
               | Type jump -> Some (add_type p, jump.hash)
+              | Scope_use { hash; _ } -> Some (add_usage p, hash)
               | Scope_def { hash; _ } -> Some (add_decl p, hash)
-              | Scope_decl { hash; _ } -> Some (add_decl p, hash)
+              | Scope_decl { hash; _ } ->
+                Some ((fun m -> add_decl p m |> add_type p), hash)
               | Module_use { hash; _ } -> Some (add_usage p, hash)
               | Module_decl { hash; _ } -> Some (add_decl p, hash)
               | Module_def { hash; _ } -> Some (add_def p, hash)
@@ -762,6 +766,7 @@ let lookup (tables : t) (p : Pos.t) : lookup_entry list =
   let proj = function
     | Topdef j | Definition j | Declaration j | Usage j | Type j ->
       LTable.find_opt j.hash tables.lookup_table
+    | Scope_use { hash; _ }
     | Scope_def { hash; _ }
     | Scope_decl { hash; _ }
     | Module_use { hash; _ }
@@ -802,6 +807,7 @@ let lookup_type (tables : t) (p : Pos.t) :
     | Topdef j | Definition j | Declaration j | Usage j -> Expr j.typ
     | Type j -> Type j.typ
     | Literal typ -> Expr typ
+    | Scope_use { scope_decl_name; scope_sig; _ }
     | Scope_def { scope_decl_name; scope_sig; _ }
     | Scope_decl { scope_decl_name; scope_sig; _ } ->
       Scope (scope_decl_name, scope_sig)
@@ -829,6 +835,7 @@ let var_to_symbol (p : Pos.t) (var : var) : Linol_lwt.SymbolInformation.t option
     | Definition v -> Some (v.name, Function)
     | Declaration v -> Some (v.name, Interface)
     | Usage v -> Some (v.name, Variable)
+    | Scope_use v -> Some (v.name, Function)
     | Scope_def v -> Some (v.name, Function)
     | Scope_decl v -> Some (v.name, Interface)
     | Module_use v | Module_decl v | Module_def v -> Some (v.name, Module)

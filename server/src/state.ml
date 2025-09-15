@@ -229,6 +229,58 @@ let lookup_document_symbols file =
         vl acc)
     jt.variables []
 
+let lookup_lenses file =
+  let*? { jump_table = (lazy jt); _ } = file.result in
+  let mk_lens scope range =
+    let arguments =
+      [
+        `Assoc
+          [
+            "uri", `String (file.doc_id :> string);
+            "scope", `String (ScopeName.base scope);
+          ];
+      ]
+    in
+    let run_command =
+      Command.create ~arguments ~command:"catala.runScope" ~title:"▶ Run scope"
+        ()
+    in
+    let debug_command =
+      Command.create ~arguments ~command:"catala.debugScope"
+        ~title:"🛠 Debug scope" ()
+    in
+    [
+      CodeLens.create ~command:run_command ~range ();
+      CodeLens.create ~command:debug_command ~range ();
+    ]
+  in
+  let scope_lenses =
+    let is_input_or_context_var = function
+      | {
+          Scopelang.Ast.svar_io = { io_input = (NoInput | Reentrant), _; _ };
+          _;
+        } ->
+        true
+      | _ -> false
+    in
+    Jump_table.PMap.fold_on_file file.doc_id
+      (fun p vl acc ->
+        Jump_table.PMap.DS.fold
+          (fun var acc ->
+            match var with
+            | Scope_decl { scope_decl_name; scope_sig; _ } ->
+              if
+                ScopeVar.Map.for_all
+                  (fun _scope_var v -> is_input_or_context_var v)
+                  scope_sig
+              then mk_lens scope_decl_name (range_of_pos p) @ acc
+              else acc
+            | _ -> acc)
+          vl acc)
+      jt.variables []
+  in
+  Some scope_lenses
+
 exception Failed_to_load_interface of Surface.Ast.module_use
 
 let module_usage_error ({ mod_use_name; _ } : Surface.Ast.module_use) =
