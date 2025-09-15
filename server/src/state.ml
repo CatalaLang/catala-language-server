@@ -355,10 +355,11 @@ let load_module_interfaces config_dir includes program =
         | None ->
           (* Some file paths are absolute, we normalize them wrt to the config
              directory *)
-          let f_path = Utils.join_paths config_dir f in
+          let f = Utils.join_paths config_dir f in
           let module_content =
-            try Surface.Parser_driver.load_interface (Global.FileName f_path)
-            with _ -> raise (Failed_to_load_interface use)
+            if Global.options.whole_program then
+              Surface.Parser_driver.load_interface_and_code (Global.FileName f)
+            else Surface.Parser_driver.load_interface (Global.FileName f)
           in
           let modname =
             ModuleName.fresh module_content.module_modname.module_name
@@ -494,11 +495,6 @@ let process_document ?contents (document : file Server_state.document_state) : t
             Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
               prg.program_ctx.ctx_enums
           in
-          let _type_ordering =
-            Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
-              prg.program_ctx.ctx_enums
-          in
-          let prg = Scopelang.Ast.type_program prg in
           let prg = Dcalc.From_scopelang.translate_program prg in
           ignore @@ Typing.program ~internal_check:true prg
         in

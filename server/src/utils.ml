@@ -18,6 +18,8 @@ open Lsp.Types
 open Catala_utils
 open Server_types
 
+let never_ending = fst (Lwt.wait ())
+
 let pp_opt pp fmt =
   let open Format in
   function None -> fprintf fmt "<none>" | Some v -> fprintf fmt "%a" pp v
