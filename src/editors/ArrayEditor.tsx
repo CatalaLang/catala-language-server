@@ -180,6 +180,9 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   const intl = useIntl();
   const elementTypeName = getTypeDisplayName(elementType, intl);
+  // if the array has nested subarrays, we lay it out vertically,
+  // otherwise we use a flowing 'card' layout.
+  const isVertical = hasNestedArrays(elementType);
 
   // State for drag and drop
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -244,7 +247,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
       )}
 
       <div
-        className={`array-items ${hasNestedArrays(props.elementType) ? 'array-items-nested' : 'array-items-non-nested'}`}
+        className={`array-items ${isVertical ? 'array-items-nested' : 'array-items-non-nested'}`}
       >
         {(() => {
           const baseIndices = Array.from(
@@ -314,58 +317,36 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                     if (!isPhantom) handleDragStart(e, index);
                   }}
                 >
-                  {editable &&
-                    (hasNestedArrays(elementType) ? (
-                      <>
-                        <button
-                          className="array-move-prev"
-                          onClick={() => handleMove(index, index - 1)}
-                          disabled={isPhantom || index === 0}
-                          title={intl.formatMessage({
-                            id: 'arrayEditor.movePrevious',
-                          })}
-                        >
-                          <span className="codicon codicon-arrow-up"></span>
-                        </button>
-                        <button
-                          className="array-move-next"
-                          onClick={() => handleMove(index, index + 1)}
-                          disabled={
-                            isPhantom || index === currentArray.length - 1
-                          }
-                          title={intl.formatMessage({
-                            id: 'arrayEditor.moveNext',
-                          })}
-                        >
-                          <span className="codicon codicon-arrow-down"></span>
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          className="array-move-prev"
-                          onClick={() => handleMove(index, index - 1)}
-                          disabled={isPhantom || index === 0}
-                          title={intl.formatMessage({
-                            id: 'arrayEditor.movePrevious',
-                          })}
-                        >
-                          <span className="codicon codicon-arrow-left"></span>
-                        </button>
-                        <button
-                          className="array-move-next"
-                          onClick={() => handleMove(index, index + 1)}
-                          disabled={
-                            isPhantom || index === currentArray.length - 1
-                          }
-                          title={intl.formatMessage({
-                            id: 'arrayEditor.moveNext',
-                          })}
-                        >
-                          <span className="codicon codicon-arrow-right"></span>
-                        </button>
-                      </>
-                    ))}
+                  {editable && (
+                    <>
+                      <button
+                        className="array-move-prev"
+                        onClick={() => handleMove(index, index - 1)}
+                        disabled={isPhantom || index === 0}
+                        title={intl.formatMessage({
+                          id: 'arrayEditor.movePrevious',
+                        })}
+                      >
+                        <span
+                          className={`codicon ${isVertical ? 'codicon-arrow-up' : 'codicon-arrow-left'}`}
+                        ></span>
+                      </button>
+                      <button
+                        className="array-move-next"
+                        onClick={() => handleMove(index, index + 1)}
+                        disabled={
+                          isPhantom || index === currentArray.length - 1
+                        }
+                        title={intl.formatMessage({
+                          id: 'arrayEditor.moveNext',
+                        })}
+                      >
+                        <span
+                          className={`codicon ${isVertical ? 'codicon-arrow-down' : 'codicon-arrow-right'}`}
+                        ></span>
+                      </button>
+                    </>
+                  )}
                   {editable && !isPhantom && (
                     <button
                       className="array-delete"
@@ -379,7 +360,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                   )}
                 </div>
                 <div className="array-item-content">
-                  {hasNestedArrays(elementType) && (
+                  {isVertical && (
                     <div className="array-item-header">
                       {getTypeDisplayName(elementType, intl)}
                     </div>
