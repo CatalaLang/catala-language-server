@@ -25,18 +25,32 @@ export function isPathPrefix(
 }
 
 /**
+ * Find a diff whose path exactly matches the given path.
+ */
+export function findMatchingDiff(
+  diffs: Diff[],
+  path: PathSegment[]
+): Diff | undefined {
+  return diffs.find((diff) => pathEquals(diff.path, path));
+}
+
+/**
+ * Returns true if the given path is a proper prefix of any diff path.
+ */
+export function isParentOfAnyDiff(diffs: Diff[], path: PathSegment[]): boolean {
+  return diffs.some(
+    (diff) => diff.path.length > path.length && isPathPrefix(path, diff.path)
+  );
+}
+
+/**
  * Hook that only highlights the presence of diffs without inlining expected/actual values.
  * Used for the right-hand "actual" pane in two-pane mode.
  */
 export function createHighlightOnlyHook(diffs: Diff[]) {
   return (editor: ReactElement, path: PathSegment[]): ReactElement => {
-    const matchingDiff = diffs.find((diff) => pathEquals(diff.path, path));
-    const isParentOfDiff =
-      !matchingDiff &&
-      diffs.some(
-        (diff) =>
-          diff.path.length > path.length && isPathPrefix(path, diff.path)
-      );
+    const matchingDiff = findMatchingDiff(diffs, path);
+    const isParentOfDiff = !matchingDiff && isParentOfAnyDiff(diffs, path);
 
     if (matchingDiff || isParentOfDiff) {
       return <div className="diff-highlight container-diff">{editor}</div>;
