@@ -34,7 +34,7 @@
         </dict>
         <dict>
           <key>match</key>
-          <string>\b(match|with\s+pattern|but\s+replace|fixed|by|decreasing|increasing|varies|with|we\s+have|let|in|such\s+that|exists|among|for|all|of|if|then|else|initial)\b</string>
+          <string>\b(match|with\s+pattern|but\s+replace|fixed|by|down|up|varies|with|we\s+have|let|in|such\s+that|exists|among|for|all|of|if|then|else|initial)\b</string>
           <key>name</key>
           <string>keyword.control.catala_code_en</string>
         </dict>
@@ -108,7 +108,7 @@
         </dict>
         <dict>
           <key>match</key>
-          <string>\b(integer|boolean|date|duration|money|text|decimal|number|sum)\b</string>
+          <string>\b(integer|boolean|date|duration|money|code_location|decimal|number|sum)\b</string>
           <key>name</key>
           <string>support.type.catala_code_en</string>
         </dict>
