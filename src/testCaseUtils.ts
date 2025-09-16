@@ -62,10 +62,13 @@ export function omitPositionInfo(testOutputs: TestOutputs): TestOutputs {
 }
 
 /**
- * WARNING: This function needs significant improvement!
- * It only handles basic atomic values and doesn't properly format complex types.
- *
  * Renders a runtime value as a string for display purposes.
+ *
+ * Note: this function only handles basic atomic values and doesn't
+ * properly format complex types. When complex types are displayed
+ * in a diff view, we use an expected/actual split pane rather
+ * than an inline display (this function is only used for inline
+ * displaying of simple values)
  */
 export function renderAtomicValue(value: RuntimeValue): string {
   const raw = value.value;
@@ -86,9 +89,18 @@ export function renderAtomicValue(value: RuntimeValue): string {
       const d = raw.value;
       return `${d.years}y ${d.months}m ${d.days}d`;
     }
-    // Complex types just get a placeholder
+    // Enums get their label and value if the underlying value type
+    // is atomic, otherwise just their label
     case 'Enum':
-      return `${raw.value[1][0]}`;
+      if (
+        raw.value[1][1] == undefined ||
+        !isAtomicRaw(raw.value[1][1].value.value)
+      ) {
+        return `${raw.value[1][0]}`;
+      } else {
+        return `${raw.value[1][0]} ➡ ${renderAtomicValue(raw.value[1][1].value)}  `;
+      }
+    // Complex types just get a placeholder
     case 'Struct':
       return 'Struct value';
     case 'Array':
@@ -125,7 +137,8 @@ export function isElemental(diff: Diff): boolean {
   return isAtomicRaw(e) && isAtomicRaw(a);
 }
 export function isAtomicRaw(value: RuntimeValueRaw): boolean {
-  // Atomic kinds are everything except containers; Enums are atomic only if no payload
+  // Atomic kinds are everything except containers;
+  // Enums are atomic if their paylod is atomic.
   if (!['Enum', 'Struct', 'Array', 'Tuple'].includes(value.kind)) {
     return true;
   }
