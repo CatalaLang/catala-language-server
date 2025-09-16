@@ -85,7 +85,7 @@ export default function TestOutputsEditor({
             <div key={outputName} className="test-output-row">
               <label>{outputName}</label>
               {outputData?.value ? (
-                (() => {
+                ((): ReactElement => {
                   const outputPath: PathSegment[] = [
                     { kind: 'StructField' as const, value: outputName },
                   ];
@@ -113,7 +113,7 @@ export default function TestOutputsEditor({
                             }
                             diffs={subtreeDiffs}
                             currentPath={outputPath}
-                            highlightDiffs={false}
+                            highlightDiffs={true}
                           />
                         </div>
                         <div
@@ -122,7 +122,7 @@ export default function TestOutputsEditor({
                           aria-orientation="vertical"
                         />
                         <div className="pane-actual">
-                          {(() => {
+                          {((): ReactElement | null => {
                             const actualIo = actualOutputs.get(outputName);
                             if (!actualIo) return null;
                             return (
