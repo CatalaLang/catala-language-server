@@ -9,7 +9,7 @@ import type {
 import ValueEditor from './editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
 import './styles/assertions-editor.css';
-import { pathEquals, isPathPrefix } from './diff/highlight';
+import { findMatchingDiff, isParentOfAnyDiff } from './diff/highlight';
 
 type Props = {
   testIO: TestIo;
@@ -49,15 +49,10 @@ function isEmptyValue(value: RuntimeValue): boolean {
 function createDiffHighlightHook(diffs: Diff[]) {
   return (editor: ReactElement, path: PathSegment[]): ReactElement => {
     // Check if current path matches any diff path (exact match)
-    const matchingDiff = diffs.find((diff) => pathEquals(diff.path, path));
+    const matchingDiff = findMatchingDiff(diffs, path);
 
     // Check if this is a parent of a diff path (for containers)
-    const isParentOfDiff =
-      !matchingDiff &&
-      diffs.some(
-        (diff) =>
-          diff.path.length > path.length && isPathPrefix(path, diff.path)
-      );
+    const isParentOfDiff = !matchingDiff && isParentOfAnyDiff(diffs, path);
 
     if (matchingDiff) {
       const expectedIsEmpty = isEmptyValue(matchingDiff.expected);
