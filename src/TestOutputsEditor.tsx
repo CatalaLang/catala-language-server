@@ -10,7 +10,7 @@ import type {
 import AssertionValueEditor from './AssertionValueEditor';
 import ValueEditor from './editors/ValueEditors';
 import { getDefaultValue } from './defaults';
-import { isElemental } from './util';
+import { isElemental } from './testCaseUtils';
 import { createHighlightOnlyHook, isPathPrefix } from './diff/highlight';
 
 type Props = {
