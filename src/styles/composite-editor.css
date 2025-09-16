@@ -18,14 +18,14 @@
 .simple-items-vertical {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
 .simple-item-vertical {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 4px;
+  padding: 4px 0;
 }
 
 .item-label {
