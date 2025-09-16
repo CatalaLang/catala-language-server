@@ -2,8 +2,7 @@
 .diff-highlight {
   position: relative;
   border: 1px solid var(--vscode-editorError-foreground, #f14c4c);
-  padding: 8px;
-  margin: 4px 0;
+  padding: 5px;
   border-radius: 4px;
 }
 
