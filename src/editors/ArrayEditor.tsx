@@ -249,7 +249,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
       <div
         className={`array-items ${isVertical ? 'array-items-nested' : 'array-items-non-nested'}`}
       >
-        {(() => {
+        {((): ReactElement[] => {
           const baseIndices = Array.from(
             { length: currentArray.length },
             (_, i) => i
@@ -296,7 +296,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                     JSON.stringify(d.path.slice(0, currentPath.length)) ===
                       JSON.stringify(currentPath) &&
                     d.path[currentPath.length].kind === 'ListIndex' &&
-                    (d.path[currentPath.length] as any).value === index
+                    d.path[currentPath.length].value === index
                 )
               : undefined;
 
