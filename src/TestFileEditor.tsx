@@ -115,7 +115,7 @@ export default function TestFileEditor({
                 />
               </p>
               <select
-                value={modalState.scopeUnderTest || ''}
+                value={modalState.scopeUnderTest ?? ''}
                 onChange={(e) =>
                   setModalState((prev) => ({
                     ...prev,
