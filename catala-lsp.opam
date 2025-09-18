@@ -23,9 +23,6 @@ depends: [
   "linol"     { = "0.8" }
   "linol-lwt" { = "0.8" }
   "dap"       { = "1.0.6" }
-  "ppx_deriving_yojson"
-  "ppx_make"
-  "ppx_here"
   "qcheck"    { with-test & >= "0.21.3" }
   "tezt"      { with-test }
   "atdgen"    { build }
