@@ -100,9 +100,9 @@ export function renderAtomicValue(value: RuntimeValue): string {
       } else {
         return `${raw.value[1][0]} ➡ ${renderAtomicValue(raw.value[1][1].value)}  `;
       }
-    // Complex types just get a placeholder
+    // Complex types just get a placeholder or name
     case 'Struct':
-      return 'Struct value';
+      return raw.value[0].struct_name;
     case 'Array':
       return `Array(${raw.value.length})`;
     default:
