@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
   type Test,
@@ -47,6 +47,27 @@ export default function TestEditor(props: Props): ReactElement {
   }
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const expectedSectionRef = useRef<HTMLDivElement>(null);
+  const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
+
+  useEffect(() => {
+    const runState = props.runState;
+    const shouldFocus =
+      !!runState &&
+      runState.results?.kind === 'Ok' &&
+      runState.results.value.assert_failures;
+
+    if (shouldFocus) {
+      if (isCollapsed) setIsCollapsed(false);
+      setTimeout(() => {
+        expectedSectionRef.current?.focus();
+        expectedSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 0);
+    }
+  }, [props.runState, isCollapsed]);
 
   return (
     <div className="test-editor">
@@ -132,7 +153,12 @@ export default function TestEditor(props: Props): ReactElement {
             onTestInputsChange={onTestInputsChange}
           />
         </div>
-        <div className="test-section">
+        <div
+          className="test-section"
+          id={expectedAnchorId}
+          ref={expectedSectionRef}
+          tabIndex={-1}
+        >
           <div className="test-section-header">
             <h2 className="test-section-title">
               <FormattedMessage id="testEditor.expectedValues" />
