@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
   type Test,
@@ -8,8 +8,6 @@ import {
 } from './generated/test_case';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
-import Results from './Results';
-import { select } from './testCaseUtils';
 import { type TestRunStatus } from './TestFileEditor';
 
 type Props = {
@@ -49,6 +47,27 @@ export default function TestEditor(props: Props): ReactElement {
   }
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const expectedSectionRef = useRef<HTMLDivElement>(null);
+  const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
+
+  useEffect(() => {
+    const runState = props.runState;
+    const shouldFocus =
+      !!runState &&
+      runState.results?.kind === 'Ok' &&
+      runState.results.value.assert_failures;
+
+    if (shouldFocus) {
+      if (isCollapsed) setIsCollapsed(false);
+      setTimeout(() => {
+        expectedSectionRef.current?.focus();
+        expectedSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 0);
+    }
+  }, [props.runState, isCollapsed]);
 
   return (
     <div className="test-editor">
@@ -64,7 +83,7 @@ export default function TestEditor(props: Props): ReactElement {
         </button>
         <button
           className={`test-editor-run ${props.runState?.status ?? ''}`}
-          title="Run test"
+          title={intl.formatMessage({ id: 'testEditor.run' })}
           onClick={() => props.onTestRun(props.test.testing_scope)}
           disabled={props.runState?.status === 'running'}
         >
@@ -134,7 +153,12 @@ export default function TestEditor(props: Props): ReactElement {
             onTestInputsChange={onTestInputsChange}
           />
         </div>
-        <div className="test-section">
+        <div
+          className="test-section"
+          id={expectedAnchorId}
+          ref={expectedSectionRef}
+          tabIndex={-1}
+        >
           <div className="test-section-header">
             <h2 className="test-section-title">
               <FormattedMessage id="testEditor.expectedValues" />
@@ -154,25 +178,18 @@ export default function TestEditor(props: Props): ReactElement {
             onTestChange={(test) => {
               props.onTestChange(test, false);
             }}
+            diffs={
+              props.runState?.results?.kind === 'Ok'
+                ? props.runState.results.value.diffs
+                : []
+            }
+            actualOutputs={
+              props.runState?.results?.kind === 'Ok'
+                ? props.runState.results.value.test_outputs
+                : undefined
+            }
           />
         </div>
-        {props.runState?.status === 'success' &&
-          props.runState?.results &&
-          props.runState?.results?.kind === 'Ok' && (
-            <div className="test-section">
-              <div className="test-section-header">
-                <h2 className="test-section-title">
-                  <FormattedMessage id="testEditor.results" />
-                </h2>
-                <Results
-                  {...select(
-                    props.test.test_outputs,
-                    props.runState.results.value.test_outputs
-                  )}
-                />
-              </div>
-            </div>
-          )}
       </div>
     </div>
   );
