@@ -37,7 +37,7 @@ let get_typ (_, Typed { ty; _ }) = ty
 type paused_state = { e : dcalc_expr; env : (yes, typed) env }
 
 type interp_exn =
-  | Runtime of Runtime.error * Runtime.source_position list
+  | Runtime of Catala_runtime.error * Catala_runtime.code_location list
   | Internal of (Format.formatter -> unit)
 
 type value = Expr of dcalc_expr | Exn of { pos : Pos.t; exn : interp_exn }
@@ -151,7 +151,7 @@ let run_debugger
             env = !last_step.env;
           };
         ]
-    | Error (Runtime.Error (a, b)) ->
+    | Error (Catala_runtime.Error (a, b)) ->
       let pos = get_step_pos !last_step in
       Lwt.return
         [
@@ -215,9 +215,12 @@ let load_program ((clerk_config : Clerk_config.t), root_dir) file scope =
   in
   let input_src = Global.FileName (File.clean_path file) in
   let surface = Surface.Parser_driver.parse_top_level_file input_src in
+  let stdlib_path = File.(root_dir / "_build" / "libcatala") in
+  if not (File.exists stdlib_path) then
+    failwith "Stdlib not found - Please compile your project first.";
   let mod_uses, modules, _used_modules =
     try
-      State.load_module_interfaces root_dir clerk_config.global.include_dirs
+      State.load_modules ~stdlib_path root_dir clerk_config.global.include_dirs
         surface
     with e -> raise e
   in
@@ -257,6 +260,15 @@ let load_program ((clerk_config : Clerk_config.t), root_dir) file scope =
   in
   prg, scope, pmap
 
+let build_deps ~logger file =
+  let* () = logger "Building scope dependencies..." in
+  try
+    let _r = File.process_out "clerk" ["run"; file; "--prepare-only"] in
+    Lwt.return_true
+  with Failure s ->
+    let* () = Format.ksprintf logger "Failed to build dependencies: %s" s in
+    Lwt.return_false
+
 let run_debugger rpc ~file ~scope logger : debugger_state Lwt.t =
   let* () = logger "Initializing Catala debugger.." in
   let build_dir, config_and_root =
@@ -270,6 +282,7 @@ let run_debugger rpc ~file ~scope logger : debugger_state Lwt.t =
       ~path_rewrite:(fun i -> (i :> string))
       ()
   in
+  let* _deps_built = build_deps ~logger file in
   let program, scope, pmap = load_program config_and_root file scope in
   let* () =
     Format.kasprintf logger "Program loaded - main scope: %a" ScopeName.format

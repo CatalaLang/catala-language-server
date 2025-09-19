@@ -70,7 +70,7 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
     in
     lookup_clerk_toml dir
     |> function
-    | None -> []
+    | None -> ".", []
     | Some (config, rel) ->
       let path_to_build = to_relative File.(dir / rel) in
       let include_dirs =
@@ -84,7 +84,7 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
         (if prefix_build then "build" else "include")
         Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
         include_dirs;
-      List.map Global.raw_file include_dirs
+      path_to_build, List.map Global.raw_file include_dirs
   in
   match options.Global.input_src with
   | FileName file | Contents (_, file) -> f (Filename.dirname file)
@@ -254,12 +254,12 @@ let scope_inputs ?module_name decl_ctx scope =
       | SubScopeInput _ -> acc
       | Var _ -> (
         match fst sdef.I.scope_def_io.I.io_input with
-        | Runtime.NoInput -> acc
-        | Runtime.OnlyInput ->
+        | Catala_runtime.NoInput -> acc
+        | Catala_runtime.OnlyInput ->
           ( ScopeVar.to_string v,
             get_typ ?module_name decl_ctx sdef.I.scope_def_typ )
           :: acc
-        | Runtime.Reentrant ->
+        | Catala_runtime.Reentrant ->
           ( ScopeVar.to_string v,
             get_typ ?module_name decl_ctx sdef.I.scope_def_typ )
           :: acc))
@@ -354,17 +354,22 @@ let write_stdout f arg =
 
 let print_test test = write_stdout Test_case_j.write_test test
 let print_tests test = write_stdout Test_case_j.write_test_list test
-let read_program includes options = Driver.Passes.desugared options ~includes
+
+let read_program includes path_to_build options =
+  let stdlib =
+    Some (Global.raw_file File.(path_to_build / "_build" / "libcatala"))
+  in
+  Driver.Passes.desugared options ~stdlib ~includes
 
 let generate_test
     tested_scope
     ?(testing_scope = tested_scope ^ "_test")
     include_dirs
     options =
-  let include_dirs =
-    if include_dirs = [] then lookup_include_dirs options else include_dirs
+  let path_to_build, include_dirs =
+    if include_dirs = [] then lookup_include_dirs options else ".", include_dirs
   in
-  let prg, _ = read_program include_dirs options in
+  let prg, _ = read_program include_dirs path_to_build options in
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
   in
@@ -526,11 +531,11 @@ let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
 let read_test include_dirs (options : Global.options) buffer_path =
-  let include_dirs =
+  let path_to_build, include_dirs =
     if include_dirs = [] then lookup_include_dirs ?buffer_path options
-    else include_dirs
+    else ".", include_dirs
   in
-  let prg = read_program include_dirs options in
+  let prg = read_program include_dirs path_to_build options in
   let tests = import_catala_tests prg in
   write_stdout Test_case_j.write_test_list tests
 
@@ -810,16 +815,19 @@ let write_catala options outfile =
   in
   ()
 
-
 let run_test testing_scope include_dirs options =
-  let include_dirs =
+  let path_to_build, include_dirs =
     if include_dirs = [] then
-      let include_dirs = lookup_include_dirs options in
-      let build_include_dirs = lookup_include_dirs ~prefix_build:true options in
-      build_include_dirs @ include_dirs
-    else []
+      let _path_to_build, include_dirs = lookup_include_dirs options in
+      let path_to_build, build_include_dirs =
+        lookup_include_dirs ~prefix_build:true options
+      in
+      path_to_build, build_include_dirs @ include_dirs
+    else ".", []
   in
-  let desugared_prg, naming_ctx = read_program include_dirs options in
+  let desugared_prg, naming_ctx =
+    read_program include_dirs path_to_build options
+  in
   let testing_scope_name =
     match
       Ident.Map.find_opt testing_scope
@@ -857,12 +865,16 @@ let run_test testing_scope include_dirs options =
     | { Message.kind = AssertFailure; _ } ->
       failed_asserts := e :: !failed_asserts;
       false (* absorb error *)
-    | _ -> true (* propagate error and crash *) in
-  let () = Catala_utils.Message.register_lsp_error_absorber on_assert_failures in
+    | _ -> true (* propagate error and crash *)
+  in
+  let () =
+    Catala_utils.Message.register_lsp_error_absorber on_assert_failures
+  in
   let result_struct =
     Message.with_delayed_errors
     @@ fun () ->
-    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr in
+    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr
+  in
   let results, out_struct =
     match result_struct with
     | EStruct { fields; _ }, _ -> (
@@ -887,16 +899,16 @@ let run_test testing_scope include_dirs options =
       results
   in
   let test = { test with test_outputs } in
-  let test_run = { O.test = test; O.assert_failures = not (!failed_asserts = []) } in
+  let test_run = { O.test; O.assert_failures = not (!failed_asserts = []) } in
   write_stdout Test_case_j.write_test_run test_run
 
 let print_scopes scopes = write_stdout Test_case_j.write_scope_def_list scopes
 
 let list_scopes include_dirs options =
-  let include_dirs =
-    if include_dirs = [] then lookup_include_dirs options else include_dirs
+  let path_to_build, include_dirs =
+    if include_dirs = [] then lookup_include_dirs options else ".", include_dirs
   in
-  let prg, _ = read_program include_dirs options in
+  let prg, _ = read_program include_dirs path_to_build options in
   let module_name =
     match prg.program_module_name with
     | None -> failwith "Expected a Catala module"
