@@ -85,15 +85,11 @@ function createDiffHighlightHook(diffs: Diff[]) {
         // For regular atomic values, show expected vs actual
         return (
           <div className="diff-highlight atomic-diff">
-            <div className="diff-expected">
-              <FormattedMessage id="diff.expected" />:{' '}
-              {renderAtomicValue(matchingDiff.expected)}
-            </div>
+            {editor}
             <div className="diff-actual">
               <FormattedMessage id="diff.actual" />:{' '}
               {renderAtomicValue(matchingDiff.actual)}
             </div>
-            {editor}
           </div>
         );
       }
