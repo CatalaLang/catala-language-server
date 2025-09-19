@@ -116,7 +116,7 @@ let rec runtime_to_val :
   | TLit TPos ->
     Lwt.return
     @@
-    let rpos : Runtime.source_position = Obj.obj o in
+    let rpos : Catala_runtime.code_location = Obj.obj o in
     let p =
       Pos.from_info rpos.filename rpos.start_line rpos.start_column
         rpos.end_line rpos.end_column
@@ -183,9 +183,9 @@ let rec runtime_to_val :
   | TDefault ty -> (
     (* This case is only valid for ASTs including default terms; but the typer
        isn't aware so we need some additional dark arts. *)
-    match (Obj.obj o : 'a Runtime.Optional.t) with
-    | Runtime.Optional.Absent () -> Lwt.return (Obj.magic EEmpty, m)
-    | Runtime.Optional.Present o -> (
+    match (Obj.obj o : 'a Catala_runtime.Optional.t) with
+    | Catala_runtime.Optional.Absent () -> Lwt.return (Obj.magic EEmpty, m)
+    | Catala_runtime.Optional.Present o -> (
       let* r = runtime_to_val eval_expr ctx m ty o in
       match r with
       | ETuple [(e, m); (EPos pos, _)], _ -> Lwt.return (e, Expr.with_pos pos m)
@@ -217,9 +217,9 @@ and val_to_runtime :
   | TLit TDate, ELit (LDate t) -> Lwt.return (Obj.repr t)
   | TLit TDuration, ELit (LDuration d) -> Lwt.return (Obj.repr d)
   | TLit TPos, EPos p ->
-    let rpos : Runtime.source_position =
+    let rpos : Catala_runtime.code_location =
       {
-        Runtime.filename = Pos.get_file p;
+        Catala_runtime.filename = Pos.get_file p;
         start_line = Pos.get_start_line p;
         start_column = Pos.get_start_column p;
         end_line = Pos.get_end_line p;
@@ -296,7 +296,7 @@ and val_to_runtime :
     (* In dcalc, this is an expression. in the runtime (lcalc), this is an
        option(pair(expression, pos)) *)
     match v with
-    | EEmpty, _ -> Lwt.return (Obj.repr (Runtime.Optional.Absent ()))
+    | EEmpty, _ -> Lwt.return (Obj.repr (Catala_runtime.Optional.Absent ()))
     | EPureDefault e, m | ((_, m) as e) ->
       let* e = eval_expr ctx e in
       let pos = Expr.pos e in
@@ -305,7 +305,7 @@ and val_to_runtime :
         ETuple [e; EPos pos, Expr.with_ty m (TLit TPos, pos)], Expr.with_ty m ty
       in
       let* v = val_to_runtime eval_expr ctx ty with_pos in
-      Lwt.return (Obj.repr (Runtime.Optional.Present v)))
+      Lwt.return (Obj.repr (Catala_runtime.Optional.Present v)))
   | TForAll tb, _ ->
     let _v, ty = Bindlib.unmbind tb in
     val_to_runtime eval_expr ctx ty v
@@ -324,34 +324,34 @@ and val_to_runtime :
       Expr.format v
 
 let rec value_to_runtime_embedded = function
-  | ELit LUnit -> Runtime.Unit
-  | ELit (LBool b) -> Runtime.Bool b
-  | ELit (LMoney m) -> Runtime.Money m
-  | ELit (LInt i) -> Runtime.Integer i
-  | ELit (LRat r) -> Runtime.Decimal r
-  | ELit (LDate d) -> Runtime.Date d
-  | ELit (LDuration dt) -> Runtime.Duration dt
+  | ELit LUnit -> Catala_runtime.Unit
+  | ELit (LBool b) -> Catala_runtime.Bool b
+  | ELit (LMoney m) -> Catala_runtime.Money m
+  | ELit (LInt i) -> Catala_runtime.Integer i
+  | ELit (LRat r) -> Catala_runtime.Decimal r
+  | ELit (LDate d) -> Catala_runtime.Date d
+  | ELit (LDuration dt) -> Catala_runtime.Duration dt
   | EInj { name; cons; e } ->
-    Runtime.Enum
+    Catala_runtime.Enum
       ( EnumName.to_string name,
         ( EnumConstructor.to_string cons,
           value_to_runtime_embedded (Mark.remove e) ) )
   | EStruct { name; fields } ->
-    Runtime.Struct
+    Catala_runtime.Struct
       ( StructName.to_string name,
         List.map
           (fun (f, e) ->
             StructField.to_string f, value_to_runtime_embedded (Mark.remove e))
           (StructField.Map.bindings fields) )
   | EArray el ->
-    Runtime.Array
+    Catala_runtime.Array
       (Array.of_list
          (List.map (fun e -> value_to_runtime_embedded (Mark.remove e)) el))
   | ETuple el ->
-    Runtime.Tuple
+    Catala_runtime.Tuple
       (Array.of_list
          (List.map (fun e -> value_to_runtime_embedded (Mark.remove e)) el))
-  | _ -> Runtime.Unembeddable
+  | _ -> Catala_runtime.Unembeddable
 
 (* Todo: this should be handled early when resolving overloads. Here we have
    proper structural equality, but the OCaml backend for example uses the
@@ -369,7 +369,7 @@ let handle_eq
     e1
     e2 =
   let eq_eval = evaluate_operator (Op.Eq, pos) m lang in
-  let open Runtime.Oper in
+  let open Catala_runtime.Oper in
   match e1, e2 with
   | ELit LUnit, ELit LUnit -> Lwt.return_true
   | ELit (LBool b1), ELit (LBool b2) -> Lwt.return (o_eq_boo_boo b1 b2)
@@ -486,27 +486,28 @@ let rec evaluate_operator
       (Print.operator ~debug:true)
       op
   in
-  let open Runtime.Oper in
+  let open Catala_runtime.Oper in
   let* r =
     match op, args with
     | Length, [(EArray es, _)] ->
-      Lwt.return (ELit (LInt (Runtime.integer_of_int (List.length es))))
+      Lwt.return (ELit (LInt (Catala_runtime.integer_of_int (List.length es))))
     | Log (entry, infos), [(e, _)] when Global.options.trace <> None -> (
       let rtinfos = List.map Uid.MarkedString.to_string infos in
       match entry with
-      | BeginCall -> Lwt.return (Runtime.log_begin_call rtinfos e)
-      | EndCall -> Lwt.return (Runtime.log_end_call rtinfos e)
+      | BeginCall -> Lwt.return (Catala_runtime.log_begin_call rtinfos e)
+      | EndCall -> Lwt.return (Catala_runtime.log_end_call rtinfos e)
       | PosRecordIfTrueBool ->
         (match e with
         | ELit (LBool b) ->
-          Runtime.log_decision_taken (Expr.pos_to_runtime pos) b |> ignore
+          Catala_runtime.log_decision_taken (Expr.pos_to_runtime pos) b
+          |> ignore
         | _ -> ());
         Lwt.return e
       | VarDef def ->
         Lwt.return
-          (Runtime.log_variable_definition rtinfos
+          (Catala_runtime.log_variable_definition rtinfos
              {
-               Runtime.io_input = def.log_io_input;
+               Catala_runtime.io_input = def.log_io_input;
                io_output = def.log_io_output;
              }
              value_to_runtime_embedded e))
@@ -534,7 +535,8 @@ let rec evaluate_operator
         in
         Lwt.return (EArray l)
       with Invalid_argument _ ->
-        raise Runtime.(Error (NotSameLength, [Expr.pos_to_runtime opos])))
+        raise Catala_runtime.(Error (NotSameLength, [Expr.pos_to_runtime opos]))
+      )
     | Reduce, [_; default; (EArray [], _)] ->
       let* r =
         eval_application evaluate_expr default
@@ -576,23 +578,13 @@ let rec evaluate_operator
     | (Length | Log _ | Eq | Map | Map2 | Concat | Filter | Fold | Reduce), _ ->
       err ()
     | Not, [(ELit (LBool b), _)] -> Lwt.return (ELit (LBool (o_not b)))
-    | GetDay, [(ELit (LDate d), _)] -> Lwt.return (ELit (LInt (o_getDay d)))
-    | GetMonth, [(ELit (LDate d), _)] -> Lwt.return (ELit (LInt (o_getMonth d)))
-    | GetYear, [(ELit (LDate d), _)] -> Lwt.return (ELit (LInt (o_getYear d)))
-    | FirstDayOfMonth, [(ELit (LDate d), _)] ->
-      Lwt.return (ELit (LDate (o_firstDayOfMonth d)))
-    | LastDayOfMonth, [(ELit (LDate d), _)] ->
-      Lwt.return (ELit (LDate (o_lastDayOfMonth d)))
     | And, [(ELit (LBool b1), _); (ELit (LBool b2), _)] ->
       Lwt.return (ELit (LBool (o_and b1 b2)))
     | Or, [(ELit (LBool b1), _); (ELit (LBool b2), _)] ->
       Lwt.return (ELit (LBool (o_or b1 b2)))
     | Xor, [(ELit (LBool b1), _); (ELit (LBool b2), _)] ->
       Lwt.return (ELit (LBool (o_xor b1 b2)))
-    | ( ( Not | GetDay | GetMonth | GetYear | FirstDayOfMonth | LastDayOfMonth
-        | And | Or | Xor ),
-        _ ) ->
-      err ()
+    | (Not | And | Or | Xor), _ -> err ()
     | Minus_int, [(ELit (LInt x), _)] ->
       Lwt.return (ELit (LInt (o_minus_int x)))
     | Minus_rat, [(ELit (LRat x), _)] ->
@@ -720,14 +712,14 @@ let rec evaluate_operator
               if EnumConstructor.equal cons Expr.some_constr then
                 match e with
                 | ETuple [e; (EPos p, _)], _ ->
-                  Runtime.Optional.Present (e, Expr.pos_to_runtime p)
+                  Catala_runtime.Optional.Present (e, Expr.pos_to_runtime p)
                 | _ -> err ()
-              else Runtime.Optional.Absent ()
+              else Catala_runtime.Optional.Absent ()
             | _ -> err ())
           exps
       in
-      match Runtime.handle_exceptions (Array.of_list exps) with
-      | Runtime.Optional.Absent () ->
+      match Catala_runtime.handle_exceptions (Array.of_list exps) with
+      | Catala_runtime.Optional.Absent () ->
         Lwt.return
           (EInj
              {
@@ -735,7 +727,7 @@ let rec evaluate_operator
                cons = Expr.none_constr;
                e = ELit LUnit, m;
              })
-      | Runtime.Optional.Present (e, rpos) ->
+      | Catala_runtime.Optional.Present (e, rpos) ->
         let p = Expr.runtime_to_pos rpos in
         Lwt.return
           (EInj
@@ -851,15 +843,16 @@ let rec evaluate_expr_with_env :
         Message.error ~pos "Reference to %a@ could@ not@ be@ resolved"
           Print.external_ref name
     in
-    let runtime_path =
-      ( List.map ModuleName.to_string path,
+    let runtime_modname =
+      ( List.map ModuleName.to_string
+          (Option.to_list (Uid.Path.last_member path)),
         match Mark.remove name with
         | External_value name -> TopdefName.base name
         | External_scope name -> ScopeName.base name )
       (* we have the guarantee that the two cases won't collide because they
          have different capitalisation rules inherited from the input *)
     in
-    let o = Runtime.lookup_value runtime_path in
+    let o = Catala_runtime.lookup_value runtime_modname in
     let* e =
       runtime_to_val
         (fun ctx e ->
@@ -1075,7 +1068,8 @@ let rec evaluate_expr_with_env :
     | ELit (LBool true) -> Lwt.return (Mark.add m (ELit LUnit), env)
     | ELit (LBool false) ->
       if Global.options.stop_on_error then
-        raise Runtime.(Error (AssertionFailed, [Expr.pos_to_runtime pos]))
+        raise
+          Catala_runtime.(Error (AssertionFailed, [Expr.pos_to_runtime pos]))
       else
         let* partially_evaluated_assertion_failure_expr =
           partially_evaluate_expr_for_assertion_failure_message
@@ -1105,14 +1099,15 @@ let rec evaluate_expr_with_env :
       Message.error ~pos:(Expr.pos e') "%a" Format.pp_print_text
         "Expected a boolean literal for the result of this assertion (should \
          not happen if the term was well-typed)")
-  | EFatalError err -> raise (Runtime.Error (err, [Expr.pos_to_runtime pos]))
+  | EFatalError err ->
+    raise (Catala_runtime.Error (err, [Expr.pos_to_runtime pos]))
   | EErrorOnEmpty e' -> (
     let* r = evaluate_expr_with_env ~on_expr env ctx lang e' in
     match r with
     | (EEmpty, _), _ ->
-      raise Runtime.(Error (NoValue, [Expr.pos_to_runtime pos]))
-    | exception Runtime.Empty ->
-      raise Runtime.(Error (NoValue, [Expr.pos_to_runtime pos]))
+      raise Catala_runtime.(Error (NoValue, [Expr.pos_to_runtime pos]))
+    | exception Catala_runtime.Empty ->
+      raise Catala_runtime.(Error (NoValue, [Expr.pos_to_runtime pos]))
     | e, _env -> Lwt.return (e, env))
   | EDefault { excepts; just; cons } -> (
     let* l =
@@ -1141,7 +1136,7 @@ let rec evaluate_expr_with_env :
             else Some Expr.(pos_to_runtime (pos ex)))
           excepts
       in
-      raise Runtime.(Error (Conflict, poslist)))
+      raise Catala_runtime.(Error (Conflict, poslist)))
   | EPureDefault e ->
     let* e, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
     Lwt.return (e, env)
@@ -1171,11 +1166,11 @@ let interpret_with_env
       in
       match r with
       | ((EStruct _, _) as e), _env -> Lwt.return e
-      | exception Runtime.Error (err, rpos) ->
+      | exception Catala_runtime.Error (err, rpos) ->
         Message.error
           ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) rpos)
           "%a" Format.pp_print_text
-          (Runtime.error_message err)
+          (Catala_runtime.error_message err)
       | _ ->
         Message.error ~pos:(Expr.pos e) ~internal:true "%a" Format.pp_print_text
           "The interpretation of the program doesn't yield a struct \

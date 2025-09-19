@@ -241,7 +241,7 @@ let svar_input_s_opt locale =
     | Pl -> assert false
   in
   function
-  | Runtime.NoInput -> None
+  | Catala_runtime.NoInput -> None
   | OnlyInput -> Some (input_s locale)
   | Reentrant -> Some (context_s locale)
 
@@ -274,7 +274,7 @@ let pp_scope_var
 
 let is_svar_internal (scope_ty : Scopelang.Ast.scope_var_ty) =
   (not (Mark.remove scope_ty.svar_io.io_output))
-  && Mark.remove scope_ty.svar_io.io_input = Runtime.NoInput
+  && Mark.remove scope_ty.svar_io.io_input = Catala_runtime.NoInput
 
 let pp_scope locale fmt (scope_name, scope_vars) =
   let open Format in

@@ -34,7 +34,7 @@
         </dict>
         <dict>
           <key>match</key>
-          <string>\b(selon|sous\s+forme|mais\s+en\s+remplaçant|fixé|par|décroissant|croissant|varie|avec|on\s+a|soit|dans|tel\s+que|existe|pour|parmi|tout|de|si|alors|sinon|initial)\b</string>
+          <string>\b(selon|sous\s+forme|mais\s+en\s+remplaçant|fixé|par|inférieur|supérieur|varie|avec|on\s+a|soit|dans|tel\s+que|existe|pour|parmi|tout|de|si|alors|sinon|initial)\b</string>
           <key>name</key>
           <string>keyword.control.catala_code_fr</string>
         </dict>
@@ -114,7 +114,7 @@
         </dict>
         <dict>
           <key>match</key>
-          <string>\b(entier|booléen|date|durée|argent|texte|décimal|décret|loi|nombre|somme)\b</string>
+          <string>\b(entier|booléen|date|durée|argent|position_source|décimal|décret|loi|nombre|somme)\b</string>
           <key>name</key>
           <string>support.type.catala_code_fr</string>
         </dict>

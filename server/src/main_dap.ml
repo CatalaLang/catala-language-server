@@ -287,7 +287,7 @@ let handle_evaluate logger rpc :
     in
     let* () =
       Format.kasprintf logger "@[<v 2>Message:@\n%s@]"
-        (Printexc.to_string (Runtime.Error (error, pl)))
+        (Printexc.to_string (Catala_runtime.Error (error, pl)))
     in
     send_stop ~description:"Exception" Reason.Exception
   | `Ok { DE.value = Exn { pos; exn = Internal pp }; _ }
@@ -630,21 +630,21 @@ let set_handlers rpc =
             Message.error
               ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) spl)
               "During evaluation: %a." Format.pp_print_text
-              (Runtime.error_message error)
+              (Catala_runtime.error_message error)
           with Message.CompilerError content ->
             Format.asprintf "%t" (fun ppf ->
                 Message.Content.emit ~ppf content Error)
         in
         let* () = logger full_message in
-        let exception_id = Runtime.error_to_string error in
+        let exception_id = Catala_runtime.error_to_string error in
         let description = Some full_message in
         let break_mode : Exception_break_mode.t = Always in
         let details : Exception_details.t option =
           Some
             {
               message = None;
-              type_name = Some (Runtime.error_to_string error);
-              full_type_name = Some (Runtime.error_to_string error);
+              type_name = Some (Catala_runtime.error_to_string error);
+              full_type_name = Some (Catala_runtime.error_to_string error);
               evaluate_name = None;
               stack_trace = None;
               inner_exception = None;
@@ -716,4 +716,4 @@ let main () =
   let rpc = Debug_rpc.create ~in_:Lwt_io.stdin ~out:Lwt_io.stdout () in
   Lwt_main.run (launch rpc)
 
-let _ = main ()
+let () = main ()
