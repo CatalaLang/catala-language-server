@@ -166,6 +166,12 @@ type file_selection = {
   available_scopes: scope_def_list;
 }
 
+type test_run_results_msg = {
+  scope: string;
+  reset_outputs: bool;
+  results: test_run_results;
+}
+
 type up_message = [
   | Ready
   | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
@@ -177,6 +183,6 @@ type up_message = [
 
 type down_message = [
   | Update of parse_results
-  | TestRunResults of test_run_results
+  | TestRunResults of test_run_results_msg
   | FileSelectedForNewTest of file_selection
 ]

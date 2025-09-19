@@ -166,6 +166,12 @@ export type FileSelection = {
   available_scopes: ScopeDefList;
 }
 
+export type TestRunResultsMsg = {
+  scope: string;
+  reset_outputs: boolean;
+  results: TestRunResults;
+}
+
 export type UpMessage =
 | { kind: 'Ready' }
 | { kind: 'GuiEdit'; value: [TestList, boolean] }
@@ -176,7 +182,7 @@ export type UpMessage =
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
-| { kind: 'TestRunResults'; value: TestRunResults }
+| { kind: 'TestRunResults'; value: TestRunResultsMsg }
 | { kind: 'FileSelectedForNewTest'; value: FileSelection }
 
 export function writeTyp(x: Typ, context: any = x): any {
@@ -739,6 +745,22 @@ export function readFileSelection(x: any, context: any = x): FileSelection {
   };
 }
 
+export function writeTestRunResultsMsg(x: TestRunResultsMsg, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('TestRunResultsMsg', 'scope', _atd_write_string, x.scope, x),
+    'reset_outputs': _atd_write_required_field('TestRunResultsMsg', 'reset_outputs', _atd_write_bool, x.reset_outputs, x),
+    'results': _atd_write_required_field('TestRunResultsMsg', 'results', writeTestRunResults, x.results, x),
+  };
+}
+
+export function readTestRunResultsMsg(x: any, context: any = x): TestRunResultsMsg {
+  return {
+    scope: _atd_read_required_field('TestRunResultsMsg', 'scope', _atd_read_string, x['scope'], x),
+    reset_outputs: _atd_read_required_field('TestRunResultsMsg', 'reset_outputs', _atd_read_bool, x['reset_outputs'], x),
+    results: _atd_read_required_field('TestRunResultsMsg', 'results', readTestRunResults, x['results'], x),
+  };
+}
+
 export function writeUpMessage(x: UpMessage, context: any = x): any {
   switch (x.kind) {
     case 'Ready':
@@ -791,7 +813,7 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
     case 'Update':
       return ['Update', writeParseResults(x.value, x)]
     case 'TestRunResults':
-      return ['TestRunResults', writeTestRunResults(x.value, x)]
+      return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
     case 'FileSelectedForNewTest':
       return ['FileSelectedForNewTest', writeFileSelection(x.value, x)]
   }
@@ -803,7 +825,7 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
     case 'Update':
       return { kind: 'Update', value: readParseResults(x[1], x) }
     case 'TestRunResults':
-      return { kind: 'TestRunResults', value: readTestRunResults(x[1], x) }
+      return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
     case 'FileSelectedForNewTest':
       return { kind: 'FileSelectedForNewTest', value: readFileSelection(x[1], x) }
     default:

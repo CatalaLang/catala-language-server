@@ -281,22 +281,19 @@ export default function TestFileEditor({
           setState(parseResultsToUiState(message.value));
           break;
         case 'TestRunResults': {
-          const results = message.value;
+          const { scope, reset_outputs, results } = message.value;
           setTestRunState((prev) => {
-            const updatedScope = Object.keys(prev).find(
-              //TODO test below seems fragile: improve
-              (scope) => prev[scope].status === 'running'
-            );
-            if (updatedScope) {
-              return {
-                ...prev,
-                [updatedScope]: {
-                  status: _resultsToStatus(results),
-                  results,
-                },
-              };
+            const next: TestRunState = {
+              ...prev,
+              [scope]: {
+                status: _resultsToStatus(results),
+                results,
+              },
+            };
+            if (reset_outputs && results.kind === 'Ok') {
+              delete next[scope];
             }
-            return prev;
+            return next;
           });
           break;
         }
