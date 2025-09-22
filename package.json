@@ -32,9 +32,19 @@
         "command": "catala.debug",
         "icon": "$(debug-alt)",
         "title": "Debug a scope"
+      },
+      {
+        "command": "catala.pouet",
+        "title": "Pouet"
       }
     ],
     "menus": {
+      "testing/item/context": [
+        {
+          "command": "catala.pouet",
+          "group": "catala"
+        }
+      ],
       "editor/title": [
         {
           "command": "catala.run",

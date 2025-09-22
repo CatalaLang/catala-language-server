@@ -122,6 +122,36 @@ async function debugScope(): Promise<void> {
 vscode.commands.registerCommand('catala.debug', debugScope);
 
 export function activate(context: vscode.ExtensionContext): void {
+
+  const ctrl = vscode.tests.createTestController('testController', 'Bla bla');
+  context.subscriptions.push(ctrl);
+
+
+
+  ctrl.items.add(ctrl.createTestItem
+    ("Mon test", "Mon test label",
+      vscode.Uri.file("file:///home/vincent/poc-cnaf/tests/fonctionnels/cas_1.catala_fr")));
+
+  const runHandler = (request: vscode.TestRunRequest, cancellation: vscode.CancellationToken) => {
+    vscode.window.showErrorMessage("RUN HANDLER !!")
+    // if (request.include === undefined) {
+    // 	watchingTests.set('ALL', request.profile);
+    // 	cancellation.onCancellationRequested(() => watchingTests.delete('ALL'));
+    // } else {
+    // 	request.include.forEach(item => watchingTests.set(item, request.profile));
+    // 	cancellation.onCancellationRequested(() => request.include!.forEach(item => watchingTests.delete(item)));
+    // }
+  };
+
+  ctrl.createRunProfile("Run tests - bla", vscode.TestRunProfileKind.Run, runHandler, true, undefined, true);
+
+  vscode.commands.registerCommand('catala.pouet', async (args) => {
+
+    ctrl.createTestItem("Mon test", "Mon test label", vscode.Uri.file("file:///home/vincent/poc-cnaf/tests/fonctionnels/cas_1.catala_fr"));
+
+    console.log("Pouet.");
+  });
+
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const local_path = path.join(
@@ -210,8 +240,8 @@ export function activate(context: vscode.ExtensionContext): void {
   if (is_binary_path_configured && !configured_binary_exists) {
     vscode.window.showErrorMessage(
       "Configured LSP path (catala.lspServerPath): '" +
-        lsp_server_config_path +
-        "' not found. Using default values..."
+      lsp_server_config_path +
+      "' not found. Using default values..."
     );
   }
 
