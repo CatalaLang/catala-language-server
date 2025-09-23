@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import cmd_exists from 'command-exists';
 import * as net from 'net';
 import { spawn } from 'child_process';
+import { basename } from 'path';
 
 let client: LanguageClient;
 
@@ -51,11 +52,13 @@ async function selectScope(): Promise<IRunArgs | undefined> {
     return undefined;
   }
 
-  const files_scopes_map: { path: string; scopes: string[] }[] =
-    await client.sendRequest(
-      'catala.getRunnableScopes',
-      vscode.workspace.getWorkspaceFolder
-    );
+  const files_scopes_map: {
+    path: string;
+    scopes: { name: string; range: vscode.Range }[];
+  }[] = await client.sendRequest(
+    'catala.getRunnableScopes',
+    vscode.workspace.getWorkspaceFolder
+  );
   const possible_files: vscode.QuickPickItem[] = [
     {
       label: 'Catala source files',
@@ -121,19 +124,46 @@ async function debugScope(): Promise<void> {
 }
 vscode.commands.registerCommand('catala.debug', debugScope);
 
-export function activate(context: vscode.ExtensionContext): void {
-
+async function initTests(
+  context: vscode.ExtensionContext,
+  client: LanguageClient
+): Promise<void> {
   const ctrl = vscode.tests.createTestController('testController', 'Bla bla');
   context.subscriptions.push(ctrl);
 
+  const test_scopes_map: {
+    path: string;
+    scopes: { name: string; range: vscode.Range }[];
+  }[] = await client.sendRequest('catala.getTestScopes');
 
+  vscode.window.showInformationMessage(
+    `Found ${test_scopes_map.length} test files.`
+  );
 
-  ctrl.items.add(ctrl.createTestItem
-    ("Mon test", "Mon test label",
-      vscode.Uri.file("file:///home/vincent/poc-cnaf/tests/fonctionnels/cas_1.catala_fr")));
+  test_scopes_map.forEach(({ path, scopes }) => {
+    const uri = vscode.Uri.file(path);
+    const test_item = ctrl.createTestItem(
+      uri.toString(),
+      basename(uri.path),
+      uri
+    );
+    scopes.forEach((scope) => {
+      const item = ctrl.createTestItem(
+        `${uri.toString()}:${scope.name}`,
+        scope.name,
+        uri
+      );
+      item.range = scope.range;
+      test_item.children.add(item);
+    });
+    ctrl.items.add(test_item);
+  });
 
-  const runHandler = (request: vscode.TestRunRequest, cancellation: vscode.CancellationToken) => {
-    vscode.window.showErrorMessage("RUN HANDLER !!")
+  const runHandler = (
+    _request: vscode.TestRunRequest,
+    _cancellation: vscode.CancellationToken
+  ): void => {
+    vscode.window.showErrorMessage('RUN HANDLER !!');
     // if (request.include === undefined) {
     // 	watchingTests.set('ALL', request.profile);
     // 	cancellation.onCancellationRequested(() => watchingTests.delete('ALL'));
@@ -143,15 +173,19 @@ export function activate(context: vscode.ExtensionContext): void {
     // }
   };
 
-  ctrl.createRunProfile("Run tests - bla", vscode.TestRunProfileKind.Run, runHandler, true, undefined, true);
+  ctrl.createRunProfile(
+    'Run tests',
+    vscode.TestRunProfileKind.Run,
+    runHandler,
+    true,
+    undefined,
+    false
+  );
+}
 
-  vscode.commands.registerCommand('catala.pouet', async (args) => {
-
-    ctrl.createTestItem("Mon test", "Mon test label", vscode.Uri.file("file:///home/vincent/poc-cnaf/tests/fonctionnels/cas_1.catala_fr"));
-
-    console.log("Pouet.");
-  });
-
+export async function activate(
+  context: vscode.ExtensionContext
+): Promise<void> {
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const local_path = path.join(
@@ -240,8 +274,8 @@ export function activate(context: vscode.ExtensionContext): void {
   if (is_binary_path_configured && !configured_binary_exists) {
     vscode.window.showErrorMessage(
       "Configured LSP path (catala.lspServerPath): '" +
-      lsp_server_config_path +
-      "' not found. Using default values..."
+        lsp_server_config_path +
+        "' not found. Using default values..."
     );
   }
 
@@ -291,7 +325,8 @@ export function activate(context: vscode.ExtensionContext): void {
       serverOptions,
       clientOptions
     );
-    client.start();
+    await client.start();
+    await initTests(context, client);
   }
 
   // Always register the custom editor provider
