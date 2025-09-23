@@ -12,7 +12,7 @@ import { logger } from './logger';
 import * as fs from 'fs';
 import cmd_exists from 'command-exists';
 import * as net from 'net';
-import type { ExecException} from 'child_process';
+import type { ExecException } from 'child_process';
 import { execFileSync, spawn } from 'child_process';
 import { basename } from 'path';
 import { log } from 'console';
@@ -70,33 +70,24 @@ type ClerkTestResult = Array<{
   };
 }>;
 
-// TODO: handle errors
 function clerkRunTest(cwd: string, uri: string[]): ClerkTestResult {
-  log(
-    `Running clerk test on files: ${[cwd, clerkPath, 'test', '--quiet', '--report-format', 'json'].concat(uri).join(' ')}`
-  );
-  let output;
-
   try {
-    output = execFileSync(
+    const output = execFileSync(
       clerkPath,
-      ['test', '--quiet', '--report-format', 'json'].concat(uri),
+      ['test', '--report-format', 'json', '--quiet'].concat(uri),
       { ...(cwd && { cwd }) }
     );
+    return JSON.parse(output.toString()) as ClerkTestResult;
   } catch (e) {
-    if (e.stdout) {
-      output = e.stdout;
-    } else {
-      vscode.window.showErrorMessage(
-        `Error running clerk test: ${(e as ExecException).message}`
-      );
-      return [];
+    console.log(e);
+    if (e.status && e.status === 1 && e.stdout) {
+      return JSON.parse(e.stdout) as ClerkTestResult;
     }
+    vscode.window.showErrorMessage(
+      `Error running clerk test: ${(e as ExecException).message}`
+    );
+    throw e
   }
-
-  log(`Output from clerk test command: ${output.toString()}`);
-
-  return JSON.parse(output.toString()) as ClerkTestResult;
 }
 
 async function selectScope(): Promise<IRunArgs | undefined> {
@@ -193,16 +184,11 @@ async function initTests(
   }[] = await client.sendRequest('catala.getTestScopes');
   const cwd = getCwd(test_scopes_map?.[0]?.path);
 
-  vscode.window.showInformationMessage(
-    `Found ${test_scopes_map.length} test files.`
-  );
-
   test_scopes_map.forEach(({ path, scopes }) => {
     const uri = vscode.Uri.file(path);
     const test_item = ctrl.createTestItem(uri.path, basename(uri.path), uri);
 
     scopes.forEach((scope) => {
-      log(`Adding test scope ${uri.path}:${scope.name}`);
       const item: vscode.TestItem = ctrl.createTestItem(
         `${uri.path}:${scope.name}`,
         scope.name,
@@ -219,70 +205,70 @@ async function initTests(
     _cancellation: vscode.CancellationToken
   ): Promise<void> => {
     const run = ctrl.createTestRun(request);
-    vscode.window.showInformationMessage(
-      `Running tests: ${request.include?.toString()}`
-    );
     const testFiles =
       request.include
         ?.map(({ uri }) => uri?.path)
         ?.filter((p) => p !== undefined) ?? [];
 
-    try {
-      vscode.window.showInformationMessage(
-        `Running tests in files: ${testFiles.join(', ')}`
-      );
-      const test_results = clerkRunTest(cwd!, testFiles);
-      vscode.window.showInformationMessage(
-        `Received test results for ${test_results.length} files.`
-      );
-
-      test_results.forEach(({ file, tests }) => {
-        tests.scopes.forEach((scope_test_result) => {
-          log(
-            `Tested scope ${scope_test_result.scope_name} in file ${file}: ${
-              scope_test_result.success ? 'success' : 'failure'
-            }`
-          );
-          // find the corresponding test item
-          const test_id = `${file}:${scope_test_result.scope_name}`;
-          log(`Looking for test item with id ${test_id}`);
-          const test_item = ctrl.items.get(file)?.children.get(test_id);
-
-          log(`Found test item: ${test_item?.id}`);
-
-          if (test_item) {
-            run.started(test_item);
-            if (scope_test_result.success) {
-              run.passed(test_item, scope_test_result.time);
-            } else {
-              const messages = scope_test_result.errors.map((error) => {
-                const msg = new vscode.TestMessage(error.message);
-                msg.location = new vscode.Location(
-                  vscode.Uri.file(error.position.fname),
-                  new vscode.Range(
-                    new vscode.Position(
-                      error.position.start_lnum - 1,
-                      error.position.start_cnum - 1
-                    ),
-                    new vscode.Position(
-                      error.position.end_lnum - 1,
-                      error.position.end_cnum - 1
-                    )
-                  )
-                );
-                return msg;
-              });
-              run.failed(test_item, messages, scope_test_result.time);
-            }
-          }
-        });
+    let runnedTests: readonly vscode.TestItem[];
+    if (request.include == undefined || request.include.length == 0) {
+      let all_tests: vscode.TestItem[] = [];
+      ctrl.items.forEach((item) => {
+        all_tests.push(item);
+        item.children.forEach((subitem) => all_tests.push(subitem))
       });
+      runnedTests = new Array(...all_tests);
+    } else {
+      runnedTests = request.include;
+    }
+    // Mark all tests as started before calling 'clerk test'
+    runnedTests.forEach((test) => run.started(test))
+
+    let test_results;
+    try {
+      test_results = clerkRunTest(cwd!, testFiles);
     } catch (e) {
+      runnedTests.forEach((test) => run.errored(test, e))
       console.error('Error while processing test results:', e);
       vscode.window.showErrorMessage(
         'An error occurred while processing test results. Check the console for details.'
       );
+      run.end();
+      return;
     }
+
+    test_results.forEach(({ file, tests }) => {
+      tests.scopes.forEach((scope_test_result) => {
+        // find the corresponding test item
+        const test_id = `${file}:${scope_test_result.scope_name}`;
+        const test_item = ctrl.items.get(file)?.children.get(test_id);
+        if (test_item) {
+          //run.started(test_item);
+          if (scope_test_result.success) {
+            run.passed(test_item, scope_test_result.time);
+          } else {
+            const messages = scope_test_result.errors.map((error) => {
+              const msg = new vscode.TestMessage(error.message);
+              msg.location = new vscode.Location(
+                vscode.Uri.file(error.position.fname),
+                new vscode.Range(
+                  new vscode.Position(
+                    error.position.start_lnum - 1,
+                    error.position.start_cnum - 1
+                  ),
+                  new vscode.Position(
+                    error.position.end_lnum - 1,
+                    error.position.end_cnum - 1
+                  )
+                )
+              );
+              return msg;
+            });
+            run.failed(test_item, messages, scope_test_result.time);
+          }
+        }
+      });
+    });
     run.end();
   };
 
@@ -387,8 +373,8 @@ export async function activate(
   if (is_binary_path_configured && !configured_binary_exists) {
     vscode.window.showErrorMessage(
       "Configured LSP path (catala.lspServerPath): '" +
-        lsp_server_config_path +
-        "' not found. Using default values..."
+      lsp_server_config_path +
+      "' not found. Using default values..."
     );
   }
 
