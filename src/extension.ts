@@ -12,82 +12,15 @@ import { logger } from './logger';
 import * as fs from 'fs';
 import cmd_exists from 'command-exists';
 import * as net from 'net';
-import type { ExecException } from 'child_process';
-import { execFileSync, spawn } from 'child_process';
-import { basename } from 'path';
-import { log } from 'console';
+import { spawn } from 'child_process';
+import { clerkPath, getCwd } from './util';
+import { initTests } from './testAndCoverage';
 
 let client: LanguageClient;
-
-function getCwd(bufferPath: string): string | undefined {
-  return vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(bufferPath))?.uri
-    ?.fsPath;
-}
-
-function pathFromConfig(confId: string, defaultCmd: string): string {
-  const confPath = vscode.workspace
-    .getConfiguration('catala')
-    .get<string>(confId);
-  if (confPath === undefined || confPath === null || confPath.trim() === '')
-    return defaultCmd;
-  if (!fs.existsSync(confPath)) {
-    vscode.window.showWarningMessage(
-      `Could not find executable for ${confId} at ${confPath}, falling back to default`
-    );
-    return defaultCmd;
-  }
-  return confPath;
-}
-
-const clerkPath: string = pathFromConfig('clerkPath', 'clerk');
 
 interface IRunArgs {
   uri: string;
   scope: string;
-}
-
-type ClerkTestResult = Array<{
-  file: string;
-  tests: {
-    scopes: [
-      {
-        scope_name: string;
-        success: boolean;
-        time: number;
-        errors: Array<{
-          message: string;
-          position: {
-            fname: string;
-            start_lnum: number;
-            start_cnum: number;
-            end_lnum: number;
-            end_cnum: number;
-          };
-        }>;
-      },
-    ];
-    'inline-tests': [{ cmd: string; success: boolean }];
-  };
-}>;
-
-function clerkRunTest(cwd: string, uri: string[]): ClerkTestResult {
-  try {
-    const output = execFileSync(
-      clerkPath,
-      ['test', '--report-format', 'json', '--quiet'].concat(uri),
-      { ...(cwd && { cwd }) }
-    );
-    return JSON.parse(output.toString()) as ClerkTestResult;
-  } catch (e) {
-    console.log(e);
-    if (e.status && e.status === 1 && e.stdout) {
-      return JSON.parse(e.stdout) as ClerkTestResult;
-    }
-    vscode.window.showErrorMessage(
-      `Error running clerk test: ${(e as ExecException).message}`
-    );
-    throw e
-  }
 }
 
 async function selectScope(): Promise<IRunArgs | undefined> {
@@ -170,117 +103,6 @@ async function debugScope(): Promise<void> {
   }
 }
 vscode.commands.registerCommand('catala.debug', debugScope);
-
-async function initTests(
-  context: vscode.ExtensionContext,
-  client: LanguageClient
-): Promise<void> {
-  const ctrl = vscode.tests.createTestController('testController', 'Bla bla');
-  context.subscriptions.push(ctrl);
-
-  const test_scopes_map: {
-    path: string;
-    scopes: { name: string; range: vscode.Range }[];
-  }[] = await client.sendRequest('catala.getTestScopes');
-  const cwd = getCwd(test_scopes_map?.[0]?.path);
-
-  test_scopes_map.forEach(({ path, scopes }) => {
-    const uri = vscode.Uri.file(path);
-    const test_item = ctrl.createTestItem(uri.path, basename(uri.path), uri);
-
-    scopes.forEach((scope) => {
-      const item: vscode.TestItem = ctrl.createTestItem(
-        `${uri.path}:${scope.name}`,
-        scope.name,
-        uri
-      );
-      item.range = scope.range;
-      test_item.children.add(item);
-    });
-    ctrl.items.add(test_item);
-  });
-
-  const runHandler = async (
-    request: vscode.TestRunRequest,
-    _cancellation: vscode.CancellationToken
-  ): Promise<void> => {
-    const run = ctrl.createTestRun(request);
-    const testFiles =
-      request.include
-        ?.map(({ uri }) => uri?.path)
-        ?.filter((p) => p !== undefined) ?? [];
-
-    let runnedTests: readonly vscode.TestItem[];
-    if (request.include == undefined || request.include.length == 0) {
-      let all_tests: vscode.TestItem[] = [];
-      ctrl.items.forEach((item) => {
-        all_tests.push(item);
-        item.children.forEach((subitem) => all_tests.push(subitem))
-      });
-      runnedTests = new Array(...all_tests);
-    } else {
-      runnedTests = request.include;
-    }
-    // Mark all tests as started before calling 'clerk test'
-    runnedTests.forEach((test) => run.started(test))
-
-    let test_results;
-    try {
-      test_results = clerkRunTest(cwd!, testFiles);
-    } catch (e) {
-      runnedTests.forEach((test) => run.errored(test, e))
-      console.error('Error while processing test results:', e);
-      vscode.window.showErrorMessage(
-        'An error occurred while processing test results. Check the console for details.'
-      );
-      run.end();
-      return;
-    }
-
-    test_results.forEach(({ file, tests }) => {
-      tests.scopes.forEach((scope_test_result) => {
-        // find the corresponding test item
-        const test_id = `${file}:${scope_test_result.scope_name}`;
-        const test_item = ctrl.items.get(file)?.children.get(test_id);
-        if (test_item) {
-          //run.started(test_item);
-          if (scope_test_result.success) {
-            run.passed(test_item, scope_test_result.time);
-          } else {
-            const messages = scope_test_result.errors.map((error) => {
-              const msg = new vscode.TestMessage(error.message);
-              msg.location = new vscode.Location(
-                vscode.Uri.file(error.position.fname),
-                new vscode.Range(
-                  new vscode.Position(
-                    error.position.start_lnum - 1,
-                    error.position.start_cnum - 1
-                  ),
-                  new vscode.Position(
-                    error.position.end_lnum - 1,
-                    error.position.end_cnum - 1
-                  )
-                )
-              );
-              return msg;
-            });
-            run.failed(test_item, messages, scope_test_result.time);
-          }
-        }
-      });
-    });
-    run.end();
-  };
-
-  ctrl.createRunProfile(
-    'Run tests',
-    vscode.TestRunProfileKind.Run,
-    runHandler,
-    true,
-    undefined,
-    false
-  );
-}
 
 export async function activate(
   context: vscode.ExtensionContext
@@ -373,8 +195,8 @@ export async function activate(
   if (is_binary_path_configured && !configured_binary_exists) {
     vscode.window.showErrorMessage(
       "Configured LSP path (catala.lspServerPath): '" +
-      lsp_server_config_path +
-      "' not found. Using default values..."
+        lsp_server_config_path +
+        "' not found. Using default values..."
     );
   }
 
