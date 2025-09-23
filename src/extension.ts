@@ -12,10 +12,12 @@ import { logger } from './logger';
 import * as fs from 'fs';
 import cmd_exists from 'command-exists';
 import * as net from 'net';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { basename } from 'path';
+import { log } from 'console';
 
 let client: LanguageClient;
+
 
 function getCwd(bufferPath: string): string | undefined {
   return vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(bufferPath))?.uri
@@ -44,6 +46,16 @@ interface IRunArgs {
   scope: string;
 }
 
+async function clerkRunTest(uri: string) {
+  const cwd = getCwd(uri);
+  let exit_code = 0
+  const ret = await spawnSync(
+    clerkPath,
+    ['test', uri],
+    { ...(cwd && { cwd }) }
+  );
+  return ret.status == 0
+}
 async function selectScope(): Promise<IRunArgs | undefined> {
   if (!client) {
     vscode.window.showErrorMessage(
@@ -147,8 +159,9 @@ async function initTests(
       basename(uri.path),
       uri
     );
+
     scopes.forEach((scope) => {
-      const item = ctrl.createTestItem(
+      const item: vscode.TestItem = ctrl.createTestItem(
         `${uri.toString()}:${scope.name}`,
         scope.name,
         uri
@@ -159,10 +172,10 @@ async function initTests(
     ctrl.items.add(test_item);
   });
 
-  const runHandler = (
+  const runHandler = async (
     request: vscode.TestRunRequest,
     cancellation: vscode.CancellationToken
-  ): void => {
+  ): Promise<void> => {
     const run = ctrl.createTestRun(request);
     vscode.window.showInformationMessage(
       `Running tests: ${request.include?.toString()}`
@@ -174,14 +187,24 @@ async function initTests(
       ctrl.items.forEach((test) => queue.push(test));
     }
 
+    const results: Record<string, boolean> = {};
+
     while (queue.length > 0 && !cancellation.isCancellationRequested) {
-      const test = queue.pop()!;
+      const test: vscode.TestItem = queue.pop()!;
 
       if (test.children.size > 0) {
         test.children.forEach((child) => queue.push(child));
-      } else {
+      } else if (test.uri) {
         run.started(test);
-        run.passed(test, 100);
+        let test_success = results[test.uri.path];
+        if (test_success == undefined) {
+          test_success = await clerkRunTest(test.uri.path);
+          results[test.uri.path] = test_success;
+        }
+        if (test_success)
+          run.passed(test, 666);
+        else
+          run.failed(test, [new vscode.TestMessage("nul/20")])
       }
     }
     run.end();
@@ -288,8 +311,8 @@ export async function activate(
   if (is_binary_path_configured && !configured_binary_exists) {
     vscode.window.showErrorMessage(
       "Configured LSP path (catala.lspServerPath): '" +
-        lsp_server_config_path +
-        "' not found. Using default values..."
+      lsp_server_config_path +
+      "' not found. Using default values..."
     );
   }
 
