@@ -332,7 +332,7 @@ let lookup_clerk_toml (path : string) =
     Log.err (fun m -> m "failed to lookup config file");
     None
 
-let list_scopes file : Shared_ast.ScopeName.t list =
+let list_scopes ~tests_only file : Shared_ast.ScopeName.t list =
   let open Shared_ast in
   let open Surface.Ast in
   let prg = Surface.Parser_driver.parse_top_level_file (Global.FileName file) in
@@ -354,7 +354,14 @@ let list_scopes file : Shared_ast.ScopeName.t list =
                   | _ -> true)
                 (List.map Mark.remove sdecl.scope_decl_context)
             in
-            if has_no_input then
+            let is_test_scope =
+              let pos = Mark.get sdecl.scope_decl_name in
+              Pos.get_attr pos (function
+                | Src (("test" :: _, _), Unit, _) -> Some ()
+                | _ -> None)
+              <> None
+            in
+            if has_no_input && ((not tests_only) || is_test_scope) then
               let scopename = Mark.remove sdecl.scope_decl_name in
               ScopeName.fresh [] (scopename, Pos.void) :: acc
             else acc

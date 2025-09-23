@@ -574,7 +574,7 @@ class catala_lsp_server =
         Lwt.return ((), sstate)
       | _ -> Lwt.return_unit
 
-    method private on_req_get_all_scopes () : Yojson.Safe.t Lwt.t =
+    method private on_req_get_all_scopes ~tests_only () : Yojson.Safe.t Lwt.t =
       SState.use_now server_state
       @@ fun { projects; _ } ->
       let scopes =
@@ -584,7 +584,7 @@ class catala_lsp_server =
               (fun doc_id _f acc ->
                 if Projects.is_an_included_file doc_id project then acc
                 else
-                  match Utils.list_scopes (doc_id :> string) with
+                  match Utils.list_scopes ~tests_only (doc_id :> string) with
                   | [] -> acc
                   | scopes -> Doc_id.Map.add doc_id scopes acc)
               project_files acc)
@@ -628,7 +628,9 @@ class catala_lsp_server =
         | TextDocumentFormatting params ->
           self#on_req_document_formatting ~notify_back params
         | UnknownRequest { meth = "catala.getRunnableScopes"; params = _ } ->
-          self#on_req_get_all_scopes ()
+          self#on_req_get_all_scopes ~tests_only:false ()
+        | UnknownRequest { meth = "catala.getTestScopes"; params = _ } ->
+          self#on_req_get_all_scopes ~tests_only:true ()
         | UnknownRequest { meth; _ } ->
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
