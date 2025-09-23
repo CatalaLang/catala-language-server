@@ -160,17 +160,31 @@ async function initTests(
   });
 
   const runHandler = (
-    _request: vscode.TestRunRequest,
-    _cancellation: vscode.CancellationToken
+    request: vscode.TestRunRequest,
+    cancellation: vscode.CancellationToken
   ): void => {
-    vscode.window.showErrorMessage('RUN HANDLER !!');
-    // if (request.include === undefined) {
-    // 	watchingTests.set('ALL', request.profile);
-    // 	cancellation.onCancellationRequested(() => watchingTests.delete('ALL'));
-    // } else {
-    // 	request.include.forEach(item => watchingTests.set(item, request.profile));
-    // 	cancellation.onCancellationRequested(() => request.include!.forEach(item => watchingTests.delete(item)));
-    // }
+    const run = ctrl.createTestRun(request);
+    vscode.window.showInformationMessage(
+      `Running tests: ${request.include?.toString()}`
+    );
+    const queue: vscode.TestItem[] = [];
+    if (request.include) {
+      request.include.forEach((test) => queue.push(test));
+    } else {
+      ctrl.items.forEach((test) => queue.push(test));
+    }
+
+    while (queue.length > 0 && !cancellation.isCancellationRequested) {
+      const test = queue.pop()!;
+
+      if (test.children.size > 0) {
+        test.children.forEach((child) => queue.push(child));
+      } else {
+        run.started(test);
+        run.passed(test, 100);
+      }
+    }
+    run.end();
   };
 
   ctrl.createRunProfile(
