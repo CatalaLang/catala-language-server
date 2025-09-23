@@ -23,6 +23,8 @@ module SState = Server_state
 let ( let*? ) v f =
   Lwt.bind v @@ function None -> Lwt.return_none | Some x -> f x
 
+let init_waiter, init_wakener = Lwt.wait ()
+
 exception ServerError of string
 
 let lookup_project ~on_error doc_id projects =
@@ -571,10 +573,12 @@ class catala_lsp_server =
           else Lwt.return sstate
         in
         let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
+        let () = Lwt.wakeup init_wakener () in
         Lwt.return ((), sstate)
       | _ -> Lwt.return_unit
 
     method private on_req_get_all_scopes ~tests_only () : Yojson.Safe.t Lwt.t =
+      let* () = init_waiter in
       SState.use_now server_state
       @@ fun { projects; _ } ->
       let scopes =
