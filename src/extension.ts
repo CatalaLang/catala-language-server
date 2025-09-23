@@ -75,7 +75,7 @@ async function selectScope(): Promise<IRunArgs | undefined> {
     const file_scopes = files_scopes_map.find((f) => f.path == file.label);
     if (file_scopes) {
       possible_scopes = file_scopes.scopes.map((scope) => {
-        return { label: scope };
+        return { label: scope.name };
       });
       const scopes_to_choose: vscode.QuickPickItem[] = [
         {

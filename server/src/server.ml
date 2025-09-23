@@ -578,6 +578,7 @@ class catala_lsp_server =
       | _ -> Lwt.return_unit
 
     method private on_req_get_all_scopes ~tests_only () : Yojson.Safe.t Lwt.t =
+      let open Shared_ast in
       let* () = init_waiter in
       SState.use_now server_state
       @@ fun { projects; _ } ->
@@ -605,7 +606,14 @@ class catala_lsp_server =
                        `List
                          (List.map
                             (fun s ->
-                              `String (Shared_ast.ScopeName.to_string s))
+                              let pos = Mark.get (ScopeName.get_info s) in
+                              `Assoc
+                                [
+                                  ( "name",
+                                    `String (Shared_ast.ScopeName.to_string s) );
+                                  ( "range",
+                                    Range.yojson_of_t (Utils.range_of_pos pos) );
+                                ])
                             scopes) );
                    ]))
       in
