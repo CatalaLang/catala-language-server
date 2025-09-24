@@ -39,22 +39,16 @@
       }
     ],
     "menus": {
-      "testing/item/context": [
-        {
-          "command": "catala.pouet",
-          "group": "catala"
-        }
-      ],
       "editor/title": [
         {
           "command": "catala.run",
           "when": "editorLangId == catala_fr || editorLangId == catala_en",
-          "group": "navigation@0"
+          "group": "navigation@10"
         },
         {
           "command": "catala.debug",
           "when": "editorLangId == catala_fr || editorLangId == catala_en",
-          "group": "navigation@1"
+          "group": "navigation@11"
         }
       ]
     },
