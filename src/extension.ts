@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import cmd_exists from 'command-exists';
 import * as net from 'net';
 import { spawn } from 'child_process';
-import { clerkPath, getCwd } from './util';
+import { clerkPath, getCwd } from './util_client';
 import { initTests } from './testAndCoverage';
 
 let client: LanguageClient;

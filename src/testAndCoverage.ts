@@ -1,10 +1,10 @@
+import type { LanguageClient } from 'vscode-languageclient/node';
 import * as vscode from 'vscode';
 import type { ExecException } from 'child_process';
 import { execFileSync } from 'child_process';
 import { basename } from 'path';
-import type { LanguageClient } from 'vscode-languageclient/node';
-import type { ClerkPosition } from './util';
-import { clerkPath, getCwd, positionToLocation } from './util';
+import type { ClerkPosition } from './util_client';
+import { clerkPath, getCwd, positionToLocation } from './util_client';
 
 type ClerkTestResult = Array<{
   file: string;
