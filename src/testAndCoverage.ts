@@ -5,9 +5,8 @@ import { execFileSync } from 'child_process';
 import { basename } from 'path';
 import type { ClerkPosition } from './util_client';
 import { clerkPath, getCwd, positionToLocation } from './util_client';
-import { globSync } from 'fs';
 
-type ClerkTestResult = Array<{
+type ClerkTestResult = {
   file: string;
   tests: {
     scopes: Array<{
@@ -21,7 +20,25 @@ type ClerkTestResult = Array<{
     }>;
     'inline-tests': Array<{ cmd: string; success: boolean }>;
   };
+};
+
+type ClerkCoverageResult = Array<{
+  filename: string;
+  coverage_map: Array<{
+    location: Omit<ClerkPosition, 'fname'>;
+    reached_by: string[];
+  }>;
 }>;
+
+type ClerkTestAndCoverageResult = {
+  'test-results': ClerkTestResult[];
+  coverage: ClerkCoverageResult;
+};
+
+type ClerkReachableStatement = Record<string, ClerkPosition[]>;
+//   file: string;
+//   positions: ClerkPosition[];
+// };
 
 type TestScope = {
   name: string;
@@ -33,11 +50,28 @@ type TestScopeMap = Array<{
   scopes: TestScope[];
 }>;
 
+function clerkGetAllRachableStatements(cwd: string): ClerkReachableStatement {
+  return {};
+  // try {
+  //   const output = execFileSync(
+  //     clerkPath,
+  //     ['reachable', '--report-format', 'json', '--quiet'],
+  //     { ...(cwd && { cwd }) }
+  //   );
+  //   return JSON.parse(output.toString()) as ClerkReachableStatement[];
+  // } catch (e) {
+  //   vscode.window.showErrorMessage(
+  //     `Error running clerk test: ${(e as ExecException).message}`
+  //   );
+  //   console.error(e);
+  //   throw e;
+  // }
+}
 function clerkRunTest(
   cwd: string,
   uri: string[],
   with_coverage?: boolean
-): ClerkTestResult {
+): ClerkTestAndCoverageResult {
   try {
     const output = execFileSync(
       clerkPath,
@@ -50,10 +84,10 @@ function clerkRunTest(
       ].concat(uri),
       { ...(cwd && { cwd }) }
     );
-    return JSON.parse(output.toString()) as ClerkTestResult;
+    return JSON.parse(output.toString()) as ClerkTestAndCoverageResult;
   } catch (e) {
     if (e.status && e.status === 1 && e.stdout) {
-      return JSON.parse(e.stdout) as ClerkTestResult;
+      return JSON.parse(e.stdout) as ClerkTestAndCoverageResult;
     }
     vscode.window.showErrorMessage(
       `Error running clerk test: ${(e as ExecException).message}`
@@ -134,21 +168,53 @@ class FileCoverageWithDetails extends vscode.FileCoverage {
   }
 }
 
+// class StatefulTestController {
+//   private coverages: Record<string, FileCoverageWithDetails>;
+//   private ctrl: vscode.TestController;
+//
+//   constructor(ctrl: vscode.TestController) {
+//     this.ctrl = ctrl;
+//   }
+//
+//   addCoverage(coverage: FileCoverageWithDetails) {
+//     this.coverages[coverage.uri.path] = coverage
+//     this.ctrl.
+//   }
+// }
+
 export async function initTests(
   context: vscode.ExtensionContext,
   client: LanguageClient
 ): Promise<void> {
-  const ctrl = vscode.tests.createTestController('testController', 'Bla bla');
+  const ctrl = vscode.tests.createTestController(
+    'testController',
+    'Test runner'
+  );
   context.subscriptions.push(ctrl);
 
-  const test_scopes_map: TestScopeMap = await client.sendRequest(
-    'catala.getTestScopes'
-  );
-  const cwd = getCwd(test_scopes_map?.[0]?.path);
+  let cwd: string | undefined; //= getCwd(test_scopes_map?.[0]?.path);
 
-  test_scopes_map.forEach(({ path, scopes }) =>
-    populateTestItems(ctrl, path, scopes)
-  );
+  const updateTestScopes = async () => {
+    const test_scopes_map: TestScopeMap = await client.sendRequest(
+      'catala.getTestScopes'
+    );
+    ctrl.items.replace([]);
+
+    test_scopes_map.forEach(({ path, scopes }) =>
+      populateTestItems(ctrl, path, scopes)
+    );
+
+    cwd = getCwd(test_scopes_map?.[0]?.path);
+  };
+
+  updateTestScopes();
+
+  ctrl.refreshHandler = (_token) => {
+    vscode.window.showInformationMessage('Refreshing tests...');
+    updateTestScopes();
+  };
+
+  let first = true;
 
   const testRunHandler = async (
     request: vscode.TestRunRequest,
@@ -167,8 +233,108 @@ export async function initTests(
     testsToRun.forEach((test) => run.started(test));
 
     let test_results;
+    let coverage_results;
+    // let all_reachable_statements: ClerkReachableStatement = {};
+
     try {
-      test_results = clerkRunTest(cwd!, testFiles, with_coverage);
+      // if (with_coverage) {
+      //   // TODO: correctly manage all reachable statements
+      //   all_reachable_statements = clerkGetAllRachableStatements(cwd!);
+      // }
+      const results = clerkRunTest(cwd!, testFiles, with_coverage);
+      test_results = results['test-results'];
+      coverage_results = results.coverage;
+
+      test_results.forEach(({ file, tests }) => {
+        console.log(`Processing results for file: ${file}`);
+        tests.scopes.forEach((scope_test_result) => {
+          console.log(`  Scope: ${scope_test_result.scope_name}`);
+          // find the corresponding test item
+          const test_id = `${file}:${scope_test_result.scope_name}`;
+          const test_item = ctrl.items.get(file)?.children.get(test_id);
+
+          if (test_item) {
+            if (scope_test_result.success) {
+              run.passed(test_item, scope_test_result.time);
+            } else {
+              const messages = scope_test_result.errors.map((error) => {
+                const msg = new vscode.TestMessage(error.message);
+                msg.location = positionToLocation(error.position);
+                return msg;
+              });
+              run.failed(test_item, messages, scope_test_result.time);
+            }
+          }
+        });
+      });
+
+      if (with_coverage) {
+        coverage_results.forEach(({ filename, coverage_map }) => {
+          const { statements, test_files } = coverage_map.reduce(
+            (
+              acc: {
+                statements: vscode.StatementCoverage[];
+                test_files: string[];
+              },
+              { location, reached_by }
+            ) => {
+              // delete all_reachable_statements[filename];
+              acc.statements.push(
+                new vscode.StatementCoverage(
+                  test_files.length,
+                  new vscode.Range(
+                    new vscode.Position(
+                      location.start_lnum - 1,
+                      location.start_cnum
+                    ),
+                    new vscode.Position(
+                      location.end_lnum - 1,
+                      location.end_cnum
+                    )
+                  )
+                )
+              );
+
+              // acc.test_files.concat(test_files);
+              return acc;
+            },
+            { statements: [], test_files: [] }
+          ) ?? { statements: [], test_files: [] };
+
+          const fileCoverage = vscode.FileCoverage.fromDetails(
+            vscode.Uri.file(filename),
+            statements
+          );
+
+          // FIXME: should implement [TestRunProfile.loadDetailedCoverageForTest] to be used
+          // FIXME: maybe we need to remove doublons
+          fileCoverage.includesTests = test_files
+            .map((file) => ctrl.items.get(file))
+            .filter((i) => i !== undefined);
+
+          run.addCoverage(fileCoverage);
+        });
+
+        //   Object.entries(all_reachable_statements).forEach(
+        //     ([filename, statements]) => {
+        //       run.addCoverage(
+        //         vscode.FileCoverage.fromDetails(
+        //           vscode.Uri.file(filename),
+        //           statements.map(
+        //             (pos) =>
+        //               new vscode.StatementCoverage(
+        //                 0,
+        //                 new vscode.Range(
+        //                   new vscode.Position(pos.start_lnum - 1, pos.start_cnum),
+        //                   new vscode.Position(pos.end_lnum - 1, pos.end_cnum)
+        //                 )
+        //               )
+        //           )
+        //         )
+        //       );
+        //     }
+        //   );
+      }
     } catch (e) {
       testsToRun.forEach((test) => run.errored(test, e));
       console.error('Error while processing test results:', e);
@@ -179,75 +345,6 @@ export async function initTests(
       return;
     }
 
-    if (with_coverage) {
-      const catala_fr_files = globSync(`${cwd}/**/*.catala_fr`, {
-        exclude: [`${cwd}/node_modules`, `${cwd}/_build`],
-      });
-      // catala_fr_files.forEach((file) => {
-      run.addCoverage(
-        FileCoverageWithDetails.fromDetails(
-          vscode.Uri.file(catala_fr_files[0]),
-          [
-            new vscode.StatementCoverage(
-              10,
-              new vscode.Range(
-                new vscode.Position(10, 0),
-                new vscode.Position(15, 0)
-              )
-            ),
-            new vscode.StatementCoverage(
-              10,
-              new vscode.Range(
-                new vscode.Position(10, 0),
-                new vscode.Position(12, 0)
-              )
-            ),
-            new vscode.StatementCoverage(
-              0,
-              new vscode.Range(
-                new vscode.Position(13, 0),
-                new vscode.Position(15, 0)
-              )
-            ),
-          ]
-        )
-      );
-      run.addCoverage(
-        FileCoverageWithDetails.fromDetails(
-          vscode.Uri.file(catala_fr_files[1]),
-          [
-            new vscode.StatementCoverage(
-              0,
-              new vscode.Range(
-                new vscode.Position(13, 0),
-                new vscode.Position(15, 0)
-              )
-            ),
-          ]
-        )
-      );
-      // });
-    }
-
-    test_results.forEach(({ file, tests }) => {
-      tests.scopes.forEach((scope_test_result) => {
-        // find the corresponding test item
-        const test_id = `${file}:${scope_test_result.scope_name}`;
-        const test_item = ctrl.items.get(file)?.children.get(test_id);
-        if (test_item) {
-          if (scope_test_result.success) {
-            run.passed(test_item, scope_test_result.time);
-          } else {
-            const messages = scope_test_result.errors.map((error) => {
-              const msg = new vscode.TestMessage(error.message);
-              msg.location = positionToLocation(error.position);
-              return msg;
-            });
-            run.failed(test_item, messages, scope_test_result.time);
-          }
-        }
-      });
-    });
     run.end();
   };
 
