@@ -5,6 +5,7 @@ import { execFileSync } from 'child_process';
 import { basename } from 'path';
 import type { ClerkPosition } from './util_client';
 import { clerkPath, getCwd, positionToLocation } from './util_client';
+import { globSync } from 'fs';
 
 type ClerkTestResult = Array<{
   file: string;
@@ -45,7 +46,7 @@ function clerkRunTest(
         '--report-format',
         'json',
         '--quiet',
-        with_coverage ? '--coverage' : '',
+        with_coverage ? '--code-coverage' : '',
       ].concat(uri),
       { ...(cwd && { cwd }) }
     );
@@ -100,6 +101,39 @@ export function getAllTestsToRun(
   return request.include;
 }
 
+class FileCoverageWithDetails extends vscode.FileCoverage {
+  private details: vscode.FileCoverageDetail[];
+
+  private constructor(
+    fileCoverage: vscode.FileCoverage,
+    details: readonly vscode.FileCoverageDetail[]
+  ) {
+    super(
+      fileCoverage.uri,
+      fileCoverage.statementCoverage,
+      fileCoverage.branchCoverage,
+      fileCoverage.declarationCoverage,
+      fileCoverage.includesTests
+    );
+    this.details = [...details];
+  }
+
+  public static fromDetails(
+    uri: vscode.Uri,
+    details: readonly vscode.FileCoverageDetail[]
+  ): FileCoverageWithDetails {
+    const fileCoverage = vscode.FileCoverage.fromDetails(uri, details);
+    return new FileCoverageWithDetails(fileCoverage, details);
+  }
+
+  public async getDetails(): Promise<vscode.FileCoverageDetail[]> {
+    vscode.window.showInformationMessage(
+      `Getting details: ${this.details.length}`
+    );
+    return this.details;
+  }
+}
+
 export async function initTests(
   context: vscode.ExtensionContext,
   client: LanguageClient
@@ -145,6 +179,56 @@ export async function initTests(
       return;
     }
 
+    if (with_coverage) {
+      const catala_fr_files = globSync(`${cwd}/**/*.catala_fr`, {
+        exclude: [`${cwd}/node_modules`, `${cwd}/_build`],
+      });
+      // catala_fr_files.forEach((file) => {
+      run.addCoverage(
+        FileCoverageWithDetails.fromDetails(
+          vscode.Uri.file(catala_fr_files[0]),
+          [
+            new vscode.StatementCoverage(
+              10,
+              new vscode.Range(
+                new vscode.Position(10, 0),
+                new vscode.Position(15, 0)
+              )
+            ),
+            new vscode.StatementCoverage(
+              10,
+              new vscode.Range(
+                new vscode.Position(10, 0),
+                new vscode.Position(12, 0)
+              )
+            ),
+            new vscode.StatementCoverage(
+              0,
+              new vscode.Range(
+                new vscode.Position(13, 0),
+                new vscode.Position(15, 0)
+              )
+            ),
+          ]
+        )
+      );
+      run.addCoverage(
+        FileCoverageWithDetails.fromDetails(
+          vscode.Uri.file(catala_fr_files[1]),
+          [
+            new vscode.StatementCoverage(
+              0,
+              new vscode.Range(
+                new vscode.Position(13, 0),
+                new vscode.Position(15, 0)
+              )
+            ),
+          ]
+        )
+      );
+      // });
+    }
+
     test_results.forEach(({ file, tests }) => {
       tests.scopes.forEach((scope_test_result) => {
         // find the corresponding test item
@@ -167,15 +251,6 @@ export async function initTests(
     run.end();
   };
 
-  const testCoverageHandler = async (
-    _request: vscode.TestRunRequest,
-    _cancellation: vscode.CancellationToken
-  ): Promise<void> => {
-    vscode.window.showInformationMessage(
-      'Test coverage is not implemented yet.'
-    );
-  };
-
   ctrl.createRunProfile(
     'Run tests',
     vscode.TestRunProfileKind.Run,
@@ -185,12 +260,27 @@ export async function initTests(
     false
   );
 
-  ctrl.createRunProfile(
+  const profile = ctrl.createRunProfile(
     'Run tests with coverage',
     vscode.TestRunProfileKind.Coverage,
-    testCoverageHandler,
+    (a, b) => testRunHandler(a, b, true),
     true,
     undefined,
     false
   );
+
+  profile.loadDetailedCoverage = async (
+    _testRun: vscode.TestRun,
+    coverage: vscode.FileCoverage,
+    _token
+  ) => {
+    const details =
+      coverage instanceof FileCoverageWithDetails
+        ? await coverage.getDetails()
+        : [];
+    vscode.window.showInformationMessage(
+      `Load details: ${coverage instanceof FileCoverageWithDetails} ${details.length}`
+    );
+    return details;
+  };
 }
