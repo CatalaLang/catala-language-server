@@ -233,7 +233,7 @@ export async function initTests(
     testsToRun.forEach((test) => run.started(test));
 
     let test_results;
-    let coverage_results;
+    let coverage_results: ClerkCoverageResult;
     // let all_reachable_statements: ClerkReachableStatement = {};
 
     try {
@@ -281,7 +281,7 @@ export async function initTests(
               // delete all_reachable_statements[filename];
               acc.statements.push(
                 new vscode.StatementCoverage(
-                  test_files.length,
+                  reached_by.length,
                   new vscode.Range(
                     new vscode.Position(
                       location.start_lnum - 1,
@@ -295,13 +295,13 @@ export async function initTests(
                 )
               );
 
-              // acc.test_files.concat(test_files);
+              acc.test_files.concat(reached_by);
               return acc;
             },
             { statements: [], test_files: [] }
           ) ?? { statements: [], test_files: [] };
 
-          const fileCoverage = vscode.FileCoverage.fromDetails(
+          const fileCoverage = FileCoverageWithDetails.fromDetails(
             vscode.Uri.file(filename),
             statements
           );
