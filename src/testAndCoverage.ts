@@ -77,10 +77,9 @@ function clerkRunTest(
       clerkPath,
       [
         'test',
-        '--report-format',
-        'json',
-        '--quiet',
-        with_coverage ? '--code-coverage' : '',
+        '--report-format=json',
+        with_coverage ? '--code-coverage=global' : '',
+        '--quiet'
       ].concat(uri),
       { ...(cwd && { cwd }) }
     );
