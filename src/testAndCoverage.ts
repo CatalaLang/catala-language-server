@@ -31,7 +31,7 @@ type ClerkTestResult = {
 
 type ClerkCoverageEntry = {
   location: Omit<ClerkPosition, 'fname'>;
-  reached_by: string[];
+  reached_by: number;
 };
 
 type ClerkCoverageResult = Array<{
@@ -182,10 +182,7 @@ function getStatementCoveragesFromClerkResult(
     coverage_map.reduce(
       (statements: vscode.StatementCoverage[], { location, reached_by }) => {
         statements.push(
-          new vscode.StatementCoverage(
-            reached_by.length,
-            positionToRange(location)
-          )
+          new vscode.StatementCoverage(reached_by, positionToRange(location))
         );
         return statements;
       },
@@ -222,9 +219,8 @@ export async function initTests(
   updateTestScopes();
 
   ctrl.refreshHandler = (_token) => {
-    vscode.window.showInformationMessage('Refreshing tests...');
     updateTestScopes();
-    vscode.window.showInformationMessage('Tests refreshed.');
+    vscode.window.showInformationMessage('Test scopes updated');
   };
 
   const testRunHandler = async (
@@ -297,15 +293,10 @@ export async function initTests(
   profile.loadDetailedCoverage = async (
     _testRun: vscode.TestRun,
     coverage: vscode.FileCoverage,
-    _token
+    _token: vscode.CancellationToken
   ) => {
-    const details =
-      coverage instanceof FileCoverageWithDetails
-        ? await coverage.getDetails()
-        : [];
-    vscode.window.showInformationMessage(
-      `Load details: ${coverage instanceof FileCoverageWithDetails} ${details.length}`
-    );
-    return details;
+    return coverage instanceof FileCoverageWithDetails
+      ? await coverage.getDetails()
+      : [];
   };
 }
