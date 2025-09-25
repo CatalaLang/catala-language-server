@@ -37,11 +37,14 @@ export type ClerkPosition = {
 };
 
 export function positionToLocation(pos: ClerkPosition): vscode.Location {
-  return new vscode.Location(
-    vscode.Uri.file(pos.fname),
-    new vscode.Range(
-      new vscode.Position(pos.start_lnum - 1, pos.start_cnum - 1),
-      new vscode.Position(pos.end_lnum - 1, pos.end_cnum - 1)
-    )
+  return new vscode.Location(vscode.Uri.file(pos.fname), positionToRange(pos));
+}
+
+export function positionToRange(
+  pos: Omit<ClerkPosition, 'fname'>
+): vscode.Range {
+  return new vscode.Range(
+    new vscode.Position(pos.start_lnum - 1, pos.start_cnum - 1),
+    new vscode.Position(pos.end_lnum - 1, pos.end_cnum - 1)
   );
 }
