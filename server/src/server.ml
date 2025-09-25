@@ -585,13 +585,19 @@ class catala_lsp_server =
       let scopes =
         Projects.Projects.fold
           (fun ({ Projects.project_files; _ } as project) acc ->
+            (* FIXME: deleted files are actually not deleted? *)
             Doc_id.Map.fold
               (fun doc_id _f acc ->
                 if Projects.is_an_included_file doc_id project then acc
                 else
                   match Utils.list_scopes ~tests_only (doc_id :> string) with
                   | [] -> acc
-                  | scopes -> Doc_id.Map.add doc_id scopes acc)
+                  | scopes -> Doc_id.Map.add doc_id scopes acc
+                  | exception e ->
+                    Log.err (fun m ->
+                        m "Cannot read file %a: %s" Doc_id.format doc_id
+                          (Printexc.to_string e));
+                    acc)
               project_files acc)
           projects Doc_id.Map.empty
       in
