@@ -73,16 +73,13 @@ function clerkRunTest(
   with_coverage?: boolean
 ): ClerkTestAndCoverageResult {
   try {
-    const output = execFileSync(
-      clerkPath,
-      [
-        'test',
-        '--report-format=json',
-        with_coverage ? '--code-coverage=global' : '',
-        '--quiet'
-      ].concat(uri),
-      { ...(cwd && { cwd }) }
-    );
+    const args = ['test', '--report-format=json', '--quiet']
+      .concat(with_coverage ? ['--code-coverage'] : [])
+      .concat(uri);
+
+    const output = execFileSync(clerkPath, args, {
+      ...(cwd && { cwd }),
+    });
     return JSON.parse(output.toString()) as ClerkTestAndCoverageResult;
   } catch (e) {
     if (e.status && e.status === 1 && e.stdout) {
