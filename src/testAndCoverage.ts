@@ -1,7 +1,7 @@
 import type { LanguageClient } from 'vscode-languageclient/node';
 import * as vscode from 'vscode';
 import type { ExecException } from 'child_process';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import { basename } from 'path';
 import type { ClerkPosition } from './util_client';
 import {
@@ -54,30 +54,32 @@ type TestScopeMap = Array<{
   scopes: TestScope[];
 }>;
 
-function clerkRunTest(
+async function clerkRunTest(
   cwd: string,
   uri: string[],
-  with_coverage?: boolean
-): ClerkTestAndCoverageResult {
-  try {
-    const args = ['test', '--report-format=json', '--quiet']
-      .concat(with_coverage ? ['--code-coverage'] : [])
-      .concat(uri);
+  cancellation: vscode.CancellationToken,
+  with_coverage?: boolean,
+): Promise<ClerkTestAndCoverageResult> {
 
-    const output = execFileSync(clerkPath, args, {
+  const args = ['test', '--report-format=json', '--quiet']
+    .concat(with_coverage ? ['--code-coverage'] : [])
+    .concat(uri);
+  return new Promise(resolve => {
+    const proc = spawn(clerkPath, args, {
       ...(cwd && { cwd }),
     });
-    return JSON.parse(output.toString()) as ClerkTestAndCoverageResult;
-  } catch (e) {
-    if (e.status && e.status === 1 && e.stdout) {
-      return JSON.parse(e.stdout) as ClerkTestAndCoverageResult;
-    }
-    vscode.window.showErrorMessage(
-      `Error running clerk test: ${(e as ExecException).message}`
-    );
-    console.error(e);
-    throw e;
-  }
+
+    cancellation.onCancellationRequested((_) => proc.kill(2));
+
+    let output = ""
+    proc.stdout.on('data', (data) => {
+      output += data;
+    });
+
+    proc.on('close', (code) => {
+      resolve(JSON.parse(output.toString()) as ClerkTestAndCoverageResult)
+    });
+  })
 }
 
 function populateTestItems(
@@ -225,7 +227,7 @@ export async function initTests(
 
   const testRunHandler = async (
     request: vscode.TestRunRequest,
-    _cancellation: vscode.CancellationToken,
+    cancellation: vscode.CancellationToken,
     with_coverage?: boolean
   ): Promise<void> => {
     const run = ctrl.createTestRun(request);
@@ -240,7 +242,13 @@ export async function initTests(
     testsToRun.forEach((test) => run.started(test));
 
     try {
-      const results = clerkRunTest(cwd!, testFiles, with_coverage);
+      const thread = clerkRunTest(cwd!, testFiles, cancellation, with_coverage);
+      if (cancellation.isCancellationRequested) {
+        run.end() ;
+        return;
+      }
+
+      const results = await thread;
 
       results['test-results'].forEach(({ file, tests }) => {
         tests.scopes.forEach((scope_test_result) => {
