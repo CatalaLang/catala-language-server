@@ -218,7 +218,7 @@ let load_program ((clerk_config : Clerk_config.t), root_dir) file scope =
   let stdlib_path = File.(root_dir / "_build" / "libcatala") in
   if not (File.exists stdlib_path) then
     failwith "Stdlib not found - Please compile your project first.";
-  let mod_uses, modules, _used_modules =
+  let mod_uses, modules, _used_modules, _stdlib_modules =
     try
       State.load_modules ~stdlib_path root_dir clerk_config.global.include_dirs
         surface

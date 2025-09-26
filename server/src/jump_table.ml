@@ -382,6 +382,18 @@ let traverse_expr
       PMap.add pos var acc
     | ELocation (ToplevelVar { name; _ }) ->
       let (topdef_var : TopdefName.t), _ = name in
+      let acc =
+        List.fold_left
+          (fun acc mname ->
+            let mjump = module_lookup mname in
+            let pos' = pos in
+            let pos = Mark.get (ModuleName.get_info mname) in
+            Format.eprintf "POPULATING %a at %a/%a@." ModuleName.format mname
+              Pos.format_loc_text pos Pos.format_loc_text pos';
+            PMap.add pos (Module_use mjump) acc)
+          acc
+          (TopdefName.path topdef_var)
+      in
       let name = TopdefName.to_string topdef_var in
       let hash = Hashtbl.hash (TopdefName.get_info topdef_var) in
       let var = Usage { name; hash; typ } in
@@ -435,7 +447,8 @@ let traverse_expr
     | EScopeCall { scope; args } ->
       populate_scopecall ctx module_lookup scope_lookup pos scope args acc
         (f bnd_ctx)
-    | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | EApp _ | ETuple _
+    | EApp _ -> Expr.shallow_fold (f bnd_ctx) e acc
+    | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ (* EApp _ | *) | ETuple _
     | ETupleAccess _ | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ | EPos _
       ->
       Expr.shallow_fold (f bnd_ctx) e acc
@@ -619,11 +632,23 @@ let add_scope_definitions
   List.fold_left process variables surface.program_items
 
 let populate_modules
+    ~stdlib_modules
     input_src
     (modules_contents : Surface.Ast.module_content ModuleName.Map.t)
     (prog : typed program)
     (surface : Surface.Ast.program)
     (acc : PMap.t) : PMap.t * (ModuleName.t -> mjump) =
+  let modules_contents =
+    let stdlib_modules_contents =
+      ModuleName.Map.map (fun (_, content) -> content) stdlib_modules
+    in
+    Format.eprintf "@[<v 2>stdlib module contents:@ %a@]@."
+      (fun fmt -> ModuleName.Map.format_keys fmt)
+      stdlib_modules_contents;
+    ModuleName.Map.union
+      (fun _ _ r -> Some r)
+      modules_contents stdlib_modules_contents
+  in
   let module C = Map.Make (String) in
   let convert_map =
     ModuleName.Map.fold
@@ -694,11 +719,13 @@ let populate_modules
 let populate
     input_src
     (ctx : Desugared.Name_resolution.context)
+    ~(stdlib_modules : (Ident.t * Surface.Ast.module_content) ModuleName.Map.t)
     (modules_contents : Surface.Ast.module_content ModuleName.Map.t)
     (surface : Surface.Ast.program)
     (prog : typed program) : t =
   let variables, mod_lookup =
-    populate_modules input_src modules_contents prog surface PMap.empty
+    populate_modules ~stdlib_modules input_src modules_contents prog surface
+      PMap.empty
   in
   let variables, scope_lookup_map = traverse ctx mod_lookup prog variables in
   let variables =
@@ -760,6 +787,7 @@ let populate
           data tbl)
       variables LTable.empty
   in
+  Format.eprintf "%a@." PMap.pp variables;
   { variables; lookup_table }
 
 let lookup (tables : t) (p : Pos.t) : lookup_entry list =
