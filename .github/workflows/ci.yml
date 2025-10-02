@@ -11,7 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    env:
+      DUNE_PROFILE: check
     steps:
       - uses: actions/checkout@v4
 
