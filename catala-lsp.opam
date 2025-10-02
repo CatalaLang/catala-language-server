@@ -17,7 +17,7 @@ build: [
 depends: [
   "ocaml"     {>= "4.14.1"}
   "dune"      { >= "3.0" }
-  "catala"    { = "dev" }
+  "catala"
   "logs"
   "uri"
   "linol"     { = "0.8" }
