@@ -595,12 +595,16 @@ let rec evaluate_operator
       Lwt.return (ELit (LDuration (o_minus_dur x)))
     | ToInt_rat, [(ELit (LRat x), _)] ->
       Lwt.return (ELit (LInt (o_toint_rat x)))
+    | ToInt_mon, [(ELit (LMoney x), _)] ->
+      Lwt.return (ELit (LInt (o_toint_mon x)))
     | ToRat_int, [(ELit (LInt i), _)] ->
       Lwt.return (ELit (LRat (o_torat_int i)))
     | ToRat_mon, [(ELit (LMoney i), _)] ->
       Lwt.return (ELit (LRat (o_torat_mon i)))
     | ToMoney_rat, [(ELit (LRat i), _)] ->
       Lwt.return (ELit (LMoney (o_tomoney_rat i)))
+    | ToMoney_int, [(ELit (LInt i), _)] ->
+      Lwt.return (ELit (LMoney (o_tomoney_int i)))
     | Round_mon, [(ELit (LMoney m), _)] ->
       Lwt.return (ELit (LMoney (o_round_mon m)))
     | Round_rat, [(ELit (LRat m), _)] ->
@@ -736,8 +740,8 @@ let rec evaluate_operator
                cons = Expr.some_constr;
                e = ETuple [e; EPos p, Expr.with_pos p m], m;
              }))
-    | ( ( Minus_int | Minus_rat | Minus_mon | Minus_dur | ToInt_rat | ToRat_int
-        | ToRat_mon | ToMoney_rat | Round_rat | Round_mon | Add_int_int
+    | ( ( Minus_int | Minus_rat | Minus_mon | Minus_dur | ToInt_rat | ToInt_mon | ToRat_int
+        | ToRat_mon | ToMoney_rat | ToMoney_int | Round_rat | Round_mon | Add_int_int
         | Add_rat_rat | Add_mon_mon | Add_dat_dur _ | Add_dur_dur | Sub_int_int
         | Sub_rat_rat | Sub_mon_mon | Sub_dat_dat | Sub_dat_dur _ | Sub_dur_dur
         | Mult_int_int | Mult_rat_rat | Mult_mon_int | Mult_mon_rat
