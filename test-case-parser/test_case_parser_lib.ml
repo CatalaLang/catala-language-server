@@ -202,10 +202,10 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
     | ELit (LRat r) -> O.Decimal (Q.to_float r)
     | ELit (LMoney m) -> O.Money (Z.to_int m)
     | ELit (LDate t) ->
-      let year, month, day = Dates_calc.Dates.date_to_ymd t in
+      let year, month, day = Dates_calc.date_to_ymd t in
       O.Date { year; month; day }
     | ELit (LDuration dt) ->
-      let years, months, days = Dates_calc.Dates.period_to_ymds dt in
+      let years, months, days = Dates_calc.period_to_ymds dt in
       O.Duration { years; months; days }
     | EAppOp
         {
