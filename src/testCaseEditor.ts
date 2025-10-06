@@ -187,8 +187,13 @@ export class TestCaseEditorProvider
             // User cancelled
             postMessageToWebView({
               kind: 'TestRunResults',
-              value: { kind: 'Cancelled' },
+              value: {
+                scope: typed_msg.value.scope,
+                reset_outputs: typed_msg.value.reset_outputs,
+                results: { kind: 'Cancelled' },
+              },
             });
+            return;
           }
 
           const { scope, reset_outputs } = typed_msg.value;
@@ -207,8 +212,13 @@ export class TestCaseEditorProvider
               // test at all.
               postMessageToWebView({
                 kind: 'TestRunResults',
-                value: { kind: 'Cancelled' },
+                value: {
+                  scope,
+                  reset_outputs,
+                  results: { kind: 'Cancelled' },
+                },
               });
+              return;
             }
           }
           const results = await this.testQueue.add(() =>
@@ -217,7 +227,7 @@ export class TestCaseEditorProvider
 
           postMessageToWebView({
             kind: 'TestRunResults',
-            value: results,
+            value: { scope, reset_outputs, results },
           });
 
           if (reset_outputs) {
