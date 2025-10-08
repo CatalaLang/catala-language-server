@@ -260,14 +260,16 @@ let load_program ((clerk_config : Clerk_config.t), root_dir) file scope =
   in
   prg, scope, pmap
 
-let build_deps ~logger file =
+let try_build_deps ~logger file =
   let* () = logger "Building scope dependencies..." in
   try
-    let _r = File.process_out "clerk" ["run"; file; "--prepare-only"] in
-    Lwt.return_true
+    let _ = File.process_out "clerk" ["run"; file; "--prepare-only"; "-d"] in
+    Lwt.return_unit
   with Failure s ->
     let* () = Format.ksprintf logger "Failed to build dependencies: %s" s in
-    Lwt.return_false
+    Format.ksprintf logger
+      "Trying to launch debugger anyway... If it fails, make sure that you \
+       declared a `clerk.toml` file in your project."
 
 let run_debugger rpc ~file ~scope logger : debugger_state Lwt.t =
   let* () = logger "Initializing Catala debugger.." in
@@ -282,7 +284,7 @@ let run_debugger rpc ~file ~scope logger : debugger_state Lwt.t =
       ~path_rewrite:(fun i -> (i :> string))
       ()
   in
-  let* _deps_built = build_deps ~logger file in
+  let* () = try_build_deps ~logger file in
   let program, scope, pmap = load_program config_and_root file scope in
   let* () =
     Format.kasprintf logger "Program loaded - main scope: %a" ScopeName.format
