@@ -51,6 +51,6 @@
   "diff.expected": "Attendu",
   "diff.actual": "Obtenu",
   "diff.emptyExpected": "Aucun élément attendu",
-  "diff.emptyActual": "Élément manquant",
+  "diff.emptyActual": "Élément attendu, mais manquant à l'exécution",
   "diff.actualValue": "Valeur obtenue"
 }
