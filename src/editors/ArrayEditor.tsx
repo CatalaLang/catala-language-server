@@ -14,7 +14,7 @@ import ValueEditor, { createRuntimeValue } from './ValueEditors';
 import { assertUnreachable } from '../util';
 
 /**
- * Diffs are consumed only by ArrayEditor to compute “phantom” indices
+ * Diffs are consumed only by ArrayEditor to compute "phantom" indices
  * (expected Empty vs actual Something). We do NOT propagate diffs into
  * phantom children (we pass [] there) so recursion stops at the first
  * Empty-vs-Actual boundary.
@@ -368,12 +368,40 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                   {isPhantom && phantomDiff ? (
                     isEmptyValue(phantomDiff.expected) &&
                     !isEmptyValue(phantomDiff.actual) ? (
-                      <div className="empty-value-indicator expected">
-                        <FormattedMessage
-                          id="diff.emptyExpected"
-                          defaultMessage="Empty"
-                        />
-                      </div>
+                      <>
+                        <div className="empty-value-indicator expected">
+                          <FormattedMessage
+                            id="diff.emptyExpected"
+                            defaultMessage="Empty"
+                          />
+                        </div>
+                        <div className="phantom-actual-value">
+                          <div className="phantom-actual-label">
+                            <FormattedMessage
+                              id="diff.actualValue"
+                              defaultMessage="Actual value"
+                            />
+                          </div>
+                          <div className="phantom-actual-content">
+                            <ValueEditor
+                              testIO={{
+                                typ: elementType,
+                                value: { value: phantomDiff.actual },
+                              }}
+                              onValueChange={() => {
+                                // Non-editable
+                              }}
+                              editorHook={undefined}
+                              currentPath={[
+                                ...currentPath,
+                                { kind: 'ListIndex', value: index },
+                              ]}
+                              diffs={[]}
+                              editable={false}
+                            />
+                          </div>
+                        </div>
+                      </>
                     ) : isEmptyValue(phantomDiff.actual) &&
                       !isEmptyValue(phantomDiff.expected) ? (
                       <div className="empty-value-indicator actual">

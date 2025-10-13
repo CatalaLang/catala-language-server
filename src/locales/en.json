@@ -51,5 +51,6 @@
   "diff.expected": "Expected",
   "diff.actual": "Actual",
   "diff.emptyExpected": "No element expected",
-  "diff.emptyActual": "No element"
+  "diff.emptyActual": "No element",
+  "diff.actualValue": "Actual value"
 }
