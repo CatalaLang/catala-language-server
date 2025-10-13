@@ -1,0 +1,97 @@
+/* Diff highlighting styles */
+.diff-highlight {
+  position: relative;
+  border: 1px solid var(--vscode-editorError-foreground, #f14c4c);
+  padding: 5px;
+  border-radius: 4px;
+}
+
+.atomic-diff {
+  background-color: var(
+    --vscode-diffEditor-removedLineBackground,
+    rgba(255, 0, 0, 0.1)
+  );
+}
+
+.container-diff {
+  background-color: var(
+    --vscode-diffEditor-diagonalFill,
+    rgba(255, 0, 0, 0.05)
+  );
+}
+
+.diff-expected,
+.diff-actual {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  padding: 2px 4px;
+  margin-bottom: 4px;
+}
+
+.diff-expected {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
+}
+
+.diff-actual {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
+}
+
+.empty-value-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 8px;
+  margin: 4px 0;
+  border-radius: 4px;
+  position: relative;
+}
+
+.empty-value-indicator::before {
+  content: '⊘';
+  font-size: 24px;
+  margin-right: 8px;
+}
+
+.empty-value-indicator.expected {
+  color: var(--vscode-editorWarning-foreground, #d19a66);
+  background-color: var(
+    --vscode-editorWarning-background,
+    rgba(255, 165, 0, 0.12)
+  );
+}
+
+.empty-value-indicator.actual {
+  color: var(--vscode-editorError-foreground, #f14c4c);
+  background-color: var(
+    --vscode-diffEditor-removedLineBackground,
+    rgba(255, 0, 0, 0.1)
+  );
+}
+
+/* Phantom actual value styling */
+.phantom-actual-value {
+  margin-top: 8px;
+  border: 1px solid var(--vscode-editorWarning-foreground, #d19a66);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.phantom-actual-label {
+  background-color: var(--vscode-editorWarning-foreground, #d19a66);
+  color: var(--vscode-editor-background, #1e1e1e);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.phantom-actual-content {
+  padding: 8px;
+  background-color: var(
+    --vscode-editorWarning-background,
+    rgba(255, 165, 0, 0.08)
+  );
+}

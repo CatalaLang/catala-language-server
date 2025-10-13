@@ -90,7 +90,9 @@ export default function TestFileEditor({
           tabIndex={-1}
           onKeyDown={handleKeyDown}
         >
-          <h2>Add New Test</h2>
+          <h2>
+            <FormattedMessage id="testFile.addNewTest" />
+          </h2>
 
           {modalState.step === 'selectFile' && (
             <>
@@ -113,7 +115,7 @@ export default function TestFileEditor({
                 />
               </p>
               <select
-                value={modalState.scopeUnderTest || ''}
+                value={modalState.scopeUnderTest ?? ''}
                 onChange={(e) =>
                   setModalState((prev) => ({
                     ...prev,
@@ -157,10 +159,6 @@ export default function TestFileEditor({
         );
         const newTestState = [...state.tests];
         newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
-        console.log('old test state');
-        console.log(state.tests);
-        console.log('new test state');
-        console.log(newTestState);
 
         // optimistic update
         setState({ state: 'success', tests: newTestState });
@@ -173,7 +171,7 @@ export default function TestFileEditor({
         );
       }
     },
-    [state, vscode]
+    [state, vscode, setTestRunState]
   );
 
   const onTestDelete = useCallback(
@@ -283,22 +281,19 @@ export default function TestFileEditor({
           setState(parseResultsToUiState(message.value));
           break;
         case 'TestRunResults': {
-          const results = message.value;
+          const { scope, reset_outputs, results } = message.value;
           setTestRunState((prev) => {
-            const updatedScope = Object.keys(prev).find(
-              //TODO test below seems fragile: improve
-              (scope) => prev[scope].status === 'running'
-            );
-            if (updatedScope) {
-              return {
-                ...prev,
-                [updatedScope]: {
-                  status: _resultsToStatus(results),
-                  results,
-                },
-              };
+            const next: TestRunState = {
+              ...prev,
+              [scope]: {
+                status: _resultsToStatus(results),
+                results,
+              },
+            };
+            if (reset_outputs && results.kind === 'Ok') {
+              delete next[scope];
             }
-            return prev;
+            return next;
           });
           break;
         }
