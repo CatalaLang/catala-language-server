@@ -361,12 +361,6 @@ export default function TestFileEditor({
       }
       return (
         <div className="test-editor-container">
-          <div className="test-editor-top-bar">
-            <button className="test-editor-add-button" onClick={onAddNewTest}>
-              <span className="codicon codicon-add"></span>
-              <FormattedMessage id="testFile.addNewTest" />
-            </button>
-          </div>
           {state.tests.map((test) => (
             <TestEditor
               test={test}
@@ -386,6 +380,14 @@ export default function TestFileEditor({
       assertUnreachable(state);
   }
 }
+
+/*           <div className="test-editor-top-bar">
+            <button className="test-editor-add-button" onClick={onAddNewTest}>
+              <span className="codicon codicon-add"></span>
+              <FormattedMessage id="testFile.addNewTest" />
+            </button>
+          </div>
+ */
 
 function ParsingErrorWarning({
   message,

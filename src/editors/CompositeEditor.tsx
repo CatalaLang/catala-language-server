@@ -86,8 +86,8 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
               key={item.key}
               className={`simple-item-vertical ${props.atomicElements ? 'atomic-element' : ''}`}
             >
-              <div className="item-label">{item.label}</div>
-              <div className="item-editor">{item.editor}</div>
+              <label className="item-label body-1">{item.label}</label>
+              {item.editor}
             </div>
           ))}
         </div>
@@ -101,8 +101,8 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
               key={item.key}
               className={`simple-item ${props.atomicElements ? 'atomic-element' : ''}`}
             >
-              <div className="item-label">{item.label}</div>
-              <div className="item-editor">{item.editor}</div>
+              <label className="item-label body-1">{item.label}</label>
+              {item.editor}
             </div>
           ))}
         </div>
@@ -138,7 +138,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
       {/* Single complex item displayed directly */}
       {singleComplexItem && (
         <>
-          <div className="item-label">{complexItems[0].label}</div>
+          <h3 className="heading-h3">{complexItems[0].label}</h3>
           <div className="item-editor">{complexItems[0].editor}</div>
         </>
       )}

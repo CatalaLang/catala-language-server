@@ -231,7 +231,6 @@ function IntEditor(props: IntEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor int-editor">
       <input
         type="text"
         pattern={INT_PATTERN.source}
@@ -239,11 +238,10 @@ function IntEditor(props: IntEditorProps): ReactElement {
         value={displayValue}
         onChange={handleChange}
         onBlur={handleBlur}
-        className={displayValue && !isValidInt(displayValue) ? 'invalid' : ''}
+        className={`value-editor rat-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
         placeholder="0"
         disabled={props.editable === false}
       />
-    </div>
   );
 }
 
@@ -307,14 +305,12 @@ function DateEditor(props: DateEditorProps): ReactElement {
   // TODO: Add onBlur validation?
 
   return (
-    <div className="value-editor">
-      <input
+      <input className="value-editor"
         type="date"
         value={internalValue}
         onChange={handleChange}
         disabled={props.editable === false}
       />
-    </div>
   );
 }
 
@@ -385,19 +381,17 @@ function RatEditor(props: RatEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor rat-editor">
-      <input
+      <input 
         type="text"
         pattern={RAT_PATTERN.source}
         required
         value={displayValue}
         onChange={handleChange}
         onBlur={handleBlur}
-        className={displayValue && !isValidRat(displayValue) ? 'invalid' : ''}
+        className={`value-editor rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
         placeholder="0.0"
         disabled={props.editable === false}
       />
-    </div>
   );
 }
 
@@ -419,8 +413,7 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor">
-      <select
+      <select className="value-editor"
         value={currentValue.toString()}
         onChange={handleChange}
         disabled={props.editable === false}
@@ -432,7 +425,6 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
           <FormattedMessage id="true" />
         </option>
       </select>
-    </div>
   );
 }
 
@@ -756,8 +748,8 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor enum-editor">
-      <select
+    <div >
+      <select className="value-editor enum-editor"
         onChange={handleCtorChange}
         value={currentCtor}
         disabled={editable === false}

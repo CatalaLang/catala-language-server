@@ -11,27 +11,28 @@
 }
 
 .simple-item {
+  box-sizing: border-box;
   min-width: 150px;
-  max-width: 250px;
+/*   max-width: 250px; */
 }
 
 .simple-items-vertical {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--spacing8);
 }
 
 .simple-item-vertical {
   display: flex;
   flex-direction: column;
-  gap: 4px;
   padding: 4px 0;
 }
 
 .item-label {
+  text-transform: capitalize;
   display: block;
   font-weight: var(--field-label-font-weight);
-  margin-bottom: 6px;
+  margin-bottom: var(--spacing8);
   color: var(--field-label-color);
   font-size: var(--field-label-font-size);
 }
@@ -44,35 +45,31 @@
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--card-border-light);
+  overflow-y: scroll;
+  box-sizing: content-box;
 }
 
 .tab {
-  padding: 10px 16px;
+  padding: var(--spacing8) var(--spacing12) var(--spacing8) var(--spacing12);
   border: none;
   background: none;
-  cursor: pointer;
-  color: var(--vscode-foreground);
-  opacity: 0.7;
+  cursor: pointer;  
+  color: var(--stormgray950);
   font-weight: 500;
+  font-size: 14px;
   position: relative;
+  text-transform: uppercase;
 }
 
 .tab.active {
   opacity: 1;
-}
-
-.tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background-color: var(--tab-active-border);
+  background-color: var(--stormgray800);
+  color: var(--stormgray00);
 }
 
 .tab:hover {
-  background-color: var(--tab-hover-background);
+  background-color: var(--stormgray50);
+  color: var(--stormgray950);
 }
 
 .tab-content {

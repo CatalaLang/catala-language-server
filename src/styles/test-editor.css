@@ -7,18 +7,15 @@
 
 .test-editor-bar {
   display: flex;
+  flex-direction: column;
   justify-content: space-between;
-  align-items: center;
   background-color: var(--level-2-background);
-  padding: 10px 16px;
+  padding: 0 var(--spacing32) 0 var(--spacing32);
   border-bottom: 1px solid var(--card-border-light);
 }
 
-.test-editor-scope {
-  font-weight: bold;
+.test-editor-breadcrumb {
   flex-grow: 1;
-  margin-left: 8px;
-  font-size: 14px;
 }
 
 .test-editor-collapse,
@@ -83,7 +80,7 @@
 }
 
 .test-editor-content {
-  padding: 16px;
+  padding: var(--space-32);
 }
 
 .test-run-success {
@@ -95,7 +92,7 @@
 }
 
 .test-section {
-  margin-bottom: 24px;
+  padding: var(--spacing32) var(--spacing32) 0 var(--spacing32);
 }
 
 .test-section-header {
@@ -103,12 +100,8 @@
 }
 
 .test-section-title {
-  font-size: var(--section-header-font-size);
-  font-weight: var(--section-header-font-weight);
   margin: var(--section-header-margin);
-  color: var(--section-header-color);
-  display: flex;
-  align-items: center;
+  color: var(--stormgray900);
 }
 
 .reset-expected-values {
@@ -146,10 +139,6 @@
   display: flex;
   justify-content: center;
   height: 2rem;
-}
-
-.test-editor-container {
-  padding-top: 2.5rem; /* Make space for the fixed bar */
 }
 
 .test-editor-add-button {
