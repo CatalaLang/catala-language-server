@@ -1,23 +1,13 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
-import type {
-  Test,
-  TestIo,
-  Diff,
-  PathSegment,
-  TestOutputs,
-} from './generated/test_case';
+import type { Test, TestIo, Diff } from './generated/test_case';
 import AssertionValueEditor from './AssertionValueEditor';
-import ValueEditor from './editors/ValueEditors';
 import { getDefaultValue } from './defaults';
-import { isElemental } from './testCaseUtils';
-import { createHighlightOnlyHook, isPathPrefix } from './diff/highlight';
 
 type Props = {
   test: Test;
   onTestChange(newValue: Test): void;
   diffs?: Diff[];
-  actualOutputs?: TestOutputs;
 };
 
 /* An editor for test outputs. Outputs are named and typed, and
@@ -41,7 +31,6 @@ export default function TestOutputsEditor({
   test,
   onTestChange: onTestAssertsChange,
   diffs = [],
-  actualOutputs,
 }: Props): ReactElement {
   const { test_outputs, tested_scope } = test;
 
@@ -85,76 +74,17 @@ export default function TestOutputsEditor({
             <div key={outputName} className="test-output-row">
               <label>{outputName}</label>
               {outputData?.value ? (
-                ((): ReactElement => {
-                  const outputPath: PathSegment[] = [
-                    { kind: 'StructField' as const, value: outputName },
-                  ];
-                  const subtreeDiffs = (diffs ?? []).filter((d) =>
-                    isPathPrefix(outputPath, d.path)
-                  );
-                  const isComplex = subtreeDiffs.some((d) => !isElemental(d));
-
-                  if (isComplex && actualOutputs) {
-                    const rightHook = createHighlightOnlyHook(subtreeDiffs);
-
-                    return (
-                      <div className="two-pane-diff">
-                        <div
-                          className="pane-expected"
-                          style={{ minWidth: '25%', maxWidth: '75%' }}
-                        >
-                          <AssertionValueEditor
-                            testIO={outputData}
-                            onValueChange={(newValue) =>
-                              onAssertValueChange(outputName, newValue)
-                            }
-                            onAssertionDeletion={() =>
-                              onAssertDelete(outputName)
-                            }
-                            diffs={subtreeDiffs}
-                            currentPath={outputPath}
-                            highlightDiffs={true}
-                          />
-                        </div>
-                        <div
-                          className="pane-divider"
-                          role="separator"
-                          aria-orientation="vertical"
-                        />
-                        <div className="pane-actual">
-                          {((): ReactElement | null => {
-                            const actualIo = actualOutputs.get(outputName);
-                            if (!actualIo) return null;
-                            return (
-                              <ValueEditor
-                                testIO={actualIo}
-                                onValueChange={() => {
-                                  /* read-only */
-                                }}
-                                editorHook={rightHook}
-                                currentPath={outputPath}
-                                diffs={subtreeDiffs}
-                                editable={false}
-                              />
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    );
+                <AssertionValueEditor
+                  testIO={outputData}
+                  onValueChange={(newValue) =>
+                    onAssertValueChange(outputName, newValue)
                   }
-
-                  return (
-                    <AssertionValueEditor
-                      testIO={outputData}
-                      onValueChange={(newValue) =>
-                        onAssertValueChange(outputName, newValue)
-                      }
-                      onAssertionDeletion={() => onAssertDelete(outputName)}
-                      diffs={diffs}
-                      currentPath={outputPath}
-                    />
-                  );
-                })()
+                  onAssertionDeletion={() => onAssertDelete(outputName)}
+                  diffs={diffs}
+                  currentPath={[
+                    { kind: 'StructField' as const, value: outputName },
+                  ]}
+                />
               ) : (
                 <button
                   className="test-editor-run"
