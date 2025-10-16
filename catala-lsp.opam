@@ -28,6 +28,9 @@ depends: [
   "atdgen"    { build }
   "atdgen-runtime"
 ]
+pin-depends: [
+  ["catala.dev" "git+https://github.com/CatalaLang/catala"]
+]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
 dev-repo: "git+https://github.com/CatalaLang/catala-language-server.git"
