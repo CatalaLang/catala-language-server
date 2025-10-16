@@ -31,6 +31,10 @@ depends: [
 pin-depends: [
   ["catala.dev" "git+https://github.com/CatalaLang/catala"]
 ]
+conflicts: [
+  # catala-lsp conflicts with linol = 0.10, which is used by ocaml-lsp-server
+  "ocaml" { >= "5.4.0"}
+]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
 dev-repo: "git+https://github.com/CatalaLang/catala-language-server.git"
