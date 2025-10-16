@@ -2,7 +2,7 @@
   "name": "catala",
   "displayName": "Catala",
   "description": "A VSCode extension and LSP server for the Catala language",
-  "version": "1.0.0-beta",
+  "version": "0.24.2",
   "publisher": "catalalang",
   "license": "Apache-2.0",
   "repository": {
