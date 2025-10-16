@@ -1,5 +1,5 @@
 opam-version: "2.0"
-version: "0.0.1"
+version: "1.0.0~beta"
 name: "catala-lsp"
 maintainer: "Vincent Botbol"
 authors: [ "Vincent Botbol" ]
@@ -27,9 +27,6 @@ depends: [
   "tezt"      { with-test }
   "atdgen"    { build }
   "atdgen-runtime"
-]
-pin-depends: [
-  ["catala.dev" "git+https://github.com/CatalaLang/catala"]
 ]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
