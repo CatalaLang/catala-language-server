@@ -14,7 +14,8 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
-open Lsp.Types
+open Linol_lsp
+open Linol_lwt
 open Catala_utils
 open Server_types
 
@@ -56,8 +57,8 @@ let dummy_range =
     ~start:{ line = 0; character = 0 }
     ~end_:{ line = 0; character = 0 }
 
-let lsp_pos line character = Lsp.Types.Position.create ~line ~character
-let lsp_range start end_ = Lsp.Types.Range.create ~start ~end_
+let lsp_pos line character = Position.create ~line ~character
+let lsp_range start end_ = Range.create ~start ~end_
 let start_pos = lsp_pos 1 1
 let start_range = lsp_range start_pos start_pos
 
@@ -67,7 +68,7 @@ let pos_of_range doc_id ({ start; end_ } : Range.t) : Pos.t =
     (succ start.line) (succ start.character) (succ end_.line)
     (succ end_.character)
 
-let pos_to_loc (pos : Pos.t) : Linol_lwt.Position.t * Linol_lwt.Position.t =
+let pos_to_loc (pos : Pos.t) : Position.t * Position.t =
   let open Pos in
   ( {
       line = pred @@ get_start_line pos;
@@ -78,7 +79,7 @@ let pos_to_loc (pos : Pos.t) : Linol_lwt.Position.t * Linol_lwt.Position.t =
 
 let range_of_pos (pos : Pos.t) : Range.t =
   let start, end_ = pos_to_loc pos in
-  { Range.start; end_ }
+  { start; end_ }
 
 let location_of_pos (pos : Pos.t) : Location.t =
   let start, end_ = pos_to_loc pos in
@@ -91,13 +92,13 @@ let unclosed_range_of_pos (pos : Pos.t) : Range.t =
     { Range.start; end_ = { line = end_.line + 1; character = 0 } }
   else { Range.start; end_ }
 
-let send_notification ?(type_ = MessageType.Warning) ~notify_back message =
+let send_notification ?(type_ = MessageType.Warning) ~(notify_back : Jsonrpc2.notify_back) message =
   let message = Format.sprintf "Catala LSP: %s" message in
-  let notif = Lsp.Server_notification.ShowMessage { message; type_ } in
+  let notif = Server_notification.ShowMessage { message; type_ } in
   notify_back#send_notification notif
 
 let lookup_catala_format_config_path
-    (notify_back : Linol_lwt.Jsonrpc2.notify_back) =
+    (notify_back : Jsonrpc2.notify_back) =
   let open Lwt.Syntax in
   let r, w = Lwt.task () in
   let param =
@@ -105,7 +106,7 @@ let lookup_catala_format_config_path
       ~items:[ConfigurationItem.create ~section:"catala.catalaFormatPath" ()]
   in
   let* _req_id =
-    notify_back#send_request (Lsp.Server_request.WorkspaceConfiguration param)
+    notify_back#send_request (WorkspaceConfiguration param)
       (fun e ->
         match e with
         | Ok (`String x :: _) ->
@@ -145,8 +146,8 @@ let write_string oc s =
   inner 0 0 (String.length s)
 
 let lookup_catala_enable_project_scan
-    ~(notify_back : Linol_lwt.Jsonrpc2.notify_back) : bool option Lwt.t =
-  let open Lwt.Syntax in
+    ~(notify_back : Jsonrpc2.notify_back) : bool option Lwt.t =
+  let open Linol_lwt in
   let r, w = Lwt.task () in
   let param =
     ConfigurationParams.create
@@ -154,7 +155,7 @@ let lookup_catala_enable_project_scan
         [ConfigurationItem.create ~section:"catala-lsp.enableProjectScan" ()]
   in
   let* _req_id =
-    notify_back#send_request (Lsp.Server_request.WorkspaceConfiguration param)
+    notify_back#send_request (WorkspaceConfiguration param)
       (fun e ->
         match e with
         | Ok (`Bool x :: _) ->

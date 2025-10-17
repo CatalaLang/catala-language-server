@@ -55,7 +55,7 @@ module Projects : Set.S with type elt = project
 
 type projects = Projects.t
 type t = projects
-type error_handler = Doc_id.t * Lsp.Types.Range.t * Diagnostic.t -> unit
+type error_handler = Doc_id.t * Linol_lwt.Range.t * Diagnostic.t -> unit
 
 val empty : projects
 val format_project : Format.formatter -> project -> unit

@@ -18,9 +18,9 @@ module Doc_id : sig
   type doc_id = private Catala_utils.File.t
   type t = doc_id
 
-  val of_lsp_uri : Lsp.Types.DocumentUri.t -> doc_id
+  val of_lsp_uri : Linol_lsp.Uri0.t -> doc_id
   val of_catala_pos : Catala_utils.Pos.t -> doc_id
-  val to_lsp_uri : doc_id -> Lsp.Types.DocumentUri.t
+  val to_lsp_uri : doc_id -> Linol_lsp.Uri0.t
   val format : Format.formatter -> doc_id -> unit
   val compare : doc_id -> doc_id -> int
   val equal : doc_id -> doc_id -> bool

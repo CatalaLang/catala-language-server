@@ -14,8 +14,7 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
-open Lsp
-open Types
+open Linol_lwt
 open Catala_utils
 open Shared_ast
 open Format

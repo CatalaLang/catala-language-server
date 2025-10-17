@@ -15,17 +15,17 @@
    the License. *)
 
 open Catala_utils
-open Lsp.Types
+open Linol_lsp
 
 module Doc_id = struct
   type doc_id = File.t
   type t = doc_id
 
-  let of_lsp_uri (document : DocumentUri.t) : doc_id =
-    DocumentUri.to_path document |> Uri.pct_decode
+  let of_lsp_uri (document : Uri0.t) : doc_id =
+    Uri0.to_path document |> Uri.pct_decode
 
   let of_catala_pos (pos : Pos.t) : doc_id = Pos.get_file pos
-  let to_lsp_uri file = DocumentUri.of_path file
+  let to_lsp_uri file = Uri0.of_path file
   let format = Format.pp_print_string
   let compare = String.compare
   let equal = String.equal
