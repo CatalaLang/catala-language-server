@@ -19,7 +19,6 @@
  (package catala-lsp)
  (libraries
   threads.posix
-  lsp
   linol
   linol-lwt
   dap.rpc_lwt

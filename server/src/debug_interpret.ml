@@ -102,7 +102,7 @@ let rec runtime_to_val :
     'm mark ->
     typ ->
     Obj.t ->
-    (((d, yes) interpr_kind as 'a), 'm) gexpr Lwt.t =
+    (((d, yes) interpr_kind), 'm) gexpr Lwt.t =
  fun eval_expr ctx m ty o ->
   let m = Expr.map_ty (fun _ -> ty) m in
   match Mark.remove ty with

@@ -20,8 +20,8 @@ depends: [
   "catala"
   "logs"
   "uri"
-  "linol"     { = "0.8" }
-  "linol-lwt" { = "0.8" }
+  "linol"     { = "0.10" }
+  "linol-lwt" { = "0.10" }
   "dap"       { = "1.0.6" }
   "qcheck"    { with-test & >= "0.21.3" }
   "tezt"      { with-test }
@@ -30,10 +30,6 @@ depends: [
 ]
 pin-depends: [
   ["catala.dev" "git+https://github.com/CatalaLang/catala"]
-]
-conflicts: [
-  # catala-lsp conflicts with linol = 0.10, which is used by ocaml-lsp-server
-  "ocaml" { >= "5.4.0"}
 ]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"

@@ -802,7 +802,7 @@ module Ord_lookup = Set.Make (struct
 end)
 
 let lookup_type (tables : t) (p : Pos.t) :
-    (Lsp.Types.Range.t * Ord_lookup.t) option =
+    (Linol_lwt.Range.t * Ord_lookup.t) option =
   let proj = function
     | Topdef j | Definition j | Declaration j | Usage j -> Expr j.typ
     | Type j -> Type j.typ

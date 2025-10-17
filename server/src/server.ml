@@ -14,6 +14,8 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
+open Linol_lwt
+open Linol_lsp
 open Catala_utils
 open Server_types
 open Lwt.Syntax
@@ -93,7 +95,7 @@ let retrieve_existing_document doc_id server_state =
 
 let unlocked_raw_send_all_diagnostics =
   let previous_faulty_documents = ref Doc_id.Set.empty in
-  fun ~notify_back (diags : Diagnostic.t RangeMap.t Doc_id.Map.t) ->
+  fun ~(notify_back : Linol_lwt.Jsonrpc2.notify_back) (diags : Diagnostic.t RangeMap.t Doc_id.Map.t) ->
     let send_diagnostics (doc_id, diags) =
       notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
       notify_back#send_diagnostic diags
@@ -119,7 +121,7 @@ let unlocked_raw_send_all_diagnostics =
 
 let unlocked_send_all_diagnostics
     ?doc_id
-    ~notify_back
+    ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
     { SState.open_documents; _ } =
   let diags =
     match doc_id with
@@ -523,13 +525,13 @@ class catala_lsp_server =
 
     method! on_notification_unhandled
         ~notify_back
-        (n : Lsp.Client_notification.t) =
+        (n : Client_notification.t) =
       match n with
       | SetTrace params ->
         set_log_level (Some params.value);
         Lwt.return_unit
       | UnknownNotification notif ->
-        let json = Jsonrpc.Notification.yojson_of_t notif in
+        let json = Linol.Jsonrpc.Notification.yojson_of_t notif in
         Log.warn (fun m -> m "unknown notification: %a" Yojson.Safe.pp json);
         Lwt.return_unit
       | DidChangeWatchedFiles { changes } ->
@@ -609,10 +611,10 @@ class catala_lsp_server =
 
     method! on_unknown_request ~notify_back ~server_request:_ ~id meth params =
       self#on_request_unhandled ~notify_back ~id
-        (Lsp.Client_request.UnknownRequest { meth; params })
+        (Client_request.UnknownRequest { meth; params })
 
     method! on_request_unhandled : type r.
-        notify_back:_ -> id:_ -> r Lsp.Client_request.t -> r Lwt.t =
+        notify_back:_ -> id:_ -> r Client_request.t -> r Lwt.t =
       (* Override to process other requests *)
       fun ~notify_back ~id r ->
         match r with
@@ -749,7 +751,7 @@ class catala_lsp_server =
 
     method private on_req_declaration
         ~notify_back:_
-        ~(uri : Lsp.Uri.t)
+        ~(uri : Uri0.t)
         ~(pos : Position.t)
         ()
         : Locations.t option t =
@@ -772,7 +774,7 @@ class catala_lsp_server =
 
     method private on_req_references
         ~notify_back:_
-        ~(uri : Lsp.Uri.t)
+        ~(uri : Uri0.t)
         ~(pos : Position.t)
         ()
         : Location.t list option Lwt.t =
@@ -811,7 +813,7 @@ class catala_lsp_server =
 
     method private on_req_type_definition
         ~notify_back:_
-        ~(uri : Lsp.Uri.t)
+        ~(uri : Uri0.t)
         ~(pos : Position.t)
         ()
         : Locations.t option Lwt.t =
