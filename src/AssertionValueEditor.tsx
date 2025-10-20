@@ -108,12 +108,13 @@ function createDiffHighlightHook(diffs: Diff[]) {
                 </div>
               </>
             ) : (
+              //actualIsEmpty
               <>
+                {renderEmptyValueIndicator(false)}
                 <div className="diff-expected">
                   <FormattedMessage id="diff.expected" />:{' '}
                   {renderAtomicValue(matchingDiff.expected)}
                 </div>
-                {renderEmptyValueIndicator(false)}
               </>
             )}
             {editor}
