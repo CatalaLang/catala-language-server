@@ -51,6 +51,9 @@
   "diff.expected": "Expected",
   "diff.actual": "Actual",
   "diff.emptyExpected": "No element expected",
-  "diff.emptyActual": "Element expected, but missing at execution",
-  "diff.actualValue": "Actual value"
+  "diff.emptyActual": "Element expected, but missing during computation",
+  "diff.actualValue": "Actual value",
+  "diff.addToExpected": "Add to expected",
+  "diff.replaceExpected": "Replace expected with computed value",
+  "diff.removeFromExpected": "Remove from expected"
 }

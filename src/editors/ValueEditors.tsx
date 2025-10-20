@@ -19,6 +19,8 @@ import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../util';
 import { getDefaultValue } from '../defaults';
 import { CompositeEditor } from './CompositeEditor';
+import { findMatchingDiff } from '../diff/highlight';
+import { isAtomicRuntime } from '../diff/diff';
 
 // Helper to create a RuntimeValue from a RuntimeValueRaw, preserving attrs
 export function createRuntimeValue(
@@ -38,6 +40,7 @@ type Props = {
   currentPath: PathSegment[];
   diffs: Diff[];
   editable?: boolean;
+  onDiffResolved?: (path: PathSegment[]) => void;
 };
 
 export function isCollapsible(typ: Typ): boolean {
@@ -97,6 +100,7 @@ export default function ValueEditor(props: Props): ReactElement {
           currentPath={currentPath}
           diffs={props.diffs}
           editable={editable}
+          onDiffResolved={props.onDiffResolved}
         />
       );
       break;
@@ -146,6 +150,7 @@ export default function ValueEditor(props: Props): ReactElement {
           currentPath={currentPath}
           diffs={props.diffs}
           editable={editable}
+          onDiffResolved={props.onDiffResolved}
         />
       );
       break;
@@ -159,11 +164,13 @@ export default function ValueEditor(props: Props): ReactElement {
           currentPath={currentPath}
           diffs={props.diffs}
           editable={editable}
+          onDiffResolved={props.onDiffResolved}
         />
       );
       break;
     case 'TTuple':
     case 'TOption':
+      // TODO: When implementing TOption editor, mirror the enum "actual preview" handling for None vs Some(complex) diffs.
       editor = <i>Unimplemented Editor</i>;
       break;
     default:
@@ -618,6 +625,7 @@ type StructEditorProps = {
   currentPath: PathSegment[];
   diffs: Diff[];
   editable?: boolean;
+  onDiffResolved?: (path: PathSegment[]) => void;
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
@@ -677,6 +685,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
             ]}
             diffs={props.diffs}
             editable={editable}
+            onDiffResolved={props.onDiffResolved}
           />
         ),
       };
@@ -698,6 +707,7 @@ type EnumEditorProps = {
   currentPath: PathSegment[];
   diffs: Diff[];
   editable?: boolean;
+  onDiffResolved?: (path: PathSegment[]) => void;
 };
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
@@ -719,6 +729,31 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   const currentCtor = currentEnumData ? currentEnumData[1][0] : defaultCtor;
   const currentPayload = currentEnumData ? currentEnumData[1][1] : null;
   const currentCtorType = enumDeclaration.constructors.get(currentCtor); // Option<Typ>
+
+  // If there is a diff exactly at this enum node and the actual value
+  // has a non-atomic payload while the expected is a simple label (no payload),
+  // render an actual preview (read-only), similar to arrays' phantom view.
+  const enumTyp: Typ = { kind: 'TEnum', value: enumDeclaration };
+  const matchingDiff = findMatchingDiff(props.diffs, currentPath);
+
+  const showEnumActualPreview =
+    !!matchingDiff &&
+    matchingDiff.actual.value.kind === 'Enum' &&
+    (() => {
+      const [, [, payloadA]] = matchingDiff.actual.value.value;
+      const payloadActualRv = payloadA?.value;
+      const expectedIsSimple =
+        matchingDiff.expected.value.kind === 'Enum' &&
+        matchingDiff.expected.value.value[1][1] === null;
+      return (
+        !!payloadActualRv &&
+        !isAtomicRuntime(payloadActualRv) &&
+        expectedIsSimple
+      );
+    })();
+
+  // Note: do not early-return here; we render the expected editor and, when applicable,
+  // an "actual preview" block alongside it further below.
 
   const handleCtorChange = (
     event: React.ChangeEvent<HTMLSelectElement>
@@ -755,7 +790,8 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
     onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
 
-  return (
+  // Build the expected editor (existing UI)
+  const expectedEditor = (
     <div className="value-editor enum-editor">
       <select
         onChange={handleCtorChange}
@@ -786,9 +822,63 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
             ]}
             diffs={props.diffs}
             editable={editable}
+            onDiffResolved={props.onDiffResolved}
           />
         </div>
       )}
     </div>
   );
+
+  if (showEnumActualPreview) {
+    return (
+      <div className="diff-highlight container-diff enum-preview enum-phantom">
+        <div className="expected-value">
+          <div className="expected-label">
+            <FormattedMessage id="diff.expected" defaultMessage="Expected" />
+          </div>
+          {expectedEditor}
+        </div>
+        <div className="actual-preview-value phantom-actual-value">
+          <div className="actual-preview-label phantom-actual-label">
+            <FormattedMessage
+              id="diff.actualValue"
+              defaultMessage="Actual value"
+            />
+          </div>
+          <div className="actual-preview-content phantom-actual-content">
+            <ValueEditor
+              testIO={{ typ: enumTyp, value: { value: matchingDiff.actual } }}
+              onValueChange={() => {
+                // read-only preview
+              }}
+              editorHook={undefined}
+              currentPath={currentPath}
+              diffs={[]}
+              editable={false}
+            />
+          </div>
+          <button
+            className="diff-action-accept array-phantom-action array-phantom-add"
+            onClick={() => {
+              if (editable === false) return;
+              onValueChange(
+                createRuntimeValue(matchingDiff.actual.value, runtimeValue)
+              );
+              props.onDiffResolved?.(currentPath);
+            }}
+            disabled={editable === false}
+          >
+            <span className="codicon codicon-check"></span>
+            <FormattedMessage
+              id="diff.replaceExpected"
+              defaultMessage="Replace expected with computed value"
+            />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: just the expected editor
+  return expectedEditor;
 }

@@ -1,14 +1,11 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
-import type {
-  TestIo,
-  Diff,
-  PathSegment,
-  RuntimeValue,
-} from './generated/test_case';
+import type { TestIo, Diff, PathSegment } from './generated/test_case';
 import ValueEditor from './editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
 import './styles/assertions-editor.css';
+import { findMatchingDiff, isParentOfAnyDiff } from './diff/highlight';
+import { isAtomicRuntime } from './diff/diff';
 
 type Props = {
   testIO: TestIo;
@@ -17,69 +14,8 @@ type Props = {
   diffs?: Diff[];
   currentPath: PathSegment[];
   highlightDiffs?: boolean;
+  onDiffResolved?: (path: PathSegment[]) => void;
 };
-
-/**
- * Compare two paths for exact equality.
- */
-function pathEquals(a: PathSegment[], b: PathSegment[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((seg, i) => JSON.stringify(seg) === JSON.stringify(b[i]))
-  );
-}
-
-/**
- * Find a diff whose path exactly matches the given path.
- */
-function findMatchingDiff(
-  diffs: Diff[],
-  path: PathSegment[]
-): Diff | undefined {
-  return diffs.find((diff) => pathEquals(diff.path, path));
-}
-
-/**
- * Returns true if 'prefix' is a prefix of 'full'.
- */
-function isPathPrefix(prefix: PathSegment[], full: PathSegment[]): boolean {
-  if (prefix.length > full.length) return false;
-  return prefix.every(
-    (seg, i) => JSON.stringify(seg) === JSON.stringify(full[i])
-  );
-}
-
-/**
- * Returns true if the given path is a proper prefix of any diff path.
- */
-function isParentOfAnyDiff(diffs: Diff[], path: PathSegment[]): boolean {
-  return diffs.some(
-    (diff) => diff.path.length > path.length && isPathPrefix(path, diff.path)
-  );
-}
-
-/**
- * Renders an empty value indicator for array elements
- */
-function renderEmptyValueIndicator(isExpected: boolean): ReactElement {
-  return (
-    <div
-      className={`empty-value-indicator ${isExpected ? 'expected' : 'actual'}`}
-    >
-      <FormattedMessage
-        id={isExpected ? 'diff.emptyExpected' : 'diff.emptyActual'}
-        defaultMessage="Empty"
-      />
-    </div>
-  );
-}
-
-/**
- * Checks if a runtime value represents an empty value
- */
-function isEmptyValue(value: RuntimeValue): boolean {
-  return value.value.kind === 'Empty';
-}
 
 /**
  * Creates a hook function that highlights editors with diffs
@@ -89,49 +25,40 @@ function createDiffHighlightHook(diffs: Diff[]) {
     // Check if current path matches any diff path (exact match)
     const matchingDiff = findMatchingDiff(diffs, path);
 
+    // Special-case: for enums where expected is a simple label (no payload)
+    // and actual has a complex payload, let the EnumEditor render an actual
+    // preview (read-only) instead of the atomic banner here.
+
+    if (
+      matchingDiff &&
+      matchingDiff.actual.value.kind === 'Enum' &&
+      matchingDiff.expected.value.kind === 'Enum'
+    ) {
+      const [, [, payload]] = matchingDiff.actual.value.value;
+      const actualPayload = payload?.value;
+      const expectedIsSimple = matchingDiff.expected.value.value[1][1] === null;
+      const actualPayloadIsComplex =
+        !!actualPayload && !isAtomicRuntime(actualPayload);
+      if (expectedIsSimple && actualPayloadIsComplex) {
+        // Defer to EnumEditor preview UI
+        return editor;
+      }
+    }
+
     // Check if this is a parent of a diff path (for containers)
     const isParentOfDiff = !matchingDiff && isParentOfAnyDiff(diffs, path);
 
     if (matchingDiff) {
-      const expectedIsEmpty = isEmptyValue(matchingDiff.expected);
-      const actualIsEmpty = isEmptyValue(matchingDiff.actual);
-
-      if (expectedIsEmpty || actualIsEmpty) {
-        return (
-          <div className="diff-highlight atomic-diff">
-            {expectedIsEmpty ? (
-              <>
-                {renderEmptyValueIndicator(true)}
-                <div className="diff-actual">
-                  <FormattedMessage id="diff.actual" />:{' '}
-                  {renderAtomicValue(matchingDiff.actual)}
-                </div>
-              </>
-            ) : (
-              //actualIsEmpty
-              <>
-                {renderEmptyValueIndicator(false)}
-                <div className="diff-expected">
-                  <FormattedMessage id="diff.expected" />:{' '}
-                  {renderAtomicValue(matchingDiff.expected)}
-                </div>
-              </>
-            )}
-            {editor}
+      // For regular atomic values, show expected vs actual
+      return (
+        <div className="diff-highlight atomic-diff">
+          {editor}
+          <div className="diff-actual">
+            <FormattedMessage id="diff.actual" />:{' '}
+            {renderAtomicValue(matchingDiff.actual)}
           </div>
-        );
-      } else {
-        // For regular atomic values, show expected vs actual
-        return (
-          <div className="diff-highlight atomic-diff">
-            {editor}
-            <div className="diff-actual">
-              <FormattedMessage id="diff.actual" />:{' '}
-              {renderAtomicValue(matchingDiff.actual)}
-            </div>
-          </div>
-        );
-      }
+        </div>
+      );
     } else if (isParentOfDiff) {
       // For containers that have diffs somewhere inside them
       return <div className="diff-highlight container-diff">{editor}</div>;
@@ -148,6 +75,7 @@ export default function AssertionValueEditor({
   diffs = [],
   currentPath,
   highlightDiffs = true,
+  onDiffResolved,
 }: Props): ReactElement {
   // Array item phantom rendering is handled inside ArrayEditor based on diffs.
 
@@ -165,6 +93,7 @@ export default function AssertionValueEditor({
         editorHook={editorHook}
         currentPath={currentPath}
         diffs={diffs}
+        onDiffResolved={onDiffResolved}
       />
       <button
         className="assertion-delete"

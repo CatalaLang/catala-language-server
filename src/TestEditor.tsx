@@ -5,6 +5,7 @@ import {
   type Test,
   type TestInputs,
   type TestRunResults,
+  type PathSegment,
 } from './generated/test_case';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
@@ -20,6 +21,7 @@ type Props = {
     status: TestRunStatus;
     results?: TestRunResults;
   };
+  onDiffResolved(scope: string, path: PathSegment[]): void;
 };
 
 // Editor for a single test case (child of TestFileEditor)
@@ -182,6 +184,9 @@ export default function TestEditor(props: Props): ReactElement {
               props.runState?.results?.kind === 'Ok'
                 ? props.runState.results.value.diffs
                 : []
+            }
+            onDiffResolved={(path) =>
+              props.onDiffResolved(props.test.testing_scope, path as any)
             }
           />
         </div>
