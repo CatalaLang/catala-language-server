@@ -13,30 +13,10 @@ import * as fs from 'fs';
 import cmd_exists from 'command-exists';
 import * as net from 'net';
 import { spawn } from 'child_process';
+import { clerkPath, getCwd } from './util_client';
+import { initTests } from './testAndCoverage';
 
 let client: LanguageClient;
-
-function getCwd(bufferPath: string): string | undefined {
-  return vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(bufferPath))?.uri
-    ?.fsPath;
-}
-
-function pathFromConfig(confId: string, defaultCmd: string): string {
-  const confPath = vscode.workspace
-    .getConfiguration('catala')
-    .get<string>(confId);
-  if (confPath === undefined || confPath === null || confPath.trim() === '')
-    return defaultCmd;
-  if (!fs.existsSync(confPath)) {
-    vscode.window.showWarningMessage(
-      `Could not find executable for ${confId} at ${confPath}, falling back to default`
-    );
-    return defaultCmd;
-  }
-  return confPath;
-}
-
-const clerkPath: string = pathFromConfig('clerkPath', 'clerk');
 
 interface IRunArgs {
   uri: string;
@@ -51,11 +31,14 @@ async function selectScope(): Promise<IRunArgs | undefined> {
     return undefined;
   }
 
-  const files_scopes_map: { path: string; scopes: string[] }[] =
-    await client.sendRequest(
-      'catala.getRunnableScopes',
-      vscode.workspace.getWorkspaceFolder
-    );
+  const files_scopes_map: {
+    path: string;
+    scopes: { name: string; range: vscode.Range }[];
+  }[] = await client.sendRequest(
+    'catala.getRunnableScopes',
+    vscode.workspace.getWorkspaceFolder
+  );
+
   const possible_files: vscode.QuickPickItem[] = [
     {
       label: 'Catala source files',
@@ -75,7 +58,7 @@ async function selectScope(): Promise<IRunArgs | undefined> {
     const file_scopes = files_scopes_map.find((f) => f.path == file.label);
     if (file_scopes) {
       possible_scopes = file_scopes.scopes.map((scope) => {
-        return { label: scope };
+        return { label: scope.name };
       });
       const scopes_to_choose: vscode.QuickPickItem[] = [
         {
@@ -121,7 +104,9 @@ async function debugScope(): Promise<void> {
 }
 vscode.commands.registerCommand('catala.debug', debugScope);
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(
+  context: vscode.ExtensionContext
+): Promise<void> {
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const local_path = path.join(
@@ -261,7 +246,8 @@ export function activate(context: vscode.ExtensionContext): void {
       serverOptions,
       clientOptions
     );
-    client.start();
+    await client.start();
+    await initTests(context, client);
   }
 
   // Always register the custom editor provider

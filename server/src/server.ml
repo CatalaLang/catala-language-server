@@ -25,6 +25,8 @@ module SState = Server_state
 let ( let*? ) v f =
   Lwt.bind v @@ function None -> Lwt.return_none | Some x -> f x
 
+let init_waiter, init_wakener = Lwt.wait ()
+
 exception ServerError of string
 
 let lookup_project ~on_error doc_id projects =
@@ -573,22 +575,31 @@ class catala_lsp_server =
           else Lwt.return sstate
         in
         let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
+        let () = Lwt.wakeup init_wakener () in
         Lwt.return ((), sstate)
       | _ -> Lwt.return_unit
 
-    method private on_req_get_all_scopes () : Yojson.Safe.t Lwt.t =
+    method private on_req_get_all_scopes ~tests_only () : Yojson.Safe.t Lwt.t =
+      let open Shared_ast in
+      let* () = init_waiter in
       SState.use_now server_state
       @@ fun { projects; _ } ->
       let scopes =
         Projects.Projects.fold
           (fun ({ Projects.project_files; _ } as project) acc ->
+            (* FIXME: deleted files are actually not deleted? *)
             Doc_id.Map.fold
               (fun doc_id _f acc ->
                 if Projects.is_an_included_file doc_id project then acc
                 else
-                  match Utils.list_scopes (doc_id :> string) with
+                  match Utils.list_scopes ~tests_only (doc_id :> string) with
                   | [] -> acc
-                  | scopes -> Doc_id.Map.add doc_id scopes acc)
+                  | scopes -> Doc_id.Map.add doc_id scopes acc
+                  | exception e ->
+                    Log.err (fun m ->
+                        m "Cannot read file %a: %s" Doc_id.format doc_id
+                          (Printexc.to_string e));
+                    acc)
               project_files acc)
           projects Doc_id.Map.empty
       in
@@ -603,7 +614,14 @@ class catala_lsp_server =
                        `List
                          (List.map
                             (fun s ->
-                              `String (Shared_ast.ScopeName.to_string s))
+                              let pos = Mark.get (ScopeName.get_info s) in
+                              `Assoc
+                                [
+                                  ( "name",
+                                    `String (Shared_ast.ScopeName.to_string s) );
+                                  ( "range",
+                                    Range.yojson_of_t (Utils.range_of_pos pos) );
+                                ])
                             scopes) );
                    ]))
       in
@@ -630,7 +648,9 @@ class catala_lsp_server =
         | TextDocumentFormatting params ->
           self#on_req_document_formatting ~notify_back params
         | UnknownRequest { meth = "catala.getRunnableScopes"; params = _ } ->
-          self#on_req_get_all_scopes ()
+          self#on_req_get_all_scopes ~tests_only:false ()
+        | UnknownRequest { meth = "catala.getTestScopes"; params = _ } ->
+          self#on_req_get_all_scopes ~tests_only:true ()
         | UnknownRequest { meth; _ } ->
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
