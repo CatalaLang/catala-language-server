@@ -12,6 +12,7 @@ import type {
 } from '../generated/test_case';
 import ValueEditor, { createRuntimeValue } from './ValueEditors';
 import { assertUnreachable } from '../util';
+import { isPathPrefix } from '../diff/highlight';
 
 /**
  * Diffs are consumed only by ArrayEditor to compute "phantom" indices
@@ -26,6 +27,7 @@ type ArrayEditorProps = {
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
   currentPath: PathSegment[];
   diffs: Diff[];
+  onDiffResolved?: (path: PathSegment[]) => void;
   editable?: boolean;
 };
 
@@ -257,12 +259,12 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
           const extraIndices = (props.diffs ?? [])
             .filter(
               (d) =>
+                isPathPrefix(currentPath, d.path) &&
                 d.path.length === currentPath.length + 1 &&
-                JSON.stringify(d.path.slice(0, currentPath.length)) ===
-                  JSON.stringify(currentPath) &&
                 d.path[currentPath.length].kind === 'ListIndex' &&
-                ((isEmptyValue(d.expected) && !isEmptyValue(d.actual)) ||
-                  (isEmptyValue(d.actual) && !isEmptyValue(d.expected)))
+                // Only create phantom indices when expected is Empty and actual has a value
+                isEmptyValue(d.expected) &&
+                !isEmptyValue(d.actual)
             )
             .map((d) => (d.path[currentPath.length] as any).value as number);
           const indicesToRender = Array.from(
@@ -271,7 +273,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
           return indicesToRender.map((index) => {
             const item = currentArray[index];
-            const isPhantom = item === undefined;
+            const isPhantom = item === undefined; // "phantom"
 
             // Determine key
             let itemKey: string | number;
@@ -289,16 +291,18 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
               itemKey = `phantom-${index}`;
             }
 
-            const phantomDiff = isPhantom
-              ? (props.diffs ?? []).find(
-                  (d) =>
-                    d.path.length === currentPath.length + 1 &&
-                    JSON.stringify(d.path.slice(0, currentPath.length)) ===
-                      JSON.stringify(currentPath) &&
-                    d.path[currentPath.length].kind === 'ListIndex' &&
-                    d.path[currentPath.length].value === index
-                )
-              : undefined;
+            const childIndexSeg: PathSegment = {
+              kind: 'ListIndex',
+              value: index,
+            };
+            const childPath: PathSegment[] = [...currentPath, childIndexSeg];
+            const indexDiff = (props.diffs ?? []).find(
+              (d) =>
+                isPathPrefix(currentPath, d.path) &&
+                d.path.length === currentPath.length + 1 &&
+                d.path[currentPath.length].kind === 'ListIndex' &&
+                d.path[currentPath.length].value === index
+            );
 
             return (
               <div
@@ -365,85 +369,110 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                       {getTypeDisplayName(elementType, intl)}
                     </div>
                   )}
-                  {isPhantom && phantomDiff ? (
-                    isEmptyValue(phantomDiff.expected) &&
-                    !isEmptyValue(phantomDiff.actual) ? (
-                      <>
-                        <div className="empty-value-indicator expected">
+                  {isPhantom &&
+                  indexDiff &&
+                  isEmptyValue(indexDiff.expected) &&
+                  !isEmptyValue(indexDiff.actual) ? (
+                    <>
+                      <div className="empty-value-indicator expected">
+                        <FormattedMessage
+                          id="diff.emptyExpected"
+                          defaultMessage="Empty"
+                        />
+                      </div>
+                      <div className="phantom-actual-value">
+                        <div className="phantom-actual-label">
                           <FormattedMessage
-                            id="diff.emptyExpected"
-                            defaultMessage="Empty"
+                            id="diff.actualValue"
+                            defaultMessage="Actual value"
                           />
                         </div>
-                        <div className="phantom-actual-value">
-                          <div className="phantom-actual-label">
-                            <FormattedMessage
-                              id="diff.actualValue"
-                              defaultMessage="Actual value"
-                            />
-                          </div>
-                          <div className="phantom-actual-content">
-                            <ValueEditor
-                              testIO={{
-                                typ: elementType,
-                                value: { value: phantomDiff.actual },
-                              }}
-                              onValueChange={() => {
-                                // Non-editable
-                              }}
-                              editorHook={undefined}
-                              currentPath={[
-                                ...currentPath,
-                                { kind: 'ListIndex', value: index },
-                              ]}
-                              diffs={[]}
-                              editable={false}
-                            />
-                          </div>
+                        <div className="phantom-actual-content">
+                          <ValueEditor
+                            testIO={{
+                              typ: elementType,
+                              value: { value: indexDiff.actual },
+                            }}
+                            onValueChange={() => {
+                              // Non-editable
+                            }}
+                            editorHook={undefined}
+                            currentPath={childPath}
+                            diffs={[]}
+                            editable={false}
+                          />
                         </div>
-                      </>
-                    ) : isEmptyValue(phantomDiff.actual) &&
-                      !isEmptyValue(phantomDiff.expected) ? (
-                      <div className="empty-value-indicator actual">
-                        <FormattedMessage
-                          id="diff.emptyActual"
-                          defaultMessage="Empty"
-                        />
+                        <button
+                          className="array-phantom-action array-phantom-add"
+                          onClick={() => {
+                            if (editable === false || !indexDiff) return;
+                            const elementToInsert =
+                              indexDiff.actual as RuntimeValue;
+                            const newArray = [...currentArray];
+                            newArray.splice(index, 0, elementToInsert);
+                            updateParent(newArray);
+                            props.onDiffResolved?.(childPath);
+                          }}
+                          disabled={editable === false}
+                        >
+                          <span className="codicon codicon-check"></span>
+                          <FormattedMessage
+                            id="diff.addToExpected"
+                            defaultMessage="Add to expected"
+                          />
+                        </button>
                       </div>
-                    ) : (
-                      <div className="empty-value-indicator">
-                        <FormattedMessage
-                          id="diff.emptyActual"
-                          defaultMessage="Empty"
-                        />
-                      </div>
-                    )
-                  ) : item && item.value.kind === 'Empty' ? (
-                    <div className="empty-value-indicator">
-                      <FormattedMessage
-                        id="diff.emptyActual"
-                        defaultMessage="Empty"
-                      />
-                    </div>
+                    </>
                   ) : (
-                    <ValueEditor
-                      testIO={{
-                        typ: elementType,
-                        value: { value: item as RuntimeValue },
-                      }}
-                      onValueChange={(newItemTestIo) => {
-                        if (newItemTestIo.value) {
-                          handleUpdate(index, newItemTestIo.value.value);
-                        }
-                      }}
-                      editorHook={editorHook}
-                      currentPath={[
-                        ...currentPath,
-                        { kind: 'ListIndex', value: index },
-                      ]}
-                      diffs={props.diffs}
-                      editable={editable}
-                    />
+                    <>
+                      {indexDiff &&
+                        isEmptyValue(indexDiff.actual) &&
+                        !isEmptyValue(indexDiff.expected) && (
+                          <>
+                            <div className="empty-value-indicator actual">
+                              <FormattedMessage
+                                id="diff.emptyActual"
+                                defaultMessage="Empty"
+                              />
+                            </div>
+                            <button
+                              className="array-phantom-action array-phantom-remove"
+                              onClick={() => {
+                                if (editable === false) return;
+                                const newArray = [...currentArray];
+                                newArray.splice(index, 1);
+                                updateParent(newArray);
+                                props.onDiffResolved?.(childPath);
+                              }}
+                              disabled={editable === false}
+                            >
+                              <span className="codicon codicon-trash"></span>
+                              <FormattedMessage
+                                id="diff.removeFromExpected"
+                                defaultMessage="Remove from expected"
+                              />
+                            </button>
+                          </>
+                        )}
+                      {!isPhantom && (
+                        <ValueEditor
+                          testIO={{
+                            typ: elementType,
+                            value: { value: item as RuntimeValue },
+                          }}
+                          onValueChange={(newItemTestIo) => {
+                            if (newItemTestIo.value) {
+                              handleUpdate(index, newItemTestIo.value.value);
+                            }
+                          }}
+                          editorHook={editorHook}
+                          currentPath={childPath}
+                          diffs={props.diffs}
+                          editable={editable}
+                          onDiffResolved={props.onDiffResolved}
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               </div>

@@ -12,11 +12,14 @@ import {
   type Test,
   type TestList,
   type TestRunResults,
+  type PathSegment,
+  type Diff,
   readDownMessage,
   writeUpMessage,
 } from './generated/test_case';
 import TestEditor from './TestEditor';
 import { assertUnreachable } from './util';
+import { pathEquals } from './diff/highlight';
 import type { WebviewApi } from 'vscode-webview';
 
 // Note:
@@ -220,6 +223,30 @@ export default function TestFileEditor({
   const onTestRun = useCallback(_onTestRun(false), [vscode]);
   const onTestOutputsReset = useCallback(_onTestRun(true), [vscode]);
 
+  const onDiffResolved = useCallback(
+    (scope: string, path: PathSegment[]): void => {
+      setTestRunState((prev) => {
+        const entry = prev[scope];
+        if (!entry?.results || entry.results.kind !== 'Ok') return prev;
+        const currentDiffs = entry.results.value.diffs;
+        const filtered: Diff[] = currentDiffs.filter(
+          (d) => !pathEquals(d.path, path)
+        );
+        return {
+          ...prev,
+          [scope]: {
+            ...entry,
+            results: {
+              kind: 'Ok',
+              value: { ...entry.results.value, diffs: filtered },
+            },
+          },
+        };
+      });
+    },
+    []
+  );
+
   const onAddNewTest = useCallback((): void => {
     setModalState({
       isOpen: true,
@@ -365,6 +392,7 @@ export default function TestFileEditor({
               onTestRun={onTestRun}
               onTestOutputsReset={onTestOutputsReset}
               runState={testRunState[test.testing_scope]}
+              onDiffResolved={onDiffResolved}
             />
           ))}
           {renderModal()}

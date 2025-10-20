@@ -13,7 +13,7 @@
   "testFile.openTextEditor": "Ouvrir dans l'éditeur de texte",
   "testEditor.collapse": "Réduire le cas de test",
   "testEditor.expand": "Développer le cas de test",
-  "testEditor.run": "Exécuter le test",
+  "testEditor.run": "Lancer le calcul",
   "testEditor.delete": "Supprimer le test",
   "testEditor.description": "Description",
   "testEditor.descriptionPlaceholder": "Entrez une description du test...",
@@ -51,6 +51,9 @@
   "diff.expected": "Attendu",
   "diff.actual": "Obtenu",
   "diff.emptyExpected": "Aucun élément attendu",
-  "diff.emptyActual": "Élément attendu, mais manquant à l'exécution",
-  "diff.actualValue": "Valeur obtenue"
+  "diff.emptyActual": "Élément attendu, mais manquant lors du calcul",
+  "diff.actualValue": "Valeur obtenue",
+  "diff.addToExpected": "Ajouter à l'attendu",
+  "diff.replaceExpected": "Remplacer l'attendu par la valeur calculée",
+  "diff.removeFromExpected": "Supprimer de l'attendu"
 }

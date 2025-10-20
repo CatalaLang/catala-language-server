@@ -161,3 +161,39 @@
   position: absolute;
   top: -1000px;
 }
+
+/* Phantom diff action buttons */
+.array-phantom-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  margin-left: 8px;
+}
+
+.array-phantom-add {
+  background-color: var(--button-primary-background);
+  color: var(--button-primary-foreground);
+  border: none;
+}
+.array-phantom-add:hover {
+  background-color: var(--button-primary-hover);
+}
+
+.array-phantom-remove {
+  background-color: transparent;
+  color: var(--vscode-editorError-foreground, #f14c4c);
+  border-color: var(--vscode-editorError-foreground, #f14c4c);
+}
+.array-phantom-remove:hover {
+  background-color: var(
+    --vscode-diffEditor-removedLineBackground,
+    rgba(255, 0, 0, 0.08)
+  );
+}

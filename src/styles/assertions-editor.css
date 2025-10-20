@@ -20,16 +20,11 @@
   );
 }
 
-.diff-expected,
 .diff-actual {
   font-family: var(--vscode-editor-font-family);
   font-size: 12px;
   padding: 2px 4px;
   margin-bottom: 4px;
-}
-
-.diff-expected {
-  color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
 }
 
 .diff-actual {
@@ -94,4 +89,21 @@
     --vscode-editorWarning-background,
     rgba(255, 165, 0, 0.08)
   );
+}
+
+/* Expected value label for enum actual preview */
+.expected-value {
+  margin-bottom: 8px;
+}
+
+.expected-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--field-label-color);
+  margin-bottom: 6px;
+}
+
+/* Slight spacing for the replace action button */
+.diff-action-accept {
+  margin-right: 8px;
 }
