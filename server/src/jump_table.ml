@@ -137,6 +137,13 @@ module PMap = Position_map.Make (struct
   let format = pp_var
 end)
 
+type traversal_ctxt = {
+  ctx : Desugared.Name_resolution.context;
+  scope_structs : ScopeName.t StructName.Map.t;
+  module_lookup : ModuleName.t -> mjump;
+  scope_lookup : sjump ScopeName.Map.t;
+}
+
 type variables = PMap.pmap
 type t = { variables : variables; lookup_table : lookup_entry LTable.t }
 
@@ -163,24 +170,18 @@ let pp_table ppf { declaration; definitions; usages; types } =
 let find key proj bindings =
   List.find_opt (fun (k, _) -> proj key = proj k) bindings
 
-let populate_struct_def
-    (ctx : Desugared.Name_resolution.context)
-    (module_lookup : ModuleName.t -> mjump)
-    name
-    fields
-    m
-    k =
+let populate_struct_def (tctx : traversal_ctxt) name fields m k =
   let m =
     (* Populate struct's path components *)
     List.fold_left
       (fun acc mname ->
-        let mjump = module_lookup mname in
+        let mjump = tctx.module_lookup mname in
         let pos = Mark.get (ModuleName.get_info mname) in
         PMap.add pos (Module_use mjump) acc)
       m (StructName.path name)
   in
   match
-    find name StructName.to_string (StructName.Map.bindings ctx.structs)
+    find name StructName.to_string (StructName.Map.bindings tctx.ctx.structs)
   with
   | None ->
     (* Structure not found: should not happen *)
@@ -221,8 +222,7 @@ let populate_struct_def
       fields m
 
 let populate_enum_inject
-    (ctx : Desugared.Name_resolution.context)
-    (module_lookup : ModuleName.t -> mjump)
+    (tctx : traversal_ctxt)
     (enum_name : EnumName.t)
     (cons : EnumConstructor.t)
     m =
@@ -230,13 +230,13 @@ let populate_enum_inject
     (* Populate enum's path components *)
     List.fold_left
       (fun acc mname ->
-        let mjump = module_lookup mname in
+        let mjump = tctx.module_lookup mname in
         let pos = Mark.get (ModuleName.get_info mname) in
         PMap.add pos (Module_use mjump) acc)
       m (EnumName.path enum_name)
   in
   let enum_decl_opt =
-    find enum_name EnumName.to_string (EnumName.Map.bindings ctx.enums)
+    find enum_name EnumName.to_string (EnumName.Map.bindings tctx.ctx.enums)
   in
   match enum_decl_opt with
   | None -> m
@@ -265,25 +265,17 @@ let populate_enum_inject
       let pos = Mark.get (EnumConstructor.get_info cons) in
       PMap.add pos var m)
 
-let populate_scopecall
-    (ctx : Desugared.Name_resolution.context)
-    module_lookup
-    scope_lookup
-    pos
-    scope
-    args
-    acc
-    f =
+let populate_scopecall (tctx : traversal_ctxt) pos scope args acc f =
   let acc =
     (* Populate scope's path components *)
     List.fold_left
       (fun acc mname ->
-        let mjump = module_lookup mname in
+        let mjump = tctx.module_lookup mname in
         let pos = Mark.get (ModuleName.get_info mname) in
         PMap.add pos (Module_use mjump) acc)
       acc (ScopeName.path scope)
   in
-  let sjump = ScopeName.Map.find scope scope_lookup in
+  let sjump = ScopeName.Map.find scope tctx.scope_lookup in
   let acc = PMap.add pos (Scope_use sjump) acc in
   ScopeVar.Map.fold
     (fun scope_var (def_pos, e) acc ->
@@ -293,7 +285,7 @@ let populate_scopecall
       in
       let typ =
         match
-          ScopeVar.Map.to_seq ctx.var_typs
+          ScopeVar.Map.to_seq tctx.ctx.var_typs
           |> Seq.find (fun (sv', _) -> ScopeVar.to_string sv' = name)
         with
         | None ->
@@ -308,34 +300,43 @@ let populate_scopecall
       f e acc)
     args acc
 
-let rec traverse_typ
-    (ctx : Desugared.Name_resolution.context)
-    (module_lookup : ModuleName.t -> mjump)
-    ((typ, pos) : naked_typ * Pos.t)
-    m : PMap.pmap =
+let rec traverse_typ (tctx : traversal_ctxt) ((typ, pos) : naked_typ * Pos.t) m
+    : PMap.pmap =
   match typ with
-  | TStruct struct_name ->
-    let m =
-      (* Populate struct's path components *)
-      List.fold_left
-        (fun acc mname ->
-          let mjump = module_lookup mname in
-          let pos = Mark.get (ModuleName.get_info mname) in
-          PMap.add pos (Module_use mjump) acc)
-        m
-        (StructName.path struct_name)
-    in
-    let name = StructName.to_string struct_name in
-    let hash = Hashtbl.hash (StructName.get_info struct_name) in
-    let jump = { name; hash; typ = typ, pos } in
-    let m = PMap.add pos (Type jump) m in
-    PMap.add pos (Usage jump) m
+  | TStruct struct_name -> begin
+    StructName.Map.find_opt struct_name tctx.scope_structs
+    |> function
+    | None ->
+      let m =
+        (* Populate struct's path components *)
+        List.fold_left
+          (fun acc mname ->
+            let mjump = tctx.module_lookup mname in
+            let pos = Mark.get (ModuleName.get_info mname) in
+            PMap.add pos (Module_use mjump) acc)
+          m
+          (StructName.path struct_name)
+      in
+      let name = StructName.to_string struct_name in
+      let hash = Hashtbl.hash (StructName.get_info struct_name) in
+      let jump = { name; hash; typ = typ, pos } in
+      let m = PMap.add pos (Type jump) m in
+      PMap.add pos (Usage jump) m
+    | Some scope_name -> begin
+      (* If a scope's out struct is referenced, populate with the scope's
+         signature instead. *)
+      ScopeName.Map.find_opt scope_name tctx.scope_lookup
+      |> function
+      | None -> (* shouldn't happen *) m
+      | Some sjump -> PMap.add pos (Scope_use sjump) m
+    end
+  end
   | TEnum enum_name ->
     let m =
       (* Populate enum's path components *)
       List.fold_left
         (fun acc mname ->
-          let mjump = module_lookup mname in
+          let mjump = tctx.module_lookup mname in
           let pos = Mark.get (ModuleName.get_info mname) in
           PMap.add pos (Module_use mjump) acc)
         m (EnumName.path enum_name)
@@ -345,20 +346,13 @@ let rec traverse_typ
     let jump = { name; hash; typ = typ, pos } in
     let m = PMap.add pos (Type jump) m in
     PMap.add pos (Usage jump) m
-  | TArrow (tl, t) ->
-    List.fold_right (traverse_typ ctx module_lookup) (t :: tl) m
-  | TTuple tl -> List.fold_right (traverse_typ ctx module_lookup) tl m
-  | TOption typ | TArray typ | TDefault typ ->
-    traverse_typ ctx module_lookup typ m
+  | TArrow (tl, t) -> List.fold_right (traverse_typ tctx) (t :: tl) m
+  | TTuple tl -> List.fold_right (traverse_typ tctx) tl m
+  | TOption typ | TArray typ | TDefault typ -> traverse_typ tctx typ m
   | TLit _lit -> PMap.add pos (Literal (typ, pos)) m
   | TForAll _ | TVar _ | TClosureEnv -> m
 
-let traverse_expr
-    (ctx : Desugared.Name_resolution.context)
-    (module_lookup : ModuleName.t -> mjump)
-    (scope_lookup : sjump ScopeName.Map.t)
-    (e : (scopelang, typed) gexpr)
-    m =
+let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
   let open Shared_ast in
   let open Catala_utils in
   let rec f (bnd_ctx : Bindlib.ctxt) (e : (scopelang, typed) gexpr) acc =
@@ -394,9 +388,9 @@ let traverse_expr
       let acc = PMap.add pos var acc in
       f bnd_ctx sub_expr acc
     | EStruct { name; fields } ->
-      populate_struct_def ctx module_lookup name fields acc (f bnd_ctx)
+      populate_struct_def tctx name fields acc (f bnd_ctx)
     | EInj { name; e; cons } ->
-      let acc = populate_enum_inject ctx module_lookup name cons acc in
+      let acc = populate_enum_inject tctx name cons acc in
       if Mark.remove e = ELit LUnit then
         (* Don't recurse when the next expression is nil *)
         acc
@@ -433,8 +427,7 @@ let traverse_expr
           PMap.add pos var acc |> f bnd_ctx e)
         cases acc
     | EScopeCall { scope; args } ->
-      populate_scopecall ctx module_lookup scope_lookup pos scope args acc
-        (f bnd_ctx)
+      populate_scopecall tctx pos scope args acc (f bnd_ctx)
     | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | EApp _ | ETuple _
     | ETupleAccess _ | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ | EPos _
       ->
@@ -442,12 +435,7 @@ let traverse_expr
   in
   f Bindlib.empty_ctxt e m
 
-let traverse_scope_def
-    ctx
-    (module_lookup : ModuleName.t -> mjump)
-    scope_lookup
-    (rule : typed rule)
-    m : PMap.pmap =
+let traverse_scope_def tctx (rule : typed rule) m : PMap.pmap =
   match rule with
   | ScopeVarDefinition { var; typ; io = _; e }
   | SubScopeVarDefinition { var; typ; var_within_origin_scope = _; e } ->
@@ -456,15 +444,15 @@ let traverse_scope_def
     let hash = hash_info (module ScopeVar) var in
     let var = Definition { name; hash; typ } in
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
-    let m = traverse_typ ctx module_lookup typ m in
-    traverse_expr ctx module_lookup scope_lookup e m
-  | Assertion e -> traverse_expr ctx module_lookup scope_lookup e m
+    let m = traverse_typ tctx typ m in
+    traverse_expr tctx e m
+  | Assertion e -> traverse_expr tctx e m
 
-let traverse_scope_sig ctx module_lookup (scope : _ scope_decl) m : PMap.pmap =
+let traverse_scope_sig tctx (scope : _ scope_decl) m : PMap.pmap =
   ScopeVar.Map.fold
     (fun scope_var var_ty m ->
       (* FIXME: subscope type definition is buggy *)
-      let m = traverse_typ ctx module_lookup var_ty.svar_out_ty m in
+      let m = traverse_typ tctx var_ty.svar_out_ty m in
       let name = ScopeVar.to_string scope_var in
       let pos = Mark.get (ScopeVar.get_info scope_var) in
       let hash = hash_info (module ScopeVar) scope_var in
@@ -472,21 +460,12 @@ let traverse_scope_sig ctx module_lookup (scope : _ scope_decl) m : PMap.pmap =
       PMap.add pos var m)
     scope.scope_sig m
 
-let traverse_scope
-    ctx
-    (module_lookup : ModuleName.t -> mjump)
-    scope_lookup
-    (scope : typed scope_decl)
-    m : PMap.pmap =
-  let m = traverse_scope_sig ctx module_lookup scope m in
-  List.fold_right
-    (traverse_scope_def ctx module_lookup scope_lookup)
-    scope.scope_decl_rules m
+let traverse_scope tctx (scope : typed scope_decl) m : PMap.pmap =
+  let m = traverse_scope_sig tctx scope m in
+  List.fold_right (traverse_scope_def tctx) scope.scope_decl_rules m
 
 let traverse_topdef
-    ctx
-    (module_lookup : ModuleName.t -> mjump)
-    scope_lookup
+    tctx
     (topdef : TopdefName.t)
     ((e, typ, _vis, _meta) : typed expr * typ * visibility * bool)
     m : PMap.pmap =
@@ -495,13 +474,10 @@ let traverse_topdef
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
   let topdef = Topdef { name; hash; typ } in
   let m = PMap.add topdef_pos topdef m in
-  let m = traverse_typ ctx module_lookup typ m in
-  traverse_expr ctx module_lookup scope_lookup e m
+  let m = traverse_typ tctx typ m in
+  traverse_expr tctx e m
 
-let traverse_ctx
-    (ctx : Desugared.Name_resolution.context)
-    (module_lookup : ModuleName.t -> mjump)
-    m : PMap.pmap =
+let traverse_ctx (tctx : traversal_ctxt) m : PMap.pmap =
   let m =
     StructName.Map.fold
       (fun struct_name (fields, _vis) m ->
@@ -515,14 +491,14 @@ let traverse_ctx
         in
         StructField.Map.fold
           (fun sf typ m ->
-            let m = traverse_typ ctx module_lookup typ m in
+            let m = traverse_typ tctx typ m in
             let name = StructField.to_string sf in
             let pos = Mark.get (StructField.get_info sf) in
             let hash = hash_info (module StructField) sf in
             let var = Declaration { name; hash; typ } in
             PMap.add pos var m)
           fields m)
-      ctx.structs m
+      tctx.ctx.structs m
   in
   let m =
     EnumName.Map.fold
@@ -534,14 +510,14 @@ let traverse_ctx
         let m = PMap.add pos (Declaration { name; hash; typ = enum_type }) m in
         EnumConstructor.Map.fold
           (fun ecstr typ m ->
-            let m = traverse_typ ctx module_lookup typ m in
+            let m = traverse_typ tctx typ m in
             let name = EnumConstructor.to_string ecstr in
             let pos = Mark.get (EnumConstructor.get_info ecstr) in
             let hash = hash_info (module EnumConstructor) ecstr in
             let var = Declaration { name; hash; typ = enum_type } in
             PMap.add pos var m)
           cstrs m)
-      ctx.enums m
+      tctx.ctx.enums m
   in
   m
 
@@ -550,50 +526,70 @@ let traverse
     (module_lookup : ModuleName.t -> mjump)
     (prog : _ program)
     (m : PMap.pmap) =
-  let all_scopes =
+  let (all_scopes : typed scope_decl list) =
     ScopeName.Map.values prog.program_scopes |> List.map Mark.remove
   in
-  let add_scope_sjump (m, scope_lookup_map) (scope : _ scope_decl) =
-    let scope_decl_name = scope.scope_decl_name in
-    let ((name, pos) as info) = ScopeName.get_info scope_decl_name in
+  let add_scope_lookup (scope_decl : _ scope_decl) map =
+    let scope_decl_name = scope_decl.scope_decl_name in
+    let ((name, _pos) as info) = ScopeName.get_info scope_decl_name in
     let hash = Hashtbl.hash info in
-    let sjump = { name; hash; scope_decl_name; scope_sig = scope.scope_sig } in
-    let m = PMap.add pos (Scope_decl sjump) m in
-    let scope_lookup_map =
-      ScopeName.Map.add scope_decl_name sjump scope_lookup_map
+    let sjump : sjump =
+      { name; hash; scope_decl_name; scope_sig = scope_decl.scope_sig }
     in
-    m, scope_lookup_map
+    ScopeName.Map.add scope_decl_name sjump map
   in
-  let m, scope_lookup =
+  let scope_lookup : sjump ScopeName.Map.t =
     ModuleName.Map.fold
-      (fun _m_name decl_map (acc, scope_lookup_map) ->
+      (fun _m_name (decl_map : _ ScopeName.Map.t) scope_lookup_map ->
         ScopeName.Map.fold
-          (fun _sname scope (acc, scope_lookup_map) ->
+          (fun _sname (scope : (_ scope_decl, _) Mark.ed)
+               (scope_lookup_map : sjump ScopeName.Map.t) ->
             let scope = Mark.remove scope in
-            let acc = traverse_scope_sig ctx module_lookup scope acc in
-            add_scope_sjump (acc, scope_lookup_map) scope)
-          decl_map (acc, scope_lookup_map))
-      prog.program_modules (m, ScopeName.Map.empty)
+            add_scope_lookup scope scope_lookup_map)
+          decl_map scope_lookup_map)
+      prog.program_modules ScopeName.Map.empty
   in
-  let m, (scope_lookup : sjump ScopeName.Map.t) =
-    List.fold_left add_scope_sjump (m, scope_lookup) all_scopes
+  let scope_lookup =
+    List.fold_left (Fun.flip add_scope_lookup) scope_lookup all_scopes
+  in
+  let tctx =
+    let scope_structs =
+      ScopeName.Map.fold
+        (fun scope_name scope_context m ->
+          StructName.Map.add
+            scope_context.Desugared.Name_resolution.scope_out_struct scope_name
+            m)
+        ctx.scopes StructName.Map.empty
+    in
+    { ctx; scope_structs; module_lookup; scope_lookup }
+  in
+  let add_scope_sjump m (scope : _ scope_decl) =
+    let _, pos = ScopeName.get_info scope.scope_decl_name in
+    PMap.add pos
+      (Scope_decl (ScopeName.Map.find scope.scope_decl_name scope_lookup))
+      m
   in
   let m =
-    TopdefName.Map.fold
-      (traverse_topdef ctx module_lookup scope_lookup)
-      prog.program_topdefs m
+    ModuleName.Map.fold
+      (fun _m_name decl_map acc ->
+        ScopeName.Map.fold
+          (fun _sname scope acc ->
+            let scope = Mark.remove scope in
+            let acc = traverse_scope_sig tctx scope acc in
+            add_scope_sjump acc scope)
+          decl_map acc)
+      prog.program_modules m
   in
+  let m = List.fold_left add_scope_sjump m all_scopes in
+  let m = TopdefName.Map.fold (traverse_topdef tctx) prog.program_topdefs m in
   let m =
-    List.fold_left
-      (fun m scope -> traverse_scope ctx module_lookup scope_lookup scope m)
-      m all_scopes
+    List.fold_left (fun m scope -> traverse_scope tctx scope m) m all_scopes
   in
-  traverse_ctx ctx module_lookup m, scope_lookup
+  traverse_ctx tctx m, tctx
 
 let add_scope_definitions
-    (ctx : Desugared.Name_resolution.context)
+    (tctx : traversal_ctxt)
     (surface : Surface.Ast.program)
-    (scope_lookup_map : sjump ScopeName.Map.t)
     (variables : PMap.t) =
   let rec process vars_acc = function
     | Surface.Ast.CodeBlock (cb, _, _) ->
@@ -606,9 +602,9 @@ let add_scope_definitions
               |> fun p -> Pos.overwrite_law_info p []
             in
             let scope_uid =
-              Desugared.Name_resolution.get_scope ctx s_use.scope_use_name
+              Desugared.Name_resolution.get_scope tctx.ctx s_use.scope_use_name
             in
-            let sjump = ScopeName.Map.find scope_uid scope_lookup_map in
+            let sjump = ScopeName.Map.find scope_uid tctx.scope_lookup in
             let var = Scope_def sjump in
             PMap.add pos var vars
           | ScopeDecl _ | StructDecl _ | EnumDecl _ | Topdef _ -> vars)
@@ -700,10 +696,8 @@ let populate
   let variables, mod_lookup =
     populate_modules input_src modules_contents prog surface PMap.empty
   in
-  let variables, scope_lookup_map = traverse ctx mod_lookup prog variables in
-  let variables =
-    add_scope_definitions ctx surface scope_lookup_map variables
-  in
+  let variables, tctx = traverse ctx mod_lookup prog variables in
+  let variables = add_scope_definitions tctx surface variables in
   let add f = function None -> Some (f empty_lookup) | Some v -> Some (f v) in
   let add_def p =
     add (fun v ->
