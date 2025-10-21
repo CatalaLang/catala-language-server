@@ -352,7 +352,7 @@ let module_type locale ?alias (module_content : Surface.Ast.module_content) =
 
 let typ_to_markdown ?prg locale (kind : Jump_table.type_lookup) =
   match prg, kind with
-  | Some prg, Type typ -> data_type prg locale typ
-  | _, (Type typ | Expr typ) -> expr_type locale typ
+  | Some prg, (Type typ | Expr typ) -> data_type prg locale typ
+  | None, (Type typ | Expr typ) -> expr_type locale typ
   | _, Scope (sn, scope_var_map) -> sig_type locale sn scope_var_map
   | _, Module (itf, alias) -> module_type locale ?alias itf
