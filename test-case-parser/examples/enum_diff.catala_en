@@ -1,0 +1,41 @@
+> Module Ui_Complex
+
+```catala-metadata
+declaration enumeration Outcome:
+  -- LabelOnly
+  -- WithDetails content Details
+  -- Many content list of integer
+
+declaration structure Details:
+  data count content integer
+  data when content date
+  data amounts content list of integer
+
+declaration scope StructPayload:
+  input selector content integer
+  output outcome content Outcome
+
+declaration scope ArrayPayload:
+  input selector content integer
+  output outcome content Outcome
+```
+
+```catala
+scope StructPayload:
+  definition outcome equals
+    if selector <= 0 then
+      Outcome.LabelOnly
+    else
+      Outcome.WithDetails content Details {
+        -- count: 2
+        -- when: |2024-12-24|
+        -- amounts: [ 3; 4; 5 ]
+      }
+
+scope ArrayPayload:
+  definition outcome equals
+    if selector <= 0 then
+      Outcome.LabelOnly
+    else
+      Outcome.Many content [ 10; 20; 30 ]
+```
