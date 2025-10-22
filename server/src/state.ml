@@ -186,15 +186,19 @@ let lookup_usages ?doc_id f p =
   generic_lookup ?doc_id f p (fun { usages; _ } -> usages)
   |> Option.map (List.map of_position)
 
-let lookup_type f p =
+let get_hover_type ?(markdown = false) f p =
   let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in
   let*? { jump_table = (lazy jt); prg; _ } = f.result in
-  let*? r, lookup_s = Jump_table.lookup_type jt p in
+  let*? range, lookup_s = Jump_table.lookup_type jt p in
   let kind =
     try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
   in
-  let md = Type_printing.typ_to_markdown ~prg f.locale kind in
-  Some (r, md)
+  if markdown then
+    let md = Type_printing.typ_to_markdown ~prg f.locale kind in
+    Some (Hover.create ~range ~contents:(`MarkupContent md) ())
+  else
+    let md = Type_printing.typ_to_raw_string ~prg f.locale kind in
+    Some (Hover.create ~range ~contents:(`MarkedString md) ())
 
 let lookup_type_declaration f p =
   let p = Utils.(lsp_range p p |> pos_of_range (f.doc_id :> File.t)) in

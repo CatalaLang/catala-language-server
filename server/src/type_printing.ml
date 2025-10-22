@@ -143,14 +143,16 @@ let pp_typ_no_box locale fmt (ty : typ) =
   in
   pp_typ fmt ty
 
-let expr_type locale typ =
+let expr_type ~markdown locale typ =
   let locale_s =
     match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
   in
   let typ_s =
-    asprintf "```catala_type_%s@\n%a@\n```" locale_s (pp_typ locale) typ
+    if markdown then
+      asprintf "```catala_type_%s@\n%a@\n```" locale_s (pp_typ locale) typ
+    else asprintf "%a" (pp_typ locale) typ
   in
-  MarkupContent.create ~kind:Markdown ~value:typ_s
+  typ_s
 
 let pp_struct_field locale fmt ((field_name, typ) : StructField.t * typ) =
   Format.fprintf fmt "@[<hov 2>%s %s %s@ %a@]" (struct_data locale)
@@ -166,15 +168,17 @@ let pp_struct_code
     (pp_print_list ~pp_sep:pp_print_cut (pp_struct_field locale))
     (StructField.Map.bindings field_map)
 
-let struct_code locale field_map =
+let struct_code ~markdown locale field_map =
   let locale_s =
     match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
   in
   let typ_s =
-    asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_struct_code locale)
-      field_map
+    if markdown then
+      asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_struct_code locale)
+        field_map
+    else asprintf "%a" (pp_struct_code locale) field_map
   in
-  MarkupContent.create ~kind:Markdown ~value:typ_s
+  typ_s
 
 let pp_enum_field locale fmt ((field_name, typ) : EnumConstructor.t * typ) =
   match fst typ with
@@ -194,17 +198,20 @@ let pp_enum_code
     (pp_print_list ~pp_sep:pp_print_cut (pp_enum_field locale))
     (EnumConstructor.Map.bindings field_map)
 
-let enum_code locale field_map =
+let enum_code ~markdown locale field_map =
   let locale_s =
     match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
   in
   let typ_s =
-    asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_enum_code locale)
-      field_map
+    if markdown then
+      asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_enum_code locale)
+        field_map
+    else asprintf "%a" (pp_enum_code locale) field_map
   in
-  MarkupContent.create ~kind:Markdown ~value:typ_s
+  typ_s
 
 let data_type
+    ~markdown
     (prg : Shared_ast.typed Scopelang.Ast.program)
     locale
     (typ : naked_typ Mark.pos) =
@@ -214,19 +221,19 @@ let data_type
   | TArrow (_, _)
   | TTuple _ | TOption _ | TArray _ | TDefault _ | TForAll _ | TVar _
   | TClosureEnv ->
-    expr_type locale typ
+    expr_type ~markdown locale typ
   | TStruct sname -> (
     let struct_ctx = ctx.ctx_structs in
     StructName.Map.find_opt sname struct_ctx
     |> function
-    | None -> expr_type locale typ
-    | Some field_map -> struct_code locale (sname, field_map))
+    | None -> expr_type ~markdown locale typ
+    | Some field_map -> struct_code ~markdown locale (sname, field_map))
   | TEnum ename -> (
     let enum_ctx = ctx.ctx_enums in
     EnumName.Map.find_opt ename enum_ctx
     |> function
-    | None -> expr_type locale typ
-    | Some field_map -> enum_code locale (ename, field_map))
+    | None -> expr_type ~markdown locale typ
+    | Some field_map -> enum_code ~markdown locale (ename, field_map))
 
 let svar_input_s_opt locale =
   let context_s = function
@@ -284,6 +291,7 @@ let pp_scope locale fmt (scope_name, scope_vars) =
     |> List.filter (fun (_, v) -> not (is_svar_internal v)))
 
 let sig_type
+    ~markdown
     locale
     scope_name
     (scope_vars : Scopelang.Ast.scope_var_ty ScopeVar.Map.t) =
@@ -291,10 +299,12 @@ let sig_type
     match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
   in
   let typ_s =
-    asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_scope locale)
-      (scope_name, scope_vars)
+    if markdown then
+      asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_scope locale)
+        (scope_name, scope_vars)
+    else asprintf "%a" (pp_scope locale) (scope_name, scope_vars)
   in
-  MarkupContent.create ~kind:Markdown ~value:typ_s
+  typ_s
 
 let pp_module locale fmt (mcontent : Surface.Ast.module_content) =
   let open Format in
@@ -337,22 +347,41 @@ let pp_module locale fmt (mcontent : Surface.Ast.module_content) =
     in
     loop ls
 
-let module_type locale ?alias (module_content : Surface.Ast.module_content) =
+let module_type
+    ~markdown
+    locale
+    ?alias
+    (module_content : Surface.Ast.module_content) =
   let locale_s =
     match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
   in
-  let typ_s =
-    asprintf "**Module %s%a**@\n```catala_code_%s@\n%a@\n```"
+  let buf = Buffer.create 128 in
+  let ppf = Format.formatter_of_buffer buf in
+  let () =
+    fprintf ppf "**Module %s%a**@\n"
       (fst module_content.module_modname.module_name)
       (Utils.pp_opt (fun fmt alias ->
            Format.fprintf fmt " (%s %s)" (alias_s locale) alias))
-      alias locale_s (pp_module locale) module_content
+      alias;
+    if markdown then fprintf ppf "```catala_code_%s@\n" locale_s;
+    fprintf ppf "%a@\n" (pp_module locale) module_content;
+    if markdown then fprintf ppf "```"
   in
-  MarkupContent.create ~kind:Markdown ~value:typ_s
+  Buffer.contents buf
 
-let typ_to_markdown ?prg locale (kind : Jump_table.type_lookup) =
+let typ_to_content ~markdown ?prg locale (kind : Jump_table.type_lookup) =
   match prg, kind with
-  | Some prg, (Type typ | Expr typ) -> data_type prg locale typ
-  | None, (Type typ | Expr typ) -> expr_type locale typ
-  | _, Scope (sn, scope_var_map) -> sig_type locale sn scope_var_map
-  | _, Module (itf, alias) -> module_type locale ?alias itf
+  | Some prg, (Type typ | Expr typ) -> data_type ~markdown prg locale typ
+  | None, (Type typ | Expr typ) -> expr_type ~markdown locale typ
+  | _, Scope (sn, scope_var_map) -> sig_type ~markdown locale sn scope_var_map
+  | _, Module (itf, alias) -> module_type ~markdown locale ?alias itf
+
+let typ_to_markdown ?prg locale (kind : Jump_table.type_lookup) :
+    MarkupContent.t =
+  let value = typ_to_content ~markdown:true ?prg locale kind in
+  MarkupContent.create ~kind:Markdown ~value
+
+let typ_to_raw_string ?prg locale (kind : Jump_table.type_lookup) :
+    MarkedString.t =
+  let value = typ_to_content ~markdown:false ?prg locale kind in
+  { MarkedString.value; language = None }

@@ -806,10 +806,15 @@ class catala_lsp_server =
       if should_ignore doc_id then Lwt.return_none
       else
         let*? f = retrieve_existing_document doc_id server_state in
-        match State.lookup_type f pos with
+        let markdown =
+          let ( let*? ) = Option.bind in
+          let*? { hover; _ } = initialize_params.capabilities.textDocument in
+          let*? { contentFormat; _ } = hover in
+          Option.map (fun l -> List.mem MarkupKind.Markdown l) contentFormat
+        in
+        match State.get_hover_type ?markdown f pos with
         | None -> Lwt.return_none
-        | Some (range, md) ->
-          Lwt.return_some (Hover.create ~range ~contents:(`MarkupContent md) ())
+        | Some content -> Lwt.return_some content
 
     method private on_req_type_definition
         ~notify_back:_
