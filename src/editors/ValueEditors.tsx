@@ -730,25 +730,24 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   const currentPayload = currentEnumData ? currentEnumData[1][1] : null;
   const currentCtorType = enumDeclaration.constructors.get(currentCtor); // Option<Typ>
 
-  // If there is a diff exactly at this enum node and the actual value
-  // has a non-atomic payload while the expected is a simple label (no payload),
-  // render an actual preview (read-only), similar to arrays' phantom view.
+  // If there is a diff exactly at this enum node and the enum labels differ,
+  // and the actual payload is non-atomic (complex), render an actual preview
+  // (read-only), similar to arrays' phantom view.
   const enumTyp: Typ = { kind: 'TEnum', value: enumDeclaration };
   const matchingDiff = findMatchingDiff(props.diffs, currentPath);
 
   const showEnumActualPreview =
     !!matchingDiff &&
     matchingDiff.actual.value.kind === 'Enum' &&
-    (() => {
-      const [, [, payloadA]] = matchingDiff.actual.value.value;
+    matchingDiff.expected.value.kind === 'Enum' &&
+    ((): boolean => {
+      const [, [labelA, payloadA]] = matchingDiff.actual.value.value;
+      const [, [labelE]] = matchingDiff.expected.value.value;
       const payloadActualRv = payloadA?.value;
-      const expectedIsSimple =
-        matchingDiff.expected.value.kind === 'Enum' &&
-        matchingDiff.expected.value.value[1][1] === null;
       return (
+        labelA !== labelE &&
         !!payloadActualRv &&
-        !isAtomicRuntime(payloadActualRv) &&
-        expectedIsSimple
+        !isAtomicRuntime(payloadActualRv)
       );
     })();
 
