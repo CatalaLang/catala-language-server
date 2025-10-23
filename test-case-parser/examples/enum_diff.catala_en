@@ -1,4 +1,4 @@
-> Module Ui_Complex
+> Module Enum_diff
 
 ```catala-metadata
 declaration enumeration Outcome:
