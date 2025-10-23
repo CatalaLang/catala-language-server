@@ -4,8 +4,8 @@ import type {
   TestOutputs,
   TestIo,
   RuntimeValue,
-  RuntimeValueRaw,
 } from './generated/test_case';
+import { isAtomicRaw } from './diff/diff';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -104,20 +104,4 @@ export function renderAtomicValue(value: RuntimeValue): string {
     default:
       return 'Unknown value';
   }
-}
-
-export function isAtomicRaw(value: RuntimeValueRaw): boolean {
-  // Atomic kinds are everything except containers;
-  // Enums are atomic if their paylod is atomic.
-  if (!['Enum', 'Struct', 'Array', 'Tuple'].includes(value.kind)) {
-    return true;
-  }
-  if (value.kind === 'Enum') {
-    const payload = value.value[1][1];
-    if (payload === null) {
-      return true;
-    }
-    return isAtomicRaw(payload.value.value);
-  }
-  return false;
 }
