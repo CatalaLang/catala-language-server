@@ -1,4 +1,4 @@
-> Module Enum_diff
+> Module Diff
 
 ```catala-metadata
 declaration enumeration Outcome:
@@ -18,6 +18,10 @@ declaration scope StructPayload:
 declaration scope ArrayPayload:
   input selector content integer
   output outcome content Outcome
+
+declaration scope IntArrayExample:
+  input inp content integer
+  output out content list of integer
 ```
 
 ```catala
@@ -38,4 +42,9 @@ scope ArrayPayload:
       Outcome.LabelOnly
     else
       Outcome.Many content [ 10; 20; 30 ]
+
+scope IntArrayExample:
+  definition out equals
+  if inp <0 then []
+  else [3; 4; 5]
 ```

@@ -1,0 +1,37 @@
+> Using Diff
+
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
+declaration scope StructPayload_test:
+  output struct_payload scope Diff.StructPayload
+  
+```
+
+```catala
+scope StructPayload_test:
+  definition struct_payload.selector equals 12
+  assertion (struct_payload.outcome =
+             Diff.Outcome.WithDetails content Diff.Details {
+                                                -- count: 2
+                                                
+                                                -- when: |2024-12-24|
+                                                
+                                                -- amounts: [3; 4; 5]
+                                                
+                                              })
+```
+
+```catala-metadata
+#[test]
+#[testcase.test_description = ""]
+declaration scope ArrayPayload_test:
+  output array_payload scope Diff.ArrayPayload
+  
+```
+
+```catala
+scope ArrayPayload_test:
+  definition array_payload.selector equals 11
+  assertion (array_payload.outcome = Diff.Outcome.Many content [10; 20; 30])
+```
