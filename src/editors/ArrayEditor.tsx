@@ -387,21 +387,6 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                             defaultMessage="Actual value"
                           />
                         </div>
-                        <div className="phantom-actual-content">
-                          <ValueEditor
-                            testIO={{
-                              typ: elementType,
-                              value: { value: indexDiff.actual },
-                            }}
-                            onValueChange={() => {
-                              // Non-editable
-                            }}
-                            editorHook={undefined}
-                            currentPath={childPath}
-                            diffs={[]}
-                            editable={false}
-                          />
-                        </div>
                         <button
                           className="array-phantom-action array-phantom-add"
                           onClick={() => {
@@ -421,6 +406,21 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                             defaultMessage="Add to expected"
                           />
                         </button>
+                        <div className="phantom-actual-content">
+                          <ValueEditor
+                            testIO={{
+                              typ: elementType,
+                              value: { value: indexDiff.actual },
+                            }}
+                            onValueChange={() => {
+                              // Non-editable
+                            }}
+                            editorHook={undefined}
+                            currentPath={childPath}
+                            diffs={[]}
+                            editable={false}
+                          />
+                        </div>
                       </div>
                     </>
                   ) : (
