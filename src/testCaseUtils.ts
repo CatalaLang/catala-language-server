@@ -4,7 +4,6 @@ import type {
   TestOutputs,
   TestIo,
   RuntimeValue,
-  Diff,
   RuntimeValueRaw,
 } from './generated/test_case';
 
@@ -65,10 +64,7 @@ export function omitPositionInfo(testOutputs: TestOutputs): TestOutputs {
  * Renders a runtime value as a string for display purposes.
  *
  * Note: this function only handles basic atomic values and doesn't
- * properly format complex types. When complex types are displayed
- * in a diff view, we use an expected/actual split pane rather
- * than an inline display (this function is only used for inline
- * displaying of simple values)
+ * properly format complex types.
  */
 export function renderAtomicValue(value: RuntimeValue): string {
   const raw = value.value;
@@ -108,34 +104,8 @@ export function renderAtomicValue(value: RuntimeValue): string {
     default:
       return 'Unknown value';
   }
-} /**
- * Tells whether the diff is elemental (inline-displayable).
- * Rules:
- * - Empty vs atomic -> elemental
- * - Same kind and atomic on both sides -> elemental
- * - Otherwise -> non-elemental (complex)
- */
-
-export function isElemental(diff: Diff): boolean {
-  const e = diff.expected.value;
-  const a = diff.actual.value;
-
-  // If one side is Empty and the other is atomic, treat as elemental
-  if (e.kind === 'Empty' && a.kind !== 'Empty') {
-    return isAtomicRaw(a);
-  }
-  if (a.kind === 'Empty' && e.kind !== 'Empty') {
-    return isAtomicRaw(e);
-  }
-
-  // Different kinds (not an Empty vs atomic case) -> complex
-  if (e.kind !== a.kind) {
-    return false;
-  }
-
-  // Same kind: elemental only if atomic
-  return isAtomicRaw(e) && isAtomicRaw(a);
 }
+
 export function isAtomicRaw(value: RuntimeValueRaw): boolean {
   // Atomic kinds are everything except containers;
   // Enums are atomic if their paylod is atomic.
