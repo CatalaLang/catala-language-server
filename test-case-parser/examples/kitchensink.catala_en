@@ -37,5 +37,5 @@ scope LunchReimbursement:
   definition reimbursement equals
     match option with pattern
     -- FixedPrice : $20
-    -- Cost of amount: if (amount < $20) then amount else $20
+    -- Cost content amount: if (amount < $20) then amount else $20
 ```

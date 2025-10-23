@@ -23,7 +23,7 @@ scope A:
   definition w equals a - b - b
   definition x equals a - (b - b)
   definition y equals a - b - -b
-  definition z equals c.x / a * c.y - 50. / - (5. - 20 / 2)
+  definition z equals c.x / a * c.y - 50.0 / - (5.0 - 20 / 2)
 
 scope B:
   definition z equals 10

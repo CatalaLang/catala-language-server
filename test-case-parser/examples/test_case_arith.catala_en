@@ -12,7 +12,7 @@ declaration scope A_test:
 scope A_test:
   definition a.a equals 2
   definition a.b equals 4
-  definition a.c equals Arith.Pair { -- x: 50 -- y: 200. }
+  definition a.c equals Arith.Pair { -- x: 50 -- y: 200.0 }
   assertion (a.w = 42)
 ```
 
@@ -28,5 +28,5 @@ declaration scope B_test:
 scope B_test:
   definition a.a equals 2
   definition a.b equals 3
-  definition a.c equals Arith.Pair { -- x: 50 -- y: 200. }
+  definition a.c equals Arith.Pair { -- x: 50 -- y: 200.0 }
 ```
