@@ -54,7 +54,6 @@
   border: none;
   background: none;
   cursor: pointer;  
-  color: var(--stormgray950);
   font-weight: 500;
   font-size: 14px;
   position: relative;
@@ -63,13 +62,6 @@
 
 .tab.active {
   opacity: 1;
-  background-color: var(--stormgray800);
-  color: var(--stormgray00);
-}
-
-.tab:hover {
-  background-color: var(--stormgray50);
-  color: var(--stormgray950);
 }
 
 .tab-content {

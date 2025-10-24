@@ -101,7 +101,6 @@
 
 .test-section-title {
   margin: var(--section-header-margin);
-  color: var(--stormgray900);
 }
 
 .reset-expected-values {
