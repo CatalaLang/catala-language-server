@@ -74,7 +74,7 @@ export default function TestEditor(props: Props): ReactElement {
   return (
     <div className="test-editor">
       <div className="test-editor-bar">
-        <button
+{/*         <button
           className="test-editor-collapse"
           title={isCollapsed ? 'Expand test case' : 'Collapse test case'}
           onClick={() => setIsCollapsed(!isCollapsed)}
@@ -82,21 +82,13 @@ export default function TestEditor(props: Props): ReactElement {
           <span
             className={`codicon ${isCollapsed ? 'codicon-unfold' : 'codicon-fold'}`}
           ></span>
-        </button>
-        <button
-          className={`test-editor-run ${props.runState?.status ?? ''}`}
-          title={intl.formatMessage({ id: 'testEditor.run' })}
-          onClick={() => props.onTestRun(props.test.testing_scope)}
-          disabled={props.runState?.status === 'running'}
-        >
-          <span
-            className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
-          ></span>
-        </button>
-        <span className="test-editor-scope">
-          <b>{props.test.testing_scope}</b> ➛{' '}
+        </button> */}
+        <div className="test-editor-breadcrumb body-b3">
+          {props.test.testing_scope} ➛{' '}
           {String(props.test.tested_scope.name)}
-        </span>
+        </div>
+        <h1 className="test-case-name heading-h1">{props.test.testing_scope}</h1>
+
         {props.runState?.status === 'success' &&
           props.runState?.results?.kind === 'Ok' &&
           !props.runState.results.value.assert_failures && (
@@ -114,20 +106,20 @@ export default function TestEditor(props: Props): ReactElement {
             <FormattedMessage id="testEditor.failed" defaultMessage="Failed" />
           </span>
         )}
-        <button
+        {/*<button
           className="test-editor-delete"
           title="Delete test"
           onClick={() => props.onTestDelete(props.test.testing_scope)}
         >
           <span className="codicon codicon-trash"></span>
-        </button>
+        </button> */}
       </div>
       <div
         className="test-editor-content"
         style={{ display: isCollapsed ? 'none' : 'block' }}
       >
         <div className="test-section">
-          <h2 className="test-section-title">
+          <h2 className="test-section-title heading-h2">
             <FormattedMessage
               id="testEditor.description"
               defaultMessage="Description"
@@ -147,7 +139,7 @@ export default function TestEditor(props: Props): ReactElement {
           </div>
         </div>
         <div className="test-section">
-          <h2 className="test-section-title">
+          <h2 className="test-section-title heading-h2">
             <FormattedMessage id="testEditor.inputs" />
           </h2>
           <TestInputsEditor
@@ -162,7 +154,7 @@ export default function TestEditor(props: Props): ReactElement {
           tabIndex={-1}
         >
           <div className="test-section-header">
-            <h2 className="test-section-title">
+            <h2 className="test-section-title heading-h2">
               <FormattedMessage id="testEditor.expectedValues" />
               <button
                 className="reset-expected-values"
@@ -172,6 +164,16 @@ export default function TestEditor(props: Props): ReactElement {
                 }}
               >
                 <span className="codicon codicon-refresh"></span>
+              </button>
+              <button
+                className={`test-editor-run ${props.runState?.status ?? ''}`}
+                title={intl.formatMessage({ id: 'testEditor.run' })}
+                onClick={() => props.onTestRun(props.test.testing_scope)}
+                disabled={props.runState?.status === 'running'}
+              >
+                <span
+                  className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
+                ></span>
               </button>
             </h2>
           </div>

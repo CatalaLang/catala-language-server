@@ -238,16 +238,6 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   return (
     <div className="array-editor">
-      {editable && (
-        <button className="array-add" onClick={handleAdd}>
-          <span className="codicon codicon-add"></span>
-          <FormattedMessage
-            id="arrayEditor.addElement"
-            values={{ elementType: elementTypeName }}
-          />
-        </button>
-      )}
-
       <div
         className={`array-items ${isVertical ? 'array-items-nested' : 'array-items-non-nested'}`}
       >
@@ -314,60 +304,11 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 onDrop={(e) => handleDrop(e, index)}
                 onDragEnd={handleDragEnd}
               >
-                <div
-                  className="array-item-controls"
-                  draggable={editable && !isPhantom}
-                  onDragStart={(e) => {
-                    if (!isPhantom) handleDragStart(e, index);
-                  }}
-                >
-                  {editable && (
-                    <>
-                      <button
-                        className="array-move-prev"
-                        onClick={() => handleMove(index, index - 1)}
-                        disabled={isPhantom || index === 0}
-                        title={intl.formatMessage({
-                          id: 'arrayEditor.movePrevious',
-                        })}
-                      >
-                        <span
-                          className={`codicon ${isVertical ? 'codicon-arrow-up' : 'codicon-arrow-left'}`}
-                        ></span>
-                      </button>
-                      <button
-                        className="array-move-next"
-                        onClick={() => handleMove(index, index + 1)}
-                        disabled={
-                          isPhantom || index === currentArray.length - 1
-                        }
-                        title={intl.formatMessage({
-                          id: 'arrayEditor.moveNext',
-                        })}
-                      >
-                        <span
-                          className={`codicon ${isVertical ? 'codicon-arrow-down' : 'codicon-arrow-right'}`}
-                        ></span>
-                      </button>
-                    </>
-                  )}
-                  {editable && !isPhantom && (
-                    <button
-                      className="array-delete"
-                      onClick={() => handleDelete(index)}
-                      title={intl.formatMessage({
-                        id: 'arrayEditor.deleteElement',
-                      })}
-                    >
-                      <span className="codicon codicon-trash"></span>
-                    </button>
-                  )}
-                </div>
                 <div className="array-item-content">
                   {isVertical && (
-                    <div className="array-item-header">
+                    <h2 className="array-item-header heading-h2">
                       {getTypeDisplayName(elementType, intl)}
-                    </div>
+                    </h2>
                   )}
                   {isPhantom &&
                   indexDiff &&
@@ -475,11 +416,71 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                     </>
                   )}
                 </div>
+                <div
+                  className="array-item-controls"
+                  draggable={editable && !isPhantom}
+                  onDragStart={(e) => {
+                    if (!isPhantom) handleDragStart(e, index);
+                  }}
+                >
+                  {editable && (
+                    <>
+                      <button
+                        className="array-move-prev"
+                        onClick={() => handleMove(index, index - 1)}
+                        disabled={isPhantom || index === 0}
+                        title={intl.formatMessage({
+                          id: 'arrayEditor.movePrevious',
+                        })}
+                      >
+                        <span
+                          className={`codicon ${isVertical ? 'codicon-arrow-up' : 'codicon-arrow-left'}`}
+                        ></span>
+                      </button>
+                      <button
+                        className="array-move-next"
+                        onClick={() => handleMove(index, index + 1)}
+                        disabled={
+                          isPhantom || index === currentArray.length - 1
+                        }
+                        title={intl.formatMessage({
+                          id: 'arrayEditor.moveNext',
+                        })}
+                      >
+                        <span
+                          className={`codicon ${isVertical ? 'codicon-arrow-down' : 'codicon-arrow-right'}`}
+                        ></span>
+                      </button>
+                    </>
+                  )}
+                  {editable && !isPhantom && (
+                    <button
+                      className="array-delete"
+                      onClick={() => handleDelete(index)}
+                      title={intl.formatMessage({
+                        id: 'arrayEditor.deleteElement',
+                      })}
+                    >
+                      <span className="codicon codicon-trash"></span>
+                    </button>
+                  )}
+                </div>
+                
               </div>
             );
           });
         })()}
       </div>
+      {editable && (
+        <button className="array-add" onClick={handleAdd}>
+          <span className="codicon codicon-add"></span>
+          <FormattedMessage
+            id="arrayEditor.addElement"
+            values={{ elementType: elementTypeName }}
+          />
+        </button>
+      )}
+
     </div>
   );
 }
