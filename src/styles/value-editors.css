@@ -4,10 +4,8 @@
 .struct-editor input,
 .struct-editor select {
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--control-border);
-  background-color: var(--control-background);
-  color: var(--control-text);
+  padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
+  border: 1px solid;
   box-sizing: border-box;
   border-radius: 2px;
   font-size: 13px;
@@ -32,7 +30,6 @@
 .value-editor {
   text-align: left;
   vertical-align: top;
-  width: 100%;
   max-width: 250px;
 }
 
