@@ -111,3 +111,36 @@
 input{
   padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
 }
+
+/* Color theming */
+/* Dark mode */
+.vscode-dark .test-section-title{
+  color: var(--stormgray300);
+}
+.vscode-dark .tab{
+    color: var(--stormgray600);
+}
+.vscode-dark .tab.active {
+  background-color: var(--stormgray900);
+  color: var(--stormgray400);
+}
+.vscode-dark .tab:hover {
+  background-color: var(--stormgray950);
+  color: var(--stormgray600);
+}
+
+/* Light mode */
+.vscode-light .test-section-title{
+    color: var(--stormgray900);
+}
+.vscode-light .tab{
+    color: var(--stormgray950);
+}
+.vscode-light .tab.active {
+  background-color: var(--stormgray800);
+  color: var(--stormgray00);
+}
+.vscode-light .tab:hover {
+  background-color: var(--stormgray50);
+  color: var(--stormgray950);
+}
