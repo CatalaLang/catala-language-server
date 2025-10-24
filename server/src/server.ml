@@ -95,7 +95,8 @@ let retrieve_existing_document doc_id server_state =
 
 let unlocked_raw_send_all_diagnostics =
   let previous_faulty_documents = ref Doc_id.Set.empty in
-  fun ~(notify_back : Linol_lwt.Jsonrpc2.notify_back) (diags : Diagnostic.t RangeMap.t Doc_id.Map.t) ->
+  fun ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
+      (diags : Diagnostic.t RangeMap.t Doc_id.Map.t) ->
     let send_diagnostics (doc_id, diags) =
       notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
       notify_back#send_diagnostic diags
@@ -523,9 +524,7 @@ class catala_lsp_server =
       let* () = unlocked_send_all_diagnostics ~notify_back sstate in
       Lwt.return sstate
 
-    method! on_notification_unhandled
-        ~notify_back
-        (n : Client_notification.t) =
+    method! on_notification_unhandled ~notify_back (n : Client_notification.t) =
       match n with
       | SetTrace params ->
         set_log_level (Some params.value);

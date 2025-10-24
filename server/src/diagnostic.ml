@@ -20,8 +20,7 @@ open Linol_lwt
 type t = Diagnostic.t
 
 let warn_r range message =
-  Diagnostic.create ~range ~severity:Warning ~source:"catala-lsp"
-    ~message ()
+  Diagnostic.create ~range ~severity:Warning ~source:"catala-lsp" ~message ()
 
 let error_r ?related range message =
   let relatedInformation =
@@ -47,7 +46,6 @@ let diag_r (severity : DiagnosticSeverity.t) range msg =
   match severity with
   | Error -> error_r range msg
   | Warning -> warn_r range msg
-  | Information | Hint ->
-    Stdlib.failwith "diag_r: unsupported diagnostic kind"
+  | Information | Hint -> Stdlib.failwith "diag_r: unsupported diagnostic kind"
 
 let diag_p (severity : DiagnosticSeverity.t) pos msg = diag_r severity pos msg
