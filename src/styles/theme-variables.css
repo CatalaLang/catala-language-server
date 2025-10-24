@@ -1,4 +1,36 @@
 :root {
+  /* Primitives */
+  --stormgray00:#ffffff;
+  --stormgray50:#f5f7f8;
+  --stormgray100:#ecf0f3;
+  --stormgray200:#dde2e8;
+  --stormgray300:#c8d0d9;
+  --stormgray400:#b1b9c8;
+  --stormgray500:#9ca5b8;
+  --stormgray600:#868da5;
+  --stormgray700:#71778e;
+  --stormgray800:#5e6275;
+  --stormgray900:#4f5360;
+  --stormgray950:#2e3038;
+
+  --spacing0:0;
+  --spacing1:1;
+  --spacing2:2;
+  --spacing4:4px;
+  --spacing8:8px;
+  --spacing12:12px;
+  --spacing16: 16px;
+  --spacing20:20;
+  --spacing24:24;
+  --spacing28:28;
+  --spacing32: 32px;
+
+  /* Custom Catala Colors */
+  --background-color-lvl-1: var(--stormgray50);
+  --background-color-lvl-2: var(--stormgray00);
+
+  --font-body-3: italic bold xx-large 16px/2 cursive;
+  
   /* Semantic color variables that map to VS Code theme colors */
   --card-background: var(--vscode-editor-background);
   --card-background-alt: var(--vscode-sideBarSectionHeader-background);
@@ -48,4 +80,56 @@
     --vscode-editorWidget-border,
     rgba(128, 128, 128, 0.2)
   );
+}
+
+.heading-h1{
+  font-size: 26px;
+  font-family: SF Pro Text, sans-serif;
+}
+.heading-h2{
+  font-size: 20px;
+  font-family: SF Pro Text, sans-serif;
+  font-weight: 500;
+}
+.heading-h3{
+  font-size: 16px;
+  font-family: SF Pro Text, sans-serif;
+  text-transform: capitalize;
+  font-weight: 500;
+  margin: 0;
+}
+.Heading__H4{
+  font-size: 11px;
+  font-family: SF Pro Text, sans-serif;
+  font-weight: 700;
+  text-decoration: uppercase;
+}
+.Heading__H5{
+  font-size: 11px;
+  font-family: SF Pro Text, sans-serif;
+  font-weight: 500;
+  text-decoration: uppercase;
+}
+.Heading__H6{
+  font-size: 11px;
+  font-family: SF Pro Text, sans-serif;
+  font-weight: undefined;
+}
+.body-1{
+  font-size: 16px;
+  font-family: SF Pro Text, sans-serif;
+  font-weight: 500;
+}
+.Body__B2{
+  font-size: 14px;
+  font-family: SF Pro Text, sans-serif;
+  font-weight: 500;
+}
+.body-b3{
+  font-size: 12px;
+  font-family: SF Pro Text, sans-serif;
+  font-weight: 500;
+}
+input{
+  padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
 }

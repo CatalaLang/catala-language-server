@@ -7,3 +7,7 @@
 @import './struct-editor.css';
 @import './modal.css';
 @import './misc.css';
+
+html {
+    background-color: var(--background-color-lvl-1)
+}
