@@ -472,7 +472,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
         })()}
       </div>
       {editable && (
-        <button className="array-add" onClick={handleAdd}>
+        <button className="button-action-dvp body-b3" onClick={handleAdd}>
           <span className="codicon codicon-add"></span>
           <FormattedMessage
             id="arrayEditor.addElement"

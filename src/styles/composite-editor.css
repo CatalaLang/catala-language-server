@@ -33,7 +33,6 @@
   display: block;
   font-weight: var(--field-label-font-weight);
   margin-bottom: var(--spacing8);
-  color: var(--field-label-color);
   font-size: var(--field-label-font-size);
 }
 
@@ -62,10 +61,6 @@
 
 .tab.active {
   opacity: 1;
-}
-
-.tab-content {
-  background-color: var(--level-2-background);
 }
 
 .tab-panel {

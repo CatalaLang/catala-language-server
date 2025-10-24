@@ -11,7 +11,13 @@
   --stormgray700:#71778e;
   --stormgray800:#5e6275;
   --stormgray900:#4f5360;
+  --stormgray925:#383b45;
   --stormgray950:#2e3038;
+  --thunderbird500: #F64C3D;
+  --caribbean-green-600: #02997D;
+
+  --error: var(--thunderbird500);
+  --success: var(--caribbean-green-600);
 
   --spacing0:0;
   --spacing1:1;
@@ -52,13 +58,15 @@
   --button-secondary-foreground: var(--vscode-button-secondaryForeground);
   --button-secondary-hover: var(--vscode-button-secondaryHoverBackground);
 
-  /* Even-odd nesting system */
+  /* Even-odd nesting system dark mode */
+  --level-1-background-dark: var(--stormgray950);
+  --level-2-background-dark: var(--stormgray925);
+  --level-3-background-dark: var(--stormgray950);
+
+  /* Even-odd nesting system light mode */
   --level-1-background: var(--vscode-editor-background);
-  --level-2-background: var(
-    --vscode-sideBarSectionHeader-background,
-    rgba(128, 128, 128, 0.05)
-  );
-  --level-3-background: var(--vscode-editor-background);
+  --level-2-background: var(--stormgray00);
+  --level-3-background: var(--stormgray50);
 
   /* Section headers */
   --section-header-color: var(--vscode-foreground);
@@ -87,12 +95,12 @@
   font-family: SF Pro Text, sans-serif;
 }
 .heading-h2{
-  font-size: 20px;
+  font-size: 24px;
   font-family: SF Pro Text, sans-serif;
   font-weight: 500;
 }
 .heading-h3{
-  font-size: 16px;
+  font-size: 20px;
   font-family: SF Pro Text, sans-serif;
   text-transform: capitalize;
   font-weight: 500;
@@ -108,12 +116,26 @@
   font-family: SF Pro Text, sans-serif;
   font-weight: 500;
 }
+p{
+  display: inline;
+  margin-block-start: 0;
+  margin-block-end: 0;
+}
 input{
   padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
 }
 
+.button-action-dvp{
+  padding: var(--spacing4) var(--spacing12) var(--spacing4) var(--spacing12);
+  border: 1px solid;
+  border-radius: var(--spacing12);
+}
+
 /* Color theming */
 /* Dark mode */
+.vscode-dark {
+  background: var(--stormgray950);
+}
 .vscode-dark .test-section-title{
   color: var(--stormgray300);
 }
@@ -128,13 +150,51 @@ input{
   background-color: var(--stormgray950);
   color: var(--stormgray600);
 }
+.vscode-dark .test-description-editor,
+.vscode-dark .data-card,
+.vscode-dark .tab-content,
+.vscode-dark .test-result-header {
+  background: var(--level-2-background-dark);
+}
+.vscode-dark .array-item,
+.vscode-dark .atomic-element{
+  background-color: var(--level-3-background-dark);
+}
+.vscode-dark .button-action-dvp{
+  color: var(--stormgray500);
+  border-color: var(--stormgray800);
+}
+.vscode-dark .button-action-dvp:hover{
+  background-color: var(--stormgray800);
+  border-color: var(--stormgray600);
+}
+.vscode-dark .test-description-textarea{
+  border-color: var(--stormgray800);
+}
+
+.vscode-dark .value-editor input,
+.vscode-dark .value-editor select,
+.vscode-dark .struct-editor input,
+.vscode-dark .value-editor,
+.vscode-dark .struct-editor select {
+  background-color: var(--stormgray925);
+  color: var(--stormgray500);
+  border-color: var(--stormgray800)
+}
+.vscode-dark .item-label{
+  color: var(--stormgray500);
+}
 
 /* Light mode */
+.vscode-light {
+  background: var(--stormgray50);
+}
+
 .vscode-light .test-section-title{
-    color: var(--stormgray900);
+  color: var(--stormgray900);
 }
 .vscode-light .tab{
-    color: var(--stormgray950);
+  color: var(--stormgray950);
 }
 .vscode-light .tab.active {
   background-color: var(--stormgray800);
@@ -142,5 +202,41 @@ input{
 }
 .vscode-light .tab:hover {
   background-color: var(--stormgray50);
+  color: var(--stormgray950);
+}
+.vscode-light .test-description-editor,
+.vscode-light .data-card,
+.vscode-light .tab-content,
+.vscode-light .test-result-header{
+  background: var(--level-2-background);
+}
+.vscode-light .array-item,
+.vscode-light .atomic-element{
+  background-color: var(--level-3-background);
+}
+
+.vscode-light .button-action-dvp{
+  color: var(--stormgray900);
+  border-color: var(--stormgray200);
+}
+.vscode-light .button-action-dvp:hover{
+  background-color: var(--stormgray100);
+  border-color: var(--stormgray400);
+}
+
+.vscode-light .test-description-textarea{
+  border-color: var(--stormgray300);
+}
+
+.vscode-light .value-editor input,
+.vscode-light .value-editor select,
+.vscode-light .struct-editor input,
+.vscode-light .struct-editor .value-editor,
+.vscode-light .struct-editor select {
+  background-color: var(--stormgray00);
+  color: var(--stormgray900);
+  border-color: var(--stormgray300)
+}
+.vscode-light .item-label{
   color: var(--stormgray950);
 }

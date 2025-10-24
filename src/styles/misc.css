@@ -11,15 +11,12 @@
 
 /* Additional styles for data cards */
 .data-card {
-  background-color: var(--level-2-background);
   border-radius: 4px;
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: var(--spacing32);
 }
 
 /* Styles for atomic elements */
 .atomic-element {
-  background-color: var(--level-3-background);
   border-radius: 4px;
   padding: var(--spacing16);
 }
