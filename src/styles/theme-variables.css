@@ -98,30 +98,8 @@
   font-weight: 500;
   margin: 0;
 }
-.Heading__H4{
-  font-size: 11px;
-  font-family: SF Pro Text, sans-serif;
-  font-weight: 700;
-  text-decoration: uppercase;
-}
-.Heading__H5{
-  font-size: 11px;
-  font-family: SF Pro Text, sans-serif;
-  font-weight: 500;
-  text-decoration: uppercase;
-}
-.Heading__H6{
-  font-size: 11px;
-  font-family: SF Pro Text, sans-serif;
-  font-weight: undefined;
-}
 .body-1{
   font-size: 16px;
-  font-family: SF Pro Text, sans-serif;
-  font-weight: 500;
-}
-.Body__B2{
-  font-size: 14px;
   font-family: SF Pro Text, sans-serif;
   font-weight: 500;
 }
