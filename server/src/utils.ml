@@ -181,13 +181,16 @@ let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
       in
       let* catala_format_path = lookup_catala_format_config_path notify_back in
       begin
-        match catala_format_path with
-        | None ->
-          Lwt_process.with_process_full ~timeout:5.
-            ("", [| "catala-format"; "-l"; language |])
-        | Some path ->
-          Lwt_process.with_process_full ~timeout:5.
-            (path, [| "catala-format"; "-l"; language |])
+        let path = Option.value ~default:"" catala_format_path in
+        Lwt_process.with_process_full ~timeout:10.
+          ( path,
+            [|
+              "catala-format";
+              "--language";
+              language;
+              "--buffer-name";
+              (doc_id :> string);
+            |] )
       end
       @@ fun proc ->
       let read ic =
@@ -239,23 +242,9 @@ let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
           in
           Lwt.return_none
         else
-          let lines = String.split_on_char '\n' error_output in
-          let take_n l n =
-            let rec loop acc = function
-              | [], _ | _, 0 -> List.rev acc
-              | h :: t, n -> loop (h :: acc) (t, pred n)
-            in
-            loop [] (l, n)
-          in
-          let l =
-            if List.length lines > 10 then
-              take_n lines 5 @ ["..."] @ (take_n (List.rev lines) 5 |> List.rev)
-            else lines
-          in
           let* () =
-            Format.kasprintf
-              (send_notification ~type_:MessageType.Warning ~notify_back)
-              "Code formatting failed.\nReason:\n%s" (String.concat "\n" l)
+            send_notification ~type_:MessageType.Warning ~notify_back
+              error_output
           in
           Lwt.return_none)
     (fun _ -> Lwt.return_none)
