@@ -29,7 +29,6 @@
   display: flex;
   align-items: stretch;
   padding: 0;
-  background-color: var(--level-3-background);
   border-radius: 4px;
 }
 
@@ -98,25 +97,6 @@
 .array-item-controls button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
-}
-
-.array-add {
-  color: var(--button-primary-foreground);
-  background-color: var(--button-primary-background);
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  margin-bottom: 8px;
-  border: none;
-  font-size: 13px;
-}
-
-.array-add:hover {
-  background-color: var(--button-primary-hover);
 }
 
 /* Drag and drop styles */

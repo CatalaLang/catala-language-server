@@ -74,45 +74,11 @@ export default function TestEditor(props: Props): ReactElement {
   return (
     <div className="test-editor">
       <div className="test-editor-bar">
-{/*         <button
-          className="test-editor-collapse"
-          title={isCollapsed ? 'Expand test case' : 'Collapse test case'}
-          onClick={() => setIsCollapsed(!isCollapsed)}
-        >
-          <span
-            className={`codicon ${isCollapsed ? 'codicon-unfold' : 'codicon-fold'}`}
-          ></span>
-        </button> */}
         <div className="test-editor-breadcrumb body-b3">
           {props.test.testing_scope} ➛{' '}
           {String(props.test.tested_scope.name)}
         </div>
         <h1 className="test-case-name heading-h1">{props.test.testing_scope}</h1>
-
-        {props.runState?.status === 'success' &&
-          props.runState?.results?.kind === 'Ok' &&
-          !props.runState.results.value.assert_failures && (
-            <span className="test-run-success">
-              <FormattedMessage
-                id="testEditor.passed"
-                defaultMessage="Passed"
-              />
-            </span>
-          )}
-        {(props.runState?.status === 'error' ||
-          (props.runState?.results?.kind === 'Ok' &&
-            props.runState.results.value.assert_failures)) && (
-          <span className="test-run-error">
-            <FormattedMessage id="testEditor.failed" defaultMessage="Failed" />
-          </span>
-        )}
-        {/*<button
-          className="test-editor-delete"
-          title="Delete test"
-          onClick={() => props.onTestDelete(props.test.testing_scope)}
-        >
-          <span className="codicon codicon-trash"></span>
-        </button> */}
       </div>
       <div
         className="test-editor-content"
@@ -126,6 +92,7 @@ export default function TestEditor(props: Props): ReactElement {
             />
           </h2>
           <div className="test-description-editor">
+            <h3 className="heading-h3">Commentaire</h3>
             <textarea
               value={props.test.description}
               onChange={onDescriptionChange}
@@ -133,12 +100,13 @@ export default function TestEditor(props: Props): ReactElement {
               placeholder={intl.formatMessage({
                 id: 'testEditor.descriptionPlaceholder',
               })}
-              rows={3}
+              rows={10}
               className="test-description-textarea"
             />
           </div>
         </div>
         <div className="test-section">
+
           <h2 className="test-section-title heading-h2">
             <FormattedMessage id="testEditor.inputs" />
           </h2>
@@ -147,36 +115,58 @@ export default function TestEditor(props: Props): ReactElement {
             onTestInputsChange={onTestInputsChange}
           />
         </div>
-        <div
-          className="test-section"
-          id={expectedAnchorId}
-          ref={expectedSectionRef}
-          tabIndex={-1}
-        >
-          <div className="test-section-header">
-            <h2 className="test-section-title heading-h2">
+        <div className="test-section" id={expectedAnchorId} ref={expectedSectionRef} tabIndex={-1}>
+          <h2 className="test-section-title heading-h2">
               <FormattedMessage id="testEditor.expectedValues" />
+          </h2>
+          <div className="test-result-header">
+            <h3 className='heading-h3'>Résultats obtenus</h3>
+            <p className="body-3">Aucun test réalisé / Date du dernier test</p>
+            <div className="test-result-action-bar">
               <button
-                className="reset-expected-values"
+                className="reset-expected-values button-action-dvp body-b3"
                 title={intl.formatMessage({ id: 'testEditor.resetExpected' })}
                 onClick={() => {
                   props.onTestOutputsReset(props.test.testing_scope);
                 }}
               >
-                <span className="codicon codicon-refresh"></span>
+                <span className="codicon codicon-refresh"></span> Remplacer avec les valeurs attendues
               </button>
               <button
-                className={`test-editor-run ${props.runState?.status ?? ''}`}
+                className={`button-action-dvp test-editor-run ${props.runState?.status ?? ''}`}
                 title={intl.formatMessage({ id: 'testEditor.run' })}
                 onClick={() => props.onTestRun(props.test.testing_scope)}
                 disabled={props.runState?.status === 'running'}
               >
-                <span
-                  className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
-                ></span>
+                <span className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}></span> Lancer le test
               </button>
-            </h2>
+            </div>
+            <div className="test-result">
+              {props.runState?.status === 'success' &&
+                props.runState?.results?.kind === 'Ok' &&
+                !props.runState.results.value.assert_failures && (
+                  <p className="test-run-result test-run-success body-1">
+                    <span className="codicon codicon-check-all"></span>
+                    <FormattedMessage
+                      id="testEditor.passed"
+                      defaultMessage="Passed"
+                    />
+                  </p>
+              )}
+              {(props.runState?.status === 'error' ||
+                (props.runState?.results?.kind === 'Ok' &&
+                  props.runState.results.value.assert_failures)) && (
+                    <div className="test-result-information">
+                      <p className="test-run-result test-run-error body-1">
+                        <span className="codicon codicon-warning"></span>
+                        <FormattedMessage id="testEditor.failed" defaultMessage="Failed" />
+                      </p>
+                      <p className="body-3">Informations complémentaires sur les erreurs rencontrées</p>
+                    </div>
+              )}
+            </div>
           </div>
+
           <TestOutputsEditor
             test={props.test}
             onTestChange={(test) => {
