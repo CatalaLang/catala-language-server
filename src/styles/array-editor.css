@@ -26,10 +26,11 @@
 
 .array-item {
   max-width: 100%;
-  display: flex;
-  align-items: stretch;
   padding: 0;
   border-radius: 4px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
 }
 
 .array-items-non-nested .array-item {
@@ -45,9 +46,12 @@
   flex: 1;
   padding: var(--spacing16);
   border-radius: var(--spacing4);
+  box-sizing:border-box;
+  max-width: 97%;
 }
 
 .array-item-controls {
+  flex: 1;
   display: flex;
   gap: 2px;
   padding: 8px 4px;
