@@ -18,6 +18,16 @@
   },
   "main": "./dist/extension.js",
   "contributes": {
+    "snippets": [
+      {
+        "language": "catala_en",
+        "path": "./snippets/catala_en.json"
+      },
+      {
+        "language": "catala_fr",
+        "path": "./snippets/catala_fr.json"
+      }
+    ],
     "commands": [
       {
         "command": "catala.selectScope",
