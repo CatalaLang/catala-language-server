@@ -1,61 +1,60 @@
 # Catala VSCode extension and LSP server
 
-## Disclaimer
+If you are looking for more information regarding Catala, please visit
+https://catala-lang.org/
 
-Be advised that this is a work in progress repository and is not yet
-considered as a fully functional VSCode extension.
+For more documentation or installation instructions, check out the
+Catala book: https://book.catala-lang.org/
 
 ## Features
 
-Client side:
-
 - Syntax highlighting
-
-LSP-server:
-
-- Highlighting of miscellaneous type of errors
-- Auto-completion
+- Auto-completion snippets
+- Error and warning highlighting
+- Hovering tool-tips
+- Custom test editor
+- Clerk project support
+- Code formatting
+- Code navigation
+- Interactive debugging
 
 ## Getting started
 
 ### Prerequisites
 
-In order to build and use this extension, you will need to
-install:
+In order to use this extension, you will need to install, [opam, the
+OCaml package manager](https://github.com/ocaml/opam), in order to
+retrieve the LSP server.
 
-- [OPAM](https://github.com/ocaml/opam), the OCaml package manager
-- [npm](https://www.npmjs.com/), the JavaScript package manager
+If `opam` is not yet installed on your machine, please follow the
+instructions on their website. Do not forget to invoke `opam init` first.
 
 ### Installation
 
-#### VSCode Marketplace
+In order to install the latest release of the VSCode extension and the
+Catala LSP server, please refer to the [installation
+instructions](https://book.catala-lang.org/1-1-1-linux-mac-wsl.html#getting-the-lsp-server-needed-by-the-vscode-extension)
+in the Catala Book.
 
-The simplest way to install this extension is through the [VSCode
-marketplace](https://marketplace.visualstudio.com/items?itemName=catalalang.catala)
-which is directly accessible in VScode. However, the extension still
-requires the Catala LSP server which, for the time being, need to be
-manually installed through OPAM using this command:
+— and, optionally, you may also install the [code
+formatter](https://book.catala-lang.org/1-1-1-linux-mac-wsl.html#getting-the-catala-code-formatter).
 
-```bash
-opam pin catala-lsp git+https://github.com/CatalaLang/catala-language-server.git
-```
+### Build from sources
 
--- and, optionally, you may also install the code formatter ([see
-below](#code-formatting)).
+> **_NOTE_**: You will also need [npm](https://www.npmjs.com/), the
+> JavaScript package manager, to build the VSCode extension.
 
-#### Build from sources
-
-It is also possible to build the extension from the sources through
-these commands:
+If you want to experiment with the latest version or build it directly
+from the sources you may use these instructions:
 
 ```bash
 # 1. Clone this repository
-git clone https://github.com/CatalaLang/catala-language-server/
+git clone https://github.com/CatalaLang/catala-language-server.git
 # 2. Enter the freshly created directory
 cd catala-language-server/
 # 3. Install the JS dependencies
 npm install
-# 4. Install the OCaml dependencies
+# 4. Install the LSP dependencies
 opam install . --deps-only
 # 5. Build the extension
 npm run compile
@@ -72,42 +71,22 @@ sudo npm install -g @vscode/vsce
 vsce package
 # 3. Install the generated .vsix extension through the VSCode GUI or
 #    by invoking:
-code --install-extension catala-0.20.0.vsix
+code --install-extension catala-XXXX.vsix
+# Replace the XXXX with the current version
+# 4. Install the LSP locally
+opam install .
 ```
 
 #### Testing
 
 If you wish to test the extension without installing it, you may:
 
-1. Open VSCode at the repository's root (e.g., in a terminal `$ code
-.`)
-2. Go to "Run and Debug" in the VSCode sidebar (invoked by command "View: Show Run and Debug")
+1. Open VSCode at the repository's root (e.g., in a terminal `$ code .`)
+2. Go to "Run and Debug" in the VSCode sidebar (invoked by command
+   "View: Show Run and Debug")
 3. Choose "Launch Client" and click on the play button
 4. A new VSCode window should open with the extension running
-   - you can press CTRL+R to reload the extension window to apply changes
-
-### Code formatting
-
-[catala-format](https://github.com/CatalaLang/catala-format) is an
-automated code formatting tool based on
-[topiary](https://github.com/tweag/topiary/). To install
-`catala-format`, use this command:
-
-```
-$ opam install catala-format
-```
-
-N.b. the installation may be lengthy as it needs to install `topiary`.
-
-Once this is done, you may start (or reload) the extension and use the
-format document command: `Ctrl-p` and type 'Format Document'. You may
-also bind it to a handy keyboard shortcut. Beware: if the catala
-program you are trying to format cannot be properly parsed, the
-formatter call will fail.
-
-`catala-format` can also be used as a standalone tool or plugged in
-your favorite IDE. Type `catala-format --help` in a terminal for more
-details.
+   - you can press `Ctrl+r` to reload the extension window to apply changes
 
 ### Using the Custom Test Case Editor
 
@@ -134,11 +113,11 @@ All the code contained in this repository is released under the Apache
 license (version 2) unless another license is explicited for a
 sub-directory.
 
-## Release Process
+# Release Process
 
 This extension is automatically published to the VS Code Marketplace when a new GitHub release is created.
 
-### Creating a New Release
+## Creating a New Release
 
 1. **Update Version in package.json**:
 
