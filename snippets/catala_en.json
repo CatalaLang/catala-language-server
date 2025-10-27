@@ -1,0 +1,82 @@
+{
+  "Catala code block": {
+    "description": "Insert a Catala code-block",
+    "scope": "catala_en",
+    "prefix": ["code", "block", "```catala"],
+    "body": ["```catala", "$0", "```"]
+  },
+  "Catala metadata block": {
+    "description": "Insert a Catala metadata-block",
+    "scope": "catala_en",
+    "prefix": ["metadata", "block", "```catala-metadata"],
+    "body": ["```catala-metadata", "$0", "```"]
+  },
+  "declaration scope": {
+    "description": "Declare a Catala scope",
+    "scope": "catala_en",
+    "prefix": "declscope",
+    "body": ["declaration scope ${1:ScopeName}:", "  $0"]
+  },
+  "scope definition": {
+    "description": "Defines a Catala scope",
+    "scope": "catala_en",
+    "prefix": "scopedef",
+    "body": ["scope ${1:ScopeName}:", "  $0"]
+  },
+  "declaration struct": {
+    "description": "Declare a Catala structure",
+    "scope": "catala_en",
+    "prefix": "declstruct",
+    "body": ["declaration structure ${1:StructName}:", "  $0"]
+  },
+  "declaration enum": {
+    "description": "Declare a Catala enumeration",
+    "scope": "catala_en",
+    "prefix": "declenum",
+    "body": ["declaration enumeration ${1:EnumName}:", "  $0"]
+  },
+  "Existence in list test": {
+    "description": "Test whether an element in a list satisfies the test",
+    "scope": "catala_en",
+    "prefix": "exists",
+    "body": ["exists ${1:x} among ${2:lst}", "  such that ${3:test}"]
+  },
+  "For-All list elements test": {
+    "description": "Test that all element in a list satisfies the test",
+    "scope": "catala_en",
+    "prefix": "for all",
+    "body": ["for all ${1:x} among ${2:lst}", "  we have ${3:test}"]
+  },
+  "Map list": {
+    "description": "Transform each element of a list",
+    "scope": "catala_en",
+    "prefix": "map each",
+    "body": ["map each ${1:x} among ${2:lst}", "  to ${3:expr}"]
+  },
+  "Filter list": {
+    "description": "Filter out elements of a list that don't satisfy the test",
+    "scope": "catala_en",
+    "prefix": "list of",
+    "body": ["list of ${1:x} among ${2:lst}", "  such that ${3:test}"]
+  },
+  "Filter-Map list": {
+    "description": "Transform only the elements of a list that satisfy the test",
+    "scope": "catala_en",
+    "prefix": "map each such-that",
+    "body": [
+      "map each ${1:x} among ${2:lst}",
+      "  such that ${3:test}",
+      "  to ${4:expr}"
+    ]
+  },
+  "Combine list": {
+    "description": "Combine all the elements of a list",
+    "scope": "catala_en",
+    "prefix": "combine all",
+    "body": [
+      "combine all ${1:x} among ${2:lst}",
+      "  in ${3:acc} initially ${4:init}",
+      "  with ${5:aggregation}"
+    ]
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "Bloc de code catala": {
+    "description": "Insère un bloc de code Catala",
+    "scope": "catala_fr",
+    "prefix": ["code", "bloc", "```catala"],
+    "body": ["```catala", "$0", "```"]
+  },
+  "Bloc métadonnée catala": {
+    "description": "Insère un bloc de métadonnée Catala",
+    "scope": "catala_fr",
+    "prefix": ["metadata", "bloc", "```catala-metadata"],
+    "body": ["```catala-metadata", "$0", "```"]
+  },
+  "déclaration champ d'application": {
+    "description": "Déclare un champ d'application Catala",
+    "scope": "catala_fr",
+    "prefix": ["déclchamp"],
+    "body": ["déclaration champ d'application ${1:NomChamp}:", "  $0"]
+  },
+  "champ d'application": {
+    "description": "Définit un champ d'application Catala",
+    "scope": "catala_fr",
+    "prefix": ["champdéf"],
+    "body": ["champ d'application ${1:NomChamp}:", "  $0"]
+  },
+  "déclaration structure": {
+    "description": "Déclare une structure Catala",
+    "scope": "catala_fr",
+    "prefix": ["déclstruct"],
+    "body": ["déclaration structure ${1:NomStruct}:", "  $0"]
+  },
+  "déclaration énumération": {
+    "description": "Déclare une énumération Catala",
+    "scope": "catala_fr",
+    "prefix": ["déclénum"],
+    "body": ["déclaration énumération ${1:NomÉnum}:", "  $0"]
+  },
+  "Test d'existence dans une liste": {
+    "description": "Teste si un élément de la liste satisfait le test",
+    "scope": "catala_fr",
+    "prefix": "existe",
+    "body": ["existe ${1:x} parmi ${2:lst}", "  tel que ${3:test}"]
+  },
+  "Test Pour-Tout d'une liste": {
+    "description": "Teste que tous les éléments de la liste satisfont le test",
+    "scope": "catala_fr",
+    "prefix": "pour tout",
+    "body": ["pour tout ${1:x} parmi ${2:lst}", "  on a ${3:test}"]
+  },
+  "Transformation de liste": {
+    "description": "Transforme chaque élément d'une liste",
+    "scope": "catala_fr",
+    "prefix": "transforme chaque",
+    "body": ["transforme chaque ${1:x} parmi ${2:lst}", "  en ${3:expr}"]
+  },
+  "Filtrage d'une liste": {
+    "description": "Filtre les éléments d'une liste qui ne satisfont pas le test",
+    "scope": "catala_fr",
+    "prefix": "liste de",
+    "body": ["liste de ${1:x} parmi ${2:lst}", "  tel que ${3:test}"]
+  },
+  "Transformation-Filtrage de liste": {
+    "description": "Transforme seulement les éléments d'une liste qui sastisfont le test",
+    "scope": "catala_fr",
+    "prefix": "transforme chaque tel que",
+    "body": [
+      "transforme chaque ${1:x} parmi ${2:lst}",
+      "  tel que ${3:test}",
+      "  en ${4:expr}"
+    ]
+  },
+  "Combinaison de liste": {
+    "description": "Combine tous les éléments d'une liste",
+    "scope": "catala_fr",
+    "prefix": "combine tout",
+    "body": [
+      "combine tout ${1:x} parmi ${2:lst}",
+      "  dans ${3:acc} initialement ${4:init}",
+      "  avec ${5:expr}"
+    ]
+  }
+}
