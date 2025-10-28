@@ -47,17 +47,17 @@
   padding: var(--spacing16);
   border-radius: var(--spacing4);
   box-sizing:border-box;
-  max-width: 97%;
+  max-width: 100%;
 }
 
 .array-item-controls {
-  flex: 1;
   display: flex;
   gap: 2px;
   padding: 8px 4px;
   background-color: var(--controls-background);
   justify-content: center;
   position: relative;
+  min-width: 30px;;
 }
 
 .array-items-nested .array-item-controls {
@@ -169,3 +169,10 @@
     rgba(255, 0, 0, 0.08)
   );
 }
+
+@media screen and (max-width: 1400px) {
+  .array-item-content {
+    max-width: 96%;
+  }
+}
+
