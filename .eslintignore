@@ -5,3 +5,4 @@ server/vendors
 _opam
 .eslintrc.js
 webpack.config.js
+lint_scripts/
