@@ -17,7 +17,7 @@
   "testEditor.delete": "Supprimer le test",
   "testEditor.description": "Description",
   "testEditor.descriptionPlaceholder": "Entrez une description du test...",
-  "testEditor.passed": "Le test est réussi",
+  "testEditor.passed": "Le test a réussi",
   "testEditor.failed": "Le test a échoué",
   "testEditor.inputs": "Données d'entrée",
   "testEditor.expectedValues": "Résultats du test",
