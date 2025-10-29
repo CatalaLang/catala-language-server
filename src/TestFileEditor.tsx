@@ -398,14 +398,6 @@ export default function TestFileEditor({
   }
 }
 
-/*           <div className="test-editor-top-bar">
-            <button className="test-editor-add-button" onClick={onAddNewTest}>
-              <span className="codicon codicon-add"></span>
-              <FormattedMessage id="testFile.addNewTest" />
-            </button>
-          </div>
- */
-
 function ParsingErrorWarning({
   message,
   vscode,
