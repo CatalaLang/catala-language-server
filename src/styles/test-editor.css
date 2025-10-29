@@ -17,30 +17,6 @@
   flex-grow: 1;
 }
 
-.test-editor-collapse,
-.test-editor-delete {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--vscode-editor-foreground);
-  font-size: 16px;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-}
-
-.test-editor-collapse:hover,
-.test-editor-delete:hover {
-  background: var(--tab-hover-background);
-}
-
-.test-editor-collapse {
-  color: var(--vscode-editor-foreground);
-  margin-right: 4px;
-}
-
 .test-editor-run:hover {
   background-color: var(--vscode-button-hoverBackground);
 }
