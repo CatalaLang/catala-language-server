@@ -17,10 +17,6 @@
   flex-grow: 1;
 }
 
-.test-editor-run:hover {
-  background-color: var(--vscode-button-hoverBackground);
-}
-
 .test-editor-empty {
   display: flex;
   flex-direction: column;
@@ -106,20 +102,6 @@
 }
 .button-action-dvp .codicon {
   font-size: 14px;
-}
-
-.test-editor-top-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  background-color: var(--vscode-editor-background);
-  padding: 0.25rem 1rem;
-  border-bottom: 1px solid var(--vscode-editorWidget-border);
-  z-index: 100;
-  display: flex;
-  justify-content: center;
-  height: 2rem;
 }
 
 .test-editor-add-button {
