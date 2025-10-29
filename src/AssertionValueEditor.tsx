@@ -1,5 +1,5 @@
 import { type ReactElement } from 'react';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import type { TestIo, Diff, PathSegment } from './generated/test_case';
 import ValueEditor from './editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
@@ -77,6 +77,7 @@ export default function AssertionValueEditor({
   highlightDiffs = true,
   onDiffResolved,
 }: Props): ReactElement {
+  const intl = useIntl();
   // Array item phantom rendering is handled inside ArrayEditor based on diffs.
 
   // Create the diff highlight hook if we have diffs
@@ -97,7 +98,7 @@ export default function AssertionValueEditor({
       />
       <button
         className="assertion-delete"
-        title="Delete assertion"
+        title={intl.formatMessage({ id: 'assertion.delete' })}
         onClick={onAssertionDeletion}
       >
         <span className="codicon codicon-trash"></span>
