@@ -56,25 +56,14 @@ async function findUnusedCSS() {
 
       const purgedSize = file.css.length;
 
-      console.log(`\nFile: ${file.file}`);
-      console.log(`Size after purge: ${purgedSize} bytes`);
-
       if (file.rejected && file.rejected.length > 0) {
+        console.log(`\nFile: ${file.file}`);
+        console.log(`Size after purge: ${purgedSize} bytes`);
         console.log('\nUnused CSS selectors:');
         file.rejected.forEach((selector) => {
           console.log(`  - ${selector}`);
         });
-
-        const totalSelectors =
-          file.rejected.length + (file.selectors ? file.selectors.length : 0);
-        const unusedPercent = (
-          (file.rejected.length / totalSelectors) *
-          100
-        ).toFixed(2);
-        console.log(`Percentage of unused selectors: ${unusedPercent}%`);
         hasUnused = true;
-      } else {
-        console.log('\nNo unused CSS selectors found.');
       }
     });
   } catch (error) {
