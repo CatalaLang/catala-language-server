@@ -139,7 +139,7 @@ export default function TestEditor(props: Props): ReactElement {
                 les valeurs attendues
               </button>
               <button
-                className={`button-action-dvp test-editor-run ${props.runState?.status ?? ''}`}
+                className={`button-action-dvp ${props.runState?.status ?? ''}`}
                 title={intl.formatMessage({ id: 'testEditor.run' })}
                 onClick={() => props.onTestRun(props.test.testing_scope)}
                 disabled={props.runState?.status === 'running'}

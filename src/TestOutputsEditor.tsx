@@ -90,7 +90,7 @@ export default function TestOutputsEditor({
                 />
               ) : (
                 <button
-                  className="test-editor-run"
+                  className="button-action-dvp"
                   onClick={() => onAssertAdd(outputName)}
                 >
                   <span className="codicon codicon-add"></span>
