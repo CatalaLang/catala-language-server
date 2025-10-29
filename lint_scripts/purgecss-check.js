@@ -13,6 +13,10 @@ const glob = require('glob');
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 let hasUnused = false;
 
+// Theme classes injected by VS Code at the document root; include them as virtual content so PurgeCSS can match theme-prefixed selectors during analysis.
+const THEME_CLASSES = ['vscode-light', 'vscode-dark'];
+const THEME_SNIPPET = `<div class="${THEME_CLASSES.join(' ')}"></div>`;
+
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 async function findUnusedCSS() {
   console.log('Analyzing unused CSS with PurgeCSS...');
@@ -35,7 +39,7 @@ async function findUnusedCSS() {
     );
 
     const result = await new PurgeCSS().purge({
-      content: contentFiles,
+      content: [...contentFiles, { raw: THEME_SNIPPET, extension: 'html' }],
       css: cssFiles,
       rejected: true,
       safelist: ['html', 'body'],
