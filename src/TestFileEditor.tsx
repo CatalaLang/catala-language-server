@@ -30,6 +30,16 @@ import type { WebviewApi } from 'vscode-webview';
 // between tests?
 //
 
+// Note (2025-10-29):
+//
+// We changed our test file editor to
+// show 0 or 1 test (vs an arbitrary number of tests before) ;
+// for now the compiler-side definitions are unchanged (a TestFile
+// is a possibly empty list of Test) and the TestFileEditor
+// component will render N tests, but we removed the "add test"
+// button (only the wizard for an empty file remains) which effectively
+// limits test files to 1 test. It may be worth revisiting later?
+
 type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
