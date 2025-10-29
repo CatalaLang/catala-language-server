@@ -46,7 +46,7 @@
   flex: 1;
   padding: var(--spacing16);
   border-radius: var(--spacing4);
-  box-sizing:border-box;
+  box-sizing: border-box;
   max-width: 100%;
 }
 
@@ -57,7 +57,7 @@
   background-color: var(--controls-background);
   justify-content: center;
   position: relative;
-  min-width: 30px;;
+  min-width: 30px;
 }
 
 .array-items-nested .array-item-controls {
@@ -70,8 +70,6 @@
   padding: 4px;
   border-radius: 3px 0 0 3px;
 }
-
-
 
 .array-items-non-nested .array-item-content {
   flex: 1;
@@ -175,4 +173,3 @@
     max-width: 96%;
   }
 }
-

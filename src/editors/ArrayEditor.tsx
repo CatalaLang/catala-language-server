@@ -465,7 +465,6 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                     </button>
                   )}
                 </div>
-                
               </div>
             );
           });
@@ -480,7 +479,6 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
           />
         </button>
       )}
-
     </div>
   );
 }
