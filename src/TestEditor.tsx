@@ -75,10 +75,11 @@ export default function TestEditor(props: Props): ReactElement {
     <div className="test-editor">
       <div className="test-editor-bar">
         <div className="test-editor-breadcrumb body-b3">
-          {props.test.testing_scope} ➛{' '}
-          {String(props.test.tested_scope.name)}
+          {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
         </div>
-        <h1 className="test-case-name heading-h1">{props.test.testing_scope}</h1>
+        <h1 className="test-case-name heading-h1">
+          {props.test.testing_scope}
+        </h1>
       </div>
       <div
         className="test-editor-content"
@@ -106,7 +107,6 @@ export default function TestEditor(props: Props): ReactElement {
           </div>
         </div>
         <div className="test-section">
-
           <h2 className="test-section-title heading-h2">
             <FormattedMessage id="testEditor.inputs" />
           </h2>
@@ -115,12 +115,17 @@ export default function TestEditor(props: Props): ReactElement {
             onTestInputsChange={onTestInputsChange}
           />
         </div>
-        <div className="test-section" id={expectedAnchorId} ref={expectedSectionRef} tabIndex={-1}>
+        <div
+          className="test-section"
+          id={expectedAnchorId}
+          ref={expectedSectionRef}
+          tabIndex={-1}
+        >
           <h2 className="test-section-title heading-h2">
-              <FormattedMessage id="testEditor.expectedValues" />
+            <FormattedMessage id="testEditor.expectedValues" />
           </h2>
           <div className="test-result-header">
-            <h3 className='heading-h3'>Résultats obtenus</h3>
+            <h3 className="heading-h3">Résultats obtenus</h3>
             <p className="body-3">Aucun test réalisé / Date du dernier test</p>
             <div className="test-result-action-bar">
               <button
@@ -130,7 +135,8 @@ export default function TestEditor(props: Props): ReactElement {
                   props.onTestOutputsReset(props.test.testing_scope);
                 }}
               >
-                <span className="codicon codicon-refresh"></span> Remplacer avec les valeurs attendues
+                <span className="codicon codicon-refresh"></span> Remplacer avec
+                les valeurs attendues
               </button>
               <button
                 className={`button-action-dvp test-editor-run ${props.runState?.status ?? ''}`}
@@ -138,7 +144,10 @@ export default function TestEditor(props: Props): ReactElement {
                 onClick={() => props.onTestRun(props.test.testing_scope)}
                 disabled={props.runState?.status === 'running'}
               >
-                <span className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}></span> Lancer le test
+                <span
+                  className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
+                ></span>{' '}
+                Lancer le test
               </button>
             </div>
             <div className="test-result">
@@ -152,17 +161,22 @@ export default function TestEditor(props: Props): ReactElement {
                       defaultMessage="Passed"
                     />
                   </p>
-              )}
+                )}
               {(props.runState?.status === 'error' ||
                 (props.runState?.results?.kind === 'Ok' &&
                   props.runState.results.value.assert_failures)) && (
-                    <div className="test-result-information">
-                      <p className="test-run-result test-run-error body-1">
-                        <span className="codicon codicon-warning"></span>
-                        <FormattedMessage id="testEditor.failed" defaultMessage="Failed" />
-                      </p>
-                      <p className="body-3">Informations complémentaires sur les erreurs rencontrées</p>
-                    </div>
+                <div className="test-result-information">
+                  <p className="test-run-result test-run-error body-1">
+                    <span className="codicon codicon-warning"></span>
+                    <FormattedMessage
+                      id="testEditor.failed"
+                      defaultMessage="Failed"
+                    />
+                  </p>
+                  <p className="body-3">
+                    Informations complémentaires sur les erreurs rencontrées
+                  </p>
+                </div>
               )}
             </div>
           </div>

@@ -238,17 +238,17 @@ function IntEditor(props: IntEditorProps): ReactElement {
   };
 
   return (
-      <input
-        type="text"
-        pattern={INT_PATTERN.source}
-        required
-        value={displayValue}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        className={`value-editor rat-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
-        placeholder="0"
-        disabled={props.editable === false}
-      />
+    <input
+      type="text"
+      pattern={INT_PATTERN.source}
+      required
+      value={displayValue}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      className={`value-editor rat-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
+      placeholder="0"
+      disabled={props.editable === false}
+    />
   );
 }
 
@@ -312,12 +312,13 @@ function DateEditor(props: DateEditorProps): ReactElement {
   // TODO: Add onBlur validation?
 
   return (
-      <input className="value-editor"
-        type="date"
-        value={internalValue}
-        onChange={handleChange}
-        disabled={props.editable === false}
-      />
+    <input
+      className="value-editor"
+      type="date"
+      value={internalValue}
+      onChange={handleChange}
+      disabled={props.editable === false}
+    />
   );
 }
 
@@ -388,17 +389,17 @@ function RatEditor(props: RatEditorProps): ReactElement {
   };
 
   return (
-      <input 
-        type="text"
-        pattern={RAT_PATTERN.source}
-        required
-        value={displayValue}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        className={`value-editor rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
-        placeholder="0.0"
-        disabled={props.editable === false}
-      />
+    <input
+      type="text"
+      pattern={RAT_PATTERN.source}
+      required
+      value={displayValue}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      className={`value-editor rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
+      placeholder="0.0"
+      disabled={props.editable === false}
+    />
   );
 }
 
@@ -420,18 +421,19 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   };
 
   return (
-      <select className="value-editor"
-        value={currentValue.toString()}
-        onChange={handleChange}
-        disabled={props.editable === false}
-      >
-        <option value="false">
-          <FormattedMessage id="false" />
-        </option>
-        <option value="true">
-          <FormattedMessage id="true" />
-        </option>
-      </select>
+    <select
+      className="value-editor"
+      value={currentValue.toString()}
+      onChange={handleChange}
+      disabled={props.editable === false}
+    >
+      <option value="false">
+        <FormattedMessage id="false" />
+      </option>
+      <option value="true">
+        <FormattedMessage id="true" />
+      </option>
+    </select>
   );
 }
 

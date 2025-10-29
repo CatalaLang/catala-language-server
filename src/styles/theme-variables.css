@@ -1,34 +1,34 @@
 :root {
   /* Primitives */
-  --stormgray00:#ffffff;
-  --stormgray50:#f5f7f8;
-  --stormgray100:#ecf0f3;
-  --stormgray200:#dde2e8;
-  --stormgray300:#c8d0d9;
-  --stormgray400:#b1b9c8;
-  --stormgray500:#9ca5b8;
-  --stormgray600:#868da5;
-  --stormgray700:#71778e;
-  --stormgray800:#5e6275;
-  --stormgray900:#4f5360;
-  --stormgray925:#383b45;
-  --stormgray950:#2e3038;
-  --thunderbird500: #F64C3D;
-  --caribbean-green-600: #02997D;
+  --stormgray00: #ffffff;
+  --stormgray50: #f5f7f8;
+  --stormgray100: #ecf0f3;
+  --stormgray200: #dde2e8;
+  --stormgray300: #c8d0d9;
+  --stormgray400: #b1b9c8;
+  --stormgray500: #9ca5b8;
+  --stormgray600: #868da5;
+  --stormgray700: #71778e;
+  --stormgray800: #5e6275;
+  --stormgray900: #4f5360;
+  --stormgray925: #383b45;
+  --stormgray950: #2e3038;
+  --thunderbird500: #f64c3d;
+  --caribbean-green-600: #02997d;
 
   --error: var(--thunderbird500);
   --success: var(--caribbean-green-600);
 
-  --spacing0:0;
-  --spacing1:1;
-  --spacing2:2;
-  --spacing4:4px;
-  --spacing8:8px;
-  --spacing12:12px;
+  --spacing0: 0;
+  --spacing1: 1;
+  --spacing2: 2;
+  --spacing4: 4px;
+  --spacing8: 8px;
+  --spacing12: 12px;
   --spacing16: 16px;
-  --spacing20:20;
-  --spacing24:24;
-  --spacing28:28;
+  --spacing20: 20;
+  --spacing24: 24;
+  --spacing28: 28;
   --spacing32: 32px;
 
   /* Custom Catala Colors */
@@ -36,7 +36,7 @@
   --background-color-lvl-2: var(--stormgray00);
 
   --font-body-3: italic bold xx-large 16px/2 cursive;
-  
+
   /* Semantic color variables that map to VS Code theme colors */
   --card-background: var(--vscode-editor-background);
   --card-background-alt: var(--vscode-sideBarSectionHeader-background);
@@ -90,42 +90,52 @@
   );
 }
 
-.heading-h1{
+.heading-h1 {
   font-size: 26px;
-  font-family: SF Pro Text, sans-serif;
+  font-family:
+    SF Pro Text,
+    sans-serif;
 }
-.heading-h2{
+.heading-h2 {
   font-size: 24px;
-  font-family: SF Pro Text, sans-serif;
+  font-family:
+    SF Pro Text,
+    sans-serif;
   font-weight: 500;
 }
-.heading-h3{
+.heading-h3 {
   font-size: 20px;
-  font-family: SF Pro Text, sans-serif;
+  font-family:
+    SF Pro Text,
+    sans-serif;
   text-transform: capitalize;
   font-weight: 500;
   margin: 0;
 }
-.body-1{
+.body-1 {
   font-size: 16px;
-  font-family: SF Pro Text, sans-serif;
+  font-family:
+    SF Pro Text,
+    sans-serif;
   font-weight: 500;
 }
-.body-b3{
+.body-b3 {
   font-size: 12px;
-  font-family: SF Pro Text, sans-serif;
+  font-family:
+    SF Pro Text,
+    sans-serif;
   font-weight: 500;
 }
-p{
+p {
   display: inline;
   margin-block-start: 0;
   margin-block-end: 0;
 }
-input{
+input {
   padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
 }
 
-.button-action-dvp{
+.button-action-dvp {
   padding: var(--spacing4) var(--spacing12) var(--spacing4) var(--spacing12);
   border: 1px solid;
   border-radius: var(--spacing12);
@@ -136,11 +146,11 @@ input{
 .vscode-dark {
   background: var(--stormgray950);
 }
-.vscode-dark .test-section-title{
+.vscode-dark .test-section-title {
   color: var(--stormgray300);
 }
-.vscode-dark .tab{
-    color: var(--stormgray600);
+.vscode-dark .tab {
+  color: var(--stormgray600);
 }
 .vscode-dark .tab.active {
   background-color: var(--stormgray900);
@@ -157,18 +167,18 @@ input{
   background: var(--level-2-background-dark);
 }
 .vscode-dark .array-item,
-.vscode-dark .atomic-element{
+.vscode-dark .atomic-element {
   background-color: var(--level-3-background-dark);
 }
-.vscode-dark .button-action-dvp{
+.vscode-dark .button-action-dvp {
   color: var(--stormgray500);
   border-color: var(--stormgray800);
 }
-.vscode-dark .button-action-dvp:hover{
+.vscode-dark .button-action-dvp:hover {
   background-color: var(--stormgray800);
   border-color: var(--stormgray600);
 }
-.vscode-dark .test-description-textarea{
+.vscode-dark .test-description-textarea {
   border-color: var(--stormgray800);
 }
 
@@ -179,9 +189,9 @@ input{
 .vscode-dark .struct-editor select {
   background-color: var(--stormgray925);
   color: var(--stormgray500);
-  border-color: var(--stormgray800)
+  border-color: var(--stormgray800);
 }
-.vscode-dark .item-label{
+.vscode-dark .item-label {
   color: var(--stormgray500);
 }
 
@@ -190,10 +200,10 @@ input{
   background: var(--stormgray50);
 }
 
-.vscode-light .test-section-title{
+.vscode-light .test-section-title {
   color: var(--stormgray900);
 }
-.vscode-light .tab{
+.vscode-light .tab {
   color: var(--stormgray950);
 }
 .vscode-light .tab.active {
@@ -207,24 +217,24 @@ input{
 .vscode-light .test-description-editor,
 .vscode-light .data-card,
 .vscode-light .tab-content,
-.vscode-light .test-result-header{
+.vscode-light .test-result-header {
   background: var(--level-2-background);
 }
 .vscode-light .array-item,
-.vscode-light .atomic-element{
+.vscode-light .atomic-element {
   background-color: var(--level-3-background);
 }
 
-.vscode-light .button-action-dvp{
+.vscode-light .button-action-dvp {
   color: var(--stormgray900);
   border-color: var(--stormgray200);
 }
-.vscode-light .button-action-dvp:hover{
+.vscode-light .button-action-dvp:hover {
   background-color: var(--stormgray100);
   border-color: var(--stormgray400);
 }
 
-.vscode-light .test-description-textarea{
+.vscode-light .test-description-textarea {
   border-color: var(--stormgray300);
 }
 
@@ -235,8 +245,8 @@ input{
 .vscode-light .struct-editor select {
   background-color: var(--stormgray00);
   color: var(--stormgray900);
-  border-color: var(--stormgray300)
+  border-color: var(--stormgray300);
 }
-.vscode-light .item-label{
+.vscode-light .item-label {
   color: var(--stormgray950);
 }

@@ -13,7 +13,7 @@
 .simple-item {
   box-sizing: border-box;
   min-width: 150px;
-/*   max-width: 250px; */
+  /*   max-width: 250px; */
 }
 
 .simple-items-vertical {
@@ -53,7 +53,7 @@
   padding: var(--spacing8) var(--spacing12) var(--spacing8) var(--spacing12);
   border: none;
   background: none;
-  cursor: pointer;  
+  cursor: pointer;
   font-weight: 500;
   font-size: 14px;
   position: relative;
