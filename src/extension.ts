@@ -190,6 +190,24 @@ export function activate(context: vscode.ExtensionContext): void {
     term.sendText([clerkPath, 'run', file, '--scope', scope].join(' '));
   });
 
+  vscode.commands.registerCommand(
+    'catala.getTestableScopes',
+    async (workspacePath?: string) => {
+      if (!client) {
+        vscode.window.showErrorMessage(
+          'Catala LSP is not running: cannot list testable scopes.'
+        );
+        return [];
+      }
+      const files_scopes_map: { path: string; scopes: string[] }[] =
+        await client.sendRequest(
+          'catala.getTestableScopes',
+          workspacePath ?? null
+        );
+      return files_scopes_map;
+    }
+  );
+
   const lsp_server_config_path = vscode.workspace
     .getConfiguration('catala')
     .get<string>('lspServerPath');
