@@ -145,3 +145,82 @@
 .file-select-button .codicon {
   font-size: 16px;
 }
+
+/* --- Scope search inside modal --- */
+
+.modal-scope-picker {
+  margin-bottom: 16px;
+}
+
+.modal-scope-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--vscode-foreground);
+}
+
+.modal-scope-search {
+  position: relative;
+}
+
+.modal-scope-search-input {
+  width: calc(100% - 16px);
+  padding: 8px;
+  border: 1px solid var(--vscode-input-border);
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.modal-scope-search-input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+}
+
+.modal-scope-results {
+  position: relative;
+  max-height: 220px;
+  overflow: auto;
+  margin-top: 8px;
+  border: 1px solid var(--vscode-input-border);
+  background-color: var(--vscode-editor-background);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.modal-scope-result {
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.modal-scope-result:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.modal-scope-loading,
+.modal-no-results {
+  color: var(--vscode-input-placeholderForeground);
+  padding: 6px 8px;
+}
+
+.modal-or-separator {
+  text-align: center;
+  margin: 12px 0 0 0;
+  color: var(--vscode-input-placeholderForeground);
+  font-size: 12px;
+}
+
+.modal-scope-selection {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--vscode-foreground);
+  opacity: 0.85;
+}

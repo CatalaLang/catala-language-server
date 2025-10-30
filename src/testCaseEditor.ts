@@ -293,6 +293,102 @@ export class TestCaseEditorProvider
           }
           break;
         }
+        case 'OpenTestScopePicker': {
+          try {
+            const ws = vscode.workspace.getWorkspaceFolder(document.uri);
+            const wsPath = ws?.uri.fsPath;
+            const entries = (await vscode.commands.executeCommand(
+              'catala.getTestableScopes',
+              wsPath
+            )) as { path: string; scopes: string[] }[];
+
+            const browseItem: vscode.QuickPickItem = {
+              label: '$(folder-opened) Choose from file…',
+              alwaysShow: true,
+            };
+
+            const scopeItems: vscode.QuickPickItem[] = entries.flatMap((e) =>
+              e.scopes.map((scope) => ({
+                label: scope,
+                description: e.path,
+              }))
+            );
+
+            const picked = await vscode.window.showQuickPick(
+              [
+                browseItem,
+                {
+                  label: 'Catala scopes',
+                  kind: vscode.QuickPickItemKind.Separator,
+                },
+                ...scopeItems,
+              ],
+              {
+                matchOnDescription: true,
+                placeHolder: 'Select a scope to create a test',
+              }
+            );
+
+            if (!picked) break;
+
+            let filename: string | undefined;
+            let scopeUnderTest: string | undefined;
+
+            if (picked === browseItem) {
+              const fileUri = await vscode.window.showOpenDialog({
+                filters: {
+                  'Catala Files': ['catala_fr', 'catala_en', 'catala_pl'],
+                },
+              });
+              if (!fileUri?.[0]) break;
+              filename = fileUri[0].fsPath;
+
+              const scopes = await getAvailableScopes(filename);
+              const pickedScope = await vscode.window.showQuickPick(
+                scopes.map((s) => ({ label: s.name })),
+                {
+                  placeHolder: `Select a scope in ${path.basename(filename)}`,
+                }
+              );
+              if (!pickedScope) break;
+              scopeUnderTest = pickedScope.label;
+            } else {
+              scopeUnderTest = picked.label;
+              filename = picked.description;
+            }
+
+            if (!filename || !scopeUnderTest) break;
+
+            const results = generate(scopeUnderTest, filename);
+            if (results.kind === 'Results') {
+              const newTest = results.value;
+
+              const currentTests = document.parseResults;
+              if (currentTests.kind === 'Results') {
+                newTest[0] = renameIfNeeded(currentTests.value, newTest[0]);
+                const updatedTests = [...currentTests.value, newTest[0]];
+
+                document.scheduleChange(updatedTests, false);
+
+                postMessageToWebView({
+                  kind: 'Update',
+                  value: { kind: 'Results', value: updatedTests },
+                });
+              }
+            } else {
+              vscode.window.showErrorMessage(
+                `Failed to generate test: ${results.value}`
+              );
+            }
+          } catch (err) {
+            logger.log(
+              `OpenTestScopePicker failed: ${
+                err instanceof Error ? err.message : String(err)
+              }`
+            );
+          }
+          break;
+        }
         default:
           assertUnreachable(typed_msg);
       }
