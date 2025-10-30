@@ -575,9 +575,7 @@ class catala_lsp_server =
         Lwt.return ((), sstate)
       | _ -> Lwt.return_unit
 
-    method private on_req_get_all_scopes () : Yojson.Safe.t Lwt.t =
-      SState.use_now server_state
-      @@ fun { projects; _ } ->
+    method private on_req_scope projects list_f =
       let scopes =
         Projects.Projects.fold
           (fun ({ Projects.project_files; _ } as project) acc ->
@@ -585,7 +583,7 @@ class catala_lsp_server =
               (fun doc_id _f acc ->
                 if Projects.is_an_included_file doc_id project then acc
                 else
-                  match Utils.list_scopes (doc_id :> string) with
+                  match list_f (doc_id :> string) with
                   | [] -> acc
                   | scopes -> Doc_id.Map.add doc_id scopes acc)
               project_files acc)
@@ -607,6 +605,48 @@ class catala_lsp_server =
                    ]))
       in
       Lwt.return json_list
+
+    method private on_req_get_all_scopes () : Yojson.Safe.t Lwt.t =
+      SState.use_now server_state
+      @@ fun { projects; _ } -> self#on_req_scope projects Utils.list_scopes
+
+    method private on_req_get_all_testable_scopes params : Yojson.Safe.t Lwt.t =
+      let workspace_path_opt =
+        match params with
+        | Some p -> (
+          match Linol.Jsonrpc.Structured.yojson_of_t p with
+          | `String s -> Some s
+          | `List [`String s] -> Some s
+          | `Null -> None
+          | _ -> None)
+        | None -> None
+      in
+      SState.use_now server_state
+      @@ fun { projects; _ } ->
+      let projects_to_scan =
+        match workspace_path_opt with
+        | None -> projects
+        | Some (workspace_path as p) -> (
+          (* pick the first project whose directory is a prefix of the given
+             path *)
+          let target =
+            Projects.Projects.elements projects
+            |> List.find_opt (fun (project : Projects.project) ->
+                   let dir = project.project_dir in
+                   String.length p >= String.length dir
+                   && String.equal dir (String.sub p 0 (String.length dir)))
+          in
+          match target with
+          | Some proj -> Projects.Projects.singleton proj
+          | None ->
+            Log.warn (fun m ->
+                m
+                  "Could not find a project in %s: scanning scopes in all \
+                   projects"
+                  workspace_path);
+            projects)
+      in
+      self#on_req_scope projects_to_scan Utils.list_testable_scopes
 
     method! on_unknown_request ~notify_back ~server_request:_ ~id meth params =
       self#on_request_unhandled ~notify_back ~id
@@ -630,6 +670,8 @@ class catala_lsp_server =
           self#on_req_document_formatting ~notify_back params
         | UnknownRequest { meth = "catala.getRunnableScopes"; params = _ } ->
           self#on_req_get_all_scopes ()
+        | UnknownRequest { meth = "catala.getTestableScopes"; params } ->
+          self#on_req_get_all_testable_scopes params
         | UnknownRequest { meth; _ } ->
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
