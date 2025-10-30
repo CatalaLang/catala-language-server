@@ -161,11 +161,6 @@ export type TestGenerateRequest = {
   filename: string;
 }
 
-export type FileSelection = {
-  filename: string;
-  available_scopes: ScopeDefList;
-}
-
 export type TestRunResultsMsg = {
   scope: string;
   reset_outputs: boolean;
@@ -178,13 +173,11 @@ export type UpMessage =
 | { kind: 'OpenInTextEditor' }
 | { kind: 'TestRunRequest'; value: TestRunRequest }
 | { kind: 'TestGenerateRequest'; value: TestGenerateRequest }
-| { kind: 'SelectFileForNewTest' }
 | { kind: 'OpenTestScopePicker' }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
-| { kind: 'FileSelectedForNewTest'; value: FileSelection }
 
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
@@ -732,20 +725,6 @@ export function readTestGenerateRequest(x: any, context: any = x): TestGenerateR
   };
 }
 
-export function writeFileSelection(x: FileSelection, context: any = x): any {
-  return {
-    'filename': _atd_write_required_field('FileSelection', 'filename', _atd_write_string, x.filename, x),
-    'available_scopes': _atd_write_required_field('FileSelection', 'available_scopes', writeScopeDefList, x.available_scopes, x),
-  };
-}
-
-export function readFileSelection(x: any, context: any = x): FileSelection {
-  return {
-    filename: _atd_read_required_field('FileSelection', 'filename', _atd_read_string, x['filename'], x),
-    available_scopes: _atd_read_required_field('FileSelection', 'available_scopes', readScopeDefList, x['available_scopes'], x),
-  };
-}
-
 export function writeTestRunResultsMsg(x: TestRunResultsMsg, context: any = x): any {
   return {
     'scope': _atd_write_required_field('TestRunResultsMsg', 'scope', _atd_write_string, x.scope, x),
@@ -774,8 +753,6 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return ['TestRunRequest', writeTestRunRequest(x.value, x)]
     case 'TestGenerateRequest':
       return ['TestGenerateRequest', writeTestGenerateRequest(x.value, x)]
-    case 'SelectFileForNewTest':
-      return 'SelectFileForNewTest'
     case 'OpenTestScopePicker':
       return 'OpenTestScopePicker'
   }
@@ -788,8 +765,6 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'Ready' }
       case 'OpenInTextEditor':
         return { kind: 'OpenInTextEditor' }
-      case 'SelectFileForNewTest':
-        return { kind: 'SelectFileForNewTest' }
       case 'OpenTestScopePicker':
         return { kind: 'OpenTestScopePicker' }
       default:
@@ -819,8 +794,6 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
       return ['Update', writeParseResults(x.value, x)]
     case 'TestRunResults':
       return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
-    case 'FileSelectedForNewTest':
-      return ['FileSelectedForNewTest', writeFileSelection(x.value, x)]
   }
 }
 
@@ -831,8 +804,6 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
       return { kind: 'Update', value: readParseResults(x[1], x) }
     case 'TestRunResults':
       return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
-    case 'FileSelectedForNewTest':
-      return { kind: 'FileSelectedForNewTest', value: readFileSelection(x[1], x) }
     default:
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')

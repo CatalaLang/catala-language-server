@@ -272,27 +272,6 @@ export class TestCaseEditorProvider
             'default'
           );
           break;
-        case 'SelectFileForNewTest': {
-          const fileUri = await vscode.window.showOpenDialog({
-            filters: {
-              'Catala Files': ['catala_fr', 'catala_en', 'catala_pl'],
-            },
-          });
-
-          if (fileUri?.[0]) {
-            const selectedFile = fileUri[0].fsPath;
-            const scopes = await getAvailableScopes(selectedFile);
-
-            postMessageToWebView({
-              kind: 'FileSelectedForNewTest',
-              value: {
-                filename: selectedFile,
-                available_scopes: scopes,
-              },
-            });
-          }
-          break;
-        }
         case 'OpenTestScopePicker': {
           try {
             const ws = vscode.workspace.getWorkspaceFolder(document.uri);

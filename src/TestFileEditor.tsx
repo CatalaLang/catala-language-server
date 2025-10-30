@@ -193,9 +193,6 @@ export default function TestFileEditor({
           });
           break;
         }
-        case 'FileSelectedForNewTest':
-          // Legacy modal flow removed; ignore if received
-          break;
         default:
           assertUnreachable(message);
       }
