@@ -269,9 +269,13 @@ let scope_inputs ?module_name decl_ctx scope =
 
 let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
   let decl_ctx = prg.program_ctx in
-  let input_typs : typ list =
+  let filtered_input_typs : typ list =
     I.ScopeDef.Map.fold
-      (fun _ sdef acc -> sdef.I.scope_def_typ :: acc)
+      (fun (_, kind) (sdef : I.scope_def) acc ->
+        (* Do not consider: internals & subscopes, *)
+        match kind, Mark.remove sdef.scope_def_io.io_input with
+        | _, NoInput | I.ScopeDef.SubScopeInput _, _ -> acc
+        | _, (OnlyInput | Reentrant) -> sdef.I.scope_def_typ :: acc)
       scope.I.scope_defs []
     |> List.rev
   in
@@ -297,7 +301,7 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
     | TVar _ -> raise (Unsupported "type variable")
     | TClosureEnv -> raise (Unsupported "closure type")
   in
-  List.fold_left process_typ ModuleName.Set.empty input_typs
+  List.fold_left process_typ ModuleName.Set.empty filtered_input_typs
   |> ModuleName.Set.elements
   |> List.map ModuleName.to_string
 
