@@ -161,12 +161,6 @@ type test_generate_request = {
   filename: string;
 }
 
-type file_selection = {
-  filename: string;
-  available_scopes: scope_def_list;
-}
-
-
 type test_run_results_msg = {
   scope: string;
   reset_outputs: bool;
@@ -179,12 +173,10 @@ type up_message = [
   | OpenInTextEditor
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request
-  | SelectFileForNewTest
   | OpenTestScopePicker
 ]
 
 type down_message = [
   | Update of parse_results
   | TestRunResults of test_run_results_msg
-  | FileSelectedForNewTest of file_selection
 ]
