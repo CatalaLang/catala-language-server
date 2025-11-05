@@ -304,10 +304,10 @@ let find_module_candidate
 let retrieve_project_files
     ~on_error
     (clerk_config : Clerk_config.t)
-    clerk_root_dir =
+    ~project_dir =
   let open Clerk_scan in
   Log.info (fun m -> m "building inclusion graph");
-  let tree = tree clerk_root_dir in
+  let tree = tree project_dir in
   let known_items : (string, item) Hashtbl.t = Hashtbl.create 10 in
   let known_modules =
     Seq.fold_left
@@ -414,7 +414,7 @@ let project_of_folder ~on_error project_dir =
     Log.warn (fun m ->
         m "no clerk config file found, assuming default configuration");
     let project_files, known_modules =
-      retrieve_project_files ~on_error Clerk_config.default_config project_dir
+      retrieve_project_files ~on_error Clerk_config.default_config ~project_dir
     in
     let project_kind = No_clerk in
     let project_graph = Project_graph.build_graph project_files in
@@ -422,10 +422,8 @@ let project_of_folder ~on_error project_dir =
   | Some (clerk_config, clerk_root_dir) ->
     Log.debug (fun m -> m "clerk file found in '%s' directory" clerk_root_dir);
     let project_kind = Clerk { clerk_root_dir; clerk_config } in
-    (* We also consider Catala files that may be upper in the hierarchy but
-       under the discovered "clerk.toml" scope *)
     let project_files, known_modules =
-      retrieve_project_files ~on_error clerk_config clerk_root_dir
+      retrieve_project_files ~on_error clerk_config ~project_dir
     in
     let project_graph = Project_graph.build_graph project_files in
     { project_dir; project_kind; project_files; project_graph; known_modules }
