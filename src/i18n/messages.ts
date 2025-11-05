@@ -14,6 +14,9 @@ export const messages = {
     runAgainstSavedContent:
       'Test will run against the saved file content, not your current changes.',
     continue: 'Continue',
+    deleteArrayElementConfirmation: 'Delete this element?',
+    deleteAssertionConfirmation: 'Delete this assertion?',
+    deleteButton: 'Delete',
   },
   fr: {
     resetOutputsConfirmation:
@@ -26,6 +29,9 @@ export const messages = {
     runAgainstSavedContent:
       "Le test s'exécutera sur la version enregistrée du fichier, pas sur vos modifications actuelles.",
     continue: 'Continuer',
+    deleteArrayElementConfirmation: 'Supprimer cet élément ?',
+    deleteAssertionConfirmation: 'Supprimer cette assertion ?',
+    deleteButton: 'Supprimer',
   },
 };
 

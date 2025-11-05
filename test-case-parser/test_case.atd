@@ -167,6 +167,22 @@ type test_run_results_msg = {
   results: test_run_results;
 }
 
+(* Confirmation dialog IPC *)
+type confirm_action = [
+  | DeleteArrayElement
+  | DeleteAssertion
+]
+
+type confirm_request = {
+  id: int;
+  action: confirm_action;
+}
+
+type confirm_result = {
+  id: int;
+  confirmed: bool;
+}
+
 type up_message = [
   | Ready
   | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
@@ -174,9 +190,11 @@ type up_message = [
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request
   | OpenTestScopePicker
+  | ConfirmRequest of confirm_request
 ]
 
 type down_message = [
   | Update of parse_results
   | TestRunResults of test_run_results_msg
+  | ConfirmResult of confirm_result
 ]
