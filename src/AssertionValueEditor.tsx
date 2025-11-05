@@ -6,6 +6,7 @@ import { renderAtomicValue } from './testCaseUtils';
 import './styles/assertions-editor.css';
 import { findMatchingDiff, isParentOfAnyDiff } from './diff/highlight';
 import { isAtomicRuntime } from './diff/diff';
+import { confirm } from './messaging/confirm';
 
 type Props = {
   testIO: TestIo;
@@ -99,7 +100,10 @@ export default function AssertionValueEditor({
       <button
         className="assertion-delete"
         title={intl.formatMessage({ id: 'assertion.delete' })}
-        onClick={onAssertionDeletion}
+        onClick={async () => {
+          if (!(await confirm('DeleteAssertion'))) return;
+          onAssertionDeletion();
+        }}
       >
         <span className="codicon codicon-trash"></span>
       </button>

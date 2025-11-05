@@ -14,6 +14,8 @@ import TestEditor from './TestEditor';
 import { assertUnreachable } from './util';
 import { pathEquals } from './diff/highlight';
 import type { WebviewApi } from 'vscode-webview';
+import { setVsCodeApi } from './webviewApi';
+import { resolveConfirmResult } from './messaging/confirm';
 
 // Note:
 //
@@ -57,6 +59,9 @@ export default function TestFileEditor({
 }: Props): ReactElement {
   const [state, setState] = useState(contents);
   const [testRunState, setTestRunState] = useState<TestRunState>({});
+  useEffect(() => {
+    setVsCodeApi(vscode);
+  }, [vscode]);
 
   const onTestChange = useCallback(
     (newValue: Test, mayBeBatched: boolean): void => {
@@ -191,6 +196,10 @@ export default function TestFileEditor({
             }
             return next;
           });
+          break;
+        }
+        case 'ConfirmResult': {
+          resolveConfirmResult(message.value.id, message.value.confirmed);
           break;
         }
         default:
