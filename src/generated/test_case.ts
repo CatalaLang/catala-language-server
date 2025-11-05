@@ -167,6 +167,20 @@ export type TestRunResultsMsg = {
   results: TestRunResults;
 }
 
+export type ConfirmAction =
+| { kind: 'DeleteArrayElement' }
+| { kind: 'DeleteAssertion' }
+
+export type ConfirmRequest = {
+  id: number /*int*/;
+  action: ConfirmAction;
+}
+
+export type ConfirmResult = {
+  id: number /*int*/;
+  confirmed: boolean;
+}
+
 export type UpMessage =
 | { kind: 'Ready' }
 | { kind: 'GuiEdit'; value: [TestList, boolean] }
@@ -174,10 +188,12 @@ export type UpMessage =
 | { kind: 'TestRunRequest'; value: TestRunRequest }
 | { kind: 'TestGenerateRequest'; value: TestGenerateRequest }
 | { kind: 'OpenTestScopePicker' }
+| { kind: 'ConfirmRequest'; value: ConfirmRequest }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
+| { kind: 'ConfirmResult'; value: ConfirmResult }
 
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
@@ -741,6 +757,55 @@ export function readTestRunResultsMsg(x: any, context: any = x): TestRunResultsM
   };
 }
 
+export function writeConfirmAction(x: ConfirmAction, context: any = x): any {
+  switch (x.kind) {
+    case 'DeleteArrayElement':
+      return 'DeleteArrayElement'
+    case 'DeleteAssertion':
+      return 'DeleteAssertion'
+  }
+}
+
+export function readConfirmAction(x: any, context: any = x): ConfirmAction {
+  switch (x) {
+    case 'DeleteArrayElement':
+      return { kind: 'DeleteArrayElement' }
+    case 'DeleteAssertion':
+      return { kind: 'DeleteAssertion' }
+    default:
+      _atd_bad_json('ConfirmAction', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeConfirmRequest(x: ConfirmRequest, context: any = x): any {
+  return {
+    'id': _atd_write_required_field('ConfirmRequest', 'id', _atd_write_int, x.id, x),
+    'action': _atd_write_required_field('ConfirmRequest', 'action', writeConfirmAction, x.action, x),
+  };
+}
+
+export function readConfirmRequest(x: any, context: any = x): ConfirmRequest {
+  return {
+    id: _atd_read_required_field('ConfirmRequest', 'id', _atd_read_int, x['id'], x),
+    action: _atd_read_required_field('ConfirmRequest', 'action', readConfirmAction, x['action'], x),
+  };
+}
+
+export function writeConfirmResult(x: ConfirmResult, context: any = x): any {
+  return {
+    'id': _atd_write_required_field('ConfirmResult', 'id', _atd_write_int, x.id, x),
+    'confirmed': _atd_write_required_field('ConfirmResult', 'confirmed', _atd_write_bool, x.confirmed, x),
+  };
+}
+
+export function readConfirmResult(x: any, context: any = x): ConfirmResult {
+  return {
+    id: _atd_read_required_field('ConfirmResult', 'id', _atd_read_int, x['id'], x),
+    confirmed: _atd_read_required_field('ConfirmResult', 'confirmed', _atd_read_bool, x['confirmed'], x),
+  };
+}
+
 export function writeUpMessage(x: UpMessage, context: any = x): any {
   switch (x.kind) {
     case 'Ready':
@@ -755,6 +820,8 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return ['TestGenerateRequest', writeTestGenerateRequest(x.value, x)]
     case 'OpenTestScopePicker':
       return 'OpenTestScopePicker'
+    case 'ConfirmRequest':
+      return ['ConfirmRequest', writeConfirmRequest(x.value, x)]
   }
 }
 
@@ -781,6 +848,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'TestRunRequest', value: readTestRunRequest(x[1], x) }
       case 'TestGenerateRequest':
         return { kind: 'TestGenerateRequest', value: readTestGenerateRequest(x[1], x) }
+      case 'ConfirmRequest':
+        return { kind: 'ConfirmRequest', value: readConfirmRequest(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')
@@ -794,6 +863,8 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
       return ['Update', writeParseResults(x.value, x)]
     case 'TestRunResults':
       return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
+    case 'ConfirmResult':
+      return ['ConfirmResult', writeConfirmResult(x.value, x)]
   }
 }
 
@@ -804,6 +875,8 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
       return { kind: 'Update', value: readParseResults(x[1], x) }
     case 'TestRunResults':
       return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
+    case 'ConfirmResult':
+      return { kind: 'ConfirmResult', value: readConfirmResult(x[1], x) }
     default:
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')

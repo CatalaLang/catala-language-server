@@ -368,6 +368,26 @@ export class TestCaseEditorProvider
           }
           break;
         }
+        case 'ConfirmRequest': {
+          const { id, action } = typed_msg.value;
+          const messages = getLocalizedMessages(vscode.env.language);
+          const prompt =
+            action.kind === 'DeleteArrayElement'
+              ? messages.deleteArrayElementConfirmation
+              : action.kind === 'DeleteAssertion'
+                ? messages.deleteAssertionConfirmation
+                : assertUnreachable(action as never);
+          const confirmation = await vscode.window.showWarningMessage(
+            prompt,
+            { modal: true },
+            { title: messages.deleteButton, action: 'Delete' }
+          );
+          postMessageToWebView({
+            kind: 'ConfirmResult',
+            value: { id, confirmed: confirmation?.action === 'Delete' },
+          });
+          break;
+        }
         default:
           assertUnreachable(typed_msg);
       }

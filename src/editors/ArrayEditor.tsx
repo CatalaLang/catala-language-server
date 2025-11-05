@@ -13,6 +13,7 @@ import type {
 import ValueEditor, { createRuntimeValue } from './ValueEditors';
 import { assertUnreachable } from '../util';
 import { isPathPrefix } from '../diff/highlight';
+import { confirm } from '../messaging/confirm';
 
 /**
  * Diffs are consumed only by ArrayEditor to compute "phantom" indices
@@ -378,8 +379,11 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                             </div>
                             <button
                               className="array-phantom-action array-phantom-remove"
-                              onClick={() => {
+                              onClick={async () => {
                                 if (editable === false) return;
+                                const confirmed =
+                                  await confirm('DeleteArrayElement');
+                                if (!confirmed) return;
                                 const newArray = [...currentArray];
                                 newArray.splice(index, 1);
                                 updateParent(newArray);
@@ -456,7 +460,10 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                   {editable && !isPhantom && (
                     <button
                       className="array-delete"
-                      onClick={() => handleDelete(index)}
+                      onClick={async () => {
+                        if (!(await confirm('DeleteArrayElement'))) return;
+                        handleDelete(index);
+                      }}
                       title={intl.formatMessage({
                         id: 'arrayEditor.deleteElement',
                       })}
