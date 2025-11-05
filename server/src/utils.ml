@@ -404,3 +404,15 @@ let list_testable_scopes file : Shared_ast.ScopeName.t list =
     | _ -> acc
   in
   List.fold_left loop [] prg.program_items
+
+let get_timestamp ?(no_brackets = false) () =
+  let open Ptime in
+  let now = Ptime_clock.now () in
+  let _, ((hh, mm, ss), (_tz_offset_s : tz_offset_s)) =
+    to_date_time ~tz_offset_s:0 now
+  in
+  let cs =
+    Int64.div (Ptime.(frac_s now |> Span.to_d_ps) |> snd) 1_000_000_0000L
+  in
+  if no_brackets then Format.asprintf "%02d:%02d:%02d.%02Ld" hh mm ss cs
+  else Format.asprintf "[%02d:%02d:%02d.%02Ld]" hh mm ss cs

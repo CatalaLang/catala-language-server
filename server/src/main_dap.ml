@@ -121,12 +121,6 @@ let use_state f =
     assert false
   | Some (r : Debug_evaluation.debugger_state) -> f r
 
-let get_timestamp () =
-  let open Ptime in
-  let now = Ptime_clock.now () in
-  let _, ((hh, ss, mm), _tz_offset_s) = to_date_time ~tz_offset_s:0 now in
-  Format.sprintf "[%02d:%02d:%02d] " hh ss mm
-
 type dcalc_expr = DE.dcalc_expr
 
 type env_tree =
@@ -325,8 +319,9 @@ let set_handlers rpc =
       let len = String.length output in
       let* () =
         if len > 0 then begin
-          let timestamp = get_timestamp () in
+          let timestamp = Utils.get_timestamp () in
           Buffer.add_string buf timestamp;
+          Buffer.add_char buf ' ';
           String.iter
             (function
               | '\n' ->
