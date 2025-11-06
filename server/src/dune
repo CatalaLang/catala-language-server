@@ -28,7 +28,7 @@
   catala.driver
   catala.surface
   catala.clerk_lib
-  ptime.clock
+  ptime.clock.os
   uri
   re)
  (modules
