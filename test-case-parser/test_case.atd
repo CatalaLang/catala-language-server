@@ -71,6 +71,7 @@ type runtime_value_raw = [
 (* to be extended with free-form descriptions, etc. *)
 type attr_def = [
   | TestDescription of string
+  | TestTitle of string
   | Uid of string
   ] <ocaml repr="classic">
 
@@ -100,6 +101,7 @@ type test = {
   test_inputs: test_inputs;
   test_outputs: test_outputs;
   description: string;
+  title: string;
 }
 
 type test_run = {

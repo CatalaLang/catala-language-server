@@ -9,6 +9,7 @@
   "testFile.openTextEditor": "Ouvrir dans l'éditeur de texte",
   "testEditor.run": "Lancer le calcul",
   "testEditor.description": "Description",
+  "testEditor.title": "Titre",
   "testEditor.descriptionPlaceholder": "Entrez une description du test...",
   "testEditor.passed": "Le test a réussi",
   "testEditor.failed": "Le test a échoué",
