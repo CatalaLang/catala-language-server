@@ -38,6 +38,12 @@ function pathFromConfig(confId: string, defaultCmd: string): string {
 
 const clerkPath: string = pathFromConfig('clerkPath', 'clerk');
 
+function hasResourceUri(x: unknown): x is { resourceUri: vscode.Uri } {
+  if (!x || typeof x !== 'object') return false;
+  const ru = (x as { resourceUri?: unknown }).resourceUri;
+  return !!ru && ru instanceof vscode.Uri;
+}
+
 interface IRunArgs {
   uri: string;
   scope: string;
@@ -198,8 +204,9 @@ export function activate(context: vscode.ExtensionContext): void {
         const uri =
           arg instanceof vscode.Uri
             ? arg
-            : ((arg as any)?.resourceUri ??
-              vscode.window.activeTextEditor?.document.uri);
+            : hasResourceUri(arg)
+              ? arg.resourceUri
+              : vscode.window.activeTextEditor?.document.uri;
         if (!uri) {
           return;
         }
