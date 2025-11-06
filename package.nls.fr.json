@@ -1,0 +1,5 @@
+{
+  "command.catala.openWithTestEditor.title": "Ouvrir avec l'éditeur de tests Catala",
+  "category.catala": "Catala",
+  "customEditor.testCaseEditor.displayName": "Éditeur de cas de test Catala"
+}

@@ -42,9 +42,22 @@
         "command": "catala.debug",
         "icon": "$(debug-alt)",
         "title": "Debug a scope"
+      },
+      {
+        "command": "catala.openWithTestEditor",
+        "title": "%command.catala.openWithTestEditor.title%",
+        "category": "%category.catala%",
+        "icon": "$(open-preview)"
       }
     ],
     "menus": {
+      "explorer/context": [
+        {
+          "command": "catala.openWithTestEditor",
+          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(en|fr)$/",
+          "group": "navigation@2"
+        }
+      ],
       "editor/title": [
         {
           "command": "catala.run",
@@ -55,6 +68,11 @@
           "command": "catala.debug",
           "when": "editorLangId == catala_fr || editorLangId == catala_en",
           "group": "navigation@1"
+        },
+        {
+          "command": "catala.openWithTestEditor",
+          "when": "config.catala.enableCustomTestCaseEditor && (editorLangId == catala_en || editorLangId == catala_fr) && resourceFilename =~ /.*test.*\\.catala_(en|fr)$/",
+          "group": "navigation@2"
         }
       ]
     },
@@ -181,7 +199,7 @@
     "customEditors": [
       {
         "viewType": "catala.testCaseEditor",
-        "displayName": "Catala Test Case Editor",
+        "displayName": "%customEditor.testCaseEditor.displayName%",
         "selector": [
           {
             "filenamePattern": "*test*.catala_*"
@@ -275,6 +293,7 @@
     }
   },
   "activationEvents": [
+    "onCommand:catala.openWithTestEditor",
     "workspaceContains:**/clerk.toml",
     "workspaceContains:**/*.catala_en",
     "workspaceContains:**/*.catala_fr"

@@ -190,6 +190,28 @@ export function activate(context: vscode.ExtensionContext): void {
     term.sendText([clerkPath, 'run', file, '--scope', scope].join(' '));
   });
 
+  // Open the current resource with the custom Test Case Editor
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.openWithTestEditor',
+      async (arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+        const uri =
+          arg instanceof vscode.Uri
+            ? arg
+            : ((arg as any)?.resourceUri ??
+              vscode.window.activeTextEditor?.document.uri);
+        if (!uri) {
+          return;
+        }
+        await vscode.commands.executeCommand(
+          'vscode.openWith',
+          uri,
+          'catala.testCaseEditor'
+        );
+      }
+    )
+  );
+
   vscode.commands.registerCommand(
     'catala.getTestableScopes',
     async (workspacePath?: string) => {
