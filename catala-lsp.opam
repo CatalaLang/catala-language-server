@@ -27,6 +27,7 @@ depends: [
   "tezt"      { with-test }
   "atdgen"    { build }
   "atdgen-runtime"
+  "ptime"
 ]
 pin-depends: [
   ["catala.dev" "git+https://github.com/CatalaLang/catala"]
