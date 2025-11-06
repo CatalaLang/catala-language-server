@@ -8,6 +8,7 @@
   "testFile.formatIssueFix": "Please edit the file manually in the text editor to fix the format.",
   "testFile.openTextEditor": "Open in Text Editor",
   "testEditor.description": "Description",
+  "testEditor.title": "Title",
   "testEditor.descriptionPlaceholder": "Enter test description...",
   "testEditor.run": "Run test",
   "testEditor.passed": "Passed",

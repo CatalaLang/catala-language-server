@@ -48,6 +48,16 @@ export default function TestEditor(props: Props): ReactElement {
     );
   }
 
+  function onTitleChange(event: ChangeEvent<HTMLInputElement>): void {
+    props.onTestChange(
+      {
+        ...props.test,
+        title: event.target.value,
+      },
+      true
+    );
+  }
+
   const [isCollapsed, setIsCollapsed] = useState(false);
   const expectedSectionRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
@@ -73,14 +83,18 @@ export default function TestEditor(props: Props): ReactElement {
 
   return (
     <div className="test-editor">
-      <div className="test-editor-bar">
-        <div className="test-editor-breadcrumb body-b3">
-          {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
-        </div>
-        <h1 className="test-case-name heading-h1">
-          {props.test.testing_scope}
-        </h1>
+      <div className="test-editor-breadcrumb body-b3">
+        {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
       </div>
+      <h2 className="test-section-title heading-h2">
+        <FormattedMessage id="testEditor.title" defaultMessage="Title" />
+      </h2>
+      <input
+        type="text"
+        className="test-title-input heading-h2"
+        value={props.test.title}
+        onChange={onTitleChange}
+      />
       <div
         className="test-editor-content"
         style={{ display: isCollapsed ? 'none' : 'block' }}
@@ -93,7 +107,6 @@ export default function TestEditor(props: Props): ReactElement {
             />
           </h2>
           <div className="test-description-editor">
-            <h3 className="heading-h3">Commentaire</h3>
             <textarea
               value={props.test.description}
               onChange={onDescriptionChange}

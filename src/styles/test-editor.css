@@ -7,12 +7,6 @@
   margin: var(--spacing32);
 }
 
-.test-editor-bar {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
 .test-editor-breadcrumb {
   flex-grow: 1;
 }
@@ -216,4 +210,29 @@
   background: var(--vscode-editor-background);
   color: var(--vscode-input-foreground);
   width: 100%;
+}
+
+.test-title-input {
+  font: inherit;
+  background-color: var(--control-background);
+  color: var(--control-text);
+  border: 1px solid var(--control-border);
+  border-radius: var(--spacing4);
+  padding: var(--spacing8) var(--spacing12);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.test-title-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+  opacity: 1;
+}
+
+.test-title-input:focus {
+  border-color: var(--vscode-focusBorder);
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.test-title-input:hover {
+  border-color: var(--card-border-light);
 }
