@@ -16,13 +16,13 @@
 
 open Server_types
 
-type 'result document_state = {
+type document_state = {
   document_id : Doc_id.t;
   contents : string option;
   saved : bool;
   project : Projects.project;
   project_file : Projects.project_file;
-  last_valid_result : 'result option;
+  last_valid_result : State.file option;
   errors : Diagnostic.t Utils.RangeMap.t Doc_id.Map.t;
 }
 
@@ -32,36 +32,30 @@ val make_document :
   Doc_id.doc_id ->
   Projects.project ->
   Projects.project_file ->
-  'a document_state
+  document_state
 
-type 'result server_state = {
+type server_state = {
   projects : Projects.t;
-  open_documents : 'result document_state Doc_id.Map.t;
+  open_documents : document_state Doc_id.Map.t;
 }
 
-type 'result locked_server_state
+type locked_server_state
 
-val use :
-  'result locked_server_state -> ('result server_state -> 'a Lwt.t) -> 'a Lwt.t
+val use : locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
 
 val use_if_ready :
-  'result locked_server_state ->
-  ('result server_state -> 'a Lwt.t) ->
-  'a option Lwt.t
+  locked_server_state -> (server_state -> 'a Lwt.t) -> 'a option Lwt.t
 
-val use_now :
-  'result locked_server_state -> ('result server_state -> 'a Lwt.t) -> 'a Lwt.t
+val use_now : locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
 
 val use_and_update :
-  'result locked_server_state ->
-  ('result server_state -> ('a * 'result server_state) Lwt.t) ->
-  'a Lwt.t
+  locked_server_state -> (server_state -> ('a * server_state) Lwt.t) -> 'a Lwt.t
 
 val delayed_update :
   ?delay:float ->
   Doc_id.doc_id ->
-  'result locked_server_state ->
-  ('result server_state -> 'result server_state Lwt.t) ->
+  locked_server_state ->
+  (server_state -> server_state Lwt.t) ->
   unit Lwt.t
 
-val make : unit -> 'result locked_server_state
+val make : unit -> locked_server_state

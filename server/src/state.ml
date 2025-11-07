@@ -455,11 +455,11 @@ let load_modules ~stdlib_path config_dir includes program :
   in
   mod_uses, modules, used_modules
 
-let process_document ?contents (document : file Server_state.document_state) : t
-    =
-  let { Server_state.document_id = doc_id; project; project_file; _ } =
-    document
-  in
+let process_document
+    ?contents
+    (doc_id : Doc_id.t)
+    (project : Projects.project)
+    (project_file : Projects.project_file) : t =
   let file = (doc_id :> File.t) in
   let locale = Catala_utils.Cli.file_lang file in
   let input_src =

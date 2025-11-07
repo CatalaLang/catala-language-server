@@ -144,12 +144,12 @@ let send_all_diagnostics ?doc_id ~notify_back server_state =
   @@ fun unlocked_sstate ->
   unlocked_send_all_diagnostics ?doc_id ~notify_back unlocked_sstate
 
-let unlocked_process_document document :
-    State.file * State.file SState.document_state =
+let unlocked_process_document document : State.file * SState.document_state =
   Log.info (fun m ->
       m "Processing document %s" (document.SState.document_id :> string));
   let new_file =
-    State.process_document ?contents:document.SState.contents document
+    State.process_document ?contents:document.SState.contents
+      document.document_id document.project document.project_file
   in
   let errors = State.all_diagnostics new_file in
   let document = { document with errors } in
@@ -177,7 +177,7 @@ let unlocked_process_file
     ?contents
     ~is_saved
     doc_id
-    { SState.projects; open_documents } : State.file SState.server_state Lwt.t =
+    { SState.projects; open_documents } : SState.server_state Lwt.t =
   let doc_errors, on_error = make_error_handler () in
   let document, projects =
     Doc_id.Map.find_opt doc_id open_documents
@@ -311,7 +311,7 @@ class catala_lsp_server =
         ()
 
     (* Server state *)
-    val server_state : State.file SState.locked_server_state = SState.make ()
+    val server_state : SState.locked_server_state = SState.make ()
 
     method! on_req_initialize
         ~notify_back:_
@@ -341,7 +341,7 @@ class catala_lsp_server =
       Lwt.return (InitializeResult.create ~capabilities ())
 
     method private use_or_process_file ~is_saved doc_id =
-      let* (doc_opt : State.file SState.document_state option) =
+      let* (doc_opt : SState.document_state option) =
         SState.use server_state
         @@ fun { projects = _; open_documents } ->
         Lwt.return (Doc_id.Map.find_opt doc_id open_documents)
