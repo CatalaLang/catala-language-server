@@ -46,10 +46,18 @@ module RangeSet = Stdlib.Set.Make (struct
   let compare = compare
 end)
 
-module RangeMap = Stdlib.Map.Make (struct
+module RangeMap = Map.Make (struct
   type t = Range.t
 
   let compare = compare
+
+  let format
+      fmt
+      {
+        Range.start = { line; character };
+        end_ = { line = line'; character = character' };
+      } =
+    Format.fprintf fmt "%d:%d <-> %d:%d" line character line' character'
 end)
 
 let dummy_range =
