@@ -178,6 +178,25 @@ module Project_graph = struct
   let is_an_included_file vertex g =
     let pred_edges = G.pred_e g vertex in
     List.exists (function _, Including, _ -> true | _ -> false) pred_edges
+
+  let including_files vertex g =
+    let rec loop v =
+      let pred_edges = G.pred_e g v in
+      let including_documents =
+        List.filter_map
+          (function r, Including, _ -> Some r | _ -> None)
+          pred_edges
+      in
+      if including_documents = [] then [v]
+      else List.concat_map loop including_documents
+    in
+    loop vertex
+
+  let included_files vertex g =
+    let succ_edges = G.succ_e g vertex in
+    List.filter_map
+      (function _, Including, inc -> Some inc | _ -> None)
+      succ_edges
 end
 
 type project = {
@@ -652,6 +671,12 @@ let update_project_file
 
 let is_an_included_file doc_id project =
   Project_graph.is_an_included_file doc_id project.project_graph
+
+let including_files doc_id project =
+  Project_graph.including_files doc_id project.project_graph
+
+let included_files doc_id project =
+  Project_graph.included_files doc_id project.project_graph
 
 let remove_project_file ~on_error doc_id project projects =
   Log.debug (fun m ->

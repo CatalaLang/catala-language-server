@@ -93,3 +93,5 @@ val remove_project_file :
   on_error:error_handler -> Doc_id.doc_id -> project -> t -> update_result
 
 val is_an_included_file : Doc_id.doc_id -> project -> bool
+val including_files : Doc_id.doc_id -> project -> Doc_id.doc_id list
+val included_files : Doc_id.doc_id -> project -> Doc_id.doc_id list
