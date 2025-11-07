@@ -24,20 +24,19 @@ type processing_result = {
   jump_table : Jump_table.t Lazy.t;
 }
 
+type buffer_state = Saved | Modified of { contents : string }
+
 type document_state = {
   document_id : Doc_id.t;
   locale : Global.backend_lang;
-  contents : string option;
-  saved : bool;
+  buffer_state : buffer_state;
   project : Projects.project;
   project_file : Projects.project_file;
   last_valid_result : processing_result option;
-  diags : diagnostics;
 }
 
 val make_document :
-  ?contents:string ->
-  saved:bool ->
+  buffer_state ->
   Doc_id.doc_id ->
   Projects.project ->
   Projects.project_file ->
@@ -46,6 +45,7 @@ val make_document :
 type server_state = {
   projects : Projects.t;
   open_documents : document_state Doc_id.Map.t;
+  diagnostics : diagnostics;
 }
 
 type locked_server_state

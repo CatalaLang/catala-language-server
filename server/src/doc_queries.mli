@@ -7,10 +7,13 @@ open Catala_utils
 val pp_range : Format.formatter -> Range.t -> unit
 
 val lookup_suggestions :
-  document_state -> Range.t -> (Range.t * string list) option
+  Doc_id.t -> diagnostics -> Range.t -> (Range.t * string list) option
 
 val lookup_suggestions_by_pos :
-  document_state -> Linol_lwt.Position.t -> (Range.t * string list) option
+  Doc_id.t ->
+  diagnostics ->
+  Linol_lwt.Position.t ->
+  (Range.t * string list) option
 
 val all_symbols_as_warning :
   Doc_id.doc_id ->

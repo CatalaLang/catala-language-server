@@ -25,34 +25,32 @@ type processing_result = {
   jump_table : Jump_table.t Lazy.t;
 }
 
+type buffer_state = Saved | Modified of { contents : string }
+
 type document_state = {
   document_id : Doc_id.t;
   locale : Global.backend_lang;
-  contents : string option;
-  saved : bool;
+  buffer_state : buffer_state;
   project : Projects.project;
   project_file : Projects.project_file;
   last_valid_result : processing_result option;
-  diags : diagnostics;
 }
 
-let make_document ?contents ~saved (document_id : Doc_id.t) project project_file
-    =
+let make_document buffer_state (document_id : Doc_id.t) project project_file =
   let locale = Catala_utils.Cli.file_lang (document_id :> File.t) in
   {
     document_id;
     locale;
-    contents;
+    buffer_state;
     project;
-    saved;
     project_file;
     last_valid_result = None;
-    diags = Doc_id.Map.empty;
   }
 
 type server_state = {
   projects : Projects.t;
   open_documents : document_state Doc_id.Map.t;
+  diagnostics : diagnostics;
 }
 
 type delayed_state =
@@ -68,6 +66,13 @@ type locked_server_state = {
   lock : Lwt_mutex.t;
   mutable delayed_state : delayed_state;
 }
+
+let wrap_f' f state =
+  let c_b = Doc_id.Map.cardinal state.open_documents in
+  let* x, new_state = f state in
+  let c_a = Doc_id.Map.cardinal new_state.open_documents in
+  Log.debug (fun m -> m "USAGE STATE: %d vs %d" c_b c_a);
+  Lwt.return (x, new_state)
 
 let use s (f : server_state -> 'a Lwt.t) : 'a Lwt.t =
   Lwt_mutex.with_lock s.lock
@@ -125,7 +130,7 @@ let use_and_update s (f : server_state -> ('a * server_state) Lwt.t) : 'a Lwt.t
   @@ fun () ->
   let* ret, new_state =
     match s.delayed_state with
-    | Ready state -> f state
+    | Ready state -> wrap_f' f state
     | Delayed { doc_id = _; curr_server_state; delayed_action; action } ->
       (* The delayed action is necessarily sleeping otherwise it wouldn't be
          delayed so we can cancel the sleeping thread and force the
@@ -198,6 +203,10 @@ let delayed_update ?delay doc_id s (f : server_state -> server_state Lwt.t) :
 
 let make () =
   let state =
-    { projects = Projects.empty; open_documents = Doc_id.Map.empty }
+    {
+      projects = Projects.empty;
+      open_documents = Doc_id.Map.empty;
+      diagnostics = Doc_id.Map.empty;
+    }
   in
   { lock = Lwt_mutex.create (); delayed_state = Ready state }

@@ -28,8 +28,8 @@ let pp_range fmt { Linol_lwt.Range.start; end_ } =
   in
   fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
 
-let lookup_suggestions document range =
-  let*? rmap = Doc_id.Map.find_opt document.document_id document.diags in
+let lookup_suggestions doc_id diagnostics range =
+  let*? rmap = Doc_id.Map.find_opt doc_id diagnostics in
   Range.Map.find_opt range rmap
   |> function
   | None -> None
@@ -39,9 +39,9 @@ let lookup_suggestions document range =
     | None | Some [] -> None
     | Some suggs -> Some (range, suggs))
 
-let lookup_suggestions_by_pos file pos =
+let lookup_suggestions_by_pos doc_id diagnostics pos =
   let range = { Linol_lwt.Range.start = pos; end_ = pos } in
-  lookup_suggestions file range
+  lookup_suggestions doc_id diagnostics range
 
 (* This is use for debugging: call this function in all_diagnostics to underline
    all processed symbols in LSP. Useful to determine which expression wasn't

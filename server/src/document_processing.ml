@@ -211,13 +211,19 @@ let load_modules ~stdlib_path config_dir includes program :
   mod_uses, modules, used_modules
 
 let process
-    { Server_state.document_id = doc_id; contents; project; project_file; _ } :
-    Server_state.processing_result option * diagnostics =
+    ~(resolve_file_content : string -> string Global.input_src)
+    {
+      Server_state.document_id = doc_id;
+      buffer_state;
+      project;
+      project_file;
+      _;
+    } : Server_state.processing_result option * diagnostics =
   let file = (doc_id :> File.t) in
   let input_src =
-    match contents with
-    | None -> Global.FileName file
-    | Some c -> Contents (c, file)
+    match buffer_state with
+    | Saved -> Global.FileName file
+    | Modified { contents } -> Contents (contents, file)
   in
   let input_src, resolve_included_file =
     let { Projects.file = _; including_files; _ } = project_file in
@@ -234,11 +240,7 @@ let process
       Log.info (fun m ->
           m "found document inclusion in %s - processing this one instead"
             including_file.file_name);
-      let resolve_included_file path =
-        if File.equal path file then input_src
-        else Global.FileName (File.clean_path path)
-      in
-      FileName including_file.file_name, Some resolve_included_file
+      FileName including_file.file_name, Some resolve_file_content
     end
   in
   let _ = Catala_utils.Global.enforce_options ~input_src () in
@@ -312,7 +314,9 @@ let process
         let prg =
           Desugared.From_surface.translate_program ctx modules_contents prg
         in
+        Message.report_delayed_errors_if_any ();
         let prg = Desugared.Disambiguate.program prg in
+        Message.report_delayed_errors_if_any ();
         let () = Desugared.Linting.lint_program prg in
         let exceptions_graphs =
           Scopelang.From_desugared.build_exceptions_graph prg
@@ -333,6 +337,7 @@ let process
           lazy (Jump_table.populate input_src ctx modules_contents surface prg)
         in
         let result = { Server_state.prg; used_modules; jump_table } in
+        Message.report_delayed_errors_if_any ();
         Log.info (fun m -> m "successful validation of %a" Doc_id.format doc_id);
         !l, Some result
     with e ->
@@ -340,7 +345,8 @@ let process
         let e = match e with Fun.Finally_raised e -> e | e -> e in
         match e with
         | Catala_utils.Message.CompilerError er -> [er]
-        | Catala_utils.Message.CompilerErrors er_l -> er_l
+        | Catala_utils.Message.CompilerErrors er_and_bt_l ->
+          List.map fst er_and_bt_l
         | Failed_to_load_interface mod_use ->
           let lsp_err = module_usage_error mod_use in
           on_error lsp_err;
@@ -375,20 +381,15 @@ let process
         errors;
       List.rev !l, None
   in
-  let errors =
+  let diagnostics =
     List.fold_left
       (fun doc_map (err : Catala_utils.Message.lsp_error) ->
         let uri, range =
           match err.pos, err.kind with
-          | None, _ ->
-            Format.eprintf "%s@." __LOC__;
-            doc_id, dummy_range
+          | None, _ -> doc_id, dummy_range
           | Some pos, Lexing ->
             Doc_id.of_catala_pos pos, unclosed_range_of_pos pos
-          | Some pos, _ ->
-            Log.debug (fun m ->
-                m "ADDING ERROR AT %a" Doc_id.format (Doc_id.of_catala_pos pos));
-            Doc_id.of_catala_pos pos, range_of_pos pos
+          | Some pos, _ -> Doc_id.of_catala_pos pos, range_of_pos pos
         in
         let diag =
           { range; lsp_error = Some err; diag = to_diagnostic range err }
@@ -398,6 +399,7 @@ let process
             | None -> Some (Range.Map.singleton range diag)
             | Some x -> Some (Range.Map.add range diag x))
           doc_map)
-      Doc_id.Map.empty errors
+      (Doc_id.Map.singleton doc_id Range.Map.empty)
+      errors
   in
-  result, errors
+  result, diagnostics
