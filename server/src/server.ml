@@ -177,8 +177,7 @@ let unlocked_process_file
     ?contents
     ~is_saved
     doc_id
-    { SState.projects; open_documents } :
-    (State.file * State.file SState.server_state) Lwt.t =
+    { SState.projects; open_documents } : State.file SState.server_state Lwt.t =
   let doc_errors, on_error = make_error_handler () in
   let document, projects =
     Doc_id.Map.find_opt doc_id open_documents
@@ -261,7 +260,7 @@ let unlocked_process_file
         modified_documents open_documents
       |> Doc_id.Map.add doc_id (add_doc_errors new_document !doc_errors)
     in
-    Lwt.return (new_file, SState.{ projects; open_documents }))
+    Lwt.return { SState.projects; open_documents })
   else
     (* Unsaved or invalid : return without scanning files *)
     let open_documents =
@@ -269,15 +268,15 @@ let unlocked_process_file
         (add_doc_errors new_document !doc_errors)
         open_documents
     in
-    Lwt.return (new_file, { SState.projects; open_documents })
+    Lwt.return { SState.projects; open_documents }
 
 let process_file ?contents ~is_saved server_state doc_id =
   SState.use_and_update server_state
   @@ fun unlocked_server_state ->
-  let* new_file, new_state =
+  let* new_state =
     unlocked_process_file ?contents ~is_saved doc_id unlocked_server_state
   in
-  Lwt.return (new_file, new_state)
+  Lwt.return ((), new_state)
 
 class catala_lsp_server =
   let open Linol_lwt in
@@ -349,8 +348,9 @@ class catala_lsp_server =
       in
       match doc_opt with
       | Some { SState.last_valid_result = None; _ } | None ->
-        process_file ~is_saved server_state doc_id
-      | Some { last_valid_result = Some x; _ } -> Lwt.return x
+        let* _ = process_file ~is_saved server_state doc_id in
+        Lwt.return_unit
+      | Some { last_valid_result = Some _; _ } -> Lwt.return_unit
 
     method private process_document
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
@@ -379,7 +379,7 @@ class catala_lsp_server =
         in
         if should_skip then Lwt.return_unit
         else
-          let* _file = process_file ?contents ~is_saved server_state doc_id in
+          let* () = process_file ?contents ~is_saved server_state doc_id in
           send_all_diagnostics ~doc_id ~notify_back server_state
 
     method on_notif_doc_did_open ~notify_back d ~content =
@@ -395,7 +395,7 @@ class catala_lsp_server =
         notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
         SState.delayed_update doc_id server_state
         @@ fun state ->
-        let* _file, new_state =
+        let* new_state =
           unlocked_process_file ?contents:new_content ~is_saved:false doc_id
             state
         in
@@ -931,9 +931,7 @@ class catala_lsp_server =
                 doc_id);
           Lwt.return_none
         | Some { content = doc_content; _ } -> (
-          let* (_f : State.file) =
-            self#use_or_process_file ~is_saved:false doc_id
-          in
+          let* () = self#use_or_process_file ~is_saved:false doc_id in
           let* r = Utils.try_format_document ~notify_back ~doc_content doc_id in
           match r with
           | None ->
