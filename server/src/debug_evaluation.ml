@@ -222,8 +222,8 @@ let load_program ((clerk_config : Clerk_config.t), root_dir) file scope =
     failwith "Stdlib not found - Please compile your project first.";
   let mod_uses, modules, _used_modules =
     try
-      State.load_modules ~stdlib_path root_dir clerk_config.global.include_dirs
-        surface
+      Document_processing.load_modules ~stdlib_path root_dir
+        clerk_config.global.include_dirs surface
     with e -> raise e
   in
   let ctx =

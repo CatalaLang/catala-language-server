@@ -19,6 +19,8 @@ open Linol_lwt
 open Catala_utils
 open Server_types
 
+let ( let*? ) = Option.bind
+let ( let*?! ) (x, default) f = match x with None -> default | Some x -> f x
 let never_ending = fst (Lwt.wait ())
 
 let pp_opt pp fmt =
@@ -39,26 +41,6 @@ let is_included (p : Pos.t) p' =
   && Pos.get_end_line p <= Pos.get_end_line p'
   && Pos.get_start_column p >= Pos.get_start_column p'
   && Pos.get_end_column p <= Pos.get_end_column p'
-
-module RangeSet = Stdlib.Set.Make (struct
-  type t = Range.t
-
-  let compare = compare
-end)
-
-module RangeMap = Map.Make (struct
-  type t = Range.t
-
-  let compare = compare
-
-  let format
-      fmt
-      {
-        Range.start = { line; character };
-        end_ = { line = line'; character = character' };
-      } =
-    Format.fprintf fmt "%d:%d <-> %d:%d" line character line' character'
-end)
 
 let dummy_range =
   Range.create

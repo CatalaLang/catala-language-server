@@ -14,16 +14,25 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
+open Shared_ast
+open Catala_utils
 open Server_types
+
+type processing_result = {
+  prg : typed Scopelang.Ast.program;
+  used_modules : ModuleName.t File.Map.t;
+  jump_table : Jump_table.t Lazy.t;
+}
 
 type document_state = {
   document_id : Doc_id.t;
+  locale : Global.backend_lang;
   contents : string option;
   saved : bool;
   project : Projects.project;
   project_file : Projects.project_file;
-  last_valid_result : State.file option;
-  errors : Diagnostic.t Utils.RangeMap.t Doc_id.Map.t;
+  last_valid_result : processing_result option;
+  diags : diagnostics;
 }
 
 val make_document :

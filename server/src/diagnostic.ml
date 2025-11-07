@@ -14,7 +14,6 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
-open Utils
 open Linol_lwt
 
 type t = Diagnostic.t
@@ -32,15 +31,15 @@ let error_r ?related range message =
   Diagnostic.create ?relatedInformation ~range ~severity:Error
     ~source:"catala-lsp" ~message ()
 
-let warn_p pos msg = warn_r (range_of_pos pos) msg
+let warn_p pos msg = warn_r (Utils.range_of_pos pos) msg
 
 let error_p ?related pos msg =
   let related =
     Option.map
-      (List.map (fun (p, message) -> location_of_pos p, message))
+      (List.map (fun (p, message) -> Utils.location_of_pos p, message))
       related
   in
-  error_r ?related (range_of_pos pos) msg
+  error_r ?related (Utils.range_of_pos pos) msg
 
 let diag_r (severity : DiagnosticSeverity.t) range msg =
   match severity with

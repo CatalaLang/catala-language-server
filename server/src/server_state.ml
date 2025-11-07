@@ -16,26 +16,38 @@
 
 open Server_types
 open Lwt.Syntax
+open Shared_ast
+open Catala_utils
+
+type processing_result = {
+  prg : typed Scopelang.Ast.program;
+  used_modules : ModuleName.t File.Map.t;
+  jump_table : Jump_table.t Lazy.t;
+}
 
 type document_state = {
   document_id : Doc_id.t;
+  locale : Global.backend_lang;
   contents : string option;
   saved : bool;
   project : Projects.project;
   project_file : Projects.project_file;
-  last_valid_result : State.file option;
-  errors : Diagnostic.t Utils.RangeMap.t Doc_id.Map.t;
+  last_valid_result : processing_result option;
+  diags : diagnostics;
 }
 
-let make_document ?contents ~saved document_id project project_file =
+let make_document ?contents ~saved (document_id : Doc_id.t) project project_file
+    =
+  let locale = Catala_utils.Cli.file_lang (document_id :> File.t) in
   {
     document_id;
+    locale;
     contents;
     project;
     saved;
     project_file;
     last_valid_result = None;
-    errors = Doc_id.Map.empty;
+    diags = Doc_id.Map.empty;
   }
 
 type server_state = {
