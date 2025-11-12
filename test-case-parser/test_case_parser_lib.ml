@@ -457,10 +457,12 @@ exception InvalidTestingScope of string
 let invalid_testing_scope fmt =
   Format.kasprintf (fun msg -> raise (InvalidTestingScope msg)) fmt
 
+(* note: filters for both 'test' and 'testUI' attrs *)
 let get_test_scopes prg =
   prg.I.program_root.module_scopes
   |> ScopeName.Map.filter (fun scope_name _scope ->
-         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test)
+         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test &&
+         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
   |> ScopeName.Map.keys
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
