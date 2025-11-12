@@ -2,10 +2,11 @@
 
 ```catala-metadata
 #[test]
+#[testcase.testui]
 #[testcase.test_description = ""]
 déclaration champ d'application French_test:
   résultat test_francais champ d'application Francais.TestFrançais
-  
+
 ```
 
 ```catala
