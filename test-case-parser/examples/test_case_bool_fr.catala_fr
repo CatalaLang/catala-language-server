@@ -2,11 +2,12 @@
 
 ```catala-metadata
 #[test]
+#[testcase.testui]
 #[testcase.test_description = ""]
 déclaration champ d'application A_test:
   interne x contenu liste de entier
   résultat a champ d'application Bool.A
-  
+
 ```
 
 ```catala
