@@ -92,6 +92,24 @@ let use_if_ready s (f : server_state -> 'a Lwt.t) : 'a option Lwt.t =
     Lwt.return_some x
   | Delayed _ -> Lwt.return_none
 
+let rec use_when_ready s (f : server_state -> 'a Lwt.t) : 'a Lwt.t =
+  let* () = Lwt_mutex.lock s.lock in
+  match s.delayed_state with
+  | Ready state ->
+    let* x =
+      Lwt.finalize
+        (fun () ->
+          Log.debug (fun m -> m "document ready: processing action");
+          f state)
+        (fun () -> Lwt.return (Lwt_mutex.unlock s.lock))
+    in
+    Lwt.return x
+  | Delayed { delayed_action; _ } ->
+    Log.debug (fun m -> m "waiting on delayed action completion");
+    Lwt_mutex.unlock s.lock;
+    let* () = delayed_action in
+    use_when_ready s f
+
 let use_now s (f : server_state -> 'a Lwt.t) : 'a Lwt.t =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
@@ -138,7 +156,9 @@ let make_delayed_action ?(delay = 1.) s action =
 let make_delayed_action ?delay s action =
   let t = make_delayed_action ?delay s action in
   Lwt.on_cancel t (fun () -> Log.debug (fun m -> m "canceling delayed action"));
-  t
+  Lwt.catch
+    (fun () -> t)
+    (function Lwt.Canceled -> Lwt.return_unit | exn -> Lwt.fail exn)
 
 let delayed_update ?delay doc_id s (f : server_state -> server_state Lwt.t) :
     unit Lwt.t =

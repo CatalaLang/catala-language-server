@@ -55,6 +55,9 @@ val use : locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
 val use_if_ready :
   locked_server_state -> (server_state -> 'a Lwt.t) -> 'a option Lwt.t
 
+val use_when_ready :
+  locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
+
 val use_now : locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
 
 val use_and_update :
