@@ -186,6 +186,7 @@ and get_enum ?module_name decl_ctx enum_name =
   in
   { O.enum_name; constructors }
 
+type Pos.attr += TestUi
 type Pos.attr += Uid of string
 type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
@@ -757,6 +758,7 @@ let write_catala_test ppf t lang =
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala-metadata@,";
   fprintf ppf "#[test]@\n";
+  fprintf ppf "#[testcase.testui]@\n";
   fprintf ppf "#[testcase.test_description = %s]@\n"
     (String.quote t.description);
   fprintf ppf "#[testcase.test_title = %s]@\n" (String.quote t.title);
