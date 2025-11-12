@@ -2,10 +2,12 @@
 
 ```catala-metadata
 #[test]
+#[testcase.testui]
+#[testcase.test_title="A"]
 #[testcase.test_description = ""]
 declaration scope A_test:
   output a scope Arith.A
-  
+
 ```
 
 ```catala
@@ -21,7 +23,7 @@ scope A_test:
 #[testcase.test_description = ""]
 declaration scope B_test:
   output a scope Arith.A
-  
+
 ```
 
 ```catala

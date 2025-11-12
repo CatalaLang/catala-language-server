@@ -2,10 +2,11 @@
 
 ```catala-metadata
 #[test]
+#[testcase.testui]
 #[testcase.test_description = ""]
 declaration scope A_test:
   output a scope Bool.A
-  
+
 ```
 
 ```catala

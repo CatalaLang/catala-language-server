@@ -2,10 +2,11 @@
 
 ```catala-metadata
 #[test]
+#[testcase.testui]
 #[testcase.test_description = ""]
 declaration scope DateComp_test:
   output date_comp scope Kitchensink.DateComp
-  
+
 ```
 
 ```catala
@@ -18,7 +19,7 @@ scope DateComp_test:
 #[testcase.test_description = ""]
 declaration scope DurationComp_test:
   output duration_comp scope Kitchensink.DurationComp
-  
+
 ```
 
 ```catala
@@ -31,7 +32,7 @@ scope DurationComp_test:
 #[testcase.test_description = ""]
 declaration scope MoneyComp_test:
   output money_comp scope Kitchensink.MoneyComp
-  
+
 ```
 
 ```catala
@@ -45,7 +46,7 @@ scope MoneyComp_test:
 #[testcase.test_description = ""]
 declaration scope LunchReimbursement_test:
   output lunch_reimbursement scope Kitchensink.LunchReimbursement
-  
+
 ```
 
 ```catala
