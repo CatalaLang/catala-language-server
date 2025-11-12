@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import cmd_exists from 'command-exists';
 import * as net from 'net';
 import { spawn } from 'child_process';
+import { registerCatalaTests } from './testing/controller';
 
 let client: LanguageClient;
 
@@ -310,6 +311,9 @@ export function activate(context: vscode.ExtensionContext): void {
     );
     client.start();
   }
+
+  // Register VS Code Testing integration for Catala business tests
+  registerCatalaTests(context);
 
   // Always register the custom editor provider
   context.subscriptions.push(TestCaseEditorProvider.register(context));
