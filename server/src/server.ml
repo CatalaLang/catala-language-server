@@ -980,7 +980,9 @@ class catala_lsp_server =
                 doc_id);
           Lwt.return_none
         | Some { content = doc_content; _ } -> (
-          let* r = Utils.try_format_document ~notify_back ~doc_content doc_id in
+          let* r =
+            Formatting.try_format_document ~notify_back ~doc_content doc_id
+          in
           match r with
           | None ->
             Log.info (fun m -> m "failed to format document");
