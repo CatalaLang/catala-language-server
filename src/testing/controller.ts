@@ -50,7 +50,7 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
     'Run',
     vscode.TestRunProfileKind.Run,
     (req, token) => run(ctrl, req, token),
-    false
+    true
   );
 
   // Watch files that look like tests in both languages
