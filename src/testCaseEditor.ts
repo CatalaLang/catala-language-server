@@ -175,6 +175,7 @@ export class TestCaseEditorProvider
             kind: 'Update',
             value: document.parseResults,
           });
+          TestCaseEditorProvider.markReady(document.uri);
           break;
         }
         case 'GuiEdit': {
@@ -414,17 +415,62 @@ export class TestCaseEditorProvider
   public static readonly viewType = 'catala.testCaseEditor';
 
   // Registry of open custom editor webviews to send messages to
-  private static webviews = new Map<string, (msg: DownMessage) => void>();
+  private static webviews = new Map<
+    string,
+    { post: (msg: DownMessage) => void; ready: boolean; queue: DownMessage[] }
+  >();
 
   private static registerWebview(
     uri: vscode.Uri,
     post: (m: DownMessage) => void
   ): void {
-    TestCaseEditorProvider.webviews.set(uri.toString(), post);
+    const key = uri.toString();
+    const existing = TestCaseEditorProvider.webviews.get(key);
+    if (existing) {
+      existing.post = post;
+      TestCaseEditorProvider.webviews.set(key, existing);
+    } else {
+      TestCaseEditorProvider.webviews.set(key, {
+        post,
+        ready: false,
+        queue: [],
+      });
+    }
   }
 
   private static unregisterWebview(uri: vscode.Uri): void {
     TestCaseEditorProvider.webviews.delete(uri.toString());
+  }
+
+  private static markReady(uri: vscode.Uri): void {
+    const key = uri.toString();
+    const entry = TestCaseEditorProvider.webviews.get(key);
+    if (!entry) return;
+    entry.ready = true;
+    while (entry.queue.length) {
+      const m = entry.queue.shift()!;
+      entry.post(m);
+    }
+  }
+
+  private static postOrQueue(uri: vscode.Uri, msg: DownMessage): boolean {
+    const key = uri.toString();
+    const entry = TestCaseEditorProvider.webviews.get(key);
+    if (!entry) {
+      // Create placeholder entry with the message queued; resolveCustomEditor will register later.
+      TestCaseEditorProvider.webviews.set(key, {
+        post: () => {},
+        ready: false,
+        queue: [msg],
+      });
+      return false;
+    }
+    if (!entry.ready) {
+      entry.queue.push(msg);
+      return false;
+    }
+    entry.post(msg);
+    return true;
   }
 
   public static async focusDiffInCustomEditor(
@@ -446,18 +492,8 @@ export class TestCaseEditorProvider
       return false;
     }
 
-    const key = uri.toString();
-    let post = TestCaseEditorProvider.webviews.get(key);
-
-    // Wait briefly for the webview to be registered on first open
-    for (let i = 0; !post && i < 20; i++) {
-      await new Promise((r) => setTimeout(r, 50));
-      post = TestCaseEditorProvider.webviews.get(key);
-    }
-
-    if (!post) return false;
-
-    post({
+    // Deliver immediately if ready, or queue until the webview signals Ready.
+    TestCaseEditorProvider.postOrQueue(uri, {
       kind: 'TestRunResults',
       value: { scope, reset_outputs: false, results },
     });
