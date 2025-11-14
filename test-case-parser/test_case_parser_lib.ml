@@ -138,6 +138,7 @@ let rec get_typ ?module_name decl_ctx = function
   | TForAll _, _ -> raise (Unsupported "wildcard type")
   | TVar _, _ -> raise (Unsupported "type variable")
   | TClosureEnv, _ -> raise (Unsupported "closure type")
+  | TError, _ -> raise (Unsupported "error type")
 
 and get_struct ?module_name decl_ctx struct_name =
   let fields_map = StructName.Map.find struct_name decl_ctx.ctx_structs in
@@ -235,7 +236,8 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
         ( get_enum decl_ctx name,
           (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
     | EEmpty -> O.Empty
-    | _ -> Message.error ~pos "This test value is not a literal: %a." Expr.format e
+    | _ ->
+      Message.error ~pos "This test value is not a literal: %a." Expr.format e
   in
   { O.value; attrs }
 
@@ -301,6 +303,7 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
     | TForAll _ -> raise (Unsupported "wildcard type")
     | TVar _ -> raise (Unsupported "type variable")
     | TClosureEnv -> raise (Unsupported "closure type")
+    | TError -> raise (Unsupported "error type")
   in
   List.fold_left process_typ ModuleName.Set.empty filtered_input_typs
   |> ModuleName.Set.elements
@@ -350,7 +353,14 @@ let get_scope_test
   in
   let description = "" in
   let title = tested_scope.name in
-  { O.testing_scope; tested_scope; test_outputs; test_inputs; description; title }
+  {
+    O.testing_scope;
+    tested_scope;
+    test_outputs;
+    test_inputs;
+    description;
+    title;
+  }
 
 (* --- *)
 
@@ -403,15 +413,17 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
   in
   let info = Mark.get (ScopeName.get_info testing_scope_name) in
   let get_single_attr ~default pos f =
-    match Pos.get_attrs pos f with
-    | [] -> default
-    | x :: _ -> x
+    match Pos.get_attrs pos f with [] -> default | x :: _ -> x
   in
   let description =
-    get_single_attr ~default:"" info (function TestDescription s -> Some s | _ -> None)
+    get_single_attr ~default:"" info (function
+      | TestDescription s -> Some s
+      | _ -> None)
   in
   let title =
-    get_single_attr ~default:"" info (function TestTitle s -> Some s | _ -> None)
+    get_single_attr ~default:"" info (function
+      | TestTitle s -> Some s
+      | _ -> None)
   in
   let subscope_var, tested_scope =
     let count = ScopeVar.Map.cardinal testing_scope.I.scope_sub_scopes in
@@ -959,7 +971,7 @@ let compute_diff
   in
   assert (List.length expected_results = List.length actual_results);
   List.map2
-    (fun (field, e) (_, a) -> 
+    (fun (field, e) (_, a) ->
       (* Start the path with the field name *)
       compute_diff [SField field] e a)
     expected_results actual_results
@@ -1010,10 +1022,9 @@ let run_test testing_scope include_dirs options =
     (dcalc_prg : typed Dcalc.Ast.program);
   let program_fun = Expr.unbox (Program.to_expr dcalc_prg testing_scope_name) in
   let program_fun =
-    Message.with_delayed_errors
-    @@ fun () ->
     Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_fun
   in
+  Message.report_delayed_errors_if_any ();
   let _args, program_expr =
     match program_fun with
     | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
@@ -1031,10 +1042,9 @@ let run_test testing_scope include_dirs options =
     Catala_utils.Message.register_lsp_error_absorber on_assert_failures
   in
   let result_struct =
-    Message.with_delayed_errors
-    @@ fun () ->
     Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr
   in
+  Message.report_delayed_errors_if_any ();
   let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
       =
     match result_struct with
