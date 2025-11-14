@@ -186,6 +186,7 @@ and get_enum ?module_name decl_ctx enum_name =
   in
   { O.enum_name; constructors }
 
+type Pos.attr += TestUi
 type Pos.attr += Uid of string
 type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
@@ -391,10 +392,12 @@ exception InvalidTestingScope of string
 let invalid_testing_scope fmt =
   Format.kasprintf (fun msg -> raise (InvalidTestingScope msg)) fmt
 
+(* note: filters for both 'test' and 'testUI' attrs *)
 let get_test_scopes prg =
   prg.I.program_root.module_scopes
   |> ScopeName.Map.filter (fun scope_name _scope ->
-         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test)
+         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test &&
+         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
   |> ScopeName.Map.keys
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
@@ -757,6 +760,7 @@ let write_catala_test ppf t lang =
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala-metadata@,";
   fprintf ppf "#[test]@\n";
+  fprintf ppf "#[testcase.testui]@\n";
   fprintf ppf "#[testcase.test_description = %s]@\n"
     (String.quote t.description);
   fprintf ppf "#[testcase.test_title = %s]@\n" (String.quote t.title);
