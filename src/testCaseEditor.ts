@@ -149,6 +149,7 @@ export class TestCaseEditorProvider
     function postMessageToWebView(message: DownMessage): void {
       webviewPanel.webview.postMessage(writeDownMessage(message));
     }
+    TestCaseEditorProvider.registerWebview(document.uri, postMessageToWebView);
 
     async function runTest(
       fileName: string,
@@ -405,11 +406,63 @@ export class TestCaseEditorProvider
       // Any disposal code should go here
       // e.g. subscriptions to vs code 'system' events
       // (content change monitoring...)
+      TestCaseEditorProvider.unregisterWebview(document.uri);
       changeSubscription.dispose();
     });
   }
 
-  private static readonly viewType = 'catala.testCaseEditor';
+  public static readonly viewType = 'catala.testCaseEditor';
+
+  // Registry of open custom editor webviews to send messages to
+  private static webviews = new Map<string, (msg: DownMessage) => void>();
+
+  private static registerWebview(
+    uri: vscode.Uri,
+    post: (m: DownMessage) => void
+  ): void {
+    TestCaseEditorProvider.webviews.set(uri.toString(), post);
+  }
+
+  private static unregisterWebview(uri: vscode.Uri): void {
+    TestCaseEditorProvider.webviews.delete(uri.toString());
+  }
+
+  public static async focusDiffInCustomEditor(
+    uri: vscode.Uri,
+    scope: string,
+    results: TestRunResults
+  ): Promise<boolean> {
+    const config = vscode.workspace.getConfiguration('catala');
+    const isEnabled = config.get<boolean>('enableCustomTestCaseEditor');
+    if (!isEnabled) return false;
+
+    try {
+      await vscode.commands.executeCommand(
+        'vscode.openWith',
+        uri,
+        TestCaseEditorProvider.viewType
+      );
+    } catch (_e) {
+      return false;
+    }
+
+    const key = uri.toString();
+    let post = TestCaseEditorProvider.webviews.get(key);
+
+    // Wait briefly for the webview to be registered on first open
+    for (let i = 0; !post && i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      post = TestCaseEditorProvider.webviews.get(key);
+    }
+
+    if (!post) return false;
+
+    post({
+      kind: 'TestRunResults',
+      value: { scope, reset_outputs: false, results },
+    });
+    return true;
+  }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(
@@ -450,6 +503,14 @@ export function getLanguageFromUri(uri: vscode.Uri): string {
     return match[1];
   }
   throw new Error(`Unable to determine language from file name: ${uri}`);
+}
+
+export async function focusDiffInCustomEditor(
+  uri: vscode.Uri,
+  scope: string,
+  results: TestRunResults
+): Promise<boolean> {
+  return TestCaseEditorProvider.focusDiffInCustomEditor(uri, scope, results);
 }
 
 /**
