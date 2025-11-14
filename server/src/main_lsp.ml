@@ -22,12 +22,21 @@ let () =
       ~disable_warnings:false ~message_format:Lsp ()
   in
   let err_std =
-    let pp_header ppf (l, h) =
-      match h with
-      | None ->
-        if l = Logs.App then Format.fprintf ppf "[LSP] "
-        else Format.fprintf ppf "[LSP|%a] " Logs.pp_level l
-      | Some h -> Format.fprintf ppf "[LSP|%s] " h
+    let pp_header ppf (log_lvl, h) =
+      let l = Option.value ~default:log_lvl (Logs.level ()) in
+      if l = Logs.App then Format.fprintf ppf "[LSP] "
+      else
+        let h =
+          Option.value
+            ~default:
+              (String.capitalize_ascii (Logs.level_to_string (Some log_lvl)))
+            h
+        in
+        match l with
+        | Logs.Debug ->
+          Format.fprintf ppf "[LSP|%s|%s] " h
+            (Utils.get_timestamp ~no_brackets:true ())
+        | _ -> Format.fprintf ppf "[LSP|%s] " h
     in
     Logs.format_reporter ~pp_header ~app:Format.err_formatter
       ~dst:Format.err_formatter ()

@@ -77,7 +77,7 @@ let addcustom e =
     | (EPos _, _) as e -> Expr.map ~f e
     | ( ( EAssert _ | EFatalError _ | ELit _ | EApp _ | EArray _ | EVar _
         | EExternal _ | EAbs _ | EIfThenElse _ | ETuple _ | ETupleAccess _
-        | EInj _ | EStruct _ | EStructAccess _ | EMatch _ ),
+        | EInj _ | EStruct _ | EStructAccess _ | EMatch _ | EBad ),
         _ ) as e ->
       Expr.map ~f e
     | _ -> .
@@ -197,6 +197,7 @@ let rec runtime_to_val :
     (* A type variable being an unresolved type, it can't be deconstructed, so
        we can let it pass through. *)
     Lwt.return (Obj.obj o, m)
+  | TError -> assert false
 
 and val_to_runtime :
     type d.
@@ -1145,38 +1146,38 @@ let rec evaluate_expr_with_env :
   | EPureDefault e ->
     let* e, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
     Lwt.return (e, env)
+  | EBad -> assert false
   | _ -> .
 
 let interpret_with_env
     ?(on_expr = on_expr_void)
     (p : (yes Shared_ast__Definitions.dcalc_lcalc, typed) gexpr program)
     scope =
-  Message.with_delayed_errors (fun () ->
-      let e = Expr.unbox (Program.to_expr p scope) |> addcustom in
-      let ctx = p.decl_ctx in
-      let scope_info = ScopeName.Map.find scope ctx.ctx_scopes in
-      let scope_input_struct = scope_info.in_struct_name in
-      let app_term =
-        Scope.empty_input_struct_dcalc ctx scope_input_struct
-          (Typed { pos = Pos.void; ty = TStruct scope_input_struct, Pos.void })
-      in
-      let to_interpret =
-        Expr.make_app (Expr.box e) [app_term]
-          [TStruct scope_input_struct, Expr.pos e]
-          (Expr.pos e)
-      in
-      let* r =
-        evaluate_expr_with_env empty_env ~on_expr ctx p.lang
-          (Expr.unbox to_interpret)
-      in
-      match r with
-      | ((EStruct _, _) as e), _env -> Lwt.return e
-      | exception Catala_runtime.Error (err, rpos) ->
-        Message.error
-          ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) rpos)
-          "%a" Format.pp_print_text
-          (Catala_runtime.error_message err)
-      | _ ->
-        Message.error ~pos:(Expr.pos e) ~internal:true "%a" Format.pp_print_text
-          "The interpretation of the program doesn't yield a struct \
-           corresponding to the scope variables")
+  let e = Expr.unbox (Program.to_expr p scope) |> addcustom in
+  let ctx = p.decl_ctx in
+  let scope_info = ScopeName.Map.find scope ctx.ctx_scopes in
+  let scope_input_struct = scope_info.in_struct_name in
+  let app_term =
+    Scope.empty_input_struct_dcalc ctx scope_input_struct
+      (Typed { pos = Pos.void; ty = TStruct scope_input_struct, Pos.void })
+  in
+  let to_interpret =
+    Expr.make_app (Expr.box e) [app_term]
+      [TStruct scope_input_struct, Expr.pos e]
+      (Expr.pos e)
+  in
+  let* r =
+    evaluate_expr_with_env empty_env ~on_expr ctx p.lang
+      (Expr.unbox to_interpret)
+  in
+  match r with
+  | ((EStruct _, _) as e), _env -> Lwt.return e
+  | exception Catala_runtime.Error (err, rpos) ->
+    Message.error
+      ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) rpos)
+      "%a" Format.pp_print_text
+      (Catala_runtime.error_message err)
+  | _ ->
+    Message.error ~pos:(Expr.pos e) ~internal:true "%a" Format.pp_print_text
+      "The interpretation of the program doesn't yield a struct corresponding \
+       to the scope variables"

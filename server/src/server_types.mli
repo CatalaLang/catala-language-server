@@ -14,19 +14,35 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
+open Catala_utils
+
 module Doc_id : sig
-  type doc_id = private Catala_utils.File.t
+  type doc_id = private File.t
   type t = doc_id
 
   val of_lsp_uri : Linol_lsp.Uri0.t -> doc_id
-  val of_catala_pos : Catala_utils.Pos.t -> doc_id
+  val of_catala_pos : Pos.t -> doc_id
   val to_lsp_uri : doc_id -> Linol_lsp.Uri0.t
   val format : Format.formatter -> doc_id -> unit
   val compare : doc_id -> doc_id -> int
   val equal : doc_id -> doc_id -> bool
 
-  module Map : Catala_utils.Map.S with type key = doc_id
+  module Map : Map.S with type key = doc_id
   module Set : Set.S with type elt = doc_id
 
-  val of_file : Catala_utils.File.t -> doc_id
+  val of_file : File.t -> doc_id
 end
+
+module Range : sig
+  include module type of Linol_lwt.Range
+  module Map : Map.S with type key = t
+  module Set : Set.S with type elt = t
+end
+
+type diagnostic = {
+  range : Linol_lwt.Range.t;
+  lsp_error : Message.lsp_error option;
+  diag : Linol_lwt.Diagnostic.t;
+}
+
+type diagnostics = diagnostic Range.Map.t Doc_id.Map.t

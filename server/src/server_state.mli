@@ -14,54 +14,60 @@
    License for the specific language governing permissions and limitations under
    the License. *)
 
+open Shared_ast
+open Catala_utils
 open Server_types
 
-type 'result document_state = {
+type processing_result = {
+  prg : typed Scopelang.Ast.program;
+  used_modules : ModuleName.t File.Map.t;
+  jump_table : Jump_table.t Lazy.t;
+}
+
+type buffer_state = Saved | Modified of { contents : string }
+
+type document_state = {
   document_id : Doc_id.t;
-  contents : string option;
-  saved : bool;
+  locale : Global.backend_lang;
+  buffer_state : buffer_state;
   project : Projects.project;
   project_file : Projects.project_file;
-  last_valid_result : 'result option;
-  errors : Diagnostic.t Utils.RangeMap.t Doc_id.Map.t;
+  last_valid_result : processing_result option;
 }
 
 val make_document :
-  ?contents:string ->
-  saved:bool ->
+  buffer_state ->
   Doc_id.doc_id ->
   Projects.project ->
   Projects.project_file ->
-  'a document_state
+  document_state
 
-type 'result server_state = {
+type server_state = {
   projects : Projects.t;
-  open_documents : 'result document_state Doc_id.Map.t;
+  open_documents : document_state Doc_id.Map.t;
+  diagnostics : diagnostics;
 }
 
-type 'result locked_server_state
+type locked_server_state
 
-val use :
-  'result locked_server_state -> ('result server_state -> 'a Lwt.t) -> 'a Lwt.t
+val use : locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
 
 val use_if_ready :
-  'result locked_server_state ->
-  ('result server_state -> 'a Lwt.t) ->
-  'a option Lwt.t
+  locked_server_state -> (server_state -> 'a Lwt.t) -> 'a option Lwt.t
 
-val use_now :
-  'result locked_server_state -> ('result server_state -> 'a Lwt.t) -> 'a Lwt.t
+val use_when_ready :
+  locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
+
+val use_now : locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
 
 val use_and_update :
-  'result locked_server_state ->
-  ('result server_state -> ('a * 'result server_state) Lwt.t) ->
-  'a Lwt.t
+  locked_server_state -> (server_state -> ('a * server_state) Lwt.t) -> 'a Lwt.t
 
 val delayed_update :
   ?delay:float ->
   Doc_id.doc_id ->
-  'result locked_server_state ->
-  ('result server_state -> 'result server_state Lwt.t) ->
+  locked_server_state ->
+  (server_state -> server_state Lwt.t) ->
   unit Lwt.t
 
-val make : unit -> 'result locked_server_state
+val make : unit -> locked_server_state

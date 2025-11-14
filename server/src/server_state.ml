@@ -16,48 +16,65 @@
 
 open Server_types
 open Lwt.Syntax
+open Shared_ast
+open Catala_utils
 
-type 'a document_state = {
+type processing_result = {
+  prg : typed Scopelang.Ast.program;
+  used_modules : ModuleName.t File.Map.t;
+  jump_table : Jump_table.t Lazy.t;
+}
+
+type buffer_state = Saved | Modified of { contents : string }
+
+type document_state = {
   document_id : Doc_id.t;
-  contents : string option;
-  saved : bool;
+  locale : Global.backend_lang;
+  buffer_state : buffer_state;
   project : Projects.project;
   project_file : Projects.project_file;
-  last_valid_result : 'a option;
-  errors : Diagnostic.t Utils.RangeMap.t Doc_id.Map.t;
+  last_valid_result : processing_result option;
 }
 
-let make_document ?contents ~saved document_id project project_file =
+let make_document buffer_state (document_id : Doc_id.t) project project_file =
+  let locale = Catala_utils.Cli.file_lang (document_id :> File.t) in
   {
     document_id;
-    contents;
+    locale;
+    buffer_state;
     project;
-    saved;
     project_file;
     last_valid_result = None;
-    errors = Doc_id.Map.empty;
   }
 
-type 'a server_state = {
+type server_state = {
   projects : Projects.t;
-  open_documents : 'a document_state Doc_id.Map.t;
+  open_documents : document_state Doc_id.Map.t;
+  diagnostics : diagnostics;
 }
 
-type 'result delayed_state =
-  | Ready of 'result server_state
+type delayed_state =
+  | Ready of server_state
   | Delayed of {
       doc_id : Doc_id.t;
-      curr_server_state : 'result server_state;
+      curr_server_state : server_state;
       delayed_action : unit Lwt.t;
-      action : 'result server_state -> 'result server_state Lwt.t;
+      action : server_state -> server_state Lwt.t;
     }
 
-type 'result locked_server_state = {
+type locked_server_state = {
   lock : Lwt_mutex.t;
-  mutable delayed_state : 'result delayed_state;
+  mutable delayed_state : delayed_state;
 }
 
-let use s (f : 'result server_state -> 'a Lwt.t) : 'a Lwt.t =
+let wrap_f' f state =
+  let c_b = Doc_id.Map.cardinal state.open_documents in
+  let* x, new_state = f state in
+  let c_a = Doc_id.Map.cardinal new_state.open_documents in
+  Log.debug (fun m -> m "USAGE STATE: %d vs %d" c_b c_a);
+  Lwt.return (x, new_state)
+
+let use s (f : server_state -> 'a Lwt.t) : 'a Lwt.t =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
   match s.delayed_state with
@@ -71,7 +88,7 @@ let use s (f : 'result server_state -> 'a Lwt.t) : 'a Lwt.t =
     s.delayed_state <- Ready server_state;
     f server_state
 
-let use_if_ready s (f : 'result server_state -> 'a Lwt.t) : 'a option Lwt.t =
+let use_if_ready s (f : server_state -> 'a Lwt.t) : 'a option Lwt.t =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
   match s.delayed_state with
@@ -80,7 +97,25 @@ let use_if_ready s (f : 'result server_state -> 'a Lwt.t) : 'a option Lwt.t =
     Lwt.return_some x
   | Delayed _ -> Lwt.return_none
 
-let use_now s (f : 'result server_state -> 'a Lwt.t) : 'a Lwt.t =
+let rec use_when_ready s (f : server_state -> 'a Lwt.t) : 'a Lwt.t =
+  let* () = Lwt_mutex.lock s.lock in
+  match s.delayed_state with
+  | Ready state ->
+    let* x =
+      Lwt.finalize
+        (fun () ->
+          Log.debug (fun m -> m "document ready: processing action");
+          f state)
+        (fun () -> Lwt.return (Lwt_mutex.unlock s.lock))
+    in
+    Lwt.return x
+  | Delayed { delayed_action; _ } ->
+    Log.debug (fun m -> m "waiting on delayed action completion");
+    Lwt_mutex.unlock s.lock;
+    let* () = delayed_action in
+    use_when_ready s f
+
+let use_now s (f : server_state -> 'a Lwt.t) : 'a Lwt.t =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
   match s.delayed_state with
@@ -89,14 +124,13 @@ let use_now s (f : 'result server_state -> 'a Lwt.t) : 'a Lwt.t =
     Log.debug (fun m -> m "processing on potentially outdated document state");
     f curr_server_state
 
-let use_and_update
-    s
-    (f : 'result server_state -> ('a * 'result server_state) Lwt.t) : 'a Lwt.t =
+let use_and_update s (f : server_state -> ('a * server_state) Lwt.t) : 'a Lwt.t
+    =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
   let* ret, new_state =
     match s.delayed_state with
-    | Ready state -> f state
+    | Ready state -> wrap_f' f state
     | Delayed { doc_id = _; curr_server_state; delayed_action; action } ->
       (* The delayed action is necessarily sleeping otherwise it wouldn't be
          delayed so we can cancel the sleeping thread and force the
@@ -127,13 +161,12 @@ let make_delayed_action ?(delay = 1.) s action =
 let make_delayed_action ?delay s action =
   let t = make_delayed_action ?delay s action in
   Lwt.on_cancel t (fun () -> Log.debug (fun m -> m "canceling delayed action"));
-  t
+  Lwt.catch
+    (fun () -> t)
+    (function Lwt.Canceled -> Lwt.return_unit | exn -> Lwt.fail exn)
 
-let delayed_update
-    ?delay
-    doc_id
-    s
-    (f : 'result server_state -> 'result server_state Lwt.t) : unit Lwt.t =
+let delayed_update ?delay doc_id s (f : server_state -> server_state Lwt.t) :
+    unit Lwt.t =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
   match s.delayed_state with
@@ -170,6 +203,10 @@ let delayed_update
 
 let make () =
   let state =
-    { projects = Projects.empty; open_documents = Doc_id.Map.empty }
+    {
+      projects = Projects.empty;
+      open_documents = Doc_id.Map.empty;
+      diagnostics = Doc_id.Map.empty;
+    }
   in
   { lock = Lwt_mutex.create (); delayed_state = Ready state }

@@ -350,13 +350,14 @@ let rec traverse_typ (tctx : traversal_ctxt) ((typ, pos) : naked_typ * Pos.t) m
   | TTuple tl -> List.fold_right (traverse_typ tctx) tl m
   | TOption typ | TArray typ | TDefault typ -> traverse_typ tctx typ m
   | TLit _lit -> PMap.add pos (Literal (typ, pos)) m
-  | TForAll _ | TVar _ | TClosureEnv -> m
+  | TForAll _ | TVar _ | TClosureEnv | TError -> m
 
 let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
   let open Shared_ast in
   let open Catala_utils in
   let rec f (bnd_ctx : Bindlib.ctxt) (e : (scopelang, typed) gexpr) acc =
     let (Typed { pos; ty = typ }) = Mark.get e in
+
     match Mark.remove e with
     | EDefault { excepts; just; cons } ->
       let acc =
@@ -430,7 +431,7 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
       populate_scopecall tctx pos scope args acc (f bnd_ctx)
     | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | EApp _ | ETuple _
     | ETupleAccess _ | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ | EPos _
-      ->
+    | EBad ->
       Expr.shallow_fold (f bnd_ctx) e acc
   in
   f Bindlib.empty_ctxt e m

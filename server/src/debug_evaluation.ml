@@ -88,6 +88,7 @@ let should_stop (e : dcalc_expr) =
   | EEmpty -> true
   | EErrorOnEmpty _ -> true
   | ECustom _ -> true
+  | EBad -> true
   | ELocation _ -> .
 
 let run_debugger
@@ -132,6 +133,7 @@ let run_debugger
     Lwt.catch
       (fun () ->
         let* r = Debug_interpret.interpret_with_env ~on_expr program scope in
+        Catala_utils.Message.report_delayed_errors_if_any ();
         Lwt.return_ok r)
       (fun exn -> Lwt.return_error exn)
   in
@@ -220,8 +222,8 @@ let load_program ((clerk_config : Clerk_config.t), root_dir) file scope =
     failwith "Stdlib not found - Please compile your project first.";
   let mod_uses, modules, _used_modules =
     try
-      State.load_modules ~stdlib_path root_dir clerk_config.global.include_dirs
-        surface
+      Document_processing.load_modules ~stdlib_path root_dir
+        clerk_config.global.include_dirs surface
     with e -> raise e
   in
   let ctx =

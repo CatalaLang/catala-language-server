@@ -114,6 +114,7 @@ let pp_typ locale fmt (ty : typ) =
     | TArray a -> fprintf fmt "@[<hov 2>%s@ %a@]" (list_of locale) pp_typ a
     | TDefault d -> fprintf fmt "@[<hov 2>%a@ <%s>@]" pp_typ d (default locale)
     | TClosureEnv -> fprintf fmt "<closure_env>"
+    | TError -> fprintf fmt "<error>"
   in
   pp_typ fmt ty
 
@@ -140,6 +141,7 @@ let pp_typ_no_box locale fmt (ty : typ) =
     | TArray a -> fprintf fmt "%s@ %a" (list_of locale) pp_typ a
     | TDefault d -> fprintf fmt "%a@ <%s>" pp_typ d (default locale)
     | TClosureEnv -> fprintf fmt "<closure_env>"
+    | TError -> fprintf fmt "<error>"
   in
   pp_typ fmt ty
 
@@ -220,7 +222,7 @@ let data_type
   | TLit _
   | TArrow (_, _)
   | TTuple _ | TOption _ | TArray _ | TDefault _ | TForAll _ | TVar _
-  | TClosureEnv ->
+  | TClosureEnv | TError ->
     expr_type ~markdown locale typ
   | TStruct sname -> (
     let struct_ctx = ctx.ctx_structs in
