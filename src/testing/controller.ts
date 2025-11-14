@@ -6,7 +6,7 @@ import type {
   TestOutputs,
   SourcePosition,
 } from '../generated/test_case';
-import { getLanguageFromUri } from '../testCaseEditor';
+import { getLanguageFromUri, focusDiffInCustomEditor } from '../testCaseEditor';
 import { parseTestFile, runTestScope } from '../testCaseCompilerInterop';
 
 type Meta = {
@@ -207,9 +207,17 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
           const diffs = out.diffs ?? [];
           const hasFailures = out.assert_failures || diffs.length > 0;
           if (hasFailures) {
+            // Prefer focusing the custom editor and displaying diffs there
+            const focused = await focusDiffInCustomEditor(
+              m.file,
+              m.testingScope,
+              res
+            );
             const msg = new vscode.TestMessage(formatDiffs(diffs));
-            const loc = firstDiffLocation(diffs, out.test_outputs, m.file);
-            if (loc) msg.location = loc;
+            if (!focused) {
+              const loc = firstDiffLocation(diffs, out.test_outputs, m.file);
+              if (loc) msg.location = loc;
+            }
             tr.failed(item, msg);
           } else {
             tr.passed(item);
