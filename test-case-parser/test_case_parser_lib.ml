@@ -654,7 +654,7 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
   | _, O.Integer i -> pp_print_int ppf i
   | _, O.Decimal f ->
     let s = sprintf "%g" f in
-    let s = if String.contains s '.' then s else sprintf "%.0f." f in
+    let s = if String.contains s '.' then s else sprintf "%.1f" f in
     pp_print_string ppf
       (String.map (function '.' -> strings.decimal_sep | c -> c) s)
   | _, O.Date { year; month; day } ->
