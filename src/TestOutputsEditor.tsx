@@ -89,13 +89,15 @@ export default function TestOutputsEditor({
                   onDiffResolved={onDiffResolved}
                 />
               ) : (
-                <button
-                  className="button-action-dvp"
-                  onClick={() => onAssertAdd(outputName)}
-                >
-                  <span className="codicon codicon-add"></span>
-                  <FormattedMessage id="testOutputs.addExpectedValue" />
-                </button>
+                <div className="assertion-editor">
+                  <button
+                    className="button-action-dvp"
+                    onClick={() => onAssertAdd(outputName)}
+                  >
+                    <span className="codicon codicon-add"></span>
+                    <FormattedMessage id="testOutputs.addExpectedValue" />
+                  </button>
+                </div>
               )}
             </div>
           );

@@ -180,6 +180,7 @@ input {
 .vscode-dark .value-editor select,
 .vscode-dark .struct-editor input,
 .vscode-dark .value-editor,
+.vscode-dark .assertion-editor,
 .vscode-dark .struct-editor select {
   background-color: var(--stormgray925);
   color: var(--stormgray500);
@@ -236,6 +237,7 @@ input {
 .vscode-light .value-editor select,
 .vscode-light .struct-editor input,
 .vscode-light .struct-editor .value-editor,
+.vscode-light .assertion-editor,
 .vscode-light .struct-editor select {
   background-color: var(--stormgray00);
   color: var(--stormgray900);
