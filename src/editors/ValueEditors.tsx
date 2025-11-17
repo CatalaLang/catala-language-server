@@ -238,17 +238,19 @@ function IntEditor(props: IntEditorProps): ReactElement {
   };
 
   return (
-    <input
-      type="text"
-      pattern={INT_PATTERN.source}
-      required
-      value={displayValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      className={`value-editor rat-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
-      placeholder="0"
-      disabled={props.editable === false}
-    />
+    <div className="value-editor">
+      <input
+        type="text"
+        pattern={INT_PATTERN.source}
+        required
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={`int-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
+        placeholder="0"
+        disabled={props.editable === false}
+      />
+    </div>
   );
 }
 
@@ -312,13 +314,14 @@ function DateEditor(props: DateEditorProps): ReactElement {
   // TODO: Add onBlur validation?
 
   return (
-    <input
-      className="value-editor"
-      type="date"
-      value={internalValue}
-      onChange={handleChange}
-      disabled={props.editable === false}
-    />
+    <div className="value-editor">
+      <input
+        type="date"
+        value={internalValue}
+        onChange={handleChange}
+        disabled={props.editable === false}
+      />
+    </div>
   );
 }
 
@@ -389,17 +392,19 @@ function RatEditor(props: RatEditorProps): ReactElement {
   };
 
   return (
-    <input
-      type="text"
-      pattern={RAT_PATTERN.source}
-      required
-      value={displayValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      className={`value-editor rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
-      placeholder="0.0"
-      disabled={props.editable === false}
-    />
+    <div className="value-editor">
+      <input
+        type="text"
+        pattern={RAT_PATTERN.source}
+        required
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={`rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
+        placeholder="0.0"
+        disabled={props.editable === false}
+      />
+    </div>
   );
 }
 
@@ -421,19 +426,20 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   };
 
   return (
-    <select
-      className="value-editor"
-      value={currentValue.toString()}
-      onChange={handleChange}
-      disabled={props.editable === false}
-    >
-      <option value="false">
-        <FormattedMessage id="false" />
-      </option>
-      <option value="true">
-        <FormattedMessage id="true" />
-      </option>
-    </select>
+    <div className="value-editor">
+      <select
+        value={currentValue.toString()}
+        onChange={handleChange}
+        disabled={props.editable === false}
+      >
+        <option value="false">
+          <FormattedMessage id="false" />
+        </option>
+        <option value="true">
+          <FormattedMessage id="true" />
+        </option>
+      </select>
+    </div>
   );
 }
 
@@ -747,7 +753,6 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
   // Note: do not early-return here; we render the expected editor and, when applicable,
   // an "actual preview" block alongside it further below.
-
   const handleCtorChange = (
     event: React.ChangeEvent<HTMLSelectElement>
   ): void => {
