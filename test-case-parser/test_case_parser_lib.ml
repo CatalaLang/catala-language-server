@@ -685,6 +685,20 @@ let get_value_strings = function
     }
   | _ -> raise (unsupported "unsupported language")
 
+(* Implicit stdlib alias handling in the writer.
+   We filter out "Using ..." lines for well-known stdlib aliases.
+   TODO: when the compiler surfaces active imports/aliases for the target
+   module, use that information instead and drop this local list. *)
+let implicit_stdlib_aliases = function
+  | Catala_utils.Global.Fr ->
+    ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
+  | En ->
+    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+  | _ -> []
+
+let is_implicit_stdlib_alias lang alias =
+  List.exists (fun a -> String.equal a alias) (implicit_stdlib_aliases lang)
+
 let print_attrs ppf (attrs : O.attr_def list) =
   let open Format in
   pp_print_list
@@ -737,25 +751,30 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
             else None);
          ])
   | Some (TEnum { enum_name; constructors }), O.Enum (_en, (constr, Some v)) ->
-    fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
+    fprintf ppf "@[<hv 2>%s.%s %s %a@]"
+      enum_name constr strings.content_str
       (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
       v
   | _, O.Enum (en, (constr, Some v)) ->
-    fprintf ppf "@[<hv 2>%s.%s %s %a@]" en.enum_name constr strings.content_str
+    fprintf ppf "@[<hv 2>%s.%s %s %a@]"
+      en.enum_name constr strings.content_str
       (print_catala_value ~typ:None ~lang)
       v
   | Some (TEnum { enum_name; _ }), O.Enum (_en, (constr, None)) ->
     fprintf ppf "%s.%s" enum_name constr
-  | _, O.Enum (en, (constr, None)) -> fprintf ppf "%s.%s" en.enum_name constr
-  | Some (O.TStruct sdecl), O.Struct (st, fields) ->
-    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
+  | _, O.Enum (en, (constr, None)) ->
+    fprintf ppf "%s.%s" en.enum_name constr
+  | Some (O.TStruct _sdecl), O.Struct (st, fields) ->
+    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]"
+      st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (typ, (fld, v)) ->
            fprintf ppf "-- %s: %a@," fld
              (print_catala_value ~typ:(Some typ) ~lang)
              v))
-      (List.combine (List.map snd sdecl.fields) fields)
+      (List.combine (List.map snd _sdecl.fields) fields)
   | _, O.Struct (st, fields) ->
-    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
+    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]"
+      st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
            fprintf ppf "-- %s: %a@," fld (print_catala_value ~typ:None ~lang) v))
       fields
@@ -873,7 +892,7 @@ let write_catala options outfile =
       (fun opened test ->
         Format.pp_open_vbox ppf 0;
         let opened =
-          let modules_to_open =
+          let modules_to_open0 =
             Ident.Set.(
               diff
                 (of_list
@@ -881,12 +900,25 @@ let write_catala options outfile =
                    :: test.O.tested_scope.module_deps))
                 opened)
           in
+          (* Filter out implicit stdlib aliases from Using lines.
+             TODO: remove once the compiler provides active imports for the
+             target module, so we can decide this precisely. *)
+          let modules_to_open =
+            Ident.Set.fold
+              (fun m acc ->
+                if is_implicit_stdlib_alias lang m then acc
+                else Ident.Set.add m acc)
+              modules_to_open0 Ident.Set.empty
+          in
           Ident.Set.iter
             (fun modname ->
               Format.fprintf ppf "> %s %s@,"
                 (get_lang_strings lang).using_module modname)
             modules_to_open;
-          String.Set.union modules_to_open opened
+          let opened' =
+            String.Set.of_list (Ident.Set.elements modules_to_open)
+          in
+          String.Set.union opened' opened
         in
         write_catala_test ppf test lang;
         Format.pp_close_box ppf ();
