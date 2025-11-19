@@ -661,6 +661,10 @@ function StructEditor(props: StructEditorProps): ReactElement {
   // Create editor items for CompositeEditor
   const editorItems = Array.from(fields.entries()).map(
     ([fieldName, fieldType]) => {
+      const childPath: PathSegment[] = [
+        ...currentPath,
+        { kind: 'StructField', value: fieldName },
+      ];
       return {
         key: fieldName,
         label: fieldName,
@@ -679,10 +683,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
               }
             }}
             editorHook={editorHook}
-            currentPath={[
-              ...currentPath,
-              { kind: 'StructField', value: fieldName },
-            ]}
+            currentPath={childPath}
             diffs={props.diffs}
             editable={editable}
             onDiffResolved={props.onDiffResolved}
@@ -814,10 +815,8 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
             }}
             onValueChange={handlePayloadChange}
             editorHook={editorHook}
-            currentPath={[
-              ...currentPath,
-              { kind: 'EnumPayload', value: currentCtor },
-            ]}
+            // Do NOT add EnumPayload here: server diff paths are transparent over enums
+            currentPath={currentPath}
             diffs={props.diffs}
             editable={editable}
             onDiffResolved={props.onDiffResolved}

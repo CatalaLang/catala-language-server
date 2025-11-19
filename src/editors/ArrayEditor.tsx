@@ -257,7 +257,15 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 isEmptyValue(d.expected) &&
                 !isEmptyValue(d.actual)
             )
-            .map((d) => (d.path[currentPath.length] as any).value as number);
+            .map(
+              (d) =>
+                (
+                  d.path[currentPath.length] as Extract<
+                    PathSegment,
+                    { kind: 'ListIndex' }
+                  >
+                ).value
+            );
           const indicesToRender = Array.from(
             new Set([...baseIndices, ...extraIndices])
           ).sort((a, b) => a - b);
