@@ -132,6 +132,8 @@ export default function TestFileEditor({
   const onTestRun = useCallback(_onTestRun(false), [vscode]);
   const onTestOutputsReset = useCallback(_onTestRun(true), [vscode]);
 
+  // NOTE: Paths passed to onDiffResolved MUST be ABSOLUTE from the test outputs root.
+  // Example: [{ kind: 'StructField', value: '<outputName>' }, { kind: 'ListIndex', value: 0 }, ...]
   const onDiffResolved = useCallback(
     (scope: string, path: PathSegment[]): void => {
       setTestRunState((prev) => {

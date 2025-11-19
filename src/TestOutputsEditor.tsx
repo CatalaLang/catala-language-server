@@ -72,6 +72,8 @@ export default function TestOutputsEditor({
         {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {
           const outputData = test_outputs.get(outputName);
 
+          // NOTE: Diffs are absolute from the test outputs root; keep absolute (no slicing).
+
           return (
             <div key={outputName} className="test-output-row">
               <label>{outputName}</label>
@@ -83,9 +85,7 @@ export default function TestOutputsEditor({
                   }
                   onAssertionDeletion={() => onAssertDelete(outputName)}
                   diffs={diffs}
-                  currentPath={[
-                    { kind: 'StructField' as const, value: outputName },
-                  ]}
+                  currentPath={[{ kind: 'StructField', value: outputName }]}
                   onDiffResolved={onDiffResolved}
                 />
               ) : (
