@@ -44,6 +44,7 @@ jobs:
       - name: Run tests
         run: |
           opam exec -- dune runtest
+          npm run webview:test
           xvfb-run -a npm run test
 
   release:
