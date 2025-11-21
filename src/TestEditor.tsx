@@ -20,8 +20,10 @@ type Props = {
   runState?: {
     status: TestRunStatus;
     results?: TestRunResults;
+    stale?: boolean;
   };
   onDiffResolved(scope: string, path: PathSegment[]): void;
+  onInvalidateDiffs(scope: string, pathPrefix: PathSegment[]): void;
 };
 
 // Editor for a single test case (child of TestFileEditor)
@@ -192,6 +194,17 @@ export default function TestEditor(props: Props): ReactElement {
                 </div>
               )}
             </div>
+            {props.runState?.stale && (
+              <div className="test-result-information">
+                <p className="body-3">
+                  <span className="codicon codicon-history"></span>{' '}
+                  <FormattedMessage
+                    id="testEditor.diffsStale"
+                    defaultMessage="Diffs are out of date. Re-run to refresh."
+                  />
+                </p>
+              </div>
+            )}
           </div>
 
           <TestOutputsEditor
@@ -206,6 +219,12 @@ export default function TestEditor(props: Props): ReactElement {
             }
             onDiffResolved={(path) =>
               props.onDiffResolved(props.test.testing_scope, path as any)
+            }
+            onInvalidateDiffs={(pathPrefix) =>
+              props.onInvalidateDiffs(
+                props.test.testing_scope,
+                pathPrefix as any
+              )
             }
           />
         </div>

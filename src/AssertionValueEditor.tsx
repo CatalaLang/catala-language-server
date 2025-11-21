@@ -16,6 +16,7 @@ type Props = {
   currentPath: PathSegment[];
   highlightDiffs?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 /**
@@ -77,6 +78,7 @@ export default function AssertionValueEditor({
   currentPath,
   highlightDiffs = true,
   onDiffResolved,
+  onInvalidateDiffs,
 }: Props): ReactElement {
   const intl = useIntl();
   // Array item phantom rendering is handled inside ArrayEditor based on diffs.
@@ -96,6 +98,7 @@ export default function AssertionValueEditor({
         currentPath={currentPath}
         diffs={diffs}
         onDiffResolved={onDiffResolved}
+        onInvalidateDiffs={onInvalidateDiffs}
       />
       <button
         className="assertion-delete"

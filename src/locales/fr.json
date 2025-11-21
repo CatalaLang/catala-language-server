@@ -43,5 +43,6 @@
   "diff.actualValue": "Valeur obtenue",
   "diff.addToExpected": "Ajouter à l'attendu",
   "diff.replaceExpected": "Remplacer l'attendu par la valeur calculée",
-  "diff.removeFromExpected": "Supprimer de l'attendu"
+  "diff.removeFromExpected": "Supprimer de l'attendu",
+  "testEditor.diffsStale": "Les différences ne sont plus à jour. Relancez pour actualiser."
 }

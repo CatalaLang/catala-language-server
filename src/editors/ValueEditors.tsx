@@ -41,6 +41,7 @@ type Props = {
   diffs: Diff[];
   editable?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 export function isCollapsible(typ: Typ): boolean {
@@ -101,6 +102,7 @@ export default function ValueEditor(props: Props): ReactElement {
           diffs={props.diffs}
           editable={editable}
           onDiffResolved={props.onDiffResolved}
+          onInvalidateDiffs={props.onInvalidateDiffs}
         />
       );
       break;
@@ -151,6 +153,7 @@ export default function ValueEditor(props: Props): ReactElement {
           diffs={props.diffs}
           editable={editable}
           onDiffResolved={props.onDiffResolved}
+          onInvalidateDiffs={props.onInvalidateDiffs}
         />
       );
       break;
@@ -165,6 +168,7 @@ export default function ValueEditor(props: Props): ReactElement {
           diffs={props.diffs}
           editable={editable}
           onDiffResolved={props.onDiffResolved}
+          onInvalidateDiffs={props.onInvalidateDiffs}
         />
       );
       break;
@@ -626,6 +630,7 @@ type StructEditorProps = {
   diffs: Diff[];
   editable?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
@@ -687,6 +692,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
             diffs={props.diffs}
             editable={editable}
             onDiffResolved={props.onDiffResolved}
+            onInvalidateDiffs={props.onInvalidateDiffs}
           />
         ),
       };
@@ -709,6 +715,7 @@ type EnumEditorProps = {
   diffs: Diff[];
   editable?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
@@ -820,6 +827,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
             diffs={props.diffs}
             editable={editable}
             onDiffResolved={props.onDiffResolved}
+            onInvalidateDiffs={props.onInvalidateDiffs}
           />
         </div>
       )}

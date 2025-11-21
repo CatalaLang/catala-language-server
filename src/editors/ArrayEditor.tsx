@@ -29,6 +29,7 @@ type ArrayEditorProps = {
   currentPath: PathSegment[];
   diffs: Diff[];
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
   editable?: boolean;
 };
 
@@ -138,6 +139,12 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
     onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
 
+  // Invalidate diffs under this array after any structural edit.
+  // Low-complexity strategy: wipe diffs (for this array subtree) and require manual re-run.
+  const invalidateArrayDiffs = (): void => {
+    props.onInvalidateDiffs?.(currentPath);
+  };
+
   const handleAdd = (): void => {
     const newElementValue = getDefaultValue(elementType);
     // Add a unique ID attribute when creating a new element
@@ -154,6 +161,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
       ],
     };
     updateParent([...currentArray, newElement]);
+    invalidateArrayDiffs();
   };
 
   const handleUpdate = (index: number, updatedElement: RuntimeValue): void => {
@@ -165,6 +173,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   const handleDelete = (index: number): void => {
     const newArray = currentArray.filter((_, i) => i !== index);
     updateParent(newArray);
+    invalidateArrayDiffs();
   };
 
   const handleMove = (fromIndex: number, toIndex: number): void => {
@@ -179,6 +188,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
     const [movedItem] = newArray.splice(fromIndex, 1);
     newArray.splice(toIndex, 0, movedItem);
     updateParent(newArray);
+    invalidateArrayDiffs();
   };
 
   const intl = useIntl();
@@ -346,7 +356,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                             const newArray = [...currentArray];
                             newArray.splice(index, 0, elementToInsert);
                             updateParent(newArray);
-                            props.onDiffResolved?.(childPath);
+                            invalidateArrayDiffs();
                           }}
                           disabled={editable === false}
                         >
@@ -395,7 +405,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                                 const newArray = [...currentArray];
                                 newArray.splice(index, 1);
                                 updateParent(newArray);
-                                props.onDiffResolved?.(childPath);
+                                invalidateArrayDiffs();
                               }}
                               disabled={editable === false}
                             >
