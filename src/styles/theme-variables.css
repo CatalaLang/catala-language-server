@@ -172,7 +172,8 @@ input {
   background-color: var(--stormgray800);
   border-color: var(--stormgray600);
 }
-.vscode-dark .test-description-textarea {
+.vscode-dark .test-description-textarea,
+.vscode-dark .test-title-input {
   border-color: var(--stormgray800);
 }
 
@@ -229,7 +230,8 @@ input {
   border-color: var(--stormgray400);
 }
 
-.vscode-light .test-description-textarea {
+.vscode-light .test-description-textarea,
+.vscode-light .test-title-input {
   border-color: var(--stormgray300);
 }
 
