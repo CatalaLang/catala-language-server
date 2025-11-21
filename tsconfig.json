@@ -1,15 +1,17 @@
 {
   "compilerOptions": {
     "outDir": "./dist",
-    "module": "CommonJS",
+    "module": "Node16",
     "target": "es2020",
     "lib": ["dom", "es2023", "ES2021.Intl"],
+    "moduleResolution": "Node16",
     "noImplicitAny": true,
     "strictNullChecks": true,
     "sourceMap": true,
     "jsx": "react-jsx",
     "resolveJsonModule": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "skipLibCheck": true
   },
-  "exclude": ["node_modules", ".vscode-test"]
+  "exclude": ["node_modules", ".vscode-test", "tests", "vitest.config.*"]
 }
