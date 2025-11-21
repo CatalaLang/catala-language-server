@@ -6,3 +6,5 @@ _opam
 .eslintrc.js
 webpack.config.js
 lint_scripts/
+tests/
+vitest.config.*
