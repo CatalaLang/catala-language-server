@@ -9,6 +9,7 @@ type Props = {
   onTestChange(newValue: Test): void;
   diffs?: Diff[];
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 /* An editor for test outputs. Outputs are named and typed, and
@@ -33,6 +34,7 @@ export default function TestOutputsEditor({
   onTestChange: onTestAssertsChange,
   diffs = [],
   onDiffResolved,
+  onInvalidateDiffs,
 }: Props): ReactElement {
   const { test_outputs, tested_scope } = test;
 
@@ -87,6 +89,7 @@ export default function TestOutputsEditor({
                   diffs={diffs}
                   currentPath={[{ kind: 'StructField', value: outputName }]}
                   onDiffResolved={onDiffResolved}
+                  onInvalidateDiffs={onInvalidateDiffs}
                 />
               ) : (
                 <div className="assertion-editor">

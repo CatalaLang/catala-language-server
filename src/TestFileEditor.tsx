@@ -12,7 +12,7 @@ import {
 } from './generated/test_case';
 import TestEditor from './TestEditor';
 import { assertUnreachable } from './util';
-import { pathEquals } from './diff/highlight';
+import { pathEquals, isPathPrefix } from './diff/highlight';
 import type { WebviewApi } from 'vscode-webview';
 import { setVsCodeApi } from './webviewApi';
 import { resolveConfirmResult } from './messaging/confirm';
@@ -47,6 +47,7 @@ type TestRunState = {
   [scope: string]: {
     status: TestRunStatus;
     results?: TestRunResults;
+    stale?: boolean;
   };
 };
 
@@ -158,6 +159,31 @@ export default function TestFileEditor({
     []
   );
 
+  // Invalidate all diffs under a given path prefix (array subtree), mark stale.
+  const onInvalidateDiffs = useCallback(
+    (scope: string, pathPrefix: PathSegment[]): void => {
+      setTestRunState((prev) => {
+        const entry = prev[scope];
+        if (!entry?.results || entry.results.kind !== 'Ok') return prev;
+        const filtered: Diff[] = entry.results.value.diffs.filter(
+          (d) => !isPathPrefix(pathPrefix, d.path)
+        );
+        return {
+          ...prev,
+          [scope]: {
+            ...entry,
+            stale: true,
+            results: {
+              kind: 'Ok',
+              value: { ...entry.results.value, diffs: filtered },
+            },
+          },
+        };
+      });
+    },
+    []
+  );
+
   const onAddNewTest = useCallback((): void => {
     vscode.postMessage(
       writeUpMessage({
@@ -191,6 +217,7 @@ export default function TestFileEditor({
               [scope]: {
                 status: _resultsToStatus(results),
                 results,
+                stale: false,
               },
             };
             if (reset_outputs && results.kind === 'Ok') {
@@ -258,6 +285,7 @@ export default function TestFileEditor({
               onTestOutputsReset={onTestOutputsReset}
               runState={testRunState[test.testing_scope]}
               onDiffResolved={onDiffResolved}
+              onInvalidateDiffs={onInvalidateDiffs}
             />
           ))}
         </div>
