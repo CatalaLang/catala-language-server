@@ -1,17 +1,15 @@
 import { type ReactElement } from 'react';
-import { FormattedMessage, useIntl } from 'react-intl';
+import { FormattedMessage } from 'react-intl';
 import type { TestIo, Diff, PathSegment } from './generated/test_case';
 import ValueEditor from './editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
 import './styles/assertions-editor.css';
 import { findMatchingDiff, isParentOfAnyDiff } from './diff/highlight';
 import { isAtomicRuntime } from './diff/diff';
-import { confirm } from './messaging/confirm';
 
 type Props = {
   testIO: TestIo;
   onValueChange: (newValue: TestIo) => void;
-  onAssertionDeletion: () => void;
   diffs?: Diff[];
   currentPath: PathSegment[];
   highlightDiffs?: boolean;
@@ -72,14 +70,12 @@ function createDiffHighlightHook(diffs: Diff[]) {
 export default function AssertionValueEditor({
   testIO,
   onValueChange,
-  onAssertionDeletion,
   diffs = [],
   currentPath,
   highlightDiffs = true,
   onDiffResolved,
   onInvalidateDiffs,
 }: Props): ReactElement {
-  const intl = useIntl();
   // Array item phantom rendering is handled inside ArrayEditor based on diffs.
 
   // Create the diff highlight hook if we have diffs
@@ -99,16 +95,6 @@ export default function AssertionValueEditor({
         onDiffResolved={onDiffResolved}
         onInvalidateDiffs={onInvalidateDiffs}
       />
-      <button
-        className="assertion-delete"
-        title={intl.formatMessage({ id: 'assertion.delete' })}
-        onClick={async () => {
-          if (!(await confirm('DeleteAssertion'))) return;
-          onAssertionDeletion();
-        }}
-      >
-        <span className="codicon codicon-trash"></span>
-      </button>
     </div>
   );
 }
