@@ -139,7 +139,7 @@ export default function TestFileEditor({
     (scope: string, path: PathSegment[]): void => {
       setTestRunState((prev) => {
         const entry = prev[scope];
-        if (!entry?.results || entry.results.kind !== 'Ok') return prev;
+        if (entry?.results?.kind !== 'Ok') return prev;
         const currentDiffs = entry.results.value.diffs;
         const filtered: Diff[] = currentDiffs.filter(
           (d) => !pathEquals(d.path, path)
@@ -164,7 +164,7 @@ export default function TestFileEditor({
     (scope: string, pathPrefix: PathSegment[]): void => {
       setTestRunState((prev) => {
         const entry = prev[scope];
-        if (!entry?.results || entry.results.kind !== 'Ok') return prev;
+        if (entry?.results?.kind !== 'Ok') return prev;
         const filtered: Diff[] = entry.results.value.diffs.filter(
           (d) => !isPathPrefix(pathPrefix, d.path)
         );

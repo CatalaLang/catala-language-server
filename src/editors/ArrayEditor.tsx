@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useState } from 'react';
 import { getDefaultValue } from '../defaults';
@@ -156,7 +157,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
         ...(newElementValue.attrs ?? []), // Preserve existing attrs if any
         {
           kind: 'Uid',
-          value: String(self.crypto.randomUUID()),
+          value: String(crypto.randomUUID()),
         },
       ],
     };
