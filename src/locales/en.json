@@ -43,5 +43,6 @@
   "diff.actualValue": "Actual value",
   "diff.addToExpected": "Add to expected",
   "diff.replaceExpected": "Replace expected with computed value",
-  "diff.removeFromExpected": "Remove from expected"
+  "diff.removeFromExpected": "Remove from expected",
+  "testEditor.diffsStale": "Diffs are out of date. Re-run to refresh."
 }

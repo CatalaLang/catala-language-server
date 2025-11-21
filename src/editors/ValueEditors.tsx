@@ -1,6 +1,7 @@
 // Editors for a single value type (grouped with a factory function)
 
 import { type ReactElement, useState, useEffect } from 'react';
+import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type {
   Option,
@@ -41,6 +42,7 @@ type Props = {
   diffs: Diff[];
   editable?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 export function isCollapsible(typ: Typ): boolean {
@@ -101,6 +103,7 @@ export default function ValueEditor(props: Props): ReactElement {
           diffs={props.diffs}
           editable={editable}
           onDiffResolved={props.onDiffResolved}
+          onInvalidateDiffs={props.onInvalidateDiffs}
         />
       );
       break;
@@ -151,6 +154,7 @@ export default function ValueEditor(props: Props): ReactElement {
           diffs={props.diffs}
           editable={editable}
           onDiffResolved={props.onDiffResolved}
+          onInvalidateDiffs={props.onInvalidateDiffs}
         />
       );
       break;
@@ -165,6 +169,7 @@ export default function ValueEditor(props: Props): ReactElement {
           diffs={props.diffs}
           editable={editable}
           onDiffResolved={props.onDiffResolved}
+          onInvalidateDiffs={props.onInvalidateDiffs}
         />
       );
       break;
@@ -238,17 +243,19 @@ function IntEditor(props: IntEditorProps): ReactElement {
   };
 
   return (
-    <input
-      type="text"
-      pattern={INT_PATTERN.source}
-      required
-      value={displayValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      className={`value-editor rat-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
-      placeholder="0"
-      disabled={props.editable === false}
-    />
+    <div className="value-editor">
+      <input
+        type="text"
+        pattern={INT_PATTERN.source}
+        required
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={`int-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
+        placeholder="0"
+        disabled={props.editable === false}
+      />
+    </div>
   );
 }
 
@@ -312,13 +319,14 @@ function DateEditor(props: DateEditorProps): ReactElement {
   // TODO: Add onBlur validation?
 
   return (
-    <input
-      className="value-editor"
-      type="date"
-      value={internalValue}
-      onChange={handleChange}
-      disabled={props.editable === false}
-    />
+    <div className="value-editor">
+      <input
+        type="date"
+        value={internalValue}
+        onChange={handleChange}
+        disabled={props.editable === false}
+      />
+    </div>
   );
 }
 
@@ -389,17 +397,19 @@ function RatEditor(props: RatEditorProps): ReactElement {
   };
 
   return (
-    <input
-      type="text"
-      pattern={RAT_PATTERN.source}
-      required
-      value={displayValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      className={`value-editor rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
-      placeholder="0.0"
-      disabled={props.editable === false}
-    />
+    <div className="value-editor">
+      <input
+        type="text"
+        pattern={RAT_PATTERN.source}
+        required
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={`rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
+        placeholder="0.0"
+        disabled={props.editable === false}
+      />
+    </div>
   );
 }
 
@@ -421,19 +431,20 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   };
 
   return (
-    <select
-      className="value-editor"
-      value={currentValue.toString()}
-      onChange={handleChange}
-      disabled={props.editable === false}
-    >
-      <option value="false">
-        <FormattedMessage id="false" />
-      </option>
-      <option value="true">
-        <FormattedMessage id="true" />
-      </option>
-    </select>
+    <div className="value-editor">
+      <select
+        value={currentValue.toString()}
+        onChange={handleChange}
+        disabled={props.editable === false}
+      >
+        <option value="false">
+          <FormattedMessage id="false" />
+        </option>
+        <option value="true">
+          <FormattedMessage id="true" />
+        </option>
+      </select>
+    </div>
   );
 }
 
@@ -620,6 +631,7 @@ type StructEditorProps = {
   diffs: Diff[];
   editable?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 function StructEditor(props: StructEditorProps): ReactElement {
@@ -655,6 +667,10 @@ function StructEditor(props: StructEditorProps): ReactElement {
   // Create editor items for CompositeEditor
   const editorItems = Array.from(fields.entries()).map(
     ([fieldName, fieldType]) => {
+      const childPath: PathSegment[] = [
+        ...currentPath,
+        { kind: 'StructField', value: fieldName },
+      ];
       return {
         key: fieldName,
         label: fieldName,
@@ -673,13 +689,11 @@ function StructEditor(props: StructEditorProps): ReactElement {
               }
             }}
             editorHook={editorHook}
-            currentPath={[
-              ...currentPath,
-              { kind: 'StructField', value: fieldName },
-            ]}
+            currentPath={childPath}
             diffs={props.diffs}
             editable={editable}
             onDiffResolved={props.onDiffResolved}
+            onInvalidateDiffs={props.onInvalidateDiffs}
           />
         ),
       };
@@ -702,6 +716,7 @@ type EnumEditorProps = {
   diffs: Diff[];
   editable?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 function EnumEditor(props: EnumEditorProps): ReactElement {
@@ -747,7 +762,6 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
   // Note: do not early-return here; we render the expected editor and, when applicable,
   // an "actual preview" block alongside it further below.
-
   const handleCtorChange = (
     event: React.ChangeEvent<HTMLSelectElement>
   ): void => {
@@ -809,13 +823,12 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
             }}
             onValueChange={handlePayloadChange}
             editorHook={editorHook}
-            currentPath={[
-              ...currentPath,
-              { kind: 'EnumPayload', value: currentCtor },
-            ]}
+            // Do NOT add EnumPayload here: server diff paths are transparent over enums
+            currentPath={currentPath}
             diffs={props.diffs}
             editable={editable}
             onDiffResolved={props.onDiffResolved}
+            onInvalidateDiffs={props.onInvalidateDiffs}
           />
         </div>
       )}

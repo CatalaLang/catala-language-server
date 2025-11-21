@@ -1,13 +1,40 @@
 import type { Diff, PathSegment } from '../generated/test_case';
 
 /**
- * Compare two paths for exact equality.
+ * Compare two paths for exact equality using structural comparison
+ * and NFC-normalized string values to avoid false negatives with
+ * accented identifiers from different sources.
  */
+function _normalizeStr(s: string): string {
+  return s.normalize('NFC');
+}
+
+function _sameSegment(a: PathSegment, b: PathSegment): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case 'StructField':
+    case 'EnumPayload':
+      return (
+        _normalizeStr((a as any).value) === _normalizeStr((b as any).value)
+      );
+    case 'ListIndex':
+    case 'TupleIndex':
+      return (a as any).value === (b as any).value;
+    default:
+      return false;
+  }
+}
+
+export function pathToString(p: PathSegment[]): string {
+  return p.map((s) => `${s.kind}:${String((s as any).value)}`).join(' / ');
+}
+
 export function pathEquals(a: PathSegment[], b: PathSegment[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((seg, i) => JSON.stringify(seg) === JSON.stringify(b[i]))
-  );
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!_sameSegment(a[i], b[i])) return false;
+  }
+  return true;
 }
 
 /**
@@ -22,15 +49,17 @@ export function findMatchingDiff(
 
 /**
  * Returns true if 'prefix' is a prefix of 'full'.
+ * Uses structural comparison with NFC-normalized strings.
  */
 export function isPathPrefix(
   prefix: PathSegment[],
   full: PathSegment[]
 ): boolean {
   if (prefix.length > full.length) return false;
-  return prefix.every(
-    (seg, i) => JSON.stringify(seg) === JSON.stringify(full[i])
-  );
+  for (let i = 0; i < prefix.length; i++) {
+    if (!_sameSegment(prefix[i], full[i])) return false;
+  }
+  return true;
 }
 
 /**

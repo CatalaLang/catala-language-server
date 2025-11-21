@@ -27,10 +27,25 @@
 }
 
 /* Value editor container */
-.value-editor {
+.value-editor,
+.assertion-editor {
   text-align: left;
   vertical-align: top;
   max-width: 250px;
+}
+
+/* Make action buttons used in assertion editor align with inputs */
+.assertion-editor .button-action-dvp {
+  width: 100%;
+  /* keep original vertical padding and right padding; align left padding with inputs */
+  padding: var(--spacing8) var(--spacing12) var(--spacing8) var(--spacing16);
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.assertion-editor .button-action-dvp:focus {
+  outline: none;
+  border-color: var(--tab-active-border);
 }
 
 .enum-editor {
@@ -98,27 +113,4 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-}
-
-.assertion-delete {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--vscode-editor-foreground);
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.7;
-  transition: opacity 0.2s ease-in-out;
-  flex-shrink: 0;
-}
-
-.assertion-delete:hover {
-  opacity: 1;
-  background-color: var(--vscode-toolbar-hoverBackground);
-}
-
-.assertion-delete .codicon {
-  font-size: 14px;
 }

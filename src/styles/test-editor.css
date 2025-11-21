@@ -214,9 +214,9 @@
 
 .test-title-input {
   font: inherit;
-  background-color: var(--control-background);
-  color: var(--control-text);
-  border: 1px solid var(--control-border);
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid;
   border-radius: var(--spacing4);
   padding: var(--spacing8) var(--spacing12);
   width: 100%;
@@ -234,5 +234,5 @@
 }
 
 .test-title-input:hover {
-  border-color: var(--card-border-light);
+  border-color: inherit;
 }

@@ -107,3 +107,22 @@
 .diff-action-accept {
   margin-right: 8px;
 }
+
+/* Assertion row label and delete button alignment */
+.test-output-row .test-output-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing8);
+}
+
+.assertion-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--vscode-descriptionForeground, rgba(128, 128, 128, 0.9));
+}
+
+.assertion-delete-btn:hover {
+  color: var(--vscode-foreground, #fff);
+}

@@ -1,5 +1,6 @@
 import { type ReactElement } from 'react';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
+import { confirm } from './messaging/confirm';
 import type { Test, TestIo, Diff, PathSegment } from './generated/test_case';
 import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from './defaults';
@@ -9,6 +10,7 @@ type Props = {
   onTestChange(newValue: Test): void;
   diffs?: Diff[];
   onDiffResolved?: (path: PathSegment[]) => void;
+  onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
 /* An editor for test outputs. Outputs are named and typed, and
@@ -33,7 +35,9 @@ export default function TestOutputsEditor({
   onTestChange: onTestAssertsChange,
   diffs = [],
   onDiffResolved,
+  onInvalidateDiffs,
 }: Props): ReactElement {
+  const intl = useIntl();
   const { test_outputs, tested_scope } = test;
 
   function onAssertAdd(outputName: string): void {
@@ -69,33 +73,49 @@ export default function TestOutputsEditor({
   return (
     <div className="test-outputs-editor">
       <div className="test-outputs data-card">
-        {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {
+        {Array.from(tested_scope.outputs, ([outputName]) => {
           const outputData = test_outputs.get(outputName);
+
+          // NOTE: Diffs are absolute from the test outputs root; keep absolute (no slicing).
 
           return (
             <div key={outputName} className="test-output-row">
-              <label>{outputName}</label>
+              <div className="test-output-label">
+                <label>{outputName}</label>
+                {outputData?.value && (
+                  <button
+                    className="assertion-delete-btn"
+                    title={intl.formatMessage({ id: 'assertion.delete' })}
+                    onClick={async () => {
+                      if (!(await confirm('DeleteAssertion'))) return;
+                      onAssertDelete(outputName);
+                    }}
+                  >
+                    <span className="codicon codicon-trash"></span>
+                  </button>
+                )}
+              </div>
               {outputData?.value ? (
                 <AssertionValueEditor
                   testIO={outputData}
                   onValueChange={(newValue) =>
                     onAssertValueChange(outputName, newValue)
                   }
-                  onAssertionDeletion={() => onAssertDelete(outputName)}
                   diffs={diffs}
-                  currentPath={[
-                    { kind: 'StructField' as const, value: outputName },
-                  ]}
+                  currentPath={[{ kind: 'StructField', value: outputName }]}
                   onDiffResolved={onDiffResolved}
+                  onInvalidateDiffs={onInvalidateDiffs}
                 />
               ) : (
-                <button
-                  className="button-action-dvp"
-                  onClick={() => onAssertAdd(outputName)}
-                >
-                  <span className="codicon codicon-add"></span>
-                  <FormattedMessage id="testOutputs.addExpectedValue" />
-                </button>
+                <div className="assertion-editor">
+                  <button
+                    className="button-action-dvp"
+                    onClick={() => onAssertAdd(outputName)}
+                  >
+                    <span className="codicon codicon-add"></span>
+                    <FormattedMessage id="testOutputs.addExpectedValue" />
+                  </button>
+                </div>
               )}
             </div>
           );
