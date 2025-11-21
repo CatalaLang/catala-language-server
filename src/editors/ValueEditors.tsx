@@ -1,6 +1,7 @@
 // Editors for a single value type (grouped with a factory function)
 
 import { type ReactElement, useState, useEffect } from 'react';
+import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type {
   Option,

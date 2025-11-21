@@ -71,7 +71,7 @@ export default function TestOutputsEditor({
   return (
     <div className="test-outputs-editor">
       <div className="test-outputs data-card">
-        {Array.from(tested_scope.outputs, ([outputName, _outputType]) => {
+        {Array.from(tested_scope.outputs, ([outputName]) => {
           const outputData = test_outputs.get(outputName);
 
           // NOTE: Diffs are absolute from the test outputs root; keep absolute (no slicing).

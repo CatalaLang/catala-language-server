@@ -32,9 +32,8 @@ function createDiffHighlightHook(diffs: Diff[]) {
     // preview (read-only) instead of the atomic banner here.
 
     if (
-      matchingDiff &&
-      matchingDiff.actual.value.kind === 'Enum' &&
-      matchingDiff.expected.value.kind === 'Enum'
+      matchingDiff?.actual.value.kind === 'Enum' &&
+      matchingDiff?.expected.value.kind === 'Enum'
     ) {
       const [, [, payload]] = matchingDiff.actual.value.value;
       const actualPayload = payload?.value;
