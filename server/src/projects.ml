@@ -178,6 +178,25 @@ module Project_graph = struct
   let is_an_included_file vertex g =
     let pred_edges = G.pred_e g vertex in
     List.exists (function _, Including, _ -> true | _ -> false) pred_edges
+
+  let including_files vertex g =
+    let rec loop v =
+      let pred_edges = G.pred_e g v in
+      let including_documents =
+        List.filter_map
+          (function r, Including, _ -> Some r | _ -> None)
+          pred_edges
+      in
+      if including_documents = [] then [v]
+      else List.concat_map loop including_documents
+    in
+    loop vertex
+
+  let included_files vertex g =
+    let succ_edges = G.succ_e g vertex in
+    List.filter_map
+      (function _, Including, inc -> Some inc | _ -> None)
+      succ_edges
 end
 
 type project = {
@@ -304,10 +323,10 @@ let find_module_candidate
 let retrieve_project_files
     ~on_error
     (clerk_config : Clerk_config.t)
-    clerk_root_dir =
+    ~project_dir =
   let open Clerk_scan in
   Log.info (fun m -> m "building inclusion graph");
-  let tree = tree clerk_root_dir in
+  let tree = tree project_dir in
   let known_items : (string, item) Hashtbl.t = Hashtbl.create 10 in
   let known_modules =
     Seq.fold_left
@@ -414,7 +433,7 @@ let project_of_folder ~on_error project_dir =
     Log.warn (fun m ->
         m "no clerk config file found, assuming default configuration");
     let project_files, known_modules =
-      retrieve_project_files ~on_error Clerk_config.default_config project_dir
+      retrieve_project_files ~on_error Clerk_config.default_config ~project_dir
     in
     let project_kind = No_clerk in
     let project_graph = Project_graph.build_graph project_files in
@@ -422,12 +441,36 @@ let project_of_folder ~on_error project_dir =
   | Some (clerk_config, clerk_root_dir) ->
     Log.debug (fun m -> m "clerk file found in '%s' directory" clerk_root_dir);
     let project_kind = Clerk { clerk_root_dir; clerk_config } in
-    (* We also consider Catala files that may be upper in the hierarchy but
-       under the discovered "clerk.toml" scope *)
     let project_files, known_modules =
-      retrieve_project_files ~on_error clerk_config clerk_root_dir
+      retrieve_project_files ~on_error clerk_config ~project_dir
     in
     let project_graph = Project_graph.build_graph project_files in
+
+    (* let module M = Graph.Graphviz.Dot (struct *)
+    (*   include Project_graph.G *)
+
+    (*   let edge_attributes (_, e, _) = *)
+    (*     [ *)
+    (*       `Label *)
+    (*         (match e with *)
+    (*         | Project_graph.Used_by -> "used by" *)
+    (*         | Including -> "including"); *)
+    (*       `Color 4711; *)
+    (*     ] *)
+
+    (*   let default_edge_attributes _ = [] *)
+    (*   let get_subgraph _ = None *)
+    (*   let vertex_attributes _ = [`Shape `Box] *)
+
+    (*   let vertex_name (v : Doc_id.t) = *)
+    (*     File.(basename (v :> string) |> fun f -> f -.- "") *)
+
+    (*   let default_vertex_attributes _ = [] *)
+    (*   let graph_attributes _ = [] *)
+    (* end) in *)
+    (* let f = Filename.temp_file "graph" "" in *)
+    (* let oc = open_out f in *)
+    (* M.output_graph oc project_graph; *)
     { project_dir; project_kind; project_files; project_graph; known_modules }
 
 let project_of_workspace_folder ~on_error workspace_folder =
@@ -654,6 +697,12 @@ let update_project_file
 
 let is_an_included_file doc_id project =
   Project_graph.is_an_included_file doc_id project.project_graph
+
+let including_files doc_id project =
+  Project_graph.including_files doc_id project.project_graph
+
+let included_files doc_id project =
+  Project_graph.included_files doc_id project.project_graph
 
 let remove_project_file ~on_error doc_id project projects =
   Log.debug (fun m ->

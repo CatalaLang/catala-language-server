@@ -19,6 +19,8 @@ open Linol_lwt
 open Catala_utils
 open Server_types
 
+let ( let*? ) = Option.bind
+let ( let*?! ) (x, default) f = match x with None -> default | Some x -> f x
 let never_ending = fst (Lwt.wait ())
 
 let pp_opt pp fmt =
@@ -39,18 +41,6 @@ let is_included (p : Pos.t) p' =
   && Pos.get_end_line p <= Pos.get_end_line p'
   && Pos.get_start_column p >= Pos.get_start_column p'
   && Pos.get_end_column p <= Pos.get_end_column p'
-
-module RangeSet = Stdlib.Set.Make (struct
-  type t = Range.t
-
-  let compare = compare
-end)
-
-module RangeMap = Stdlib.Map.Make (struct
-  type t = Range.t
-
-  let compare = compare
-end)
 
 let dummy_range =
   Range.create
@@ -166,101 +156,6 @@ let lookup_catala_enable_project_scan ~(notify_back : Jsonrpc2.notify_back) :
           Lwt.return_unit)
   in
   r
-
-let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
-    TextEdit.t list option Lwt.t =
-  let open Lwt.Syntax in
-  let doc_path = (doc_id :> File.t) in
-  Lwt.catch
-    (fun () ->
-      let language =
-        match String.sub doc_path (String.length doc_path - 2) 2 with
-        | "fr" -> "catala_fr"
-        | "pl" -> "catala_pl"
-        | "en" | _ | (exception _) -> "catala_en"
-      in
-      let* catala_format_path = lookup_catala_format_config_path notify_back in
-      begin
-        let path = Option.value ~default:"" catala_format_path in
-        Lwt_process.with_process_full ~timeout:10.
-          ( path,
-            [|
-              "catala-format";
-              "--language";
-              language;
-              "--buffer-name";
-              (doc_id :> string);
-            |] )
-      end
-      @@ fun proc ->
-      let read ic =
-        Lwt.finalize (fun () -> Lwt_io.read ic) (fun () -> Lwt_io.close ic)
-      in
-      let writer =
-        Lwt.finalize
-          (fun () -> write_string proc#stdin doc_content)
-          (fun () -> Lwt_io.close proc#stdin)
-      in
-      let stdout_reader = read proc#stdout in
-      let stderr_reader = read proc#stderr in
-      let* r = proc#status in
-      match r with
-      | Unix.WSIGNALED _ -> Lwt.return_none
-      | Unix.WSTOPPED _ -> Lwt.return_none
-      | Unix.WEXITED 0 ->
-        let* () = writer in
-        (* Everything went fine *)
-        Log.info (fun m -> m "document formatting successful");
-        let* formatted_content = stdout_reader in
-        if formatted_content = "" then (
-          (* Don't do anything if the stdout is empty, it's fishy.. *)
-          Log.info (fun m ->
-              m
-                "no formatted output: the document is either empty or \
-                 something went wrong");
-          Lwt.return_none)
-        else
-          let eof_range =
-            let l = String.split_on_char '\n' doc_content in
-            let l = List.rev l in
-            let len = List.length l in
-            Position.create ~character:(String.length (List.hd l)) ~line:len
-          in
-          let range =
-            Range.create ~start:{ line = 0; character = 0 } ~end_:eof_range
-          in
-          Lwt.return_some [TextEdit.create ~newText:formatted_content ~range]
-      | Unix.WEXITED n ->
-        Log.info (fun m -> m "failed to format document '%s'" doc_path);
-        let* error_output = stderr_reader in
-        if error_output = "" then
-          let* () =
-            Format.kasprintf
-              (send_notification ~type_:MessageType.Warning ~notify_back)
-              "Code formatting failed: catala-format exited with error code %d"
-              n
-          in
-          Lwt.return_none
-        else
-          let* () =
-            send_notification ~type_:MessageType.Warning ~notify_back
-              error_output
-          in
-          Lwt.return_none)
-    (fun _ -> Lwt.return_none)
-
-let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) =
-  Lwt.catch
-    (fun () -> try_format_document ~notify_back ~doc_content doc_id)
-    (fun exn ->
-      let open Lwt.Syntax in
-      let* () =
-        Format.kasprintf
-          (send_notification ~type_:MessageType.Warning ~notify_back)
-          "Code formatting failed.\nUncaught exception:\n%s"
-          (Printexc.to_string exn)
-      in
-      Lwt.return_none)
 
 let join_paths ?(abs = true) dir path =
   let open File in
@@ -404,3 +299,15 @@ let list_testable_scopes file : Shared_ast.ScopeName.t list =
     | _ -> acc
   in
   List.fold_left loop [] prg.program_items
+
+let get_timestamp ?(no_brackets = false) () =
+  let open Ptime in
+  let now = Ptime_clock.now () in
+  let _, ((hh, mm, ss), (_tz_offset_s : tz_offset_s)) =
+    to_date_time ~tz_offset_s:0 now
+  in
+  let cs =
+    Int64.div (Ptime.(frac_s now |> Span.to_d_ps) |> snd) 1_000_000_0000L
+  in
+  if no_brackets then Format.asprintf "%02d:%02d:%02d.%02Ld" hh mm ss cs
+  else Format.asprintf "[%02d:%02d:%02d.%02Ld]" hh mm ss cs

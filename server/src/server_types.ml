@@ -15,6 +15,7 @@
    the License. *)
 
 open Catala_utils
+open Linol_lwt
 open Linol_lsp
 
 module Doc_id = struct
@@ -35,3 +36,35 @@ module Doc_id = struct
 
   let of_file = Fun.id
 end
+
+module Range = struct
+  include Range
+
+  module Set = Stdlib.Set.Make (struct
+    type nonrec t = t
+
+    let compare = compare
+  end)
+
+  module Map = Map.Make (struct
+    type nonrec t = t
+
+    let compare = compare
+
+    let format
+        fmt
+        {
+          Range.start = { line; character };
+          end_ = { line = line'; character = character' };
+        } =
+      Format.fprintf fmt "%d:%d <-> %d:%d" line character line' character'
+  end)
+end
+
+type diagnostic = {
+  range : Range.t;
+  lsp_error : Catala_utils.Message.lsp_error option;
+  diag : Linol_lwt.Diagnostic.t;
+}
+
+type diagnostics = diagnostic Range.Map.t Doc_id.Map.t
