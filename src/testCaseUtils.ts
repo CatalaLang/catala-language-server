@@ -6,6 +6,7 @@ import type {
   RuntimeValue,
 } from './generated/test_case';
 import { isAtomicRaw } from './diff/diff';
+import { getLocalizedMessages } from './i18n/messages';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -69,8 +70,12 @@ export function omitPositionInfo(testOutputs: TestOutputs): TestOutputs {
 export function renderAtomicValue(value: RuntimeValue): string {
   const raw = value.value;
   switch (raw.kind) {
-    case 'Bool':
-      return raw.value ? 'true' : 'false';
+    case 'Bool': {
+      const lang = typeof navigator !== 'undefined' ? navigator.language : 'en';
+      const msgs = getLocalizedMessages(lang);
+      const key = raw.value ? 'true' : 'false';
+      return msgs[key];
+    }
     case 'Integer':
       return raw.value.toString();
     case 'Decimal':
