@@ -25,9 +25,6 @@
   font-size: 12px;
   padding: 2px 4px;
   margin-bottom: 4px;
-}
-
-.diff-actual {
   color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
 }
 
