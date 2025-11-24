@@ -17,6 +17,8 @@ export const messages = {
     deleteArrayElementConfirmation: 'Delete this element?',
     deleteAssertionConfirmation: 'Delete this assertion?',
     deleteButton: 'Delete',
+    true: 'true',
+    false: 'false',
   },
   fr: {
     resetOutputsConfirmation:
@@ -32,6 +34,8 @@ export const messages = {
     deleteArrayElementConfirmation: 'Supprimer cet élément ?',
     deleteAssertionConfirmation: 'Supprimer cette assertion ?',
     deleteButton: 'Supprimer',
+    true: 'vrai',
+    false: 'faux',
   },
 };
 
