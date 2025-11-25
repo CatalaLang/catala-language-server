@@ -13,7 +13,13 @@ import type {
 } from '../generated/test_case';
 import ValueEditor, { createRuntimeValue } from './ValueEditors';
 import { assertUnreachable } from '../util';
-import { isPathPrefix } from '../diff/highlight';
+import {
+  computeActualOnlyIndices,
+  indicesToRender as computeIndicesToRender,
+  findChildIndexDiff,
+  canAcceptAppend,
+  canRemoveLast,
+} from '../diff/arrayPresence';
 import { confirm } from '../messaging/confirm';
 
 /**
@@ -255,32 +261,14 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
         className={`array-items ${isVertical ? 'array-items-nested' : 'array-items-non-nested'}`}
       >
         {((): ReactElement[] => {
-          const baseIndices = Array.from(
-            { length: currentArray.length },
-            (_, i) => i
+          const phantomAdds = computeActualOnlyIndices(
+            props.diffs ?? [],
+            currentPath
           );
-          const extraIndices = (props.diffs ?? [])
-            .filter(
-              (d) =>
-                isPathPrefix(currentPath, d.path) &&
-                d.path.length === currentPath.length + 1 &&
-                d.path[currentPath.length].kind === 'ListIndex' &&
-                // Only create phantom indices when expected is Empty and actual has a value
-                isEmptyValue(d.expected) &&
-                !isEmptyValue(d.actual)
-            )
-            .map(
-              (d) =>
-                (
-                  d.path[currentPath.length] as Extract<
-                    PathSegment,
-                    { kind: 'ListIndex' }
-                  >
-                ).value
-            );
-          const indicesToRender = Array.from(
-            new Set([...baseIndices, ...extraIndices])
-          ).sort((a, b) => a - b);
+          const indicesToRender = computeIndicesToRender(
+            currentArray.length,
+            phantomAdds
+          );
 
           return indicesToRender.map((index) => {
             const item = currentArray[index];
@@ -307,17 +295,16 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
               value: index,
             };
             const childPath: PathSegment[] = [...currentPath, childIndexSeg];
-            const indexDiff = (props.diffs ?? []).find(
-              (d) =>
-                isPathPrefix(currentPath, d.path) &&
-                d.path.length === currentPath.length + 1 &&
-                d.path[currentPath.length].kind === 'ListIndex' &&
-                d.path[currentPath.length].value === index
+            const indexDiff = findChildIndexDiff(
+              props.diffs ?? [],
+              currentPath,
+              index
             );
-            // Append-only accept: can accept phantom only if it would append (no reindexing of siblings)
-            const canAccept = isPhantom && index === currentArray.length;
-            // Delete-last only for resolving expected>actual at this index
-            const canRemove = index === currentArray.length - 1;
+            // Append-only accept (path-stable)
+            const canAccept =
+              isPhantom && canAcceptAppend(currentArray.length, index);
+            // Delete-last only (path-stable)
+            const canRemove = canRemoveLast(currentArray.length, index);
 
             return (
               <div
