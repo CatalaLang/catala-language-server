@@ -141,7 +141,8 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   };
 
   // Invalidate diffs under this array after any structural edit.
-  // Low-complexity strategy: wipe diffs (for this array subtree) and require manual re-run.
+  // Policy: arrays are treated as a single assertion; path-unstable edits (insert/remove/move in the middle) invalidate this array subtree and require a re-run.
+  // Fast-path for path-stable cases (append/delete-last) is handled inline in the corresponding click handlers below.
   const invalidateArrayDiffs = (): void => {
     props.onInvalidateDiffs?.(currentPath);
   };
@@ -313,6 +314,10 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                 d.path[currentPath.length].kind === 'ListIndex' &&
                 d.path[currentPath.length].value === index
             );
+            // Append-only accept: can accept phantom only if it would append (no reindexing of siblings)
+            const canAccept = isPhantom && index === currentArray.length;
+            // Delete-last only for resolving expected>actual at this index
+            const canRemove = index === currentArray.length - 1;
 
             return (
               <div
@@ -348,25 +353,39 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                             defaultMessage="Actual value"
                           />
                         </div>
-                        <button
-                          className="array-phantom-action array-phantom-add"
-                          onClick={() => {
-                            if (editable === false || !indexDiff) return;
-                            const elementToInsert =
-                              indexDiff.actual as RuntimeValue;
-                            const newArray = [...currentArray];
-                            newArray.splice(index, 0, elementToInsert);
-                            updateParent(newArray);
-                            invalidateArrayDiffs();
-                          }}
-                          disabled={editable === false}
-                        >
-                          <span className="codicon codicon-check"></span>
-                          <FormattedMessage
-                            id="diff.addToExpected"
-                            defaultMessage="Add to expected"
-                          />
-                        </button>
+                        {canAccept && (
+                          <button
+                            className="array-phantom-action array-phantom-add"
+                            onClick={() => {
+                              if (
+                                editable === false ||
+                                !indexDiff ||
+                                !canAccept
+                              )
+                                return;
+                              const elementToInsert =
+                                indexDiff.actual as RuntimeValue;
+                              const newArray = [...currentArray];
+                              const isAppend = index === currentArray.length; // path-stable fast-path
+                              newArray.splice(index, 0, elementToInsert);
+                              updateParent(newArray);
+                              if (isAppend) {
+                                // path-stable: resolve only this diff
+                                props.onDiffResolved?.(childPath);
+                              } else {
+                                // path-unstable: indices shift, invalidate subtree
+                                invalidateArrayDiffs();
+                              }
+                            }}
+                            disabled={editable === false}
+                          >
+                            <span className="codicon codicon-check"></span>
+                            <FormattedMessage
+                              id="diff.addToExpected"
+                              defaultMessage="Add to expected"
+                            />
+                          </button>
+                        )}
                         <div className="phantom-actual-content">
                           <ValueEditor
                             testIO={{
@@ -396,26 +415,36 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                                 defaultMessage="Empty"
                               />
                             </div>
-                            <button
-                              className="array-phantom-action array-phantom-remove"
-                              onClick={async () => {
-                                if (editable === false) return;
-                                const confirmed =
-                                  await confirm('DeleteArrayElement');
-                                if (!confirmed) return;
-                                const newArray = [...currentArray];
-                                newArray.splice(index, 1);
-                                updateParent(newArray);
-                                invalidateArrayDiffs();
-                              }}
-                              disabled={editable === false}
-                            >
-                              <span className="codicon codicon-trash"></span>
-                              <FormattedMessage
-                                id="diff.removeFromExpected"
-                                defaultMessage="Remove from expected"
-                              />
-                            </button>
+                            {canRemove && (
+                              <button
+                                className="array-phantom-action array-phantom-remove"
+                                onClick={async () => {
+                                  if (editable === false || !canRemove) return;
+                                  const confirmed =
+                                    await confirm('DeleteArrayElement');
+                                  if (!confirmed) return;
+                                  const newArray = [...currentArray];
+                                  const isDeleteLast =
+                                    index === currentArray.length - 1; // path-stable fast-path
+                                  newArray.splice(index, 1);
+                                  updateParent(newArray);
+                                  if (isDeleteLast) {
+                                    // path-stable: resolve only this diff
+                                    props.onDiffResolved?.(childPath);
+                                  } else {
+                                    // path-unstable: indices shift, invalidate subtree
+                                    invalidateArrayDiffs();
+                                  }
+                                }}
+                                disabled={editable === false}
+                              >
+                                <span className="codicon codicon-trash"></span>
+                                <FormattedMessage
+                                  id="diff.removeFromExpected"
+                                  defaultMessage="Remove from expected"
+                                />
+                              </button>
+                            )}
                           </>
                         )}
                       {!isPhantom && (

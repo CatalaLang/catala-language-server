@@ -49,6 +49,11 @@ export function isCollapsible(typ: Typ): boolean {
   return typ.kind === 'TStruct' || typ.kind === 'TArray';
 }
 
+/*
+  Diff policy note:
+  - Leaf editors do not auto-accept actual values; acceptance is explicit (e.g., Enum preview button).
+  - Arrays handle path-unstable edits (insert/remove/move) in ArrayEditor, asserting arrays as a whole.
+*/
 export default function ValueEditor(props: Props): ReactElement {
   const {
     testIO,
