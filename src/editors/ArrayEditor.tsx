@@ -340,31 +340,32 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                             defaultMessage="Actual value"
                           />
                         </div>
-                        {canAccept && (
+                        {editable && canAccept && (
                           <button
                             className="array-phantom-action array-phantom-add"
                             onClick={() => {
-                              if (
-                                editable === false ||
-                                !indexDiff ||
-                                !canAccept
-                              )
+                              // Should not be rendered unless actionable; extra safety
+                              if (!indexDiff) {
+                                console.error(
+                                  'Unexpected: missing diff for append accept'
+                                );
                                 return;
+                              }
+                              const isAppend = index === currentArray.length;
+                              if (!isAppend) {
+                                console.error(
+                                  'Unexpected: non-append accept would be path-unstable'
+                                );
+                                return;
+                              }
                               const elementToInsert =
                                 indexDiff.actual as RuntimeValue;
                               const newArray = [...currentArray];
-                              const isAppend = index === currentArray.length; // path-stable fast-path
                               newArray.splice(index, 0, elementToInsert);
                               updateParent(newArray);
-                              if (isAppend) {
-                                // path-stable: resolve only this diff
-                                props.onDiffResolved?.(childPath);
-                              } else {
-                                // path-unstable: indices shift, invalidate subtree
-                                invalidateArrayDiffs();
-                              }
+                              // append-only => path-stable
+                              props.onDiffResolved?.(childPath);
                             }}
-                            disabled={editable === false}
                           >
                             <span className="codicon codicon-check"></span>
                             <FormattedMessage
@@ -402,28 +403,27 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
                                 defaultMessage="Empty"
                               />
                             </div>
-                            {canRemove && (
+                            {editable && canRemove && (
                               <button
                                 className="array-phantom-action array-phantom-remove"
                                 onClick={async () => {
-                                  if (editable === false || !canRemove) return;
                                   const confirmed =
                                     await confirm('DeleteArrayElement');
                                   if (!confirmed) return;
-                                  const newArray = [...currentArray];
                                   const isDeleteLast =
-                                    index === currentArray.length - 1; // path-stable fast-path
+                                    index === currentArray.length - 1;
+                                  if (!isDeleteLast) {
+                                    console.error(
+                                      'Unexpected: non-last removal would be path-unstable'
+                                    );
+                                    return;
+                                  }
+                                  const newArray = [...currentArray];
                                   newArray.splice(index, 1);
                                   updateParent(newArray);
-                                  if (isDeleteLast) {
-                                    // path-stable: resolve only this diff
-                                    props.onDiffResolved?.(childPath);
-                                  } else {
-                                    // path-unstable: indices shift, invalidate subtree
-                                    invalidateArrayDiffs();
-                                  }
+                                  // delete-last => path-stable
+                                  props.onDiffResolved?.(childPath);
                                 }}
-                                disabled={editable === false}
                               >
                                 <span className="codicon codicon-trash"></span>
                                 <FormattedMessage
