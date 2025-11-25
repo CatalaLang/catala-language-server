@@ -4,11 +4,7 @@
  * - expected-only: present in expected, absent in actual.
  * - Append-only accept and delete-last are path-stable; middle ops invalidate.
  */
-import type {
-  Diff,
-  PathSegment,
-  RuntimeValue,
-} from '../generated/test_case';
+import type { Diff, PathSegment, RuntimeValue } from '../generated/test_case';
 import { isPathPrefix } from './highlight';
 
 export function isEmptyValue(rv: RuntimeValue): boolean {
@@ -60,7 +56,9 @@ export function indicesToRender(
   actualOnlyIndices: number[]
 ): number[] {
   const base = Array.from({ length: arrayLength }, (_, i) => i);
-  return Array.from(new Set([...base, ...actualOnlyIndices])).sort((a, b) => a - b);
+  return Array.from(new Set([...base, ...actualOnlyIndices])).sort(
+    (a, b) => a - b
+  );
 }
 
 export function canAcceptAppend(arrayLength: number, index: number): boolean {
