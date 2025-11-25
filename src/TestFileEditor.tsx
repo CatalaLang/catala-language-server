@@ -135,6 +135,7 @@ export default function TestFileEditor({
 
   // NOTE: Paths passed to onDiffResolved MUST be ABSOLUTE from the test outputs root.
   // Example: [{ kind: 'StructField', value: '<outputName>' }, { kind: 'ListIndex', value: 0 }, ...]
+  // Diff policy: path-stable single-diff removal (exact path match). See ArrayEditor for path-unstable cases.
   const onDiffResolved = useCallback(
     (scope: string, path: PathSegment[]): void => {
       setTestRunState((prev) => {
@@ -160,6 +161,7 @@ export default function TestFileEditor({
   );
 
   // Invalidate all diffs under a given path prefix (array subtree), mark stale.
+  // Diff policy: path-unstable array edits clear diffs under prefix and mark results stale; requires a rerun.
   const onInvalidateDiffs = useCallback(
     (scope: string, pathPrefix: PathSegment[]): void => {
       setTestRunState((prev) => {
