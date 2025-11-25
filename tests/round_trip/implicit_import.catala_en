@@ -1,0 +1,13 @@
+> Module Implicit_import
+
+```catala-metadata
+declaration scope Example:
+  input inp content Period.Period
+  output outp content boolean
+
+```
+
+```catala
+scope Example:
+  definition outp equals (Period.duration of inp) > 42 day
+```

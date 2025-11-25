@@ -46,6 +46,7 @@ jobs:
           opam exec -- dune runtest
           npm run webview:test
           xvfb-run -a npm run test
+          (cd tests/round_trip && opam exec -- ./round_trip.sh)
 
   release:
     needs: build

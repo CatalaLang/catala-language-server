@@ -1,0 +1,17 @@
+> Using Implicit_import
+
+```catala-metadata
+#[test]
+#[testcase.test_description = "Ensure we can round-trip from/to catala source.\n\nSee issue #168"]
+#[testcase.test_title = "Implicit import test"]
+declaration scope Example_test:
+  output example scope Implicit_import.Example
+  
+```
+
+```catala
+scope Example_test:
+  definition example.inp equals
+    Period.Period { -- begin: |2025-11-13| -- end: |2026-03-12| }
+  assertion (example.outp = true)
+```
