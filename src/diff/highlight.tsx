@@ -25,10 +25,6 @@ function _sameSegment(a: PathSegment, b: PathSegment): boolean {
   }
 }
 
-export function pathToString(p: PathSegment[]): string {
-  return p.map((s) => `${s.kind}:${String((s as any).value)}`).join(' / ');
-}
-
 export function pathEquals(a: PathSegment[], b: PathSegment[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {

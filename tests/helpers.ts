@@ -21,11 +21,11 @@ export function tRat(): Typ {
   return { kind: 'TRat' } as Typ;
 }
 
-export function rv(raw: RuntimeValueRaw): RuntimeValue {
+function rv(raw: RuntimeValueRaw): RuntimeValue {
   return { value: raw, attrs: [] };
 }
 
-export function vd(r: RuntimeValue): ValueDef {
+function vd(r: RuntimeValue): ValueDef {
   return { value: r };
 }
 
