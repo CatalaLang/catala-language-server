@@ -35,6 +35,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Knip (unused exports)
+        run: npm run knip:exports
+
       - name: Build project
         run: |
           opam exec -- dune build
