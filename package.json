@@ -311,7 +311,8 @@
     "package": "webpack --mode production --devtool hidden-source-map",
     "prepare": "husky",
     "atd:generate_ts": "cd src/generated && atdts ../../test-case-parser/test_case.atd",
-    "check:css": "node purgecss-check.js"
+    "check:css": "node purgecss-check.js",
+    "knip": "knip"
   },
   "dependencies": {
     "@types/react": "^18.3.3",
@@ -330,7 +331,7 @@
     "@testing-library/react": "^16.3.0",
     "@types/command-exists": "^1.2.3",
     "@types/mocha": "^10.0.6",
-    "@types/node": "^22.13.14",
+    "@types/node": "^22.19.1",
     "@types/vscode": "^1.86.0",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
@@ -341,13 +342,14 @@
     "glob": "^11.0.3",
     "husky": "^9.0.11",
     "jsdom": "^25.0.1",
+    "knip": "^5.71.0",
     "lint-staged": "^15.2.7",
     "prettier": "3.3.3",
     "purgecss": "^7.0.2",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.1",
     "tsc-watch": "^6.2.0",
-    "typescript": "^5.8.2",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.10",
     "webpack": "^5.94.0",
     "webpack-cli": "^5.1.4"
