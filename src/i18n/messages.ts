@@ -2,7 +2,7 @@
 // This file contains localization strings only for the "shell" part of the extension
 // (VS Code dialogs, notifications, etc.) that cannot use React-intl.
 // The main UI localization happens in the src/locales/*.json files which are used by React-intl.
-export const messages = {
+const messages = {
   en: {
     resetOutputsConfirmation:
       'Replace expected outputs with test run results. Are you sure?',

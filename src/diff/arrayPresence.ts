@@ -7,11 +7,11 @@
 import type { Diff, PathSegment, RuntimeValue } from '../generated/test_case';
 import { isPathPrefix } from './highlight';
 
-export function isEmptyValue(rv: RuntimeValue): boolean {
+function isEmptyValue(rv: RuntimeValue): boolean {
   return rv.value.kind === 'Empty';
 }
 
-export function childIndexFromPath(
+function childIndexFromPath(
   parentPath: PathSegment[],
   path: PathSegment[]
 ): number | null {

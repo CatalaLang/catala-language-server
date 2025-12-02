@@ -45,10 +45,6 @@ type Props = {
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
-export function isCollapsible(typ: Typ): boolean {
-  return typ.kind === 'TStruct' || typ.kind === 'TArray';
-}
-
 /*
   Diff policy note:
   - Leaf editors do not auto-accept actual values; acceptance is explicit (e.g., Enum preview button).

@@ -84,7 +84,7 @@ function isEmptyValue(value: RuntimeValue): boolean {
 }
 
 // Get a display name for a type that can be used in UI messages
-export function getTypeDisplayName(
+function getTypeDisplayName(
   typ: Typ,
   intl: ReturnType<typeof useIntl>
 ): string {

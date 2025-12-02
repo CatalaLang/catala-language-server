@@ -1,10 +1,4 @@
-import type {
-  Test,
-  TestList,
-  TestOutputs,
-  TestIo,
-  RuntimeValue,
-} from './generated/test_case';
+import type { Test, TestList, RuntimeValue } from './generated/test_case';
 import { isAtomicRaw } from './diff/diff';
 import { getLocalizedMessages } from './i18n/messages';
 
@@ -40,25 +34,6 @@ function rename(testNames: Set<string>, newTestName: string): string {
 
     return `${newTestName}_${counter}`;
   }
-}
-
-export function omitPositionInfo(testOutputs: TestOutputs): TestOutputs {
-  const result: TestOutputs = new Map();
-
-  for (const [key, testIo] of testOutputs.entries()) {
-    const newTestIo: TestIo = { ...testIo };
-
-    if (newTestIo.value) {
-      newTestIo.value = {
-        ...newTestIo.value,
-        pos: undefined, // Remove position information
-      };
-    }
-
-    result.set(key, newTestIo);
-  }
-
-  return result;
 }
 
 /**
