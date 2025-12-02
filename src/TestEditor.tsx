@@ -217,14 +217,11 @@ export default function TestEditor(props: Props): ReactElement {
                 ? props.runState.results.value.diffs
                 : []
             }
-            onDiffResolved={(path) =>
-              props.onDiffResolved(props.test.testing_scope, path as any)
+            onDiffResolved={(path: PathSegment[]) =>
+              props.onDiffResolved(props.test.testing_scope, path)
             }
-            onInvalidateDiffs={(pathPrefix) =>
-              props.onInvalidateDiffs(
-                props.test.testing_scope,
-                pathPrefix as any
-              )
+            onInvalidateDiffs={(pathPrefix: PathSegment[]) =>
+              props.onInvalidateDiffs(props.test.testing_scope, pathPrefix)
             }
           />
         </div>
