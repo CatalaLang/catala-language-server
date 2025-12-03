@@ -5,6 +5,7 @@ import type {
   Diff,
   TestOutputs,
   SourcePosition,
+  RuntimeValue,
 } from '../generated/test_case';
 import { getLanguageFromUri, focusDiffInCustomEditor } from '../testCaseEditor';
 import { parseTestFile, runTestScope } from '../testCaseCompilerInterop';
@@ -28,7 +29,7 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
     return p.includes('/_build/');
   };
 
-  ctrl.resolveHandler = async (item?: vscode.TestItem) => {
+  ctrl.resolveHandler = async (item?: vscode.TestItem): Promise<void> => {
     if (!item) {
       const filesEn = await vscode.workspace.findFiles(
         '**/*test*.catala_en',
@@ -49,7 +50,7 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
   ctrl.createRunProfile(
     'Run',
     vscode.TestRunProfileKind.Run,
-    (req, token) => run(ctrl, req, token),
+    (req, token): Promise<void> => run(ctrl, req, token),
     true
   );
 
@@ -57,13 +58,13 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
   const wEn = vscode.workspace.createFileSystemWatcher('**/*test*.catala_en');
   const wFr = vscode.workspace.createFileSystemWatcher('**/*test*.catala_fr');
 
-  const onCreate = async (uri: vscode.Uri) => {
+  const onCreate = async (uri: vscode.Uri): Promise<void> => {
     if (!shouldIgnore(uri)) await discover(uri);
   };
-  const onChange = async (uri: vscode.Uri) => {
+  const onChange = async (uri: vscode.Uri): Promise<void> => {
     if (!shouldIgnore(uri)) await discover(uri);
   };
-  const onDelete = (uri: vscode.Uri) => {
+  const onDelete = (uri: vscode.Uri): void => {
     if (!shouldIgnore(uri)) ctrl.items.delete(uri.toString());
   };
 
@@ -79,10 +80,14 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
   // Initial scan
   vscode.workspace
     .findFiles('**/*test*.catala_en', EXCLUDE_GLOB)
-    .then((fs) => fs.forEach(discover));
+    .then((fs: vscode.Uri[]): void => {
+      fs.forEach(discover);
+    });
   vscode.workspace
     .findFiles('**/*test*.catala_fr', EXCLUDE_GLOB)
-    .then((fs) => fs.forEach(discover));
+    .then((fs: vscode.Uri[]): void => {
+      fs.forEach(discover);
+    });
 
   async function discover(uri: vscode.Uri): Promise<void> {
     if (shouldIgnore(uri)) return;
@@ -150,13 +155,13 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
     ctrl: vscode.TestController,
     request: vscode.TestRunRequest,
     token: vscode.CancellationToken
-  ) {
+  ): Promise<void> {
     const tr = ctrl.createTestRun(request);
     const queue: vscode.TestItem[] = [];
-    const enqueueAll = (items: Iterable<vscode.TestItem>) => {
+    const enqueueAll = (items: Iterable<vscode.TestItem>): void => {
       for (const i of items) queue.push(i);
     };
-    const enqueueFromCollection = (col: vscode.TestItemCollection) => {
+    const enqueueFromCollection = (col: vscode.TestItemCollection): void => {
       col.forEach((test) => queue.push(test));
     };
 
@@ -175,8 +180,8 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
         // Attempt to resolve this item (load its children or metadata)
         if (item.uri) {
           await discover(item.uri);
-        } else if (ctrl.resolveHandler) {
-          await ctrl.resolveHandler(item);
+        } else {
+          await ctrl.resolveHandler?.(item);
         }
 
         // After resolving, if it now has children, traverse them
@@ -244,7 +249,7 @@ function firstDiffLocation(
   if (!diffs.length) return;
   const first = diffs[0];
   const seg0 = first.path[0];
-  if (!seg0 || seg0.kind !== 'StructField') return;
+  if (seg0?.kind !== 'StructField') return;
 
   const field = seg0.value;
   const out = outputs.get(field);
@@ -260,7 +265,7 @@ function firstDiffLocation(
 }
 
 function formatDiffs(diffs: Diff[]): string {
-  const seg = (s: Diff['path'][number]) => {
+  const seg = (s: Diff['path'][number]): string => {
     switch (s.kind) {
       case 'StructField':
         return `.${s.value}`;
@@ -272,7 +277,7 @@ function formatDiffs(diffs: Diff[]): string {
         return `<${s.value}>`;
     }
   };
-  const pp = (rv: any): string => {
+  const pp = (rv: RuntimeValue): string => {
     switch (rv.value.kind) {
       case 'Bool':
       case 'Integer':
