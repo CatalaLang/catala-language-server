@@ -493,7 +493,7 @@ export class TestCaseEditorProvider
         uri,
         TestCaseEditorProvider.viewType
       );
-    } catch (_e) {
+    } catch {
       return false;
     }
 
