@@ -93,7 +93,12 @@ let load_modules ~stdlib_path config_dir includes program :
     match
       List.filter_map
         (fun (ext, _) -> File.Tree.lookup includes (mname ^ ext))
-        [".catala_fr", "fr"; ".catala_en", "en"; ".catala_pl", "pl"]
+        [
+          ".catala_fr", "fr";
+          ".catala_fr.md", "fr";
+          ".catala_en", "en";
+          ".catala_en.md", "en";
+        ]
     with
     | [] ->
       if in_stdlib then
