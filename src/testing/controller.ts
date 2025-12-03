@@ -136,6 +136,8 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
         item.tags = [
           new vscode.TestTag(`tested:${tested}`),
           new vscode.TestTag(`testing:${t.testing_scope}`),
+          new vscode.TestTag(t.tested_scope.name),
+          new vscode.TestTag(t.tested_scope.module_name),
         ];
         meta.set(item, {
           file: uri,
