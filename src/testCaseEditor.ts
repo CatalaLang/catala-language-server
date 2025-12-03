@@ -500,6 +500,28 @@ export class TestCaseEditorProvider
     return true;
   }
 
+  public static updateOpenCustomEditorWithResults(
+    uri: vscode.Uri,
+    scope: string,
+    results: TestRunResults
+  ): boolean {
+    const key = uri.toString();
+    const entry = TestCaseEditorProvider.webviews.get(key);
+    if (!entry) return false;
+
+    const msg: DownMessage = {
+      kind: 'TestRunResults',
+      value: { scope, reset_outputs: false, results },
+    };
+
+    if (entry.ready) {
+      entry.post(msg);
+    } else {
+      entry.queue.push(msg);
+    }
+    return true;
+  }
+
   private getHtmlForWebview(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'ui.js')
@@ -547,6 +569,18 @@ export async function focusDiffInCustomEditor(
   results: TestRunResults
 ): Promise<boolean> {
   return TestCaseEditorProvider.focusDiffInCustomEditor(uri, scope, results);
+}
+
+export async function updateOpenCustomEditorWithResults(
+  uri: vscode.Uri,
+  scope: string,
+  results: TestRunResults
+): Promise<boolean> {
+  return TestCaseEditorProvider.updateOpenCustomEditorWithResults(
+    uri,
+    scope,
+    results
+  );
 }
 
 /**

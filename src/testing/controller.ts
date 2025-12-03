@@ -7,7 +7,11 @@ import type {
   SourcePosition,
   RuntimeValue,
 } from '../generated/test_case';
-import { getLanguageFromUri, focusDiffInCustomEditor } from '../testCaseEditor';
+import {
+  getLanguageFromUri,
+  focusDiffInCustomEditor,
+  updateOpenCustomEditorWithResults,
+} from '../testCaseEditor';
 import { parseTestFile, runTestScope } from '../testCaseCompilerInterop';
 
 type Meta = {
@@ -209,6 +213,7 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
           m.file.fsPath,
           m.testingScope
         );
+
         if (res.kind === 'Ok') {
           const out = res.value;
           const diffs = out.diffs ?? [];
@@ -227,6 +232,12 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
             }
             tr.failed(item, msg);
           } else {
+            // Update GUI editor if open to clear stale diffs on success
+            await updateOpenCustomEditorWithResults(
+              m.file,
+              m.testingScope,
+              res
+            );
             tr.passed(item);
           }
         } else if (res.kind === 'Cancelled') {
