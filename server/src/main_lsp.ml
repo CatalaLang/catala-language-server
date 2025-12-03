@@ -51,6 +51,8 @@ let () =
   Driver.Plugin.register_subcommands "testcase" ~doc:"" ~man:[] [];
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
     ~contexts:[Desugared.Name_resolution.Expression] (fun ~pos:_ _ -> Some Nil);
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
+    ~contexts:[Desugared.Name_resolution.ScopeDecl] (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
     ~contexts:[Desugared.Name_resolution.ScopeDecl] (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
