@@ -214,7 +214,10 @@
         "aliases": [
           "Catala (English)"
         ],
-        "extensions": [ ".catala_en", ".catala_en.md" ],
+        "extensions": [
+          ".catala_en",
+          ".catala_en.md"
+        ],
         "configuration": "./language-configuration.json"
       },
       {
@@ -222,7 +225,10 @@
         "aliases": [
           "Catala (French)"
         ],
-        "extensions": [ ".catala_fr", ".catala_fr.md" ],
+        "extensions": [
+          ".catala_fr",
+          ".catala_fr.md"
+        ],
         "configuration": "./language-configuration.json"
       },
       {
