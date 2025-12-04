@@ -24,6 +24,7 @@
    otoml
    catala.clerk_lib
    atdgen-runtime
+   catala_types_atd
    test_case_parser_lib))
 
 (install
