@@ -20,18 +20,32 @@ open Catala_utils
 open Utils
 open Server_types
 
+let to_catala_format_lang : Global.backend_lang -> string = function
+  | En -> "catala_en"
+  | Fr -> "catala_fr"
+  | Pl -> "catala_pl"
+
 let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
     TextEdit.t list option Lwt.t =
   let open Lwt.Syntax in
+  let ( let*? ) x f =
+    let* opt = x in
+    match opt with None -> Lwt.return_none | Some x -> f x
+  in
   let doc_path = (doc_id :> File.t) in
+  let*? language =
+    match Clerk_scan.get_lang (doc_id :> string) with
+    | None ->
+      let* () =
+        send_notification ~type_:MessageType.Warning ~notify_back
+          "Code formatting failed: cannot infer file language. Make sure the \
+           file extension is valid."
+      in
+      Lwt.return_none
+    | Some lang -> Lwt.return_some (to_catala_format_lang lang)
+  in
   Lwt.catch
     (fun () ->
-      let language =
-        match String.sub doc_path (String.length doc_path - 2) 2 with
-        | "fr" -> "catala_fr"
-        | "pl" -> "catala_pl"
-        | "en" | _ | (exception _) -> "catala_en"
-      in
       let* catala_format_path = lookup_catala_format_config_path notify_back in
       begin
         let path = Option.value ~default:"" catala_format_path in
@@ -101,7 +115,7 @@ let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
                 "catala-format: Parsing error between lines %d:%d and %d:%d"
                 (fun sl sc el ec ->
                   let pos : Pos.t =
-                    Pos.from_info (doc_id :> string) sl (sc - 1) el (ec - 1)
+                    Pos.from_info (doc_id :> string) sl sc el ec
                   in
                   let diag =
                     Diag.error_p pos (`String "catala-format: Parsing error")

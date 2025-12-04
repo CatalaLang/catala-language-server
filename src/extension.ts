@@ -292,13 +292,13 @@ export function activate(context: vscode.ExtensionContext): void {
     const clientOptions: LanguageClientOptions = {
       markdown: { isTrusted: true, supportHtml: true },
       documentSelector: [
-        { scheme: 'file', language: 'catala_en', pattern: '**/*.catala_en' },
-        { scheme: 'file', language: 'catala_fr', pattern: '**/*.catala_fr' },
+          { scheme: 'file', language: 'catala_en', pattern: '**/*.{catala_en,catala_en.md}' },
+          { scheme: 'file', language: 'catala_fr', pattern: '**/*.catala_fr{,.md}' },
       ],
       synchronize: {
         fileEvents: [
-          vscode.workspace.createFileSystemWatcher('**/*.catala_en'),
-          vscode.workspace.createFileSystemWatcher('**/*.catala_fr'),
+          vscode.workspace.createFileSystemWatcher('**/*.{catala_en,catala_en.md}'),
+          vscode.workspace.createFileSystemWatcher('**/*.{catala_fr,catala_fr.md}'),
         ],
       },
     };
