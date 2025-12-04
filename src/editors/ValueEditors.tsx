@@ -317,8 +317,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
     }
   };
 
-  // TODO: Add onBlur validation?
-
   return (
     <div className="value-editor">
       <input
@@ -326,6 +324,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
         value={internalValue}
         onChange={handleChange}
         disabled={props.editable === false}
+        max="9999-12-31" /* catala date literals are coded on 4 digits */
       />
     </div>
   );
