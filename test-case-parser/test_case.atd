@@ -7,11 +7,13 @@ type typ = [
   | TMoney
   | TDate
   | TDuration
+  | TUnit
   | TTuple of typ list
   | TStruct of struct_declaration
   | TEnum of enum_declaration
   | TOption of typ
   | TArray of typ
+  | TArrow of (typ list * typ)
 ] <ocaml repr="classic">
 
 type enum_declaration = {
@@ -200,3 +202,69 @@ type down_message = [
   | TestRunResults of test_run_results_msg
   | ConfirmResult of confirm_result
 ]
+
+(* List entrypoints *)
+
+type gui_entrypoint = {
+   scope : string;
+   ?title: string option;
+   ?description : string option;
+}
+
+type fonc_test_entrypoint = {
+   scope : string;
+}
+
+type test_entrypoint = [
+  | GUI of gui_entrypoint
+  | Test of fonc_test_entrypoint
+]
+
+type no_input_scope_entrypoint = {
+  scope: string;
+  ?output_vars: (string * typ) list <json repr="object"> <ts repr="map"> option;
+}
+
+type input_scope_entrypoint = {
+  scope: string;
+  ?input_vars: (string * (typ * bool)) list <json repr="object"> <ts repr="map"> option;
+  ?output_vars: (string * typ) list <json repr="object"> <ts repr="map"> option;
+}
+
+type entrypoint_kind = [
+  | Test of test_entrypoint
+  | NoInputScope of no_input_scope_entrypoint
+  | InputScope of input_scope_entrypoint
+]
+
+type vscode_position = {
+  line: int;
+  character: int;
+}
+
+type vscode_range = {
+  start : vscode_position;
+  end_ <json name="end"> : vscode_position;
+}
+
+type entrypoint = {
+  path: string;
+  range: vscode_range;
+  entrypoint: entrypoint_kind
+}
+
+type entrypoints = entrypoint list
+
+type entrypoint_param_kind = [
+  | GUI <json name="GUI">
+  | Test <json name="Test">
+  | NoInputScope <json name="NoInputScope">
+  | InputScope <json name="InputScope">
+]
+
+type entrypoints_params = {
+  ?only : entrypoint_param_kind list option ;
+  ?path : string option ;
+  ?no_lambdas : bool option ;
+  ?no_variables : bool option ;
+}

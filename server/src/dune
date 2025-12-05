@@ -30,7 +30,9 @@
   catala.clerk_lib
   ptime.clock.os
   uri
-  re)
+  re
+  test_case_atd
+ )
  (modules
   (:standard \ Main_lsp Main_dap))
  (preprocess (pps ppx_deriving_yojson ppx_here ppx_deriving.make))

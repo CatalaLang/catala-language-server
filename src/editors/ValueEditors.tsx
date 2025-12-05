@@ -179,6 +179,10 @@ export default function ValueEditor(props: Props): ReactElement {
       // TODO: When implementing TOption editor, mirror the enum "actual preview" handling for None vs Some(complex) diffs.
       editor = <i>Unimplemented Editor</i>;
       break;
+    case 'TArrow':
+    case 'TUnit':
+      editor = <i>Unsupported type</i>;
+      break;
     default:
       assertUnreachable(typ);
   }
