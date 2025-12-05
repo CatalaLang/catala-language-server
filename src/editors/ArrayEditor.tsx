@@ -2,7 +2,6 @@ import type { ReactElement } from 'react';
 import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useState } from 'react';
-import { getDefaultValue } from '../defaults';
 import type {
   RuntimeValue,
   RuntimeValueRaw,
@@ -11,7 +10,7 @@ import type {
   PathSegment,
   Diff,
 } from '../generated/test_case';
-import ValueEditor, { createRuntimeValue } from './ValueEditors';
+import ValueEditor, { createRuntimeValue, makeUnset } from './ValueEditors';
 import { assertUnreachable } from '../util';
 import {
   computeActualOnlyIndices,
@@ -138,6 +137,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
     editable = true,
   } = props;
   const runtimeValue = valueDef?.value;
+  const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const currentArray =
     runtimeValue?.value.kind === 'Array' ? runtimeValue.value.value : [];
 
@@ -154,7 +154,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   };
 
   const handleAdd = (): void => {
-    const newElementValue = getDefaultValue(elementType);
+    const newElementValue = makeUnset();
     // Add a unique ID attribute when creating a new element
     // (this is required by React)
     // https://react.dev/learn/rendering-lists#keeping-list-items-in-order-with-key
@@ -257,6 +257,11 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   return (
     <div className="array-editor">
+      {isUnset && (
+        <span className="unset-badge">
+          <FormattedMessage id="editor.unset" defaultMessage="Unset" />
+        </span>
+      )}
       <div
         className={`array-items ${isVertical ? 'array-items-nested' : 'array-items-non-nested'}`}
       >
