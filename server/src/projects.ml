@@ -782,3 +782,293 @@ let remove_project_file ~on_error doc_id project projects =
           (Doc_id.Set.elements possibly_affected_files));
     let projects = Projects.add project projects in
     { projects; project; possibly_affected_files }
+
+type test_kind =
+  | GUI of {
+      scope : Shared_ast.ScopeName.t;
+      title : string option;
+      description : string option;
+    }
+  | Scope of Shared_ast.ScopeName.t
+
+type input_var = string * Shared_ast.typ * bool (* true if optional *)
+type output_var = string * Shared_ast.typ
+
+type entrypoint_kind =
+  | Test of test_kind
+  | NoInputScope of {
+      scopename : Shared_ast.ScopeName.t;
+      output_vars : output_var list;
+    }
+  | InputScope of {
+      scopename : Shared_ast.ScopeName.t;
+      input_vars : input_var list;
+      output_vars : output_var list;
+    }
+
+type entrypoint = { path : Doc_id.t; pos : Pos.t; kind : entrypoint_kind }
+
+let typ_to_json (decl_ctx : Shared_ast.decl_ctx) (typ : Shared_ast.typ) :
+    Test_case_atd.Test_case_t.typ =
+  let open Shared_ast in
+  let module O = Test_case_atd.Test_case_t in
+  let rec loop typ =
+    match Mark.remove typ with
+    | TLit TBool -> O.TBool
+    | TLit TUnit -> O.TUnit
+    | TLit TInt -> O.TInt
+    | TLit TRat -> O.TRat
+    | TLit TMoney -> O.TMoney
+    | TLit TDate -> O.TDate
+    | TLit TDuration -> O.TDuration
+    | TArrow (tl, t) -> O.TArrow (List.map loop tl, loop t)
+    | TTuple tl -> O.TTuple (List.map loop tl)
+    | TStruct sname ->
+      let strct = StructName.Map.find sname decl_ctx.ctx_structs in
+      TStruct
+        {
+          struct_name = StructName.to_string sname;
+          fields =
+            StructField.Map.bindings strct
+            |> List.map (fun (sf, ty) -> StructField.to_string sf, loop ty);
+        }
+    | TEnum ename ->
+      let enum = EnumName.Map.find ename decl_ctx.ctx_enums in
+      TEnum
+        {
+          enum_name = EnumName.to_string ename;
+          constructors =
+            EnumConstructor.Map.bindings enum
+            |> List.map (fun (cstr, ty) ->
+                   let ty = loop ty in
+                   let ty = if ty = O.TUnit then None else Some ty in
+                   EnumConstructor.to_string cstr, ty);
+        }
+    | TArray ty -> O.TArray (loop ty)
+    | TOption ty -> O.TOption (loop ty)
+    | TLit TPos -> assert false
+    | TDefault ty -> loop ty
+    | TVar _ -> assert false
+    | TForAll _ -> assert false
+    | TError | TClosureEnv -> assert false
+  in
+  loop typ
+
+let entrypoint_to_json ?(no_variables = false) (decl_ctx, { path; pos; kind }) :
+    Test_case_atd.Test_case_t.entrypoint =
+  let scopename s = Shared_ast.ScopeName.to_string s in
+  let opt_var f = if no_variables then None else Some (f ()) in
+  let entrypoint_kind :
+      entrypoint_kind -> Test_case_atd.Test_case_t.entrypoint_kind = function
+    | Test (GUI { scope; title; description }) ->
+      `Test (`GUI { scope = scopename scope; title; description })
+    | Test (Scope scope) -> `Test (`Test { scope = scopename scope })
+    | NoInputScope { scopename = scope; output_vars } ->
+      `NoInputScope
+        {
+          scope = scopename scope;
+          output_vars =
+            (opt_var
+            @@ fun () ->
+            List.map
+              (fun (name, typ) -> name, typ_to_json decl_ctx typ)
+              output_vars);
+        }
+    | InputScope { scopename = scope; input_vars; output_vars } ->
+      `InputScope
+        {
+          scope = scopename scope;
+          input_vars =
+            (opt_var
+            @@ fun () ->
+            List.map
+              (fun (name, typ, b) -> name, (typ_to_json decl_ctx typ, b))
+              input_vars);
+          output_vars =
+            (opt_var
+            @@ fun () ->
+            List.map
+              (fun (name, typ) -> name, typ_to_json decl_ctx typ)
+              output_vars);
+        }
+  in
+  let proj_range { Linol_lsp.Types.Range.start; end_ } :
+      Test_case_atd.Test_case_t.vscode_range =
+    let proj { Linol_lsp.Types.Position.line; character } :
+        Test_case_atd.Test_case_t.vscode_position =
+      { line; character }
+    in
+    { start = proj start; end_ = proj end_ }
+  in
+  {
+    Test_case_atd.Test_case_t.path :> string;
+    range = Utils.range_of_pos pos |> proj_range;
+    entrypoint = entrypoint_kind kind;
+  }
+
+type Catala_utils.Pos.attr += TestUI
+type Catala_utils.Pos.attr += TestDescription of string
+type Catala_utils.Pos.attr += TestTitle of string
+
+let list_file_entrypoints doc_id prg : entrypoint list =
+  let open Shared_ast in
+  let open Scopelang.Ast in
+  let path = doc_id in
+  ScopeName.Map.fold
+    (fun scopename sdecl acc ->
+      let pos = Mark.get sdecl in
+      let { scope_decl_name = _; scope_sig; _ } = Mark.remove sdecl in
+      if Pos.has_attr pos TestUI then
+        let title =
+          Pos.get_attr pos (function
+            | TestTitle s -> if s = "" then None else Some s
+            | _ -> None)
+        in
+        let description =
+          Pos.get_attr pos (function
+            | TestDescription s -> if s = "" then None else Some s
+            | _ -> None)
+        in
+        {
+          path;
+          pos;
+          kind = Test (GUI { scope = scopename; title; description });
+        }
+        :: acc
+      else if Pos.has_attr pos Test then
+        { path; pos; kind = Test (Scope scopename) } :: acc
+      else
+        let input_vars, output_vars =
+          ScopeVar.Map.fold
+            (fun scope_var { svar_in_ty; svar_out_ty; svar_io }
+                 (input_vars, output_vars) ->
+              let is_output = Mark.remove svar_io.Desugared.Ast.io_output in
+              let is_input, is_context =
+                match Mark.remove svar_io.Desugared.Ast.io_input with
+                | Catala_runtime.NoInput -> false, false
+                | OnlyInput -> true, false
+                | Reentrant -> true, true
+              in
+              let var_name = ScopeVar.to_string scope_var in
+              let output_vars =
+                if is_output then (var_name, svar_out_ty) :: output_vars
+                else output_vars
+              in
+              let input_vars =
+                if is_input then
+                  (var_name, svar_in_ty, is_context) :: input_vars
+                else input_vars
+              in
+              input_vars, output_vars)
+            scope_sig ([], [])
+        in
+        if input_vars = [] then
+          { path; pos; kind = NoInputScope { scopename; output_vars } } :: acc
+        else
+          {
+            path;
+            pos;
+            kind = InputScope { scopename; input_vars; output_vars };
+          }
+          :: acc)
+    prg.program_scopes []
+  |> List.rev
+
+let has_no_lambda
+    (prg : Shared_ast.typed Scopelang.Ast.program)
+    (e : entrypoint) =
+  let rec has_no_lambda (typ : Shared_ast.typ) : bool =
+    let open Shared_ast in
+    match Mark.remove typ with
+    | TLit _ -> true
+    | TArrow _ -> false
+    | TTuple tl -> List.for_all has_no_lambda tl
+    | TStruct sname ->
+      let strct = StructName.Map.find sname prg.program_ctx.ctx_structs in
+      StructField.Map.for_all (fun _ typ -> has_no_lambda typ) strct
+    | TEnum enum ->
+      let enum = EnumName.Map.find enum prg.program_ctx.ctx_enums in
+      EnumConstructor.Map.for_all (fun _ typ -> has_no_lambda typ) enum
+    | TArray ty | TDefault ty | TOption ty -> has_no_lambda ty
+    | TVar _ -> true
+    | TForAll m ->
+      let _, ty = Bindlib.unmbind m in
+      has_no_lambda ty
+    | TError | TClosureEnv -> assert false
+  in
+  match e with
+  | { kind = Test _; _ } -> false
+  | { kind = NoInputScope { output_vars; _ }; _ } ->
+    List.map snd output_vars |> List.for_all has_no_lambda
+  | { kind = InputScope { input_vars; output_vars; _ }; _ } ->
+    List.map (fun (_, ty, _) -> ty) input_vars |> List.for_all has_no_lambda
+    && List.map snd output_vars |> List.for_all has_no_lambda
+
+let list_entrypoints
+    ~(get_prog :
+       Doc_id.t -> Shared_ast.typed Scopelang.Ast.program option Lwt.t)
+    (project : project)
+    (params : Test_case_atd.Test_case_t.entrypoints_params) :
+    Test_case_atd.Test_case_t.entrypoints Lwt.t =
+  let open Lwt.Syntax in
+  let { Test_case_atd.Test_case_t.only; path; no_lambdas; no_variables } =
+    params
+  in
+  let only = Option.value ~default:[] only in
+  let path = Option.value ~default:project.project_dir path in
+  let no_lambdas = Option.value ~default:false no_lambdas in
+  let no_variables = Option.value ~default:false no_variables in
+  let include_gui = only = [] || List.mem `GUI only in
+  let include_test = only = [] || List.mem `Test only in
+  let include_no_input = only = [] || List.mem `NoInputScope only in
+  let include_input = only = [] || List.mem `InputScope only in
+  let filter_entrypoint = function
+    | { kind = Test (GUI _); _ } when not include_gui -> false
+    | { kind = Test (Scope _); _ } when not include_test -> false
+    | { kind = NoInputScope _; _ } when not include_no_input -> false
+    | { kind = NoInputScope _; _ } when not include_no_input -> false
+    | { kind = InputScope _; _ } when not include_input -> false
+    | _ -> true
+  in
+  let* () =
+    if not (Sys.file_exists path) then
+      Format.ksprintf Lwt.fail_with
+        "Given path '%s' is not a valid file or directory" path
+    else Lwt.return_unit
+  in
+  let* files_and_prog =
+    if not (Sys.is_directory path) then
+      let doc_id = Doc_id.of_file path in
+      let* prg = get_prog doc_id in
+      match prg with None -> Lwt.return_nil | Some p -> Lwt.return [doc_id, p]
+    else
+      let filtered_files =
+        List.filter_map
+          (fun ((doc_id : Doc_id.t), (project_file : project_file)) ->
+            if
+              String.starts_with ~prefix:path (doc_id :> string)
+              && ScanItemFiles.is_empty project_file.including_files
+            then (* is in tree & is not an included file *) Some doc_id
+            else None)
+          (Doc_id.Map.bindings project.project_files)
+      in
+      Lwt_list.filter_map_s
+        (fun doc_id ->
+          let* prg = get_prog doc_id in
+          Lwt.return (Option.bind prg (fun prg -> Some (doc_id, prg))))
+        filtered_files
+  in
+  let entrypoints =
+    List.concat_map
+      (fun (doc_id, prg) ->
+        List.map (fun x -> prg.Scopelang.Ast.program_ctx, x)
+        @@
+        let entrypoints =
+          list_file_entrypoints doc_id prg |> List.filter filter_entrypoint
+        in
+        if no_lambdas then
+          List.filter (fun ep -> has_no_lambda prg ep) entrypoints
+        else entrypoints)
+      files_and_prog
+  in
+  Lwt.return (List.map (entrypoint_to_json ~no_variables) entrypoints)

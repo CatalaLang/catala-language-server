@@ -120,8 +120,8 @@ let display_module_name_by_ctx
     (naming_ctx : Desugared.Name_resolution.context)
     (m : ModuleName.t) : string =
   let used_modules =
-    naming_ctx.Desugared.Name_resolution.local.Desugared.Name_resolution
-      .used_modules
+    naming_ctx.Desugared.Name_resolution.local
+      .Desugared.Name_resolution.used_modules
   in
   let target = ModuleName.to_string m in
   let alias =
@@ -139,8 +139,8 @@ let base_of_qualified (s : string) =
     String.sub s (i + 1) (String.length s - i - 1)
   with Not_found -> s
 
-(* Current resolver for module path printing; defaults to raw names.
-   We set this per-read to the alias-aware resolver. *)
+(* Current resolver for module path printing; defaults to raw names. We set this
+   per-read to the alias-aware resolver. *)
 let current_modname : (ModuleName.t -> string) ref = ref ModuleName.to_string
 
 let get_typ_literal = function
@@ -155,8 +155,10 @@ let get_typ_literal = function
 
 let rec get_typ ?module_name ?(modname = !current_modname) decl_ctx = function
   | TLit tlit, _ -> get_typ_literal tlit
-  | TTuple tl, _ -> O.TTuple (List.map (get_typ ?module_name ~modname decl_ctx) tl)
-  | TStruct name, _ -> O.TStruct (get_struct ?module_name ~modname decl_ctx name)
+  | TTuple tl, _ ->
+    O.TTuple (List.map (get_typ ?module_name ~modname decl_ctx) tl)
+  | TStruct name, _ ->
+    O.TStruct (get_struct ?module_name ~modname decl_ctx name)
   | TEnum name, _ -> O.TEnum (get_enum ?module_name ~modname decl_ctx name)
   | TOption ty, _ -> O.TOption (get_typ ?module_name ~modname decl_ctx ty)
   | TArray ty, _ -> O.TArray (get_typ ?module_name ~modname decl_ctx ty)
@@ -172,8 +174,7 @@ and get_struct ?module_name ?(modname = !current_modname) decl_ctx struct_name =
   let module_name =
     let path = StructName.path struct_name in
     if path = [] then module_name
-    else
-      Some (String.concat "." (List.map modname path))
+    else Some (String.concat "." (List.map modname path))
   in
   let fields =
     List.map
@@ -195,8 +196,7 @@ and get_enum ?module_name ?(modname = !current_modname) decl_ctx enum_name =
   let module_name =
     let path = EnumName.path enum_name in
     if path = [] then module_name
-    else
-      Some (String.concat "." (List.map modname path))
+    else Some (String.concat "." (List.map modname path))
   in
   let constructors =
     List.map
@@ -220,9 +220,12 @@ type Pos.attr += Uid of string
 type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
 
-let rec get_value
-    : type a. ?modname:(ModuleName.t -> string) ->
-    decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
+let rec get_value :
+    type a.
+    ?modname:(ModuleName.t -> string) ->
+    decl_ctx ->
+    (a, 'm) gexpr ->
+    O.runtime_value =
  fun ?(modname = !current_modname) decl_ctx e ->
   let pos = Expr.pos e in
   let attrs =
@@ -268,7 +271,8 @@ let rec get_value
       let decl = get_enum ~modname decl_ctx name in
       O.Enum
         ( decl,
-          (EnumConstructor.to_string cons, Some (get_value ~modname decl_ctx e)) )
+          (EnumConstructor.to_string cons, Some (get_value ~modname decl_ctx e))
+        )
     | EEmpty -> O.Empty
     | _ ->
       Message.error ~pos "This test value is not a literal: %a." Expr.format e
@@ -362,7 +366,8 @@ let get_scope_def
     O.name = ScopeName.base sc.scope_uid;
     module_name;
     inputs = scope_inputs ~module_name ~modname decl_ctx sc;
-    outputs = (get_struct ~module_name ~modname decl_ctx info.out_struct_name).fields;
+    outputs =
+      (get_struct ~module_name ~modname decl_ctx info.out_struct_name).fields;
     module_deps = retrieve_scope_module_deps naming_ctx prg sc;
   }
 
@@ -518,7 +523,11 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
           | [] -> None
           | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
-            let value = get_value ~modname:(display_module_name_by_ctx naming_ctx) prg.program_ctx e in
+            let value =
+              get_value
+                ~modname:(display_module_name_by_ctx naming_ctx)
+                prg.program_ctx e
+            in
             Some { O.value; pos = Some (get_source_position (Expr.pos e)) }
           | rules ->
             let extra_pos =
@@ -609,7 +618,7 @@ let read_test include_dirs (options : Global.options) buffer_path =
     if include_dirs = [] then lookup_include_dirs ?buffer_path options
     else ".", include_dirs
   in
-  let (_, naming_ctx as prg) =
+  let ((_, naming_ctx) as prg) =
     read_program include_dirs path_to_build options
   in
   (* Use alias-aware module name resolver by default during reading *)
@@ -685,15 +694,14 @@ let get_value_strings = function
     }
   | _ -> raise (unsupported "unsupported language")
 
-(* Implicit stdlib alias handling in the writer.
-   We filter out "Using ..." lines for well-known stdlib aliases.
-   TODO: when the compiler surfaces active imports/aliases for the target
-   module, use that information instead and drop this local list. *)
+(* Implicit stdlib alias handling in the writer. We filter out "Using ..." lines
+   for well-known stdlib aliases. TODO: when the compiler surfaces active
+   imports/aliases for the target module, use that information instead and drop
+   this local list. *)
 let implicit_stdlib_aliases = function
   | Catala_utils.Global.Fr ->
     ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
-  | En ->
-    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+  | En -> ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
   | _ -> []
 
 let is_implicit_stdlib_alias lang alias =
@@ -751,30 +759,25 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
             else None);
          ])
   | Some (TEnum { enum_name; constructors }), O.Enum (_en, (constr, Some v)) ->
-    fprintf ppf "@[<hv 2>%s.%s %s %a@]"
-      enum_name constr strings.content_str
+    fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
       (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
       v
   | _, O.Enum (en, (constr, Some v)) ->
-    fprintf ppf "@[<hv 2>%s.%s %s %a@]"
-      en.enum_name constr strings.content_str
+    fprintf ppf "@[<hv 2>%s.%s %s %a@]" en.enum_name constr strings.content_str
       (print_catala_value ~typ:None ~lang)
       v
   | Some (TEnum { enum_name; _ }), O.Enum (_en, (constr, None)) ->
     fprintf ppf "%s.%s" enum_name constr
-  | _, O.Enum (en, (constr, None)) ->
-    fprintf ppf "%s.%s" en.enum_name constr
+  | _, O.Enum (en, (constr, None)) -> fprintf ppf "%s.%s" en.enum_name constr
   | Some (O.TStruct _sdecl), O.Struct (st, fields) ->
-    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]"
-      st.struct_name
+    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (typ, (fld, v)) ->
            fprintf ppf "-- %s: %a@," fld
              (print_catala_value ~typ:(Some typ) ~lang)
              v))
       (List.combine (List.map snd _sdecl.fields) fields)
   | _, O.Struct (st, fields) ->
-    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]"
-      st.struct_name
+    fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
            fprintf ppf "-- %s: %a@," fld (print_catala_value ~typ:None ~lang) v))
       fields
@@ -818,6 +821,8 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
       O.Enum (decl, elt)
     | TOption typ -> (generate_default_value typ).value
     | TArray _ -> O.Array [||]
+    | TUnit -> raise (Unsupported "unit type")
+    | TArrow _ -> raise (Unsupported "arrow type")
   in
   { value; attrs = [] }
 
@@ -900,9 +905,9 @@ let write_catala options outfile =
                    :: test.O.tested_scope.module_deps))
                 opened)
           in
-          (* Filter out implicit stdlib aliases from Using lines.
-             TODO: remove once the compiler provides active imports for the
-             target module, so we can decide this precisely. *)
+          (* Filter out implicit stdlib aliases from Using lines. TODO: remove
+             once the compiler provides active imports for the target module, so
+             we can decide this precisely. *)
           let modules_to_open =
             Ident.Set.fold
               (fun m acc ->
@@ -1187,7 +1192,8 @@ let list_scopes include_dirs options =
             (* We do not consider no-input scopes *)
             None
           else
-            try Some (get_scope_def prg naming_ctx sc ~tested_module:module_name)
+            try
+              Some (get_scope_def prg naming_ctx sc ~tested_module:module_name)
             with _ -> None))
       modul.module_scopes
     |> ScopeName.Map.bindings

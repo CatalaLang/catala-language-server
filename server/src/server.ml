@@ -372,7 +372,14 @@ let process_saved_file server_state doc_id =
   let new_state = unlocked_process_file St.Saved doc_id unlocked_server_state in
   Lwt.return ((), new_state)
 
-let server_initialized, resolve_init = Lwt.wait ()
+let server_initialized, resolve_init =
+  let w, r = Lwt.wait () in
+  let w =
+    let* () = w in
+    Log.debug (fun m -> m "Server initialized");
+    Lwt.return_unit
+  in
+  w, r
 
 class catala_lsp_server =
   let open Linol_lwt in
@@ -731,6 +738,74 @@ class catala_lsp_server =
       in
       self#on_req_scope projects_to_scan Utils.list_testable_scopes
 
+    method private list_entrypoints
+        (params : Yojson.Safe.t option)
+        : Yojson.Safe.t Lwt.t =
+      let* () = server_initialized in
+      St.use_when_ready server_state
+      @@ fun { projects; open_documents; _ } ->
+      let open Projects in
+      Lwt.catch
+        (fun () ->
+          let params =
+            Option.map
+              (fun json ->
+                Yojson.Safe.to_string json
+                |> Test_case_atd.Test_case_j.entrypoints_params_of_string)
+              params
+            |> Option.value
+                 ~default:
+                   {
+                     Test_case_atd.Test_case_t.only = None;
+                     path = None;
+                     no_lambdas = None;
+                     no_variables = None;
+                   }
+          in
+          let all_projects = Projects.elements projects in
+          let* entrypoint_list =
+            Lwt_list.map_s
+              (fun project ->
+                let get_prog doc_id =
+                  Doc_id.Map.find_opt doc_id open_documents
+                  |> function
+                  | Some { last_valid_result = Some { prg; _ }; _ } ->
+                    Lwt.return_some prg
+                  | _ ->
+                    let*? project_file =
+                      Lwt.return
+                        (Doc_id.Map.find_opt doc_id project.project_files)
+                    in
+                    let resolve_file_content path =
+                      Global.FileName (File.clean_path path)
+                    in
+                    let document =
+                      St.make_document St.Saved doc_id project project_file
+                    in
+                    let r_opt =
+                      try
+                        fst
+                          (Document_processing.process ~resolve_file_content
+                             document)
+                      with _exn -> None
+                    in
+                    Lwt.return
+                      (Option.map (fun { Server_state.prg; _ } -> prg) r_opt)
+                in
+                list_entrypoints ~get_prog project params)
+              all_projects
+          in
+          let buf = Buffer.create 1024 in
+          let convert_to_json epl =
+            Test_case_atd.Test_case_j.write_entrypoints buf epl;
+            Yojson.Safe.from_string ~buf (Buffer.contents buf)
+          in
+          Lwt.return (convert_to_json (List.concat entrypoint_list)))
+        (fun exn ->
+          Log.err (fun m ->
+              m "listEntrypoint request failed: %s" (Printexc.to_string exn));
+          Lwt.return `Null)
+
     method! on_unknown_request ~notify_back ~server_request:_ ~id meth params =
       self#on_request_unhandled ~notify_back ~id
         (Client_request.UnknownRequest { meth; params })
@@ -757,6 +832,9 @@ class catala_lsp_server =
           self#on_req_get_all_scopes ~tests_only:true ()
         | UnknownRequest { meth = "catala.getTestableScopes"; params } ->
           self#on_req_get_all_testable_scopes params
+        | UnknownRequest { meth = "catala.listEntrypoints"; params } ->
+          self#list_entrypoints
+            (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
         | UnknownRequest { meth; _ } ->
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r

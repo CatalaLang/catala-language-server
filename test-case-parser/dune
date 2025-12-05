@@ -11,9 +11,18 @@
   (run atdgen -t %{deps})))
 
 (library
+ (package catala-lsp)
+ (name test_case_atd)
+ (modules test_case_t test_case_j)
+ (libraries atdgen-runtime)
+)
+
+(library
  (name test_case_parser_lib)
- (modules test_case_t test_case_j test_case_parser_lib)
- (libraries catala.driver catala.clerk_lib atdgen-runtime))
+ (modules test_case_parser_lib)
+ (libraries catala.driver catala.clerk_lib test_case_atd)
+ (flags (:standard -open Test_case_atd))
+)
 
 (executable
  (name testcase)

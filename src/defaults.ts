@@ -66,6 +66,10 @@ function getDefaultValueRaw(typ: Typ): RuntimeValueRaw {
         ],
       };
     }
+    case 'TArrow':
+    case 'TUnit': {
+      throw new Error(`Unexpected type: TUnit`);
+    }
     default:
       assertUnreachable(typ);
   }
