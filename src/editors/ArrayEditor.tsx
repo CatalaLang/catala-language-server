@@ -123,6 +123,12 @@ function getTypeDisplayName(
       const nameParts = fullName.split('.');
       return nameParts[nameParts.length - 1];
     }
+    case 'TArrow': {
+      throw new Error(`Unexpected type: TArrow`);
+    }
+    case 'TUnit': {
+      throw new Error(`Unexpected type: TUnit`);
+    }
     default:
       assertUnreachable(typ);
   }

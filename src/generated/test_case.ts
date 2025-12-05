@@ -21,11 +21,13 @@ export type Typ =
 | { kind: 'TMoney' }
 | { kind: 'TDate' }
 | { kind: 'TDuration' }
+| { kind: 'TUnit' }
 | { kind: 'TTuple'; value: Typ[] }
 | { kind: 'TStruct'; value: StructDeclaration }
 | { kind: 'TEnum'; value: EnumDeclaration }
 | { kind: 'TOption'; value: Typ }
 | { kind: 'TArray'; value: Typ }
+| { kind: 'TArrow'; value: [Typ[], Typ] }
 
 export type EnumDeclaration = {
   enum_name: string;
@@ -197,6 +199,67 @@ export type DownMessage =
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
 | { kind: 'ConfirmResult'; value: ConfirmResult }
 
+export type GuiEntrypoint = {
+  scope: string;
+  title?: string;
+  description?: string;
+}
+
+export type FoncTestEntrypoint = {
+  scope: string;
+}
+
+export type TestEntrypoint =
+| { kind: 'GUI'; value: GuiEntrypoint }
+| { kind: 'Test'; value: FoncTestEntrypoint }
+
+export type NoInputScopeEntrypoint = {
+  scope: string;
+  output_vars?: Map<string, Typ>;
+}
+
+export type InputScopeEntrypoint = {
+  scope: string;
+  input_vars?: Map<string, [Typ, boolean]>;
+  output_vars?: Map<string, Typ>;
+}
+
+export type EntrypointKind =
+| { kind: 'Test'; value: TestEntrypoint }
+| { kind: 'NoInputScope'; value: NoInputScopeEntrypoint }
+| { kind: 'InputScope'; value: InputScopeEntrypoint }
+
+export type VscodePosition = {
+  line: number /*int*/;
+  character: number /*int*/;
+}
+
+export type VscodeRange = {
+  start: VscodePosition;
+  end_: VscodePosition;
+}
+
+export type Entrypoint = {
+  path: string;
+  range: VscodeRange;
+  entrypoint: EntrypointKind;
+}
+
+export type Entrypoints = Entrypoint[]
+
+export type EntrypointParamKind =
+| { kind: 'GUI' }
+| { kind: 'Test' }
+| { kind: 'NoInputScope' }
+| { kind: 'InputScope' }
+
+export type EntrypointsParams = {
+  only?: EntrypointParamKind[];
+  path?: string;
+  no_lambdas?: boolean;
+  no_variables?: boolean;
+}
+
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
     case 'TBool':
@@ -211,6 +274,8 @@ export function writeTyp(x: Typ, context: any = x): any {
       return 'TDate'
     case 'TDuration':
       return 'TDuration'
+    case 'TUnit':
+      return 'TUnit'
     case 'TTuple':
       return ['TTuple', _atd_write_array(writeTyp)(x.value, x)]
     case 'TStruct':
@@ -221,6 +286,8 @@ export function writeTyp(x: Typ, context: any = x): any {
       return ['TOption', writeTyp(x.value, x)]
     case 'TArray':
       return ['TArray', writeTyp(x.value, x)]
+    case 'TArrow':
+      return ['TArrow', ((x, context) => [_atd_write_array(writeTyp)(x[0], x), writeTyp(x[1], x)])(x.value, x)]
   }
 }
 
@@ -239,6 +306,8 @@ export function readTyp(x: any, context: any = x): Typ {
         return { kind: 'TDate' }
       case 'TDuration':
         return { kind: 'TDuration' }
+      case 'TUnit':
+        return { kind: 'TUnit' }
       default:
         _atd_bad_json('Typ', x, context)
         throw new Error('impossible')
@@ -257,6 +326,8 @@ export function readTyp(x: any, context: any = x): Typ {
         return { kind: 'TOption', value: readTyp(x[1], x) }
       case 'TArray':
         return { kind: 'TArray', value: readTyp(x[1], x) }
+      case 'TArrow':
+        return { kind: 'TArrow', value: ((x, context): [Typ[], Typ] => { _atd_check_json_tuple(2, x, context); return [_atd_read_array(readTyp)(x[0], x), readTyp(x[1], x)] })(x[1], x) }
       default:
         _atd_bad_json('Typ', x, context)
         throw new Error('impossible')
@@ -889,6 +960,211 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')
   }
+}
+
+export function writeGuiEntrypoint(x: GuiEntrypoint, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('GuiEntrypoint', 'scope', _atd_write_string, x.scope, x),
+    'title': _atd_write_optional_field(_atd_write_string, x.title, x),
+    'description': _atd_write_optional_field(_atd_write_string, x.description, x),
+  };
+}
+
+export function readGuiEntrypoint(x: any, context: any = x): GuiEntrypoint {
+  return {
+    scope: _atd_read_required_field('GuiEntrypoint', 'scope', _atd_read_string, x['scope'], x),
+    title: _atd_read_optional_field(_atd_read_string, x['title'], x),
+    description: _atd_read_optional_field(_atd_read_string, x['description'], x),
+  };
+}
+
+export function writeFoncTestEntrypoint(x: FoncTestEntrypoint, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('FoncTestEntrypoint', 'scope', _atd_write_string, x.scope, x),
+  };
+}
+
+export function readFoncTestEntrypoint(x: any, context: any = x): FoncTestEntrypoint {
+  return {
+    scope: _atd_read_required_field('FoncTestEntrypoint', 'scope', _atd_read_string, x['scope'], x),
+  };
+}
+
+export function writeTestEntrypoint(x: TestEntrypoint, context: any = x): any {
+  switch (x.kind) {
+    case 'GUI':
+      return ['GUI', writeGuiEntrypoint(x.value, x)]
+    case 'Test':
+      return ['Test', writeFoncTestEntrypoint(x.value, x)]
+  }
+}
+
+export function readTestEntrypoint(x: any, context: any = x): TestEntrypoint {
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'GUI':
+      return { kind: 'GUI', value: readGuiEntrypoint(x[1], x) }
+    case 'Test':
+      return { kind: 'Test', value: readFoncTestEntrypoint(x[1], x) }
+    default:
+      _atd_bad_json('TestEntrypoint', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeNoInputScopeEntrypoint(x: NoInputScopeEntrypoint, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('NoInputScopeEntrypoint', 'scope', _atd_write_string, x.scope, x),
+    'output_vars': _atd_write_optional_field(_atd_write_assoc_map_to_object(writeTyp), x.output_vars, x),
+  };
+}
+
+export function readNoInputScopeEntrypoint(x: any, context: any = x): NoInputScopeEntrypoint {
+  return {
+    scope: _atd_read_required_field('NoInputScopeEntrypoint', 'scope', _atd_read_string, x['scope'], x),
+    output_vars: _atd_read_optional_field(_atd_read_assoc_object_into_map(readTyp), x['output_vars'], x),
+  };
+}
+
+export function writeInputScopeEntrypoint(x: InputScopeEntrypoint, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('InputScopeEntrypoint', 'scope', _atd_write_string, x.scope, x),
+    'input_vars': _atd_write_optional_field(_atd_write_assoc_map_to_object(((x, context) => [writeTyp(x[0], x), _atd_write_bool(x[1], x)])), x.input_vars, x),
+    'output_vars': _atd_write_optional_field(_atd_write_assoc_map_to_object(writeTyp), x.output_vars, x),
+  };
+}
+
+export function readInputScopeEntrypoint(x: any, context: any = x): InputScopeEntrypoint {
+  return {
+    scope: _atd_read_required_field('InputScopeEntrypoint', 'scope', _atd_read_string, x['scope'], x),
+    input_vars: _atd_read_optional_field(_atd_read_assoc_object_into_map(((x, context): [Typ, boolean] => { _atd_check_json_tuple(2, x, context); return [readTyp(x[0], x), _atd_read_bool(x[1], x)] })), x['input_vars'], x),
+    output_vars: _atd_read_optional_field(_atd_read_assoc_object_into_map(readTyp), x['output_vars'], x),
+  };
+}
+
+export function writeEntrypointKind(x: EntrypointKind, context: any = x): any {
+  switch (x.kind) {
+    case 'Test':
+      return ['Test', writeTestEntrypoint(x.value, x)]
+    case 'NoInputScope':
+      return ['NoInputScope', writeNoInputScopeEntrypoint(x.value, x)]
+    case 'InputScope':
+      return ['InputScope', writeInputScopeEntrypoint(x.value, x)]
+  }
+}
+
+export function readEntrypointKind(x: any, context: any = x): EntrypointKind {
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'Test':
+      return { kind: 'Test', value: readTestEntrypoint(x[1], x) }
+    case 'NoInputScope':
+      return { kind: 'NoInputScope', value: readNoInputScopeEntrypoint(x[1], x) }
+    case 'InputScope':
+      return { kind: 'InputScope', value: readInputScopeEntrypoint(x[1], x) }
+    default:
+      _atd_bad_json('EntrypointKind', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeVscodePosition(x: VscodePosition, context: any = x): any {
+  return {
+    'line': _atd_write_required_field('VscodePosition', 'line', _atd_write_int, x.line, x),
+    'character': _atd_write_required_field('VscodePosition', 'character', _atd_write_int, x.character, x),
+  };
+}
+
+export function readVscodePosition(x: any, context: any = x): VscodePosition {
+  return {
+    line: _atd_read_required_field('VscodePosition', 'line', _atd_read_int, x['line'], x),
+    character: _atd_read_required_field('VscodePosition', 'character', _atd_read_int, x['character'], x),
+  };
+}
+
+export function writeVscodeRange(x: VscodeRange, context: any = x): any {
+  return {
+    'start': _atd_write_required_field('VscodeRange', 'start', writeVscodePosition, x.start, x),
+    'end': _atd_write_required_field('VscodeRange', 'end_', writeVscodePosition, x.end_, x),
+  };
+}
+
+export function readVscodeRange(x: any, context: any = x): VscodeRange {
+  return {
+    start: _atd_read_required_field('VscodeRange', 'start', readVscodePosition, x['start'], x),
+    end_: _atd_read_required_field('VscodeRange', 'end', readVscodePosition, x['end'], x),
+  };
+}
+
+export function writeEntrypoint(x: Entrypoint, context: any = x): any {
+  return {
+    'path': _atd_write_required_field('Entrypoint', 'path', _atd_write_string, x.path, x),
+    'range': _atd_write_required_field('Entrypoint', 'range', writeVscodeRange, x.range, x),
+    'entrypoint': _atd_write_required_field('Entrypoint', 'entrypoint', writeEntrypointKind, x.entrypoint, x),
+  };
+}
+
+export function readEntrypoint(x: any, context: any = x): Entrypoint {
+  return {
+    path: _atd_read_required_field('Entrypoint', 'path', _atd_read_string, x['path'], x),
+    range: _atd_read_required_field('Entrypoint', 'range', readVscodeRange, x['range'], x),
+    entrypoint: _atd_read_required_field('Entrypoint', 'entrypoint', readEntrypointKind, x['entrypoint'], x),
+  };
+}
+
+export function writeEntrypoints(x: Entrypoints, context: any = x): any {
+  return _atd_write_array(writeEntrypoint)(x, context);
+}
+
+export function readEntrypoints(x: any, context: any = x): Entrypoints {
+  return _atd_read_array(readEntrypoint)(x, context);
+}
+
+export function writeEntrypointParamKind(x: EntrypointParamKind, context: any = x): any {
+  switch (x.kind) {
+    case 'GUI':
+      return 'GUI'
+    case 'Test':
+      return 'Test'
+    case 'NoInputScope':
+      return 'NoInputScope'
+    case 'InputScope':
+      return 'InputScope'
+  }
+}
+
+export function readEntrypointParamKind(x: any, context: any = x): EntrypointParamKind {
+  switch (x) {
+    case 'GUI':
+      return { kind: 'GUI' }
+    case 'Test':
+      return { kind: 'Test' }
+    case 'NoInputScope':
+      return { kind: 'NoInputScope' }
+    case 'InputScope':
+      return { kind: 'InputScope' }
+    default:
+      _atd_bad_json('EntrypointParamKind', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeEntrypointsParams(x: EntrypointsParams, context: any = x): any {
+  return {
+    'only': _atd_write_optional_field(_atd_write_array(writeEntrypointParamKind), x.only, x),
+    'path': _atd_write_optional_field(_atd_write_string, x.path, x),
+    'no_lambdas': _atd_write_optional_field(_atd_write_bool, x.no_lambdas, x),
+    'no_variables': _atd_write_optional_field(_atd_write_bool, x.no_variables, x),
+  };
+}
+
+export function readEntrypointsParams(x: any, context: any = x): EntrypointsParams {
+  return {
+    only: _atd_read_optional_field(_atd_read_array(readEntrypointParamKind), x['only'], x),
+    path: _atd_read_optional_field(_atd_read_string, x['path'], x),
+    no_lambdas: _atd_read_optional_field(_atd_read_bool, x['no_lambdas'], x),
+    no_variables: _atd_read_optional_field(_atd_read_bool, x['no_variables'], x),
+  };
 }
 
 

@@ -14,12 +14,31 @@ import * as net from 'net';
 import { spawn } from 'child_process';
 import { clerkPath, getCwd, hasResourceUri } from './util_client';
 import { initTests } from './testAndCoverage';
+import type { Entrypoint, EntrypointsParams } from './generated/test_case';
+import { writeEntrypointsParams } from './generated/test_case';
 
 let client: LanguageClient;
 
 interface IRunArgs {
   uri: string;
   scope: string;
+}
+// Atd prevents us to obtain direct ranges, we convert them here.
+type CEntrypoint = Omit<Entrypoint, 'range'> & { range: vscode.Range };
+
+async function listEntrypoints() {
+  const dummy_params: EntrypointsParams = {
+    only: [{ kind: 'GUI' }],
+    no_lambdas: true,
+    no_variables: true,
+  };
+  console.log('called list entrypoints');
+  let ret: Array<CEntrypoint> = await client.sendRequest(
+    'catala.listEntrypoints',
+    writeEntrypointsParams(dummy_params)
+  );
+  console.log('ret: ' + JSON.stringify(ret));
+  return;
 }
 
 async function selectScope(): Promise<IRunArgs | undefined> {
@@ -88,6 +107,7 @@ async function runScope(): Promise<void> {
   }
 }
 vscode.commands.registerCommand('catala.run', runScope);
+vscode.commands.registerCommand('catala.listEntrypoints', listEntrypoints);
 
 async function debugScope(): Promise<void> {
   const args: IRunArgs | undefined = await selectScope();
@@ -273,7 +293,7 @@ export async function activate(
         {
           scheme: 'file',
           language: 'catala_en',
-          pattern: '**/*.{catala_en,catala_en.md}',
+          pattern: '**/*.catala_en{,.md}',
         },
         {
           scheme: 'file',
