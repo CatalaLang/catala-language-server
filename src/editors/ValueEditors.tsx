@@ -33,12 +33,23 @@ export function createRuntimeValue(
   };
 }
 
-export function makeUnset(originalRuntimeValue?: RuntimeValue): RuntimeValue {
+function makeUnset(originalRuntimeValue?: RuntimeValue): RuntimeValue {
   // Use Unset as a GUI placeholder; server/runtime should treat it as "impossible" value.
   return createRuntimeValue(
     { kind: 'Unset' } as RuntimeValueRaw,
     originalRuntimeValue
   );
+}
+
+export function getDefaultValue(
+  typ: Typ,
+  originalRuntimeValue?: RuntimeValue
+): RuntimeValue {
+  // Arrays are the only type with a "sane default": empty list.
+  // All other types start as explicit Unset placeholders.
+  return typ.kind === 'TArray'
+    ? createRuntimeValue({ kind: 'Array', value: [] }, originalRuntimeValue)
+    : makeUnset(originalRuntimeValue);
 }
 
 function UnsetBadge(): ReactElement {
@@ -751,9 +762,9 @@ function StructEditor(props: StructEditorProps): ReactElement {
 
     // If the struct did not exist yet, pre-fill all fields with Unset placeholders
     if (!isStructPresent) {
-      for (const [fname] of fields.entries()) {
+      for (const [fname, ftype] of fields.entries()) {
         if (!newMap.has(fname)) {
-          newMap.set(fname, makeUnset());
+          newMap.set(fname, getDefaultValue(ftype));
         }
       }
     }
@@ -883,8 +894,8 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
     let newPayload: Option<RuntimeValue> = null;
     if (newCtorType?.value) {
-      // If the new constructor has a payload, start with an explicit Unset placeholder
-      newPayload = { value: makeUnset() };
+      // Initialize payload with default for its type (empty array for arrays, Unset otherwise)
+      newPayload = { value: getDefaultValue(newCtorType.value) };
     }
 
     const newValueRaw: RuntimeValueRaw = {

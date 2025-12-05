@@ -10,7 +10,10 @@ import type {
   PathSegment,
   Diff,
 } from '../generated/test_case';
-import ValueEditor, { createRuntimeValue, makeUnset } from './ValueEditors';
+import ValueEditor, {
+  createRuntimeValue,
+  getDefaultValue,
+} from './ValueEditors';
 import { assertUnreachable } from '../util';
 import {
   computeActualOnlyIndices,
@@ -154,7 +157,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   };
 
   const handleAdd = (): void => {
-    const newElementValue = makeUnset();
+    const newElementValue = getDefaultValue(elementType);
     // Add a unique ID attribute when creating a new element
     // (this is required by React)
     // https://react.dev/learn/rendering-lists#keeping-list-items-in-order-with-key
