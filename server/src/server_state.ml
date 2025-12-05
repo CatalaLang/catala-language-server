@@ -67,13 +67,6 @@ type locked_server_state = {
   mutable delayed_state : delayed_state;
 }
 
-let wrap_f' f state =
-  let c_b = Doc_id.Map.cardinal state.open_documents in
-  let* x, new_state = f state in
-  let c_a = Doc_id.Map.cardinal new_state.open_documents in
-  Log.debug (fun m -> m "USAGE STATE: %d vs %d" c_b c_a);
-  Lwt.return (x, new_state)
-
 let use s (f : server_state -> 'a Lwt.t) : 'a Lwt.t =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
@@ -130,7 +123,7 @@ let use_and_update s (f : server_state -> ('a * server_state) Lwt.t) : 'a Lwt.t
   @@ fun () ->
   let* ret, new_state =
     match s.delayed_state with
-    | Ready state -> wrap_f' f state
+    | Ready state -> f state
     | Delayed { doc_id = _; curr_server_state; delayed_action; action } ->
       (* The delayed action is necessarily sleeping otherwise it wouldn't be
          delayed so we can cancel the sleeping thread and force the
