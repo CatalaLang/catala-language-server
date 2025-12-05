@@ -2,7 +2,6 @@ import type { ReactElement } from 'react';
 import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useState } from 'react';
-import { getDefaultValue } from '../defaults';
 import type {
   RuntimeValue,
   RuntimeValueRaw,
@@ -11,7 +10,10 @@ import type {
   PathSegment,
   Diff,
 } from '../generated/catala_types';
-import ValueEditor, { createRuntimeValue } from './ValueEditors';
+import ValueEditor, {
+  createRuntimeValue,
+  getDefaultValue,
+} from './ValueEditors';
 import { assertUnreachable } from '../util';
 import {
   computeActualOnlyIndices,
