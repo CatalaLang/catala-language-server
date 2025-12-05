@@ -17,8 +17,11 @@ const messages = {
     deleteArrayElementConfirmation: 'Delete this element?',
     deleteAssertionConfirmation: 'Delete this assertion?',
     deleteButton: 'Delete',
+    runAnywayButton: 'Run anyway',
     true: 'true',
     false: 'false',
+    unsetValuesRunConfirm:
+      'This test contains one or more unset values. The run will likely fail. Do you want to run it anyway?',
   },
   fr: {
     resetOutputsConfirmation:
@@ -34,8 +37,11 @@ const messages = {
     deleteArrayElementConfirmation: 'Supprimer cet élément ?',
     deleteAssertionConfirmation: 'Supprimer cette assertion ?',
     deleteButton: 'Supprimer',
+    runAnywayButton: 'Lancer quand même',
     true: 'vrai',
     false: 'faux',
+    unsetValuesRunConfirm:
+      'Ce test contient une ou plusieurs valeurs non définies. L’exécution échouera probablement. Voulez-vous quand même lancer le test ?',
   },
 };
 

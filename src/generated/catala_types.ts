@@ -78,6 +78,7 @@ export type RuntimeValueRaw =
 | { kind: 'Enum'; value: [EnumDeclaration, [string, Option<RuntimeValue>]] }
 | { kind: 'Struct'; value: [StructDeclaration, Map<string, RuntimeValue>] }
 | { kind: 'Array'; value: RuntimeValue[] }
+| { kind: 'Unset' }
 | { kind: 'Empty' }
 
 export type AttrDef =
@@ -174,6 +175,7 @@ export type TestRunResultsMsg = {
 export type ConfirmAction =
 | { kind: 'DeleteArrayElement' }
 | { kind: 'DeleteAssertion' }
+| { kind: 'RunTestWithUnsetValues' }
 
 export type ConfirmRequest = {
   id: number /*int*/;
@@ -457,6 +459,8 @@ export function writeRuntimeValueRaw(x: RuntimeValueRaw, context: any = x): any 
       return ['Struct', ((x, context) => [writeStructDeclaration(x[0], x), _atd_write_assoc_map_to_object(writeRuntimeValue)(x[1], x)])(x.value, x)]
     case 'Array':
       return ['Array', _atd_write_array(writeRuntimeValue)(x.value, x)]
+    case 'Unset':
+      return 'Unset'
     case 'Empty':
       return 'Empty'
   }
@@ -465,6 +469,8 @@ export function writeRuntimeValueRaw(x: RuntimeValueRaw, context: any = x): any 
 export function readRuntimeValueRaw(x: any, context: any = x): RuntimeValueRaw {
   if (typeof x === 'string') {
     switch (x) {
+      case 'Unset':
+        return { kind: 'Unset' }
       case 'Empty':
         return { kind: 'Empty' }
       default:
@@ -842,6 +848,8 @@ export function writeConfirmAction(x: ConfirmAction, context: any = x): any {
       return 'DeleteArrayElement'
     case 'DeleteAssertion':
       return 'DeleteAssertion'
+    case 'RunTestWithUnsetValues':
+      return 'RunTestWithUnsetValues'
   }
 }
 
@@ -851,6 +859,8 @@ export function readConfirmAction(x: any, context: any = x): ConfirmAction {
       return { kind: 'DeleteArrayElement' }
     case 'DeleteAssertion':
       return { kind: 'DeleteAssertion' }
+    case 'RunTestWithUnsetValues':
+      return { kind: 'RunTestWithUnsetValues' }
     default:
       _atd_bad_json('ConfirmAction', x, context)
       throw new Error('impossible')
