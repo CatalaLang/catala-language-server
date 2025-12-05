@@ -6,10 +6,12 @@ import {
   type TestInputs,
   type TestRunResults,
   type PathSegment,
+  type RuntimeValue,
 } from './generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
 import { type TestRunStatus } from './TestFileEditor';
+import { confirm } from './messaging/confirm';
 
 type Props = {
   test: Test;
@@ -61,6 +63,8 @@ export default function TestEditor(props: Props): ReactElement {
   }
 
   const expectedSectionRef = useRef<HTMLDivElement>(null);
+  // Scope for searching the first '.unset-badge' before running; used to scroll into view
+  const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
 
   useEffect(() => {
@@ -81,8 +85,68 @@ export default function TestEditor(props: Props): ReactElement {
     }
   }, [props.runState]);
 
+  function containsUnsetInRuntime(rv: RuntimeValue): boolean {
+    switch (rv.value.kind) {
+      case 'Unset':
+        return true;
+      case 'Array':
+        return rv.value.value.some(containsUnsetInRuntime);
+      case 'Struct': {
+        const map = rv.value.value[1];
+        return Array.from(map.values()).some(containsUnsetInRuntime);
+      }
+      case 'Enum': {
+        const payload = rv.value.value[1][1];
+        return payload !== null && payload.value
+          ? containsUnsetInRuntime(payload.value)
+          : false;
+      }
+      default:
+        return false;
+    }
+  }
+
+  function hasUnsetInTest(test: Test): boolean {
+    const inputsHas = Array.from(test.test_inputs.values()).some(
+      (io) => io.value && containsUnsetInRuntime(io.value.value)
+    );
+    const outputsHas = Array.from(test.test_outputs.values()).some(
+      (io) => io.value && containsUnsetInRuntime(io.value.value)
+    );
+    return inputsHas || outputsHas;
+  }
+
+  const scrollToFirstUnset = (): void => {
+    setTimeout(() => {
+      const container = unsetElementRef.current ?? document;
+      const el = container.querySelector('.unset-badge') as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (el as HTMLElement)?.focus?.();
+      }
+    }, 0);
+  };
+
+  const runWithUnsetCheck = async (): Promise<void> => {
+    if (hasUnsetInTest(props.test)) {
+      scrollToFirstUnset();
+      const confirmed = await confirm('RunTestWithUnsetValues');
+      if (!confirmed) return;
+    }
+    props.onTestRun(props.test.testing_scope);
+  };
+
+  const resetWithUnsetCheck = async (): Promise<void> => {
+    if (hasUnsetInTest(props.test)) {
+      scrollToFirstUnset();
+      const confirmed = await confirm('RunTestWithUnsetValues');
+      if (!confirmed) return;
+    }
+    props.onTestOutputsReset(props.test.testing_scope);
+  };
+
   return (
-    <div className="test-editor">
+    <div className="test-editor" ref={unsetElementRef}>
       <div className="test-editor-breadcrumb body-b3">
         {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
       </div>
@@ -139,9 +203,7 @@ export default function TestEditor(props: Props): ReactElement {
               <button
                 className="reset-expected-values button-action-dvp body-b3"
                 title={intl.formatMessage({ id: 'testEditor.resetExpected' })}
-                onClick={() => {
-                  props.onTestOutputsReset(props.test.testing_scope);
-                }}
+                onClick={resetWithUnsetCheck}
               >
                 <span className="codicon codicon-refresh"></span> Remplacer avec
                 les valeurs attendues
@@ -149,7 +211,7 @@ export default function TestEditor(props: Props): ReactElement {
               <button
                 className={`button-action-dvp ${props.runState?.status ?? ''}`}
                 title={intl.formatMessage({ id: 'testEditor.run' })}
-                onClick={() => props.onTestRun(props.test.testing_scope)}
+                onClick={runWithUnsetCheck}
                 disabled={props.runState?.status === 'running'}
               >
                 <span

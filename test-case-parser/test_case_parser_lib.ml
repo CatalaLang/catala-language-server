@@ -237,6 +237,8 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
       O.Enum
         ( get_enum decl_ctx name,
           (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
+    | EFatalError _ ->
+      O.Unset (* Is EFatalError the right dcalc mapping for "impossible"? *)
     | EEmpty -> O.Empty
     | _ ->
       Message.error ~pos "This test value is not a literal: %a." Expr.format e
@@ -665,6 +667,7 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
   let strings = get_value_strings lang in
   print_attrs ppf v.attrs;
   match typ, v.value with
+  | _, O.Unset -> pp_print_string ppf "impossible"
   | _, O.Bool b ->
     pp_print_string ppf (if b then strings.true_str else strings.false_str)
   | _, O.Money m -> fprintf ppf strings.money_fmt (m / 100) (m mod 100)
@@ -737,41 +740,14 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
       (Array.to_seq vl)
   | _, O.Empty -> assert false
 
-let rec generate_default_value (typ : O.typ) : O.runtime_value =
-  let value =
-    match typ with
-    | TBool -> O.Bool false
-    | TInt -> O.Integer 0
-    | TRat -> O.Decimal 0.
-    | TMoney -> O.Money 0
-    | TDate -> O.Date { year = 1970; month = 1; day = 1 }
-    | TDuration -> O.Duration { years = 0; months = 0; days = 0 }
-    | TTuple l -> O.Array (List.map generate_default_value l |> Array.of_list)
-    | TStruct decl ->
-      O.Struct
-        (decl, List.map (fun (s, t) -> s, generate_default_value t) decl.fields)
-    | TEnum decl ->
-      let elt =
-        let cn, ty =
-          List.find_opt
-            (function _, None -> true | _ -> false)
-            decl.constructors
-          |> function Some s -> s | None -> List.hd decl.constructors
-        in
-        cn, Option.map generate_default_value ty
-      in
-      O.Enum (decl, elt)
-    | TOption typ -> (generate_default_value typ).value
-    | TArray _ -> O.Array [||]
-    | TUnit -> raise (Unsupported "unit type")
-    | TArrow _ -> raise (Unsupported "arrow type")
-  in
-  { value; attrs = [] }
-
 let print_catala_value_opt ~lang ppf (t_in : O.test_io) =
-  match t_in.O.value with
-  | None -> generate_default_value t_in.typ |> print_catala_value ~lang ppf
-  | Some { value; _ } -> print_catala_value ~lang ppf value
+  let typ = t_in.typ in
+  match t_in.O.value, typ with
+  | Some { value = { value = O.Unset; _ }; _ }, TArray _ | None, TArray _ ->
+    Format.fprintf ppf "[]"
+  | Some { value = { value = O.Unset; _ }; _ }, _ | None, _ ->
+    Format.fprintf ppf "impossible"
+  | Some { value; _ }, typ -> print_catala_value ~typ:(Some typ) ~lang ppf value
 
 let write_catala_test ppf t lang =
   let open Format in
@@ -802,7 +778,7 @@ let write_catala_test ppf t lang =
     (fun (tvar, t_in) ->
       fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition sscope_var
         tvar strings.equals
-        (print_catala_value_opt ~typ:None ~lang)
+        (print_catala_value_opt ~lang)
         t_in)
     t.test_inputs;
   List.iter

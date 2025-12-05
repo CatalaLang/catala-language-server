@@ -3,7 +3,7 @@ import { FormattedMessage, useIntl } from 'react-intl';
 import { confirm } from './messaging/confirm';
 import type { Test, TestIo, Diff, PathSegment } from './generated/catala_types';
 import AssertionValueEditor from './AssertionValueEditor';
-import { getDefaultValue } from './defaults';
+import { getDefaultValue } from './editors/ValueEditors';
 
 type Props = {
   test: Test;
@@ -43,12 +43,12 @@ export default function TestOutputsEditor({
   function onAssertAdd(outputName: string): void {
     const outputType = tested_scope.outputs.get(outputName);
     if (outputType) {
-      const defaultValue = getDefaultValue(outputType);
+      const initial = getDefaultValue(outputType);
       onTestAssertsChange({
         ...test,
         test_outputs: new Map(test_outputs).set(outputName, {
           typ: outputType,
-          value: { value: defaultValue },
+          value: { value: initial },
         }),
       });
     }

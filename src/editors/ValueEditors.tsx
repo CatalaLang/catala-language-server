@@ -18,7 +18,6 @@ import type {
 } from '../generated/catala_types';
 import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../util';
-import { getDefaultValue } from '../defaults';
 import { CompositeEditor } from './CompositeEditor';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
@@ -32,6 +31,33 @@ export function createRuntimeValue(
     value: newValueRaw,
     attrs: originalRuntimeValue?.attrs ?? [],
   };
+}
+
+function makeUnset(originalRuntimeValue?: RuntimeValue): RuntimeValue {
+  // Use Unset as a GUI placeholder; server/runtime should treat it as "impossible" value.
+  return createRuntimeValue(
+    { kind: 'Unset' } as RuntimeValueRaw,
+    originalRuntimeValue
+  );
+}
+
+export function getDefaultValue(
+  typ: Typ,
+  originalRuntimeValue?: RuntimeValue
+): RuntimeValue {
+  // Arrays are the only type with a "sane default": empty list.
+  // All other types start as explicit Unset placeholders.
+  return typ.kind === 'TArray'
+    ? createRuntimeValue({ kind: 'Array', value: [] }, originalRuntimeValue)
+    : makeUnset(originalRuntimeValue);
+}
+
+function UnsetBadge(): ReactElement {
+  return (
+    <span className="unset-badge">
+      <FormattedMessage id="editor.unset" defaultMessage="Unset" />
+    </span>
+  );
 }
 
 type Props = {
@@ -237,6 +263,10 @@ function IntEditor(props: IntEditorProps): ReactElement {
   };
 
   const handleBlur = (): void => {
+    if (displayValue.trim() === '') {
+      props.onValueChange(makeUnset(runtimeValue));
+      return;
+    }
     if (!isValidInt(displayValue)) {
       // Reset to the last valid value or empty string
       const resetValue =
@@ -252,12 +282,10 @@ function IntEditor(props: IntEditorProps): ReactElement {
       <input
         type="text"
         pattern={INT_PATTERN.source}
-        required
         value={displayValue}
         onChange={handleChange}
         onBlur={handleBlur}
         className={`int-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
-        placeholder="0"
         disabled={props.editable === false}
       />
     </div>
@@ -272,6 +300,7 @@ type DateEditorProps = {
 
 function DateEditor(props: DateEditorProps): ReactElement {
   const runtimeValue = props.valueDef?.value;
+  const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const initialValue =
     runtimeValue?.value.kind === 'Date' ? runtimeValue.value.value : undefined;
 
@@ -321,12 +350,21 @@ function DateEditor(props: DateEditorProps): ReactElement {
     }
   };
 
+  const handleBlur = (): void => {
+    if (internalValue === '') {
+      props.onValueChange(makeUnset(runtimeValue));
+      return;
+    }
+  };
+
   return (
     <div className="value-editor">
+      {isUnset && <UnsetBadge />}
       <input
         type="date"
         value={internalValue}
         onChange={handleChange}
+        onBlur={handleBlur}
         disabled={props.editable === false}
         max="9999-12-31" /* catala date literals are coded on 4 digits */
       />
@@ -348,6 +386,7 @@ type RatEditorProps = {
 
 function RatEditor(props: RatEditorProps): ReactElement {
   const runtimeValue = props.valueDef?.value;
+  const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const initialValue =
     runtimeValue?.value.kind === 'Decimal'
       ? runtimeValue.value.value
@@ -390,6 +429,10 @@ function RatEditor(props: RatEditorProps): ReactElement {
   };
 
   const handleBlur = (): void => {
+    if (displayValue.trim() === '') {
+      props.onValueChange(makeUnset(runtimeValue));
+      return;
+    }
     if (!isValidRat(displayValue)) {
       // Reset to the last valid value or empty string
       const resetValue =
@@ -402,15 +445,14 @@ function RatEditor(props: RatEditorProps): ReactElement {
 
   return (
     <div className="value-editor">
+      {isUnset && <UnsetBadge />}
       <input
         type="text"
         pattern={RAT_PATTERN.source}
-        required
         value={displayValue}
         onChange={handleChange}
         onBlur={handleBlur}
         className={`rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
-        placeholder="0.0"
         disabled={props.editable === false}
       />
     </div>
@@ -425,10 +467,19 @@ type BoolEditorProps = {
 
 function BoolEditor(props: BoolEditorProps): ReactElement {
   const runtimeValue = props.valueDef?.value;
-  const currentValue =
-    runtimeValue?.value.kind === 'Bool' ? runtimeValue.value.value : false; // Default to false
+  const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
+  const selectValue: 'unset' | 'true' | 'false' =
+    runtimeValue?.value.kind === 'Bool'
+      ? runtimeValue.value.value
+        ? 'true'
+        : 'false'
+      : 'unset';
 
   const handleChange = (event: React.ChangeEvent<HTMLSelectElement>): void => {
+    if (event.target.value === 'unset') {
+      props.onValueChange(makeUnset(runtimeValue));
+      return;
+    }
     const boolValue = event.target.value === 'true';
     const newValueRaw: RuntimeValueRaw = { kind: 'Bool', value: boolValue };
     props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
@@ -436,11 +487,15 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
 
   return (
     <div className="value-editor">
+      {isUnset && <UnsetBadge />}
       <select
-        value={currentValue.toString()}
+        value={selectValue}
         onChange={handleChange}
         disabled={props.editable === false}
       >
+        <option value="unset">
+          <FormattedMessage id="editor.unset" defaultMessage="Unset" />
+        </option>
         <option value="false">
           <FormattedMessage id="false" />
         </option>
@@ -465,9 +520,15 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
       ? runtimeValue.value.value
       : undefined;
 
-  const [years, setYears] = useState(initialValue?.years ?? 0);
-  const [months, setMonths] = useState(initialValue?.months ?? 0);
-  const [days, setDays] = useState(initialValue?.days ?? 0);
+  const [years, setYears] = useState<string>(
+    initialValue?.years !== undefined ? String(initialValue.years) : ''
+  );
+  const [months, setMonths] = useState<string>(
+    initialValue?.months !== undefined ? String(initialValue.months) : ''
+  );
+  const [days, setDays] = useState<string>(
+    initialValue?.days !== undefined ? String(initialValue.days) : ''
+  );
 
   // Update state if prop changes externally
   useEffect(() => {
@@ -475,33 +536,52 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
       runtimeValue?.value.kind === 'Duration'
         ? runtimeValue.value.value
         : undefined;
-    setYears(newValue?.years ?? 0);
-    setMonths(newValue?.months ?? 0);
-    setDays(newValue?.days ?? 0);
+    setYears(newValue?.years !== undefined ? String(newValue.years) : '');
+    setMonths(newValue?.months !== undefined ? String(newValue.months) : '');
+    setDays(newValue?.days !== undefined ? String(newValue.days) : '');
   }, [runtimeValue]);
 
-  const handleChange = (
-    field: 'years' | 'months' | 'days',
-    value: number
-  ): void => {
-    const newValue = Math.max(0, value); // Ensure non-negative values
-    switch (field) {
-      case 'years':
-        setYears(newValue);
-        break;
-      case 'months':
-        setMonths(newValue);
-        break;
-      case 'days':
-        setDays(newValue);
-        break;
+  const parseNonNegInt = (s: string): number | null => {
+    if (s.trim() === '') return null;
+    const n = Number(s);
+    if (!Number.isInteger(n) || n < 0) return null;
+    return n;
+  };
+
+  const emitIfValidOrUnset = (triggerUnsetOnInvalid: boolean): void => {
+    const y = parseNonNegInt(years);
+    const m = parseNonNegInt(months);
+    const d = parseNonNegInt(days);
+
+    const allEmpty =
+      years.trim() === '' && months.trim() === '' && days.trim() === '';
+
+    if (allEmpty) {
+      props.onValueChange(makeUnset(runtimeValue));
+      return;
     }
-    const newDuration: Duration = { years, months, days, [field]: newValue };
-    const newValueRaw: RuntimeValueRaw = {
-      kind: 'Duration',
-      value: newDuration,
-    };
-    props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+
+    if (y !== null && m !== null && d !== null) {
+      const newDuration: Duration = { years: y, months: m, days: d };
+      const newValueRaw: RuntimeValueRaw = {
+        kind: 'Duration',
+        value: newDuration,
+      };
+      props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+    } else if (triggerUnsetOnInvalid) {
+      props.onValueChange(makeUnset(runtimeValue));
+    }
+  };
+
+  const handleBlur = (): void => {
+    emitIfValidOrUnset(true);
+  };
+
+  const clearAll = (): void => {
+    setYears('');
+    setMonths('');
+    setDays('');
+    props.onValueChange(makeUnset(runtimeValue));
   };
 
   return (
@@ -510,10 +590,11 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
         <label>
           <FormattedMessage id="durationEditor.years" defaultMessage="Years:" />
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
             value={years}
-            onChange={(e) => handleChange('years', parseInt(e.target.value))}
+            onChange={(e) => setYears(e.target.value)}
+            onBlur={handleBlur}
             disabled={props.editable === false}
           />
         </label>
@@ -523,23 +604,33 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
             defaultMessage="Months:"
           />
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
             value={months}
-            onChange={(e) => handleChange('months', parseInt(e.target.value))}
+            onChange={(e) => setMonths(e.target.value)}
+            onBlur={handleBlur}
             disabled={props.editable === false}
           />
         </label>
         <label>
           <FormattedMessage id="durationEditor.days" defaultMessage="Days:" />
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
             value={days}
-            onChange={(e) => handleChange('days', parseInt(e.target.value))}
+            onChange={(e) => setDays(e.target.value)}
+            onBlur={handleBlur}
             disabled={props.editable === false}
           />
         </label>
+        <button
+          type="button"
+          className="duration-clear"
+          onClick={clearAll}
+          disabled={props.editable === false}
+        >
+          <FormattedMessage id="editor.clear" defaultMessage="Clear" />
+        </button>
       </div>
     </div>
   );
@@ -560,6 +651,7 @@ type MoneyEditorProps = {
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const intl = useIntl();
   const runtimeValue = props.valueDef?.value;
+  const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const initialValue = // in cents
     runtimeValue?.value.kind === 'Money' ? runtimeValue.value.value : undefined;
 
@@ -604,6 +696,13 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     }
   };
 
+  const handleBlur = (): void => {
+    if (displayValue.trim() === '') {
+      props.onValueChange(makeUnset(runtimeValue));
+      return;
+    }
+  };
+
   // Determine currency style based on locale
   const locale = intl.locale;
   const currencyClass = locale.startsWith('fr')
@@ -612,14 +711,14 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
 
   return (
     <div className={`value-editor money-editor ${currencyClass}`}>
+      {isUnset && <UnsetBadge />}
       <input
         type="text"
         pattern={MONEY_PATTERN.source}
-        required
         value={displayValue}
         onChange={handleChange}
+        onBlur={handleBlur}
         className={displayValue && !isValidMoney(displayValue) ? 'invalid' : ''}
-        placeholder="0.00"
         disabled={props.editable === false}
       />
     </div>
@@ -659,8 +758,21 @@ function StructEditor(props: StructEditorProps): ReactElement {
     fieldName: string,
     fieldRuntimeValue: RuntimeValue // Note: This is the full RuntimeValue for the field
   ): void => {
+    const isStructPresent = runtimeValue?.value.kind === 'Struct';
     const newMap = new Map(currentMap);
+
+    // If the struct did not exist yet, pre-fill all fields with Unset placeholders
+    if (!isStructPresent) {
+      for (const [fname, ftype] of fields.entries()) {
+        if (!newMap.has(fname)) {
+          newMap.set(fname, getDefaultValue(ftype));
+        }
+      }
+    }
+
+    // Set/overwrite the edited field
     newMap.set(fieldName, fieldRuntimeValue);
+
     const newValueRaw: RuntimeValueRaw = {
       kind: 'Struct',
       value: [structDeclaration, newMap],
@@ -736,12 +848,14 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   const currentEnumData =
     runtimeValue?.value.kind === 'Enum' ? runtimeValue.value.value : undefined;
 
-  // Note that in Catala, an enum should always have at least 1 constructor
-  // so dereferencing the first array element is valid
-  const defaultCtor = Array.from(enumDeclaration.constructors.keys())[0];
-  const currentCtor = currentEnumData ? currentEnumData[1][0] : defaultCtor;
+  const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
+  const currentCtor = currentEnumData ? currentEnumData[1][0] : null;
+  const selectValue: string = currentCtor ?? '__unset__';
   const currentPayload = currentEnumData ? currentEnumData[1][1] : null;
-  const currentCtorType = enumDeclaration.constructors.get(currentCtor); // Option<Typ>
+  const currentCtorType =
+    currentCtor !== null
+      ? enumDeclaration.constructors.get(currentCtor)
+      : undefined; // Option<Typ> | undefined
 
   // If there is a diff exactly at this enum node and the enum labels differ,
   // and the actual payload is non-atomic (complex), render an actual preview
@@ -770,12 +884,17 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
     event: React.ChangeEvent<HTMLSelectElement>
   ): void => {
     if (editable === false) return;
-    const newCtor = event.target.value;
+    const v = event.target.value;
+    if (v === '__unset__') {
+      onValueChange(makeUnset(runtimeValue));
+      return;
+    }
+    const newCtor = v;
     const newCtorType = enumDeclaration.constructors.get(newCtor);
 
     let newPayload: Option<RuntimeValue> = null;
     if (newCtorType?.value) {
-      // If the new constructor has a payload, create a default value for it
+      // Initialize payload with default for its type (empty array for arrays, Unset otherwise)
       newPayload = { value: getDefaultValue(newCtorType.value) };
     }
 
@@ -796,7 +915,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
     const newValueRaw: RuntimeValueRaw = {
       kind: 'Enum',
-      value: [enumDeclaration, [currentCtor, newPayloadOption]],
+      value: [enumDeclaration, [currentCtor!, newPayloadOption]],
     };
     onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
@@ -804,11 +923,15 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   // Build the expected editor (existing UI)
   const expectedEditor = (
     <div className="value-editor enum-editor">
+      {isUnset && <UnsetBadge />}
       <select
         onChange={handleCtorChange}
-        value={currentCtor}
+        value={selectValue}
         disabled={editable === false}
       >
+        <option value="__unset__">
+          <FormattedMessage id="editor.unset" defaultMessage="Unset" />
+        </option>
         {Array.from(enumDeclaration.constructors.keys()).map((ctorName) => (
           <option key={ctorName} value={ctorName}>
             {ctorName}
@@ -816,7 +939,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
         ))}
       </select>
       {/* Render payload editor only if the current constructor expects one */}
-      {currentCtorType?.value && (
+      {selectValue !== '__unset__' && currentCtorType?.value && (
         <div className="enum-payload-editor">
           <ValueEditor
             testIO={{
