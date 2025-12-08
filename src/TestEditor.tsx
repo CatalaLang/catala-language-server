@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
   type Test,
@@ -60,7 +60,6 @@ export default function TestEditor(props: Props): ReactElement {
     );
   }
 
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const expectedSectionRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
 
@@ -72,7 +71,6 @@ export default function TestEditor(props: Props): ReactElement {
       runState.results.value.assert_failures;
 
     if (shouldFocus) {
-      if (isCollapsed) setIsCollapsed(false);
       setTimeout(() => {
         expectedSectionRef.current?.focus();
         expectedSectionRef.current?.scrollIntoView({
@@ -81,7 +79,7 @@ export default function TestEditor(props: Props): ReactElement {
         });
       }, 0);
     }
-  }, [props.runState, isCollapsed]);
+  }, [props.runState]);
 
   return (
     <div className="test-editor">
@@ -97,10 +95,7 @@ export default function TestEditor(props: Props): ReactElement {
         value={props.test.title}
         onChange={onTitleChange}
       />
-      <div
-        className="test-editor-content"
-        style={{ display: isCollapsed ? 'none' : 'block' }}
-      >
+      <div className="test-editor-content">
         <div className="test-section">
           <h2 className="test-section-title heading-h2">
             <FormattedMessage
