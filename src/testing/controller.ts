@@ -58,6 +58,34 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
     true
   );
 
+  // Bridge: allow the custom editor to report results back to the Test Explorer
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.tests.reportResult',
+      async (file: vscode.Uri, scope: string, results: TestRunResults) => {
+        // Ensure items exist/up-to-date
+        await discover(file);
+
+        // Find the test item for this file/scope
+        const root = ctrl.items.get(file.toString());
+        if (!root) return;
+
+        let item: vscode.TestItem | undefined;
+        root.children.forEach((child) => {
+          const m = meta.get(child);
+          if (m?.testingScope === scope) item = child;
+        });
+        if (!item) return;
+
+        // Create a synthetic run to update status
+        const req = new vscode.TestRunRequest([item]);
+        const tr = ctrl.createTestRun(req);
+        applyResultsToTestItem(tr, item, file, results);
+        tr.end();
+      }
+    )
+  );
+
   // Watch files that look like tests in both languages
   const wEn = vscode.workspace.createFileSystemWatcher('**/*test*.catala_en');
   const wFr = vscode.workspace.createFileSystemWatcher('**/*test*.catala_fr');
@@ -157,6 +185,36 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
     }
   }
 
+  // Shared helper to apply results to a single TestItem and report to a TestRun
+  function applyResultsToTestItem(
+    tr: vscode.TestRun,
+    item: vscode.TestItem,
+    file: vscode.Uri,
+    results: TestRunResults
+  ): void {
+    tr.enqueued(item);
+    tr.started(item);
+
+    if (results.kind === 'Ok') {
+      const out = results.value;
+      const diffs = out.diffs ?? [];
+      const hasFailures = out.assert_failures || diffs.length > 0;
+      if (hasFailures) {
+        // Prefer focusing the custom editor and displaying diffs there when run from controller; location still attached for Test Explorer
+        const msg = new vscode.TestMessage(formatDiffs(diffs));
+        const loc = firstDiffLocation(diffs, out.test_outputs, file);
+        if (loc) msg.location = loc;
+        tr.failed(item, msg);
+      } else {
+        tr.passed(item);
+      }
+    } else if (results.kind === 'Cancelled') {
+      tr.skipped(item);
+    } else {
+      tr.errored(item, new vscode.TestMessage(results.value));
+    }
+  }
+
   async function run(
     ctrl: vscode.TestController,
     request: vscode.TestRunRequest,
@@ -220,17 +278,7 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
           const hasFailures = out.assert_failures || diffs.length > 0;
           if (hasFailures) {
             // Prefer focusing the custom editor and displaying diffs there
-            const focused = await focusDiffInCustomEditor(
-              m.file,
-              m.testingScope,
-              res
-            );
-            const msg = new vscode.TestMessage(formatDiffs(diffs));
-            if (!focused) {
-              const loc = firstDiffLocation(diffs, out.test_outputs, m.file);
-              if (loc) msg.location = loc;
-            }
-            tr.failed(item, msg);
+            await focusDiffInCustomEditor(m.file, m.testingScope, res);
           } else {
             // Update GUI editor if open to clear stale diffs on success
             await updateOpenCustomEditorWithResults(
@@ -238,13 +286,9 @@ export function registerCatalaTests(context: vscode.ExtensionContext): void {
               m.testingScope,
               res
             );
-            tr.passed(item);
           }
-        } else if (res.kind === 'Cancelled') {
-          tr.skipped(item);
-        } else {
-          tr.errored(item, new vscode.TestMessage(res.value));
         }
+        applyResultsToTestItem(tr, item, m.file, res);
       } catch (e) {
         tr.errored(item, new vscode.TestMessage(String(e)));
       }

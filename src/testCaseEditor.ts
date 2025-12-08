@@ -200,6 +200,13 @@ export class TestCaseEditorProvider
                 },
               },
             });
+            // Reflect the cancellation in the Test Explorer
+            void vscode.commands.executeCommand(
+              'catala.tests.reportResult',
+              document.uri,
+              typed_msg.value.scope,
+              { kind: 'Cancelled' }
+            );
             return;
           }
 
@@ -225,6 +232,13 @@ export class TestCaseEditorProvider
                   results: { kind: 'Cancelled' },
                 },
               });
+              // Reflect the cancellation in the Test Explorer
+              void vscode.commands.executeCommand(
+                'catala.tests.reportResult',
+                document.uri,
+                scope,
+                { kind: 'Cancelled' }
+              );
               return;
             }
           }
@@ -236,6 +250,13 @@ export class TestCaseEditorProvider
             kind: 'TestRunResults',
             value: { scope, reset_outputs, results },
           });
+          // Report results back to the Test Explorer when initiated from the GUI
+          void vscode.commands.executeCommand(
+            'catala.tests.reportResult',
+            document.uri,
+            scope,
+            results
+          );
 
           if (reset_outputs) {
             // reset assertions in the document model, update UI
