@@ -25,8 +25,6 @@ module DQ = Doc_queries
 let ( let*? ) v f =
   Lwt.bind v @@ function None -> Lwt.return_none | Some x -> f x
 
-let init_waiter, init_wakener = Lwt.wait ()
-
 exception ServerError of string
 
 let lookup_project ~on_error doc_id projects =
@@ -374,6 +372,8 @@ let process_saved_file server_state doc_id =
   let new_state = unlocked_process_file St.Saved doc_id unlocked_server_state in
   Lwt.return ((), new_state)
 
+let server_initialized, resolve_init = Lwt.wait ()
+
 class catala_lsp_server =
   let open Linol_lwt in
   object (self)
@@ -610,13 +610,13 @@ class catala_lsp_server =
           else Lwt.return sstate
         in
         let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
-        let () = Lwt.wakeup init_wakener () in
+        Lwt.wakeup resolve_init ();
         Lwt.return ((), sstate)
       | _ -> Lwt.return_unit
 
     method private on_req_get_all_scopes ~tests_only () : Yojson.Safe.t Lwt.t =
       let open Shared_ast in
-      let* () = init_waiter in
+      let* () = server_initialized in
       St.use_now server_state
       @@ fun { projects; _ } ->
       let scopes =
