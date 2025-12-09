@@ -181,16 +181,21 @@ export class TestCaseEditorProvider
           break;
         }
         case 'TestRunRequest': {
-          const shouldProceed = await promptSaveBeforeTest(document.uri);
-
-          if (!shouldProceed) {
-            // User cancelled
+          // Always save before running the test (no prompt)
+          try {
+            await saveSpecificDocument(document.uri);
+          } catch (err) {
             postMessageToWebView({
               kind: 'TestRunResults',
               value: {
                 scope: typed_msg.value.scope,
                 reset_outputs: typed_msg.value.reset_outputs,
-                results: { kind: 'Cancelled' },
+                results: {
+                  kind: 'Error',
+                  value:
+                    'Failed to save before running: ' +
+                    (err instanceof Error ? err.message : String(err)),
+                },
               },
             });
             return;
@@ -475,20 +480,6 @@ function findCustomDocumentTab(uri: vscode.Uri): vscode.Tab {
 }
 
 /**
- * Check if a custom document has unsaved changes.
- * Workaround using the tab API because vs code does not
- * expose the dirty state of a custom document even though
- * the indicator correctly displays it.
- * @param uri The URI of the custom document
- * @returns true if the document has unsaved changes, false otherwise
- * @throws Error if no tab is found for the given URI
- */
-function isCustomDocumentDirty(uri: vscode.Uri): boolean {
-  const tab = findCustomDocumentTab(uri);
-  return tab.isDirty;
-}
-
-/**
  * Save a specific custom document
  * @param uri The URI of the document to save
  */
@@ -499,41 +490,4 @@ async function saveSpecificDocument(uri: vscode.Uri): Promise<void> {
   // Now save the active document (since we clicked on the run button
   // we assume that the active document is the right one)
   await vscode.commands.executeCommand('workbench.action.files.save');
-}
-
-/**
- * Prompt user to save before running test if document is dirty
- * @param documentUri The URI of the document to check
- * @returns Promise<boolean> true if should proceed with test, false if cancelled
- */
-async function promptSaveBeforeTest(documentUri: vscode.Uri): Promise<boolean> {
-  if (!isCustomDocumentDirty(documentUri)) {
-    return true; // No unsaved changes, proceed
-  }
-
-  const messages = getLocalizedMessages(vscode.env.language);
-
-  const choice = await vscode.window.showWarningMessage(
-    messages.unsavedChangesWarning,
-    { modal: true },
-    { title: messages.saveAndRun, action: 'SaveAndRun' },
-    { title: messages.runWithoutSaving, action: 'RunWithoutSaving' }
-  );
-
-  switch (choice?.action) {
-    case 'SaveAndRun':
-      await saveSpecificDocument(documentUri);
-      return true;
-
-    case 'RunWithoutSaving': {
-      const confirmed = await vscode.window.showWarningMessage(
-        messages.runAgainstSavedContent,
-        { modal: true },
-        { title: messages.continue, action: 'Continue' }
-      );
-      return confirmed?.action === 'Continue';
-    }
-    default:
-      return false;
-  }
 }
