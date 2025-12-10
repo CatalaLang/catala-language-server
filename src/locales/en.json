@@ -21,6 +21,8 @@
   "arrayEditor.addElement": "Add {elementType}",
   "false": "false",
   "true": "true",
+  "editor.unset": "Unset",
+  "editor.clear": "Clear",
   "durationEditor.years": "Years:",
   "durationEditor.months": "Months:",
   "durationEditor.days": "Days:",

@@ -269,6 +269,7 @@ let rec get_value
       O.Enum
         ( decl,
           (EnumConstructor.to_string cons, Some (get_value ~modname decl_ctx e)) )
+    | EFatalError Impossible -> O.Unset
     | EEmpty -> O.Empty
     | _ ->
       Message.error ~pos "This test value is not a literal: %a." Expr.format e
@@ -715,6 +716,7 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
   let strings = get_value_strings lang in
   print_attrs ppf v.attrs;
   match typ, v.value with
+  | _, O.Unset -> pp_print_string ppf "impossible"
   | _, O.Bool b ->
     pp_print_string ppf (if b then strings.true_str else strings.false_str)
   | _, O.Money m -> fprintf ppf strings.money_fmt (m / 100) (m mod 100)
