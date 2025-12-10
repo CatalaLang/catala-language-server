@@ -226,6 +226,7 @@ type IntEditorProps = {
 
 function IntEditor(props: IntEditorProps): ReactElement {
   const runtimeValue = props.valueDef?.value;
+  const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const initialValue =
     runtimeValue?.value.kind === 'Integer'
       ? runtimeValue.value.value
@@ -275,6 +276,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
 
   return (
     <div className="value-editor">
+      {isUnset && <UnsetBadge />}
       <input
         type="text"
         pattern={INT_PATTERN.source}
