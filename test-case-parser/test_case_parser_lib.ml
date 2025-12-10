@@ -269,7 +269,7 @@ let rec get_value
       O.Enum
         ( decl,
           (EnumConstructor.to_string cons, Some (get_value ~modname decl_ctx e)) )
-    | EFatalError _ -> O.Unset (* Is EFatalError the right dcalc mapping for "impossible"? *)
+    | EFatalError Impossible -> O.Unset
     | EEmpty -> O.Empty
     | _ ->
       Message.error ~pos "This test value is not a literal: %a." Expr.format e
