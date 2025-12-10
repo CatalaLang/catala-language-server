@@ -237,8 +237,7 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
       O.Enum
         ( get_enum decl_ctx name,
           (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
-    | EFatalError _ ->
-      O.Unset (* Is EFatalError the right dcalc mapping for "impossible"? *)
+    | EFatalError Impossible -> O.Unset
     | EEmpty -> O.Empty
     | _ ->
       Message.error ~pos "This test value is not a literal: %a." Expr.format e
