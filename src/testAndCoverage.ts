@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { sep } from 'path';
 import { clerkPath, getCwd } from './util_client';
+import type { CatalaEntrypoint } from './lspRequests';
+import { listEntrypoints } from './lspRequests';
 
 type ClerkLocation = {
   file: string;
@@ -63,7 +65,9 @@ type ClerkTestRunResult = {
 };
 
 type TestScope = {
-  name: string;
+  label: string;
+  scope: string;
+  kind: 'GUI' | 'Test';
   range: vscode.Range;
 };
 
@@ -109,7 +113,7 @@ async function clerkRunTest(
 function lookupTestItem(
   ctrl: vscode.TestController,
   test_file: vscode.Uri,
-  scope_name: string
+  scope_name?: string
 ): vscode.TestItem | undefined {
   const cwd = getCwd(test_file.path);
   if (cwd) {
@@ -123,7 +127,9 @@ function lookupTestItem(
       file_path = file_path.slice(1);
       cur_item = cur_item.children.get(cur_path.path);
     }
-    return cur_item?.children.get(`${cur_path.path}:${scope_name}`);
+    if (scope_name)
+      return cur_item?.children.get(`${cur_path.path}:${scope_name}`);
+    else return cur_item;
   }
 }
 
@@ -137,8 +143,8 @@ function populateTestHierarchy(
   if (path.length == 0) {
     scopes.forEach((scope) => {
       const item: vscode.TestItem = ctrl.createTestItem(
-        `${cwd.path}:${scope.name}`,
-        scope.name,
+        `${cwd.path}:${scope.scope}`,
+        scope.kind == 'GUI' ? '👁 ' + scope.label : scope.label,
         cwd
       );
       item.range = scope.range;
@@ -234,11 +240,10 @@ function updateTestItemWithClerkResult(
   filePath: string,
   scopeTest: ClerkScopeTestResult
 ): void {
-  // find the corresponding test item
   const test_item = lookupTestItem(
     ctrl,
     vscode.Uri.file(filePath),
-    scopeTest.scope_name
+    scopeTest.scope_name == 'compilation' ? undefined : scopeTest.scope_name
   );
   if (test_item) {
     if (scopeTest.success) {
@@ -252,6 +257,10 @@ function updateTestItemWithClerkResult(
         );
         return msg;
       });
+      if (scopeTest.scope_name == 'compilation')
+        test_item.children.forEach((item) =>
+          run.failed(item, messages, scopeTest.time)
+        );
       run.failed(test_item, messages, scopeTest.time);
     }
   }
@@ -266,6 +275,39 @@ function fold_tree(
     fold_tree(acc, subtree);
   }
   return acc;
+}
+
+function testEntrypointsToTestScopeMap(
+  entrypoints: Array<CatalaEntrypoint>
+): TestScopeMap {
+  let map: Map<string, TestScope[]> = new Map();
+  entrypoints.forEach((e) => {
+    if (e.entrypoint.kind == 'Test' && e.entrypoint.value.kind == 'Test') {
+      const test: TestScope = {
+        label: e.entrypoint.value.value.scope,
+        scope: e.entrypoint.value.value.scope,
+        kind: 'Test',
+        range: e.range,
+      };
+      const prev_arr = map.get(e.path) ?? [];
+      map.set(e.path, [...prev_arr, test]);
+    } else if (
+      e.entrypoint.kind == 'Test' &&
+      e.entrypoint.value.kind == 'GUI'
+    ) {
+      const gui_test: TestScope = {
+        label: e.entrypoint.value.value.title ?? e.entrypoint.value.value.scope,
+        scope: e.entrypoint.value.value.scope,
+        kind: 'GUI',
+        range: e.range,
+      };
+      const prev_arr = map.get(e.path) ?? [];
+      map.set(e.path, [...prev_arr, gui_test]);
+    }
+  });
+  return Array.from(map).map((e) => {
+    return { path: e[0], scopes: e[1] };
+  });
 }
 
 export async function initTests(
@@ -283,15 +325,16 @@ export async function initTests(
   ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
 
   const updateTestScopes: () => Promise<void> = async () => {
-    const test_scopes_map: TestScopeMap = await client
-      .sendRequest('catala.getTestScopes')
-      .finally(() => ctrl.items.replace([]))
-      .then((a: TestScopeMap) => a);
+    const entrypoints = await listEntrypoints(client, [
+      { kind: 'GUI' },
+      { kind: 'Test' },
+    ]).finally(() => ctrl.items.replace([]));
 
+    const test_scopes_map: TestScopeMap =
+      testEntrypointsToTestScopeMap(entrypoints);
     test_scopes_map.forEach(({ path, scopes }) =>
       populateTestItems(ctrl, path, scopes)
     );
-
     cwd = getCwd(test_scopes_map?.[0]?.path);
   };
 
@@ -349,7 +392,6 @@ export async function initTests(
         'An error occurred while executing tests. Check the console logs for more details...'
       );
     }
-
     run.end();
   };
 

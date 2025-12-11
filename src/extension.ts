@@ -14,31 +14,14 @@ import * as net from 'net';
 import { spawn } from 'child_process';
 import { clerkPath, getCwd, hasResourceUri } from './util_client';
 import { initTests } from './testAndCoverage';
-import type { Entrypoint, EntrypointsParams } from './generated/catala_types';
-import { writeEntrypointsParams } from './generated/catala_types';
+import type { CatalaEntrypoint } from './lspRequests';
+import { listEntrypoints } from './lspRequests';
 
 let client: LanguageClient;
 
 interface IRunArgs {
   uri: string;
   scope: string;
-}
-// Atd prevents us to obtain direct ranges, we convert them here.
-type CEntrypoint = Omit<Entrypoint, 'range'> & { range: vscode.Range };
-
-async function listEntrypoints() {
-  const dummy_params: EntrypointsParams = {
-    only: [{ kind: 'GUI' }],
-    no_lambdas: true,
-    no_variables: true,
-  };
-  console.log('called list entrypoints');
-  let ret: Array<CEntrypoint> = await client.sendRequest(
-    'catala.listEntrypoints',
-    writeEntrypointsParams(dummy_params)
-  );
-  console.log('ret: ' + JSON.stringify(ret));
-  return;
 }
 
 async function selectScope(): Promise<IRunArgs | undefined> {
@@ -48,48 +31,63 @@ async function selectScope(): Promise<IRunArgs | undefined> {
     );
     return undefined;
   }
-
-  const files_scopes_map: {
-    path: string;
-    scopes: { name: string; range: vscode.Range }[];
-  }[] = await client.sendRequest(
-    'catala.getRunnableScopes',
-    vscode.workspace.getWorkspaceFolder
+  const entrypoints: Array<CatalaEntrypoint> = await listEntrypoints(
+    client,
+    [{ kind: 'Test' }, { kind: 'NoInputScope' }],
+    undefined,
+    false,
+    true
   );
-
-  const possible_files: vscode.QuickPickItem[] = [
-    {
-      label: 'Catala source files',
-      kind: vscode.QuickPickItemKind.Separator,
-    },
-    ...files_scopes_map
-      .map((file) => {
-        return { label: file.path };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label)),
-  ];
+  const uniq_sorted_files: vscode.QuickPickItem[] = Array.from(
+    new Set(entrypoints.map((file) => file.path))
+  )
+    .sort((a, b) => a.localeCompare(b))
+    .map((f) => {
+      return { label: f };
+    });
 
   const file: vscode.QuickPickItem | undefined =
-    await vscode.window.showQuickPick(possible_files);
-  let possible_scopes: vscode.QuickPickItem[];
+    await vscode.window.showQuickPick([
+      {
+        label: 'Catala source files',
+        kind: vscode.QuickPickItemKind.Separator,
+      },
+      ...uniq_sorted_files,
+    ]);
+
   if (file) {
-    const file_scopes = files_scopes_map.find((f) => f.path == file.label);
-    if (file_scopes) {
-      possible_scopes = file_scopes.scopes.map((scope) => {
-        return { label: scope.name };
-      });
-      const scopes_to_choose: vscode.QuickPickItem[] = [
-        {
-          label: 'Catala scopes',
-          kind: vscode.QuickPickItemKind.Separator,
-        },
-        ...possible_scopes,
-      ];
-      const scope: vscode.QuickPickItem | undefined =
-        await vscode.window.showQuickPick(scopes_to_choose);
-      vscode.workspace.openTextDocument(vscode.Uri.file(file.label));
-      if (scope) return { uri: file.label, scope: scope.label };
-    }
+    const scopes: vscode.QuickPickItem[] = entrypoints
+      .filter((f) => f.path == file.label)
+      .reduce((acc, e) => {
+        if (e.entrypoint.kind == 'Test' && e.entrypoint.value.kind == 'Test') {
+          const item: vscode.QuickPickItem = {
+            label: e.entrypoint.value.value.scope,
+          };
+          return [item, ...acc];
+        } else if (e.entrypoint.kind == 'NoInputScope') {
+          const item: vscode.QuickPickItem = {
+            label: e.entrypoint.value.scope,
+          };
+          return [item, ...acc];
+        } else {
+          return acc;
+        }
+      }, [])!
+      .reverse();
+
+    const scopes_to_choose: vscode.QuickPickItem[] = [
+      {
+        label: 'Catala scopes',
+        kind: vscode.QuickPickItemKind.Separator,
+      },
+      ...scopes,
+    ];
+
+    const scope: vscode.QuickPickItem | undefined =
+      await vscode.window.showQuickPick(scopes_to_choose);
+    vscode.workspace.openTextDocument(vscode.Uri.file(file.label));
+
+    if (scope) return { uri: file.label, scope: scope.label };
   }
 }
 
@@ -107,14 +105,40 @@ async function runScope(): Promise<void> {
   }
 }
 vscode.commands.registerCommand('catala.run', runScope);
-vscode.commands.registerCommand('catala.listEntrypoints', listEntrypoints);
+
+async function listTestableScopes(
+  path: string
+): Promise<Array<{ path: string; scopes: string[] }>> {
+  const entrypoints = await listEntrypoints(
+    client,
+    [{ kind: 'InputScope' }],
+    path,
+    true,
+    true
+  );
+  let m: Map<string, string[]> = new Map();
+  entrypoints.forEach((e) => {
+    if (e.entrypoint.kind == 'InputScope') {
+      const arr = m.get(e.path) ?? [];
+      m.set(e.path, [...arr, e.entrypoint.value.scope]);
+    }
+  });
+  return Array.from(m).map((e) => {
+    return { path: e[0], scopes: e[1] };
+  });
+}
+
+vscode.commands.registerCommand(
+  'catala.listTestableScopes',
+  listTestableScopes
+);
 
 async function debugScope(): Promise<void> {
   const args: IRunArgs | undefined = await selectScope();
   if (args) {
     await vscode.debug.startDebugging(undefined, {
       name: 'Run Catala program',
-      type: 'catala-debugger', // ou "extensionHost" si c'est pour développer l'extension
+      type: 'catala-debugger',
       request: 'launch',
       args: args,
       stopOnEntry: true,
@@ -215,24 +239,6 @@ export async function activate(
         );
       }
     )
-  );
-
-  vscode.commands.registerCommand(
-    'catala.getTestableScopes',
-    async (workspacePath?: string) => {
-      if (!client) {
-        vscode.window.showErrorMessage(
-          'Catala LSP is not running: cannot list testable scopes.'
-        );
-        return [];
-      }
-      const files_scopes_map: { path: string; scopes: string[] }[] =
-        await client.sendRequest(
-          'catala.getTestableScopes',
-          workspacePath ?? null
-        );
-      return files_scopes_map;
-    }
   );
 
   const lsp_server_config_path = vscode.workspace

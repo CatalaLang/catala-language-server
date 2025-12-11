@@ -282,7 +282,7 @@ export class TestCaseEditorProvider
             const ws = vscode.workspace.getWorkspaceFolder(document.uri);
             const wsPath = ws?.uri.fsPath;
             const entries = (await vscode.commands.executeCommand(
-              'catala.getTestableScopes',
+              'catala.listTestableScopes',
               wsPath
             )) as { path: string; scopes: string[] }[];
 
