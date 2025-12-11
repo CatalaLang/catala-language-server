@@ -258,55 +258,6 @@ let list_scopes ~tests_only file : Shared_ast.ScopeName.t list =
   in
   List.fold_left loop [] prg.program_items
 
-let list_testable_scopes file : Shared_ast.ScopeName.t list =
-  let open Shared_ast in
-  let open Surface.Ast in
-  let prg = Surface.Parser_driver.parse_top_level_file (Global.FileName file) in
-  let rec loop acc = function
-    | CodeBlock (code_block, _, true) ->
-      List.fold_left
-        (fun acc -> function
-          | ScopeDecl sdecl ->
-            let has_no_input =
-              List.for_all
-                (function
-                  | ContextData
-                      {
-                        scope_decl_context_item_attribute =
-                          { scope_decl_context_io_input = Input, _; _ };
-                        _;
-                      } ->
-                    false
-                  | _ -> true)
-                (List.map Mark.remove sdecl.scope_decl_context)
-            in
-            let has_function_input_or_output =
-              List.exists
-                (function
-                  | ContextData
-                      {
-                        scope_decl_context_item_typ = Func _, _;
-                        scope_decl_context_item_attribute =
-                          ( { scope_decl_context_io_input = Input, _; _ }
-                          | { scope_decl_context_io_output = true, _; _ } );
-                        _;
-                      } ->
-                    true
-                  | _ -> false)
-                (List.map Mark.remove sdecl.scope_decl_context)
-            in
-            if (not has_no_input) && not has_function_input_or_output then
-              let scopename = Mark.remove sdecl.scope_decl_name in
-              ScopeName.fresh [] (scopename, Pos.void) :: acc
-            else acc
-          | _ -> acc)
-        acc
-        (List.map Mark.remove code_block)
-    | LawHeading (_, ls) -> List.fold_left loop acc ls
-    | _ -> acc
-  in
-  List.fold_left loop [] prg.program_items
-
 let get_timestamp ?(no_brackets = false) () =
   let open Ptime in
   let now = Ptime_clock.now () in
