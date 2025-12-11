@@ -312,7 +312,7 @@
     "watch": "webpack --mode development --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
     "prepare": "husky",
-    "atd:generate_ts": "cd src/generated && atdts ../../test-case-parser/test_case.atd",
+    "atd:generate_ts": "cd src/generated && atdts ../../catala-atd/catala_types.atd",
     "check:css": "node purgecss-check.js",
     "knip": "knip",
     "knip:exports": "knip --include exports --no-progress"

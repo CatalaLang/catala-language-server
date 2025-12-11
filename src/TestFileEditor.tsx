@@ -9,7 +9,7 @@ import {
   type Diff,
   readDownMessage,
   writeUpMessage,
-} from './generated/test_case';
+} from './generated/catala_types';
 import TestEditor from './TestEditor';
 import { assertUnreachable } from './util';
 import { pathEquals, isPathPrefix } from './diff/highlight';

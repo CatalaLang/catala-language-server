@@ -31,12 +31,12 @@
   ptime.clock.os
   uri
   re
-  test_case_atd
+  catala_types_atd
  )
  (modules
   (:standard \ Main_lsp Main_dap))
  (preprocess (pps ppx_deriving_yojson ppx_here ppx_deriving.make))
- (flags (:standard -open Clerk_lib)))
+ (flags (:standard -open Clerk_lib -open Catala_types_atd)))
 
 (alias
  (name lsp)

@@ -4,7 +4,7 @@ import type {
   Test,
   TestList,
   TestOutputs,
-} from './generated/test_case';
+} from './generated/catala_types';
 import { atdToCatala } from './testCaseCompilerInterop';
 import { parseContents, getLanguageFromUri } from './testCaseEditor';
 import { logger } from './logger';

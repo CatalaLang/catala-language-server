@@ -1,4 +1,8 @@
-import type { Typ, RuntimeValue, RuntimeValueRaw } from './generated/test_case';
+import type {
+  Typ,
+  RuntimeValue,
+  RuntimeValueRaw,
+} from './generated/catala_types';
 import { assertUnreachable } from './util';
 
 export function getDefaultValue(typ: Typ): RuntimeValue {

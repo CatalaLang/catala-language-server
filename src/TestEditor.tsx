@@ -6,7 +6,7 @@ import {
   type TestInputs,
   type TestRunResults,
   type PathSegment,
-} from './generated/test_case';
+} from './generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
 import { type TestRunStatus } from './TestFileEditor';

@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { hasNestedArrays } from './ArrayEditor';
-import type { Typ } from '../generated/test_case';
+import type { Typ } from '../generated/catala_types';
 
 /**
  * Base for StructEditor and TestInputsEditor.

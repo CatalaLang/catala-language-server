@@ -7,12 +7,12 @@ import type {
   ParseResults,
   TestRunResults,
   UpMessage,
-} from './generated/test_case';
+} from './generated/catala_types';
 import {
   type DownMessage,
   readUpMessage,
   writeDownMessage,
-} from './generated/test_case';
+} from './generated/catala_types';
 import * as path from 'path';
 import PQueue from 'p-queue';
 import {

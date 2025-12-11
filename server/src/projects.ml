@@ -809,9 +809,9 @@ type entrypoint_kind =
 type entrypoint = { path : Doc_id.t; pos : Pos.t; kind : entrypoint_kind }
 
 let typ_to_json (decl_ctx : Shared_ast.decl_ctx) (typ : Shared_ast.typ) :
-    Test_case_atd.Test_case_t.typ =
+    Catala_types_t.typ =
   let open Shared_ast in
-  let module O = Test_case_atd.Test_case_t in
+  let module O = Catala_types_t in
   let rec loop typ =
     match Mark.remove typ with
     | TLit TBool -> O.TBool
@@ -855,11 +855,11 @@ let typ_to_json (decl_ctx : Shared_ast.decl_ctx) (typ : Shared_ast.typ) :
   loop typ
 
 let entrypoint_to_json ?(no_variables = false) (decl_ctx, { path; pos; kind }) :
-    Test_case_atd.Test_case_t.entrypoint =
+    Catala_types_t.entrypoint =
   let scopename s = Shared_ast.ScopeName.to_string s in
   let opt_var f = if no_variables then None else Some (f ()) in
-  let entrypoint_kind :
-      entrypoint_kind -> Test_case_atd.Test_case_t.entrypoint_kind = function
+  let entrypoint_kind : entrypoint_kind -> Catala_types_t.entrypoint_kind =
+    function
     | Test (GUI { scope; title; description }) ->
       `Test (`GUI { scope = scopename scope; title; description })
     | Test (Scope scope) -> `Test (`Test { scope = scopename scope })
@@ -893,15 +893,15 @@ let entrypoint_to_json ?(no_variables = false) (decl_ctx, { path; pos; kind }) :
         }
   in
   let proj_range { Linol_lsp.Types.Range.start; end_ } :
-      Test_case_atd.Test_case_t.vscode_range =
+      Catala_types_t.vscode_range =
     let proj { Linol_lsp.Types.Position.line; character } :
-        Test_case_atd.Test_case_t.vscode_position =
+        Catala_types_t.vscode_position =
       { line; character }
     in
     { start = proj start; end_ = proj end_ }
   in
   {
-    Test_case_atd.Test_case_t.path :> string;
+    Catala_types_t.path :> string;
     range = Utils.range_of_pos pos |> proj_range;
     entrypoint = entrypoint_kind kind;
   }
@@ -1008,12 +1008,10 @@ let list_entrypoints
     ~(get_prog :
        Doc_id.t -> Shared_ast.typed Scopelang.Ast.program option Lwt.t)
     (project : project)
-    (params : Test_case_atd.Test_case_t.entrypoints_params) :
-    Test_case_atd.Test_case_t.entrypoints Lwt.t =
+    (params : Catala_types_t.entrypoints_params) :
+    Catala_types_t.entrypoints Lwt.t =
   let open Lwt.Syntax in
-  let { Test_case_atd.Test_case_t.only; path; no_lambdas; no_variables } =
-    params
-  in
+  let { Catala_types_t.only; path; no_lambdas; no_variables } = params in
   let only = Option.value ~default:[] only in
   let path = Option.value ~default:project.project_dir path in
   let no_lambdas = Option.value ~default:false no_lambdas in
