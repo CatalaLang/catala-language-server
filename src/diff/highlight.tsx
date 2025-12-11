@@ -1,4 +1,4 @@
-import type { Diff, PathSegment } from '../generated/test_case';
+import type { Diff, PathSegment } from '../generated/catala_types';
 
 /**
  * Compare two paths for exact equality using structural comparison

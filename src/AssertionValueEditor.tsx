@@ -1,6 +1,6 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
-import type { TestIo, Diff, PathSegment } from './generated/test_case';
+import type { TestIo, Diff, PathSegment } from './generated/catala_types';
 import ValueEditor from './editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
 import './styles/assertions-editor.css';

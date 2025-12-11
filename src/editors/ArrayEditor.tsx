@@ -10,7 +10,7 @@ import type {
   ValueDef,
   PathSegment,
   Diff,
-} from '../generated/test_case';
+} from '../generated/catala_types';
 import ValueEditor, { createRuntimeValue } from './ValueEditors';
 import { assertUnreachable } from '../util';
 import {

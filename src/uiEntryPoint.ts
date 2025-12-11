@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import { writeUpMessage } from './generated/test_case';
+import { writeUpMessage } from './generated/catala_types';
 import App from './App';
 import './styles/index.css';
 import '../node_modules/@vscode/codicons/dist/codicon.css';

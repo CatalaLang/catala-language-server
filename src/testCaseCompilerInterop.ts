@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
-import type { ScopeDefList, TestGenerateResults } from './generated/test_case';
+import type {
+  ScopeDefList,
+  TestGenerateResults,
+} from './generated/catala_types';
 import {
   readScopeDefList,
   readTestList,
@@ -9,7 +12,7 @@ import {
   type ParseResults,
   type TestList,
   type TestRunResults,
-} from './generated/test_case';
+} from './generated/catala_types';
 import { logger } from './logger';
 import { Uri, window, workspace } from 'vscode';
 import path from 'path';

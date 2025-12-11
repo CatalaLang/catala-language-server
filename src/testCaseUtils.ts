@@ -1,4 +1,4 @@
-import type { Test, TestList, RuntimeValue } from './generated/test_case';
+import type { Test, TestList, RuntimeValue } from './generated/catala_types';
 import { isAtomicRaw } from './diff/diff';
 import { getLocalizedMessages } from './i18n/messages';
 
