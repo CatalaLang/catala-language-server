@@ -104,5 +104,5 @@ val list_entrypoints :
   get_prog:
     (Doc_id.doc_id -> Shared_ast.typed Scopelang.Ast.program option Lwt.t) ->
   project ->
-  Test_case_atd.Test_case_t.entrypoints_params ->
-  Test_case_atd.Test_case_t.entrypoint list Lwt.t
+  Catala_types_t.entrypoints_params ->
+  Catala_types_t.entrypoint list Lwt.t

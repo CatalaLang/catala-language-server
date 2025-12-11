@@ -4,7 +4,11 @@
  * - expected-only: present in expected, absent in actual.
  * - Append-only accept and delete-last are path-stable; middle ops invalidate.
  */
-import type { Diff, PathSegment, RuntimeValue } from '../generated/test_case';
+import type {
+  Diff,
+  PathSegment,
+  RuntimeValue,
+} from '../generated/catala_types';
 import { isPathPrefix } from './highlight';
 
 function isEmptyValue(rv: RuntimeValue): boolean {

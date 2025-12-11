@@ -15,7 +15,7 @@ import type {
   ValueDef,
   PathSegment,
   Diff,
-} from '../generated/test_case';
+} from '../generated/catala_types';
 import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../util';
 import { getDefaultValue } from '../defaults';

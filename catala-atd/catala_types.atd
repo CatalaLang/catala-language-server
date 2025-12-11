@@ -256,10 +256,10 @@ type entrypoint = {
 type entrypoints = entrypoint list
 
 type entrypoint_param_kind = [
-  | GUI <json name="GUI">
-  | Test <json name="Test">
-  | NoInputScope <json name="NoInputScope">
-  | InputScope <json name="InputScope">
+  | GUI
+  | Test
+  | NoInputScope
+  | InputScope
 ]
 
 type entrypoints_params = {

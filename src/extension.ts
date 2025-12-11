@@ -14,8 +14,8 @@ import * as net from 'net';
 import { spawn } from 'child_process';
 import { clerkPath, getCwd, hasResourceUri } from './util_client';
 import { initTests } from './testAndCoverage';
-import type { Entrypoint, EntrypointsParams } from './generated/test_case';
-import { writeEntrypointsParams } from './generated/test_case';
+import type { Entrypoint, EntrypointsParams } from './generated/catala_types';
+import { writeEntrypointsParams } from './generated/catala_types';
 
 let client: LanguageClient;
 

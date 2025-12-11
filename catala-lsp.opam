@@ -28,6 +28,10 @@ depends: [
   "atdgen"    { build }
   "atdgen-runtime"
   "ptime"
+  # --- the following are "optional dependencies" ---
+  # they're listed here mostly for documentation ; one can export
+  # OPAMVAR_cataladevmode=1 before installation to automatically get them
+  "atdts"     {?cataladevmode & cataladevmode}
 ]
 pin-depends: [
   ["catala.dev" "git+https://github.com/CatalaLang/catala"]

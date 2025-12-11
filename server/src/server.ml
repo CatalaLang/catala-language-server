@@ -751,12 +751,12 @@ class catala_lsp_server =
             Option.map
               (fun json ->
                 Yojson.Safe.to_string json
-                |> Test_case_atd.Test_case_j.entrypoints_params_of_string)
+                |> Catala_types_j.entrypoints_params_of_string)
               params
             |> Option.value
                  ~default:
                    {
-                     Test_case_atd.Test_case_t.only = None;
+                     Catala_types_t.only = None;
                      path = None;
                      no_lambdas = None;
                      no_variables = None;
@@ -797,7 +797,7 @@ class catala_lsp_server =
           in
           let buf = Buffer.create 1024 in
           let convert_to_json epl =
-            Test_case_atd.Test_case_j.write_entrypoints buf epl;
+            Catala_types_j.write_entrypoints buf epl;
             Yojson.Safe.from_string ~buf (Buffer.contents buf)
           in
           Lwt.return (convert_to_json (List.concat entrypoint_list)))

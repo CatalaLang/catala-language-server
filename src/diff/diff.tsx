@@ -1,4 +1,4 @@
-import type { RuntimeValue, RuntimeValueRaw } from '../generated/test_case';
+import type { RuntimeValue, RuntimeValueRaw } from '../generated/catala_types';
 
 /**
  * Returns true for primitive-like runtime values (used by diff display logic)

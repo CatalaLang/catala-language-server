@@ -1,4 +1,4 @@
-import { writeUpMessage, type ConfirmAction } from '../generated/test_case';
+import { writeUpMessage, type ConfirmAction } from '../generated/catala_types';
 import { getVsCodeApi } from '../webviewApi';
 
 type ConfirmActionKind = ConfirmAction['kind'];

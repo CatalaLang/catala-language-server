@@ -15,7 +15,8 @@
 open Catala_utils
 open Shared_ast
 module I = Desugared.Ast
-module O = Test_case_t
+module O = Catala_types_t
+module J = Catala_types_j
 
 let to_relative (p : File.t) =
   let cwd = File.path_to_list (Sys.getcwd ()) in
@@ -419,8 +420,8 @@ let write_stdout f arg =
   f buf arg;
   Buffer.output_buffer stdout buf
 
-let print_test test = write_stdout Test_case_j.write_test test
-let print_tests test = write_stdout Test_case_j.write_test_list test
+let print_test test = write_stdout J.write_test test
+let print_tests test = write_stdout J.write_test_list test
 
 let read_program includes path_to_build options =
   let stdlib =
@@ -624,7 +625,7 @@ let read_test include_dirs (options : Global.options) buffer_path =
   (* Use alias-aware module name resolver by default during reading *)
   current_modname := display_module_name_by_ctx naming_ctx;
   let tests = import_catala_tests prg in
-  write_stdout Test_case_j.write_test_list tests
+  write_stdout J.write_test_list tests
 
 type lang_strings = {
   declaration_scope : string;
@@ -876,8 +877,7 @@ let write_catala_test ppf t lang =
 
 let write_catala options outfile =
   let tests =
-    Test_case_j.read_test_list (Yojson.init_lexer ())
-      (Lexing.from_channel stdin)
+    J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
   in
   let lang =
     Catala_utils.Cli.file_lang
@@ -1168,9 +1168,9 @@ let run_test testing_scope include_dirs options =
   let test = { test with test_outputs } in
   let assert_failures = not (!failed_asserts = []) in
   let test_run = { O.test; O.assert_failures; O.diffs } in
-  write_stdout Test_case_j.write_test_run test_run
+  write_stdout J.write_test_run test_run
 
-let print_scopes scopes = write_stdout Test_case_j.write_scope_def_list scopes
+let print_scopes scopes = write_stdout J.write_scope_def_list scopes
 
 let list_scopes include_dirs options =
   let path_to_build, include_dirs =
