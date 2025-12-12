@@ -57,7 +57,8 @@ let module_usage_error ({ mod_use_name; _ } : Surface.Ast.module_use) =
 let load_modules ~stdlib_path config_dir includes program :
     ModuleName.t Ident.Map.t
     * (Surface.Ast.module_content * ModuleName.t Ident.Map.t) ModuleName.Map.t
-    * ModuleName.t File.Map.t =
+    * ModuleName.t File.Map.t
+    * (Ident.t * Surface.Ast.module_content) ModuleName.Map.t =
   let includes =
     List.map File.Tree.build includes
     |> List.fold_left File.Tree.union File.Tree.empty
@@ -175,7 +176,7 @@ let load_modules ~stdlib_path config_dir includes program :
           ModuleName.Map.add mname (intf, use_map) acc)
       file_map ModuleName.Map.empty
   in
-  let stdlib_files, stdlib_uses =
+  let stdlib_modules, stdlib_files, stdlib_uses =
     let stdlib_files, stdlib_use_map =
       aux true [Pos.from_info file 0 0 0 0] File.Map.empty [stdlib_use file]
     in
@@ -185,7 +186,13 @@ let load_modules ~stdlib_path config_dir includes program :
          still be overriden *)
       ModuleName.Map.choose stdlib_modules
     in
-    ( stdlib_files,
+    let stdlib_modules =
+      Ident.Map.bindings stdlib_uses
+      |> List.map (fun (x, y) -> y, x)
+      |> ModuleName.Map.of_list
+    in
+    ( stdlib_modules,
+      stdlib_files,
       Ident.Map.union (fun _ _ m -> Some m) stdlib_uses stdlib_use_map )
   in
   let file_module_map, root_uses =
@@ -197,7 +204,10 @@ let load_modules ~stdlib_path config_dir includes program :
         Option.map (fun (mname, intf, use_map) ->
             ( mname,
               intf,
-              if File.Map.mem file stdlib_files then use_map
+              if
+                File.Map.mem file stdlib_files
+                || intf.Surface.Ast.module_modname.module_external
+              then use_map
               else Ident.Map.union (fun _ _ m -> Some m) stdlib_uses use_map )))
       file_module_map
   in
@@ -208,12 +218,19 @@ let load_modules ~stdlib_path config_dir includes program :
       (Surface.Ast.module_content * ModuleName.t Ident.Map.t) ModuleName.Map.t =
     modules_map file_module_map
   in
+  let stdlib_modules =
+    ModuleName.Map.mapi
+      (fun mn alias ->
+        let m_content, _ = ModuleName.Map.find mn modules in
+        alias, m_content)
+      stdlib_modules
+  in
   let used_modules : ModuleName.t File.Map.t =
     Ident.Map.union (fun _ _ m -> Some m) stdlib_uses root_uses
     |> Ident.Map.bindings
     |> File.Map.of_list
   in
-  mod_uses, modules, used_modules
+  mod_uses, modules, used_modules, stdlib_modules
 
 let process
     ~(resolve_file_content : string -> string Global.input_src)
@@ -278,7 +295,7 @@ let process
             clerk_root_dir, clerk_config
           | No_clerk -> project.project_dir, Clerk_config.default_config
         in
-        let mod_uses, modules, used_modules =
+        let mod_uses, modules, used_modules, stdlib_modules =
           let check stdlib_path k =
             if File.exists stdlib_path then
               load_modules ~stdlib_path root_dir
@@ -339,7 +356,9 @@ let process
           ignore @@ Typing.program ~internal_check:true prg
         in
         let jump_table =
-          lazy (Jump_table.populate input_src ctx modules_contents surface prg)
+          lazy
+            (Jump_table.populate input_src ctx ~stdlib_modules modules_contents
+               surface prg)
         in
         let result = { Server_state.prg; used_modules; jump_table } in
         Message.report_delayed_errors_if_any ();

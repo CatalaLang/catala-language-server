@@ -764,6 +764,10 @@ let remove_project_file ~on_error doc_id project projects =
           file.used_modules
         |> ScanItemFiles.of_list
     in
+    let project_files =
+      (* Don't forget to remove the file from the project *)
+      Doc_id.Map.remove doc_id project_files
+    in
     let project_graph, possibly_affected_files =
       Project_graph.remove_vertex ~item ~compute_using_modules
         project.project_graph
