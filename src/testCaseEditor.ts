@@ -149,6 +149,7 @@ export class TestCaseEditorProvider
     function postMessageToWebView(message: DownMessage): void {
       webviewPanel.webview.postMessage(writeDownMessage(message));
     }
+    TestCaseEditorProvider.registerWebview(document.uri, postMessageToWebView);
 
     async function runTest(
       fileName: string,
@@ -174,6 +175,7 @@ export class TestCaseEditorProvider
             kind: 'Update',
             value: document.parseResults,
           });
+          TestCaseEditorProvider.markReady(document.uri);
           break;
         }
         case 'GuiEdit': {
@@ -198,6 +200,13 @@ export class TestCaseEditorProvider
                 },
               },
             });
+            // Reflect the cancellation in the Test Explorer
+            void vscode.commands.executeCommand(
+              'catala.testcase.reportResult',
+              document.uri,
+              typed_msg.value.scope,
+              { kind: 'Cancelled' }
+            );
             return;
           }
 
@@ -223,6 +232,13 @@ export class TestCaseEditorProvider
                   results: { kind: 'Cancelled' },
                 },
               });
+              // Reflect the cancellation in the Test Explorer
+              void vscode.commands.executeCommand(
+                'catala.testcase.reportResult',
+                document.uri,
+                scope,
+                { kind: 'Cancelled' }
+              );
               return;
             }
           }
@@ -234,6 +250,13 @@ export class TestCaseEditorProvider
             kind: 'TestRunResults',
             value: { scope, reset_outputs, results },
           });
+          // Report results back to the Test Explorer when initiated from the GUI
+          void vscode.commands.executeCommand(
+            'catala.testcase.reportResult',
+            document.uri,
+            scope,
+            results
+          );
 
           if (reset_outputs) {
             // reset assertions in the document model, update UI
@@ -410,11 +433,120 @@ export class TestCaseEditorProvider
       // Any disposal code should go here
       // e.g. subscriptions to vs code 'system' events
       // (content change monitoring...)
+      TestCaseEditorProvider.unregisterWebview(document.uri);
       changeSubscription.dispose();
     });
   }
 
-  private static readonly viewType = 'catala.testCaseEditor';
+  public static readonly viewType = 'catala.testCaseEditor';
+
+  // Registry of open custom editor webviews to send messages to
+  private static webviews = new Map<
+    string,
+    { post: (msg: DownMessage) => void; ready: boolean; queue: DownMessage[] }
+  >();
+
+  private static registerWebview(
+    uri: vscode.Uri,
+    post: (m: DownMessage) => void
+  ): void {
+    const key = uri.toString();
+    const existing = TestCaseEditorProvider.webviews.get(key);
+    if (existing) {
+      existing.post = post;
+      TestCaseEditorProvider.webviews.set(key, existing);
+    } else {
+      TestCaseEditorProvider.webviews.set(key, {
+        post,
+        ready: false,
+        queue: [],
+      });
+    }
+  }
+
+  private static unregisterWebview(uri: vscode.Uri): void {
+    TestCaseEditorProvider.webviews.delete(uri.toString());
+  }
+
+  private static markReady(uri: vscode.Uri): void {
+    const key = uri.toString();
+    const entry = TestCaseEditorProvider.webviews.get(key);
+    if (!entry) return;
+    entry.ready = true;
+    while (entry.queue.length) {
+      const m = entry.queue.shift()!;
+      entry.post(m);
+    }
+  }
+
+  private static postOrQueue(uri: vscode.Uri, msg: DownMessage): boolean {
+    const key = uri.toString();
+    const entry = TestCaseEditorProvider.webviews.get(key);
+    if (!entry) {
+      // Create placeholder entry with the message queued; resolveCustomEditor will register later.
+      TestCaseEditorProvider.webviews.set(key, {
+        post: () => {},
+        ready: false,
+        queue: [msg],
+      });
+      return false;
+    }
+    if (!entry.ready) {
+      entry.queue.push(msg);
+      return false;
+    }
+    entry.post(msg);
+    return true;
+  }
+
+  public static async focusDiffInCustomEditor(
+    uri: vscode.Uri,
+    scope: string,
+    results: TestRunResults
+  ): Promise<boolean> {
+    const config = vscode.workspace.getConfiguration('catala');
+    const isEnabled = config.get<boolean>('enableCustomTestCaseEditor');
+    if (!isEnabled) return false;
+
+    try {
+      await vscode.commands.executeCommand(
+        'vscode.openWith',
+        uri,
+        TestCaseEditorProvider.viewType
+      );
+    } catch {
+      return false;
+    }
+
+    // Deliver immediately if ready, or queue until the webview signals Ready.
+    TestCaseEditorProvider.postOrQueue(uri, {
+      kind: 'TestRunResults',
+      value: { scope, reset_outputs: false, results },
+    });
+    return true;
+  }
+
+  public static updateOpenCustomEditorWithResults(
+    uri: vscode.Uri,
+    scope: string,
+    results: TestRunResults
+  ): boolean {
+    const key = uri.toString();
+    const entry = TestCaseEditorProvider.webviews.get(key);
+    if (!entry) return false;
+
+    const msg: DownMessage = {
+      kind: 'TestRunResults',
+      value: { scope, reset_outputs: false, results },
+    };
+
+    if (entry.ready) {
+      entry.post(msg);
+    } else {
+      entry.queue.push(msg);
+    }
+    return true;
+  }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(
@@ -455,6 +587,26 @@ export function getLanguageFromUri(uri: vscode.Uri): string {
     return match[1];
   }
   throw new Error(`Unable to determine language from file name: ${uri}`);
+}
+
+export async function focusDiffInCustomEditor(
+  uri: vscode.Uri,
+  scope: string,
+  results: TestRunResults
+): Promise<boolean> {
+  return TestCaseEditorProvider.focusDiffInCustomEditor(uri, scope, results);
+}
+
+export async function updateOpenCustomEditorWithResults(
+  uri: vscode.Uri,
+  scope: string,
+  results: TestRunResults
+): Promise<boolean> {
+  return TestCaseEditorProvider.updateOpenCustomEditorWithResults(
+    uri,
+    scope,
+    results
+  );
 }
 
 /**
