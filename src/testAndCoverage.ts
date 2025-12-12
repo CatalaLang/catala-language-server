@@ -5,6 +5,18 @@ import { sep } from 'path';
 import { clerkPath, getCwd } from './util_client';
 import type { CatalaEntrypoint } from './lspRequests';
 import { listEntrypoints } from './lspRequests';
+import {
+  focusDiffInCustomEditor,
+  updateOpenCustomEditorWithResults,
+} from './testCaseEditor';
+import { runTestScope } from './testCaseCompilerInterop';
+import type {
+  Diff,
+  RuntimeValue,
+  SourcePosition,
+  TestOutputs,
+  TestRunResults,
+} from './generated/catala_types';
 
 type ClerkLocation = {
   file: string;
@@ -78,13 +90,13 @@ type TestScopeMap = Array<{
 
 async function clerkRunTest(
   cwd: string,
-  uri: string[],
+  paths: string[],
   cancellation: vscode.CancellationToken,
   with_coverage?: boolean
 ): Promise<ClerkTestRunResult | Error> {
   const args = ['test', '--json', '--quiet']
     .concat(with_coverage ? ['--code-coverage'] : [])
-    .concat(uri);
+    .concat(paths);
   return new Promise((resolve) => {
     const proc = spawn(clerkPath, args, {
       ...(cwd && { cwd }),
@@ -101,13 +113,147 @@ async function clerkRunTest(
     proc.stderr.on('data', (data) => {
       stderr += data;
     });
-    proc.on('close', (code) => {
-      const results = JSON.parse(
-        output.toString()
-      ) as ClerkTestAndCoverageResult;
-      resolve({ results, code: code ?? 0, err_msg: stderr });
+    proc.on('close', (code: number | null) => {
+      try {
+        const results = JSON.parse(
+          output.toString()
+        ) as ClerkTestAndCoverageResult;
+        if (results?.['test-results']) {
+          resolve({ results, code: code ?? 0, err_msg: stderr });
+        } else {
+          resolve(new Error('Clerk run failed:\n' + stderr));
+        }
+      } catch (e) {
+        resolve(new Error('Clerk run failed:\n' + e + '\n' + stderr));
+      }
     });
   });
+}
+
+function firstDiffLocation(
+  diffs: Diff[],
+  outputs: TestOutputs,
+  file: vscode.Uri
+): vscode.Location | undefined {
+  if (!diffs.length) return;
+  const first = diffs[0];
+  const seg0 = first.path[0];
+  if (seg0?.kind !== 'StructField') return;
+
+  const field = seg0.value;
+  const out = outputs.get(field);
+  const pos: SourcePosition | undefined = out?.value?.pos;
+  if (!pos) return;
+
+  // SourcePosition is 1-based; VS Code expects 0-based
+  const range = new vscode.Range(
+    new vscode.Position(pos.start_line - 1, pos.start_column - 1),
+    new vscode.Position(pos.end_line - 1, pos.end_column - 1)
+  );
+  return new vscode.Location(file, range);
+}
+
+function formatDiffs(diffs: Diff[]): string {
+  const seg = (s: Diff['path'][number]): string => {
+    switch (s.kind) {
+      case 'StructField':
+        return `.${s.value}`;
+      case 'ListIndex':
+        return `[${s.value}]`;
+      case 'TupleIndex':
+        return `(${s.value})`;
+      case 'EnumPayload':
+        return `<${s.value}>`;
+    }
+  };
+  const pp = (rv: RuntimeValue): string => {
+    switch (rv.value.kind) {
+      case 'Bool':
+      case 'Integer':
+      case 'Decimal':
+        return String(rv.value.value);
+      case 'Money':
+        return `$${(rv.value.value / 100).toFixed(2)}`;
+      case 'Date': {
+        const d = rv.value.value;
+        return `|${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}|`;
+      }
+      case 'Duration':
+        return JSON.stringify(rv.value.value);
+      case 'Enum':
+        return `${rv.value.value[0].enum_name}.${rv.value.value[1][0]}`;
+      case 'Struct':
+        return rv.value.value[0].struct_name;
+      case 'Array':
+        return `[${rv.value.value.map(pp).join(', ')}]`;
+      default:
+        return '<value>';
+    }
+  };
+  return diffs
+    .map(
+      (d) =>
+        `Diff at ${d.path.map(seg).join('')}:\n  expected: ${pp(
+          d.expected
+        )}\n  actual:   ${pp(d.actual)}`
+    )
+    .join('\n\n');
+}
+
+// Shared helper to apply results to a single TestItem and report to a TestRun
+function applyResultsToTestItem(
+  tr: vscode.TestRun,
+  item: vscode.TestItem,
+  file: vscode.Uri,
+  results: TestRunResults
+): void {
+  if (results.kind === 'Ok') {
+    const out = results.value;
+    const diffs = out.diffs ?? [];
+    const hasFailures = out.assert_failures || diffs.length > 0;
+    if (hasFailures) {
+      // Prefer focusing the custom editor and displaying diffs there when
+      // run from controller; location still attached for Test Explorer
+      const msg = new vscode.TestMessage(formatDiffs(diffs));
+      const loc = firstDiffLocation(diffs, out.test_outputs, file);
+      if (loc) msg.location = loc;
+      tr.failed(item, msg);
+    } else {
+      tr.passed(item);
+    }
+  } else if (results.kind === 'Cancelled') {
+    tr.skipped(item);
+  } else {
+    tr.errored(item, new vscode.TestMessage(results.value));
+  }
+}
+
+async function processGUITest(
+  run: vscode.TestRun,
+  test: vscode.TestItem,
+  file: string,
+  scope: string
+): Promise<void> {
+  try {
+    const uri = vscode.Uri.file(file);
+    const res: TestRunResults = await runTestScope(file, scope);
+    if (res.kind === 'Ok') {
+      const out = res.value;
+      const diffs = out.diffs ?? [];
+      const hasFailures = out.assert_failures || diffs.length > 0;
+      if (hasFailures) {
+        // Prefer focusing the custom editor and displaying diffs there
+        // TODO: SHOULD WE?
+        await focusDiffInCustomEditor(uri, scope, res);
+      } else {
+        // Update GUI editor if open to clear stale diffs on success
+        await updateOpenCustomEditorWithResults(uri, scope, res);
+      }
+    }
+    applyResultsToTestItem(run, test, uri, res);
+  } catch (e) {
+    run.errored(test, new vscode.TestMessage(String(e)));
+  }
 }
 
 function lookupTestItem(
@@ -133,6 +279,7 @@ function lookupTestItem(
   }
 }
 
+const gui_test_tag: vscode.TestTag = new vscode.TestTag('GUI');
 function populateTestHierarchy(
   ctrl: vscode.TestController,
   pred_item: vscode.TestItem,
@@ -148,6 +295,7 @@ function populateTestHierarchy(
         cwd
       );
       item.range = scope.range;
+      item.tags = scope.kind == 'GUI' ? [gui_test_tag] : [];
       pred_item.children.add(item);
     });
   } else {
@@ -235,34 +383,26 @@ class FileCoverageWithDetails extends vscode.FileCoverage {
 }
 
 function updateTestItemWithClerkResult(
-  ctrl: vscode.TestController,
+  test_item: vscode.TestItem,
   run: vscode.TestRun,
-  filePath: string,
   scopeTest: ClerkScopeTestResult
 ): void {
-  const test_item = lookupTestItem(
-    ctrl,
-    vscode.Uri.file(filePath),
-    scopeTest.scope_name == 'compilation' ? undefined : scopeTest.scope_name
-  );
-  if (test_item) {
-    if (scopeTest.success) {
-      run.passed(test_item, scopeTest.time);
-    } else {
-      const messages = scopeTest.errors.map((error) => {
-        const msg = new vscode.TestMessage(error.message);
-        msg.location = new vscode.Location(
-          vscode.Uri.parse(error.location.file),
-          error.location.range
-        );
-        return msg;
-      });
-      if (scopeTest.scope_name == 'compilation')
-        test_item.children.forEach((item) =>
-          run.failed(item, messages, scopeTest.time)
-        );
-      run.failed(test_item, messages, scopeTest.time);
-    }
+  if (scopeTest.success) {
+    run.passed(test_item, scopeTest.time);
+  } else {
+    const messages = scopeTest.errors.map((error) => {
+      const msg = new vscode.TestMessage(error.message);
+      msg.location = new vscode.Location(
+        vscode.Uri.parse(error.location.file),
+        error.location.range
+      );
+      return msg;
+    });
+    if (scopeTest.scope_name == 'compilation')
+      test_item.children.forEach((item) =>
+        run.failed(item, messages, scopeTest.time)
+      );
+    run.failed(test_item, messages, scopeTest.time);
   }
 }
 
@@ -314,10 +454,7 @@ export async function initTests(
   context: vscode.ExtensionContext,
   client: LanguageClient
 ): Promise<void> {
-  const ctrl = vscode.tests.createTestController(
-    'testController',
-    'Catala Tests'
-  );
+  const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
   context.subscriptions.push(ctrl);
   let cwd: string | undefined;
 
@@ -325,10 +462,13 @@ export async function initTests(
   ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
 
   const updateTestScopes: () => Promise<void> = async () => {
-    const entrypoints = await listEntrypoints(client, [
-      { kind: 'GUI' },
-      { kind: 'Test' },
-    ]).finally(() => ctrl.items.replace([]));
+    const entrypoints = await listEntrypoints(
+      client,
+      [{ kind: 'GUI' }, { kind: 'Test' }],
+      undefined,
+      false,
+      true
+    ).finally(() => ctrl.items.replace([]));
 
     const test_scopes_map: TestScopeMap =
       testEntrypointsToTestScopeMap(entrypoints);
@@ -340,7 +480,8 @@ export async function initTests(
 
   updateTestScopes();
 
-  ctrl.refreshHandler = async (_token) => await updateTestScopes();
+  ctrl.refreshHandler = async (_token): Promise<void> =>
+    await updateTestScopes();
 
   const testRunHandler = async (
     request: vscode.TestRunRequest,
@@ -368,28 +509,54 @@ export async function initTests(
       const { results, code, err_msg } = clerk_test_result;
       if (code != 0 && err_msg != '')
         console.error(`Clerk exit code: ${code}, Output:\n{err_msg}`);
+      let test_gui_threads: Array<Promise<void>> = [];
       results['test-results'].forEach(({ file, tests }) => {
         tests.scopes.forEach((scope_test_result) => {
-          updateTestItemWithClerkResult(ctrl, run, file, scope_test_result);
-        });
-      });
-
-      if (with_coverage) {
-        results.coverage.locations.forEach(({ file, tree }) => {
-          const statements = fold_tree([], tree);
-          run.addCoverage(
-            FileCoverageWithDetails.fromDetails(
-              vscode.Uri.file(file),
-              statements
-            )
+          const test_item = lookupTestItem(
+            ctrl,
+            vscode.Uri.file(file),
+            scope_test_result.scope_name == 'compilation'
+              ? undefined
+              : scope_test_result.scope_name
           );
+          if (test_item) {
+            if (
+              !with_coverage &&
+              test_item.tags[0] === gui_test_tag &&
+              scope_test_result.scope_name
+            ) {
+              const gui_thread: Promise<void> = processGUITest(
+                run,
+                test_item,
+                file,
+                scope_test_result.scope_name
+              );
+              test_gui_threads.push(gui_thread);
+            } else {
+              updateTestItemWithClerkResult(test_item, run, scope_test_result);
+            }
+          }
         });
-      }
+
+        if (with_coverage) {
+          results.coverage.locations.forEach(({ file, tree }) => {
+            const statements = fold_tree([], tree);
+            run.addCoverage(
+              FileCoverageWithDetails.fromDetails(
+                vscode.Uri.file(file),
+                statements
+              )
+            );
+          });
+        }
+      });
+      // Await GUI tests processing
+      await Promise.all(test_gui_threads);
     } catch (e) {
       testsToRun.forEach((test) => run.errored(test, e));
       console.error('Error while processing test results: ', e);
       vscode.window.showErrorMessage(
-        'An error occurred while executing tests. Check the console logs for more details...'
+        'Unexpected error while executing tests. Check the console logs for more details...'
       );
     }
     run.end();
@@ -417,9 +584,33 @@ export async function initTests(
     _testRun: vscode.TestRun,
     coverage: vscode.FileCoverage,
     _token: vscode.CancellationToken
-  ) => {
+  ): Promise<vscode.FileCoverageDetail[]> => {
     return coverage instanceof FileCoverageWithDetails
       ? await coverage.getDetails()
       : [];
   };
+
+  // Update when button run is pressed in testcase ui
+  // Bridge: allow the custom editor to report results back to the Test Explorer
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.testcase.reportResult',
+      async (file: vscode.Uri, scope: string, results: TestRunResults) => {
+        await updateTestScopes();
+        // Find the test item for this file/scope
+        let item: vscode.TestItem | undefined = lookupTestItem(
+          ctrl,
+          file,
+          scope
+        );
+        if (!item) return;
+
+        // Create a synthetic run to update status
+        const req = new vscode.TestRunRequest([item]);
+        const tr = ctrl.createTestRun(req);
+        applyResultsToTestItem(tr, item, file, results);
+        tr.end();
+      }
+    )
+  );
 }
