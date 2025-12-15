@@ -88,6 +88,29 @@ type TestScopeMap = Array<{
   scopes: TestScope[];
 }>;
 
+class TestId {
+  id: string;
+  constructor(file: vscode.Uri, scope_name?: string) {
+    this.id = scope_name ? `${file.path}:${scope_name}` : `${file.path}`;
+  }
+}
+
+class TestMap {
+  private map: Map<string, vscode.TestItem>;
+  constructor() {
+    this.map = new Map();
+  }
+  clear(): void {
+    this.map.clear();
+  }
+  set(id: TestId, test: vscode.TestItem): void {
+    this.map.set(id.id, test);
+  }
+  get(id: TestId): vscode.TestItem | undefined {
+    return this.map.get(id.id);
+  }
+}
+
 async function clerkRunTest(
   cwd: string,
   paths: string[],
@@ -256,46 +279,27 @@ async function processGUITest(
   }
 }
 
-function lookupTestItem(
-  ctrl: vscode.TestController,
-  test_file: vscode.Uri,
-  scope_name?: string
-): vscode.TestItem | undefined {
-  const cwd = getCwd(test_file.path);
-  if (cwd) {
-    let cur_uri = vscode.Uri.file(cwd);
-    let file_path = test_file.path.replace(cur_uri.path + sep, '').split(sep);
-    let cur_path = vscode.Uri.joinPath(cur_uri, file_path[0]);
-    file_path = file_path.slice(1);
-    let cur_item = ctrl.items.get(cur_path.path);
-    while (cur_item && file_path.length > 0) {
-      cur_path = vscode.Uri.joinPath(cur_path, file_path[0]);
-      file_path = file_path.slice(1);
-      cur_item = cur_item.children.get(cur_path.path);
-    }
-    if (scope_name)
-      return cur_item?.children.get(`${cur_path.path}:${scope_name}`);
-    else return cur_item;
-  }
-}
-
 const gui_test_tag: vscode.TestTag = new vscode.TestTag('GUI');
 function populateTestHierarchy(
   ctrl: vscode.TestController,
+  test_map: TestMap,
   pred_item: vscode.TestItem,
   cwd: vscode.Uri,
   path: string[],
   scopes: TestScope[]
 ): void {
   if (path.length == 0) {
+    test_map.set(new TestId(cwd), pred_item);
     scopes.forEach((scope) => {
+      const id: TestId = new TestId(cwd, scope.scope);
       const item: vscode.TestItem = ctrl.createTestItem(
-        `${cwd.path}:${scope.scope}`,
+        id.id,
         scope.kind == 'GUI' ? '👁 ' + scope.label : scope.label,
         cwd
       );
       item.range = scope.range;
       item.tags = scope.kind == 'GUI' ? [gui_test_tag] : [];
+      test_map.set(id, item);
       pred_item.children.add(item);
     });
   } else {
@@ -308,12 +312,13 @@ function populateTestHierarchy(
       cur_item = ctrl.createTestItem(id, path[0], uri);
       pred_item?.children.add(cur_item);
     }
-    populateTestHierarchy(ctrl, cur_item, uri, path.slice(1), scopes);
+    populateTestHierarchy(ctrl, test_map, cur_item, uri, path.slice(1), scopes);
   }
 }
 
 function populateTestItems(
   ctrl: vscode.TestController,
+  test_map: TestMap,
   path: string,
   scopes: TestScope[]
 ): void {
@@ -326,7 +331,14 @@ function populateTestItems(
     const item: vscode.TestItem =
       ctrl.items.get(first_id_uri.path) ??
       ctrl.createTestItem(first_id_uri.path, file_path[0], first_id_uri);
-    populateTestHierarchy(ctrl, item, first_id_uri, file_path.slice(1), scopes);
+    populateTestHierarchy(
+      ctrl,
+      test_map,
+      item,
+      first_id_uri,
+      file_path.slice(1),
+      scopes
+    );
     if (!ctrl.items.get(first_id_uri.path)) ctrl.items.add(item);
   }
 }
@@ -457,7 +469,7 @@ export async function initTests(
   const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
   context.subscriptions.push(ctrl);
   let cwd: string | undefined;
-
+  let test_map: TestMap = new TestMap();
   // Placeholder to display something while tests are retrieved
   ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
 
@@ -472,8 +484,9 @@ export async function initTests(
 
     const test_scopes_map: TestScopeMap =
       testEntrypointsToTestScopeMap(entrypoints);
+    test_map.clear();
     test_scopes_map.forEach(({ path, scopes }) =>
-      populateTestItems(ctrl, path, scopes)
+      populateTestItems(ctrl, test_map, path, scopes)
     );
     cwd = getCwd(test_scopes_map?.[0]?.path);
   };
@@ -512,13 +525,12 @@ export async function initTests(
       let test_gui_threads: Array<Promise<void>> = [];
       results['test-results'].forEach(({ file, tests }) => {
         tests.scopes.forEach((scope_test_result) => {
-          const test_item = lookupTestItem(
-            ctrl,
-            vscode.Uri.file(file),
+          const scope_name_opt =
             scope_test_result.scope_name == 'compilation'
               ? undefined
-              : scope_test_result.scope_name
-          );
+              : scope_test_result.scope_name;
+          const test_id = new TestId(vscode.Uri.file(file), scope_name_opt);
+          const test_item = test_map.get(test_id);
           if (test_item) {
             if (
               !with_coverage &&
@@ -598,13 +610,10 @@ export async function initTests(
       async (file: vscode.Uri, scope: string, results: TestRunResults) => {
         await updateTestScopes();
         // Find the test item for this file/scope
-        let item: vscode.TestItem | undefined = lookupTestItem(
-          ctrl,
-          file,
-          scope
+        let item: vscode.TestItem | undefined = test_map.get(
+          new TestId(file, scope)
         );
         if (!item) return;
-
         // Create a synthetic run to update status
         const req = new vscode.TestRunRequest([item]);
         const tr = ctrl.createTestRun(req);
