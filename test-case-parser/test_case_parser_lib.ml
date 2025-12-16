@@ -131,6 +131,7 @@ let display_module_name_by_ctx
         if ModuleName.to_string modname = target then Some alias else acc)
       used_modules None
   in
+  (* FIXME? is this really what we want? It seems to generate bugged names. *)
   let res = match alias with Some a -> a | None -> target in
   res
 
@@ -439,8 +440,6 @@ let generate_test
     if include_dirs = [] then lookup_include_dirs options else ".", include_dirs
   in
   let prg, naming_ctx = read_program include_dirs path_to_build options in
-  (* Use alias-aware module name resolver by default when listing *)
-  current_modname := display_module_name_by_ctx naming_ctx;
   (* Use alias-aware module name resolver by default during generation *)
   current_modname := display_module_name_by_ctx naming_ctx;
   let tested_scope =
@@ -461,8 +460,8 @@ let invalid_testing_scope fmt =
 let get_test_scopes prg =
   prg.I.program_root.module_scopes
   |> ScopeName.Map.filter (fun scope_name _scope ->
-         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test &&
-         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
+         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
+         && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
   |> ScopeName.Map.keys
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
