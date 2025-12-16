@@ -336,9 +336,6 @@ let unlocked_process_file
           (Doc_id.Map.of_list included_files_empty_diags) )
   in
   let should_process_dependencies =
-    Log.debug (fun m ->
-        m "should_process_dependencies %b %b %b" is_fully_saved is_valid
-          !scan_project_config);
     is_fully_saved && is_valid && !scan_project_config
   in
   let new_server_state =
@@ -376,7 +373,7 @@ let server_initialized, resolve_init =
   let w, r = Lwt.wait () in
   let w =
     let* () = w in
-    Log.debug (fun m -> m "Server initialized");
+    Log.info (fun m -> m "Server initialized");
     Lwt.return_unit
   in
   w, r
