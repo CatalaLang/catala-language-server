@@ -367,7 +367,7 @@ let process_saved_file server_state doc_id =
   St.use_and_update server_state
   @@ fun unlocked_server_state ->
   let new_state = unlocked_process_file St.Saved doc_id unlocked_server_state in
-  Lwt.return ((), new_state)
+  Lwt.return new_state
 
 let server_initialized, resolve_init =
   let w, r = Lwt.wait () in
@@ -495,7 +495,7 @@ class catala_lsp_server =
         match Projects.lookup_project doc_id projects with
         | None ->
           (* Shouldn't happen but nothing to do otherwise *)
-          Lwt.return ((), sstate)
+          Lwt.return sstate
         | Some project ->
           let { Projects.projects; project; possibly_affected_files } =
             Projects.remove_project_file ~on_error doc_id project projects
@@ -514,7 +514,7 @@ class catala_lsp_server =
           in
           let new_state = { St.projects; open_documents; diagnostics } in
           let* () = unlocked_send_all_diagnostics ~notify_back new_state in
-          Lwt.return ((), new_state)
+          Lwt.return new_state
 
     method private on_notif_did_change_watched_files ~notify_back changes =
       (* Triggers even on save.. *)
@@ -615,7 +615,7 @@ class catala_lsp_server =
         in
         let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
         Lwt.wakeup resolve_init ();
-        Lwt.return ((), sstate)
+        Lwt.return sstate
       | _ -> Lwt.return_unit
 
     method private list_entrypoints
@@ -720,7 +720,7 @@ class catala_lsp_server =
         @@ fun { projects; open_documents; diagnostics } ->
         let open_documents = Doc_id.Map.remove doc_id open_documents in
         let diagnostics = Doc_id.Map.remove doc_id diagnostics in
-        Lwt.return ((), { St.projects; open_documents; diagnostics })
+        Lwt.return { St.projects; open_documents; diagnostics }
 
     method on_notif_doc_did_close ~notify_back d =
       self#on_doc_did_close ~notify_back (Doc_id.of_lsp_uri d.uri)

@@ -117,11 +117,23 @@ let use_now s (f : server_state -> 'a Lwt.t) : 'a Lwt.t =
     Log.debug (fun m -> m "processing on potentially outdated document state");
     f curr_server_state
 
-let use_and_update s (f : server_state -> ('a * server_state) Lwt.t) : 'a Lwt.t
-    =
+let protect ls f s =
+  Lwt.catch
+    (fun () -> f s)
+    (fun e ->
+      let bt = Printexc.get_raw_backtrace () in
+      Log.err (fun m ->
+          m "Exception %s during delayed action: reverting state@\n%s"
+            (Printexc.to_string e)
+            (Printexc.raw_backtrace_to_string bt));
+      ls.delayed_state <- Ready s;
+      Lwt.return s)
+
+let use_and_update s (f : server_state -> server_state Lwt.t) : unit Lwt.t =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
-  let* ret, new_state =
+  let f = protect s f in
+  let* new_state =
     match s.delayed_state with
     | Ready state -> f state
     | Delayed { doc_id = _; curr_server_state; delayed_action; action } ->
@@ -134,13 +146,14 @@ let use_and_update s (f : server_state -> ('a * server_state) Lwt.t) : 'a Lwt.t
       f server_state
   in
   s.delayed_state <- Ready new_state;
-  Lwt.return ret
+  Lwt.return_unit
 
 let make_delayed_action ?(delay = 1.) s action =
   Log.debug (fun m -> m "start waiting on delayed action");
   let* () = Lwt_unix.sleep delay in
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
+  let action = protect s action in
   let curr_state =
     match s.delayed_state with
     | Ready _state -> assert false
@@ -162,6 +175,7 @@ let delayed_update ?delay doc_id s (f : server_state -> server_state Lwt.t) :
     unit Lwt.t =
   Lwt_mutex.with_lock s.lock
   @@ fun () ->
+  let f = protect s f in
   match s.delayed_state with
   | Ready state ->
     let delayed_action = make_delayed_action ?delay s f in

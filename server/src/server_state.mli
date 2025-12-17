@@ -61,7 +61,7 @@ val use_when_ready :
 val use_now : locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
 
 val use_and_update :
-  locked_server_state -> (server_state -> ('a * server_state) Lwt.t) -> 'a Lwt.t
+  locked_server_state -> (server_state -> server_state Lwt.t) -> unit Lwt.t
 
 val delayed_update :
   ?delay:float ->
