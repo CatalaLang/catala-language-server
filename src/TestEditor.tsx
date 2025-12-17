@@ -135,8 +135,6 @@ export default function TestEditor(props: Props): ReactElement {
             <FormattedMessage id="testEditor.expectedValues" />
           </h2>
           <div className="test-result-header">
-            <h3 className="heading-h3">Résultats obtenus</h3>
-            <p className="body-3">Aucun test réalisé / Date du dernier test</p>
             <div className="test-result-action-bar">
               <button
                 className="reset-expected-values button-action-dvp body-b3"
@@ -182,9 +180,6 @@ export default function TestEditor(props: Props): ReactElement {
                       id="testEditor.failed"
                       defaultMessage="Failed"
                     />
-                  </p>
-                  <p className="body-3">
-                    Informations complémentaires sur les erreurs rencontrées
                   </p>
                 </div>
               )}

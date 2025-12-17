@@ -14,7 +14,7 @@
   "testEditor.passed": "Le test a réussi",
   "testEditor.failed": "Le test a échoué",
   "testEditor.inputs": "Données d'entrée",
-  "testEditor.expectedValues": "Résultats du test",
+  "testEditor.expectedValues": "Résultats attendus",
   "testEditor.resetExpected": "Réinitialiser les valeurs attendues",
   "assertion.delete": "Supprimer l'assertion",
   "testOutputs.addExpectedValue": "Ajouter une valeur attendue",
