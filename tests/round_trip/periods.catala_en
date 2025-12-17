@@ -1,0 +1,7 @@
+> Module Periods
+
+```catala-metadata
+declaration structure Period:
+  data start_date content date
+  data end_date content date
+```

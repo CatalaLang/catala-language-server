@@ -1,0 +1,14 @@
+> Module Rename
+
+> Using Periods as P
+
+```catala-metadata
+declaration scope Example:
+  input inp content P.Period
+  output outp content P.Period
+```
+
+```catala
+scope Example:
+  definition outp equals inp
+```
