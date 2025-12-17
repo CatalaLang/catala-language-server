@@ -152,6 +152,7 @@ module Project_graph = struct
   let all_affected_files ~ignored_documents doc_id g =
     let rec loop (visited, affected_files) vertex =
       if Doc_id.Set.mem vertex visited then visited, affected_files
+      else if not (G.mem_vertex g vertex) then visited, affected_files
       else
         let visited = Doc_id.Set.add vertex visited in
         let pred_edges = G.pred_e g vertex in
