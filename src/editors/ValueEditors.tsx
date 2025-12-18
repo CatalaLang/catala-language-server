@@ -9,7 +9,6 @@ import type {
   StructDeclaration,
   RuntimeValue,
   RuntimeValueRaw,
-  Duration,
   EnumDeclaration,
   Typ,
   ValueDef,
@@ -524,6 +523,8 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
       ? runtimeValue.value.value
       : undefined;
 
+  const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
+
   const [years, setYears] = useState<string>(
     initialValue?.years !== undefined ? String(initialValue.years) : ''
   );
@@ -540,9 +541,28 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
       runtimeValue?.value.kind === 'Duration'
         ? runtimeValue.value.value
         : undefined;
-    setYears(newValue?.years !== undefined ? String(newValue.years) : '');
-    setMonths(newValue?.months !== undefined ? String(newValue.months) : '');
-    setDays(newValue?.days !== undefined ? String(newValue.days) : '');
+    setYears((prev) => {
+      if (newValue?.years !== undefined) {
+        const v = newValue.years;
+        return prev === '' && v === 0 ? '' : String(v);
+      }
+      return '';
+    });
+    // Preserve blank inputs for zero values so optional fields remain visually empty
+    setMonths((prev) => {
+      if (newValue?.months !== undefined) {
+        const v = newValue.months;
+        return prev === '' && v === 0 ? '' : String(v);
+      }
+      return '';
+    });
+    setDays((prev) => {
+      if (newValue?.days !== undefined) {
+        const v = newValue.days;
+        return prev === '' && v === 0 ? '' : String(v);
+      }
+      return '';
+    });
   }, [runtimeValue]);
 
   const parseNonNegInt = (s: string): number | null => {
@@ -552,52 +572,67 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
     return n;
   };
 
-  const emitIfValidOrUnset = (triggerUnsetOnInvalid: boolean): void => {
-    const y = parseNonNegInt(years);
-    const m = parseNonNegInt(months);
-    const d = parseNonNegInt(days);
+  const DIGITS = /^\d*$/;
 
-    const allEmpty =
-      years.trim() === '' && months.trim() === '' && days.trim() === '';
+  const maybeEmitWith = (yStr: string, mStr: string, dStr: string): void => {
+    const yEmpty = yStr.trim() === '';
+    const mEmpty = mStr.trim() === '';
+    const dEmpty = dStr.trim() === '';
 
-    if (allEmpty) {
+    if (yEmpty && mEmpty && dEmpty) {
       props.onValueChange(makeUnset(runtimeValue));
       return;
     }
 
-    if (y !== null && m !== null && d !== null) {
-      const newDuration: Duration = { years: y, months: m, days: d };
-      const newValueRaw: RuntimeValueRaw = {
-        kind: 'Duration',
-        value: newDuration,
-      };
-      props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
-    } else if (triggerUnsetOnInvalid) {
-      props.onValueChange(makeUnset(runtimeValue));
+    const yParsed = yEmpty ? null : parseNonNegInt(yStr);
+    const mParsed = mEmpty ? null : parseNonNegInt(mStr);
+    const dParsed = dEmpty ? null : parseNonNegInt(dStr);
+
+    const anyInvalid =
+      (!yEmpty && yParsed === null) ||
+      (!mEmpty && mParsed === null) ||
+      (!dEmpty && dParsed === null);
+
+    if (anyInvalid) {
+      return;
     }
+
+    const newValueRaw: RuntimeValueRaw = {
+      kind: 'Duration',
+      value: {
+        years: yParsed ?? 0,
+        months: mParsed ?? 0,
+        days: dParsed ?? 0,
+      },
+    };
+    props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+  };
+
+  const maybeEmitFromState = (): void => {
+    maybeEmitWith(years, months, days);
   };
 
   const handleBlur = (): void => {
-    emitIfValidOrUnset(true);
-  };
-
-  const clearAll = (): void => {
-    setYears('');
-    setMonths('');
-    setDays('');
-    props.onValueChange(makeUnset(runtimeValue));
+    maybeEmitFromState();
   };
 
   return (
     <div className="value-editor duration-editor">
+      {isUnset && <UnsetBadge />}
       <div className="duration-fields">
         <label>
           <FormattedMessage id="durationEditor.years" defaultMessage="Years:" />
           <input
             type="text"
             inputMode="numeric"
+            pattern="[0-9]*"
             value={years}
-            onChange={(e) => setYears(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!DIGITS.test(v)) return;
+              setYears(v);
+              maybeEmitWith(v, months, days);
+            }}
             onBlur={handleBlur}
             disabled={props.editable === false}
           />
@@ -610,8 +645,14 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           <input
             type="text"
             inputMode="numeric"
+            pattern="[0-9]*"
             value={months}
-            onChange={(e) => setMonths(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!DIGITS.test(v)) return;
+              setMonths(v);
+              maybeEmitWith(years, v, days);
+            }}
             onBlur={handleBlur}
             disabled={props.editable === false}
           />
@@ -621,20 +662,18 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           <input
             type="text"
             inputMode="numeric"
+            pattern="[0-9]*"
             value={days}
-            onChange={(e) => setDays(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!DIGITS.test(v)) return;
+              setDays(v);
+              maybeEmitWith(years, months, v);
+            }}
             onBlur={handleBlur}
             disabled={props.editable === false}
           />
         </label>
-        <button
-          type="button"
-          className="duration-clear"
-          onClick={clearAll}
-          disabled={props.editable === false}
-        >
-          <FormattedMessage id="editor.clear" defaultMessage="Clear" />
-        </button>
       </div>
     </div>
   );
