@@ -184,7 +184,7 @@ let rec runtime_to_val :
     (* This case is only valid for ASTs including default terms; but the typer
        isn't aware so we need some additional dark arts. *)
     match (Obj.obj o : 'a Catala_runtime.Optional.t) with
-    | Catala_runtime.Optional.Absent () -> Lwt.return (Obj.magic EEmpty, m)
+    | Catala_runtime.Optional.Absent -> Lwt.return (Obj.magic EEmpty, m)
     | Catala_runtime.Optional.Present o -> (
       let* r = runtime_to_val eval_expr ctx m ty o in
       match r with
@@ -297,7 +297,7 @@ and val_to_runtime :
     (* In dcalc, this is an expression. in the runtime (lcalc), this is an
        option(pair(expression, pos)) *)
     match v with
-    | EEmpty, _ -> Lwt.return (Obj.repr (Catala_runtime.Optional.Absent ()))
+    | EEmpty, _ -> Lwt.return (Obj.repr Catala_runtime.Optional.Absent)
     | EPureDefault e, m | ((_, m) as e) ->
       let* e = eval_expr ctx e in
       let pos = Expr.pos e in
@@ -719,12 +719,12 @@ let rec evaluate_operator
                 | ETuple [e; (EPos p, _)], _ ->
                   Catala_runtime.Optional.Present (e, Expr.pos_to_runtime p)
                 | _ -> err ()
-              else Catala_runtime.Optional.Absent ()
+              else Catala_runtime.Optional.Absent
             | _ -> err ())
           exps
       in
       match Catala_runtime.handle_exceptions (Array.of_list exps) with
-      | Catala_runtime.Optional.Absent () ->
+      | Catala_runtime.Optional.Absent ->
         Lwt.return
           (EInj
              {
