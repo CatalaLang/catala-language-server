@@ -496,7 +496,9 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
         disabled={props.editable === false}
       >
         <option value="unset">
-          <FormattedMessage id="editor.unset" defaultMessage="Unset" />
+          {/* We leave the Unset option empty so as to avoid giving
+          the user the impression that it is a tri-state value (i.e. signal
+          that Unset is unexpected when running a test) */}
         </option>
         <option value="false">
           <FormattedMessage id="false" />
@@ -932,7 +934,9 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
         disabled={editable === false}
       >
         <option value="__unset__">
-          <FormattedMessage id="editor.unset" defaultMessage="Unset" />
+          {/* We keep that blank as it is more distinguishable
+              from a user-defined Catala enum label than an
+              explicit 'Unset' value; we show a badge in addition. */}
         </option>
         {Array.from(enumDeclaration.constructors.keys()).map((ctorName) => (
           <option key={ctorName} value={ctorName}>
