@@ -669,7 +669,11 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
   | _, O.Unset -> pp_print_string ppf "impossible"
   | _, O.Bool b ->
     pp_print_string ppf (if b then strings.true_str else strings.false_str)
-  | _, O.Money m -> fprintf ppf strings.money_fmt (m / 100) (m mod 100)
+  | _, O.Money m ->
+    let major = abs m / 100 in
+    let minor = abs m mod 100 in
+    if m < 0 then fprintf ppf "-";
+    fprintf ppf strings.money_fmt major minor
   | _, O.Integer i -> pp_print_int ppf i
   | _, O.Decimal f ->
     let s = sprintf "%g" f in
@@ -687,17 +691,17 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
       ppf
       (List.filter_map Fun.id
          [
-           (if years > 0 then
+           (if years <> 0 then
               Some
                 (fun ppf ->
                   fprintf ppf "%d %s" years strings.duration_units.year)
             else None);
-           (if months > 0 then
+           (if months <> 0 then
               Some
                 (fun ppf ->
                   fprintf ppf "%d %s" months strings.duration_units.month)
             else None);
-           (if days > 0 then
+           (if days <> 0 then
               Some
                 (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day)
             else None);
