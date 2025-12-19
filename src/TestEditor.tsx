@@ -63,7 +63,7 @@ export default function TestEditor(props: Props): ReactElement {
   }
 
   const expectedSectionRef = useRef<HTMLDivElement>(null);
-  // Scope for searching the first '.unset-badge' before running; used to scroll into view
+  // Scope for searching the first '.invalid-badge' or '.unset-badge' before running; used to scroll into view
   const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
 
@@ -119,7 +119,9 @@ export default function TestEditor(props: Props): ReactElement {
   const scrollToFirstUnset = (): void => {
     setTimeout(() => {
       const container = unsetElementRef.current ?? document;
-      const el = container.querySelector('.unset-badge') as HTMLElement | null;
+      const el = container.querySelector(
+        '.invalid-badge, .unset-badge'
+      ) as HTMLElement | null;
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         (el as HTMLElement)?.focus?.();

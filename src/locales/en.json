@@ -22,6 +22,7 @@
   "false": "false",
   "true": "true",
   "editor.unset": "Unset",
+  "editor.invalid": "Invalid",
   "durationEditor.years": "Years:",
   "durationEditor.months": "Months:",
   "durationEditor.days": "Days:",
