@@ -565,14 +565,14 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
     });
   }, [runtimeValue]);
 
-  const parseNonNegInt = (s: string): number | null => {
+  const parseIntWithSign = (s: string): number | null => {
     if (s.trim() === '') return null;
     const n = Number(s);
-    if (!Number.isInteger(n) || n < 0) return null;
+    if (!Number.isInteger(n)) return null;
     return n;
   };
 
-  const DIGITS = /^\d*$/;
+  const SIGNED_INT = /^-?\d*$/;
 
   const maybeEmitWith = (yStr: string, mStr: string, dStr: string): void => {
     const yEmpty = yStr.trim() === '';
@@ -584,9 +584,9 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
       return;
     }
 
-    const yParsed = yEmpty ? null : parseNonNegInt(yStr);
-    const mParsed = mEmpty ? null : parseNonNegInt(mStr);
-    const dParsed = dEmpty ? null : parseNonNegInt(dStr);
+    const yParsed = yEmpty ? null : parseIntWithSign(yStr);
+    const mParsed = mEmpty ? null : parseIntWithSign(mStr);
+    const dParsed = dEmpty ? null : parseIntWithSign(dStr);
 
     const anyInvalid =
       (!yEmpty && yParsed === null) ||
@@ -625,11 +625,11 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           <input
             type="text"
             inputMode="numeric"
-            pattern="[0-9]*"
+            pattern="-?[0-9]*"
             value={years}
             onChange={(e) => {
               const v = e.target.value;
-              if (!DIGITS.test(v)) return;
+              if (!SIGNED_INT.test(v)) return;
               setYears(v);
               maybeEmitWith(v, months, days);
             }}
@@ -645,11 +645,11 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           <input
             type="text"
             inputMode="numeric"
-            pattern="[0-9]*"
+            pattern="-?[0-9]*"
             value={months}
             onChange={(e) => {
               const v = e.target.value;
-              if (!DIGITS.test(v)) return;
+              if (!SIGNED_INT.test(v)) return;
               setMonths(v);
               maybeEmitWith(years, v, days);
             }}
@@ -662,11 +662,11 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           <input
             type="text"
             inputMode="numeric"
-            pattern="[0-9]*"
+            pattern="-?[0-9]*"
             value={days}
             onChange={(e) => {
               const v = e.target.value;
-              if (!DIGITS.test(v)) return;
+              if (!SIGNED_INT.test(v)) return;
               setDays(v);
               maybeEmitWith(years, months, v);
             }}
@@ -679,7 +679,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   );
 }
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
+const MONEY_PATTERN = /^-?\d+(\.\d{1,2})?$/;
 
 function isValidMoney(value: string): boolean {
   return MONEY_PATTERN.test(value);
