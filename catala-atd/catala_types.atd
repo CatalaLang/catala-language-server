@@ -67,6 +67,7 @@ type runtime_value_raw = [
   | Enum of (enum_declaration * (string * runtime_value option))
   | Struct of (struct_declaration * (string * runtime_value) list <json repr="object"> <ts repr="map">)
   | Array of runtime_value list <ocaml repr="array">
+  | Unset (* GUI placeholder for 'impossible' value *)
   | Empty (* for diffs *)
 ] <ocaml repr="classic">
 
@@ -175,6 +176,7 @@ type test_run_results_msg = {
 type confirm_action = [
   | DeleteArrayElement
   | DeleteAssertion
+  | RunTestWithUnsetValues
 ]
 
 type confirm_request = {

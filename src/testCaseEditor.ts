@@ -399,20 +399,41 @@ export class TestCaseEditorProvider
         case 'ConfirmRequest': {
           const { id, action } = typed_msg.value;
           const messages = getLocalizedMessages(vscode.env.language);
-          const prompt =
-            action.kind === 'DeleteArrayElement'
-              ? messages.deleteArrayElementConfirmation
-              : action.kind === 'DeleteAssertion'
-                ? messages.deleteAssertionConfirmation
-                : assertUnreachable(action as never);
+
+          let prompt: string;
+          let buttons: Array<{ title: string; action: 'Delete' | 'RunAnyway' }>;
+          let successAction: 'Delete' | 'RunAnyway';
+
+          switch (action.kind) {
+            case 'DeleteArrayElement':
+              prompt = messages.deleteArrayElementConfirmation;
+              buttons = [{ title: messages.deleteButton, action: 'Delete' }];
+              successAction = 'Delete';
+              break;
+            case 'DeleteAssertion':
+              prompt = messages.deleteAssertionConfirmation;
+              buttons = [{ title: messages.deleteButton, action: 'Delete' }];
+              successAction = 'Delete';
+              break;
+            case 'RunTestWithUnsetValues':
+              prompt = messages.unsetValuesRunConfirm;
+              buttons = [
+                { title: messages.runAnywayButton, action: 'RunAnyway' },
+              ];
+              successAction = 'RunAnyway';
+              break;
+            default:
+              assertUnreachable(action as never);
+          }
+
           const confirmation = await vscode.window.showWarningMessage(
             prompt,
             { modal: true },
-            { title: messages.deleteButton, action: 'Delete' }
+            ...buttons
           );
           postMessageToWebView({
             kind: 'ConfirmResult',
-            value: { id, confirmed: confirmation?.action === 'Delete' },
+            value: { id, confirmed: confirmation?.action === successAction },
           });
           break;
         }
