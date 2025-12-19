@@ -21,7 +21,7 @@ const messages = {
     true: 'true',
     false: 'false',
     unsetValuesRunConfirm:
-      'This test contains one or more unset values. The run will likely fail. Do you want to run it anyway?',
+      'This test contains one or more unset or invalid values. The run will likely fail. Do you want to run it anyway?',
   },
   fr: {
     resetOutputsConfirmation:
@@ -41,7 +41,7 @@ const messages = {
     true: 'vrai',
     false: 'faux',
     unsetValuesRunConfirm:
-      'Ce test contient une ou plusieurs valeurs non définies. L’exécution échouera probablement. Voulez-vous quand même lancer le test ?',
+      'Ce test contient une ou plusieurs valeurs non définies ou invalides. L’exécution échouera probablement. Voulez-vous quand même lancer le test ?',
   },
 };
 

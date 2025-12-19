@@ -59,6 +59,14 @@ function UnsetBadge(): ReactElement {
   );
 }
 
+function InvalidBadge(): ReactElement {
+  return (
+    <span className="invalid-badge">
+      <FormattedMessage id="editor.invalid" defaultMessage="Invalid" />
+    </span>
+  );
+}
+
 type Props = {
   testIO: TestIo;
   onValueChange(newValue: TestIo): void;
@@ -238,48 +246,53 @@ function IntEditor(props: IntEditorProps): ReactElement {
   const [displayValue, setDisplayValue] = useState(
     initialValue?.toString() ?? ''
   );
+  const [isInvalid, setIsInvalid] = useState(false);
 
   // Update display value if prop changes externally
   useEffect(() => {
+    if (isInvalid) return;
     const newValue =
       runtimeValue?.value.kind === 'Integer'
         ? runtimeValue.value.value
         : undefined;
     setDisplayValue(newValue?.toString() ?? '');
-  }, [runtimeValue]);
+  }, [runtimeValue, isInvalid]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
     setDisplayValue(valueStr);
 
-    // Only update if valid
     if (isValidInt(valueStr)) {
+      setIsInvalid(false);
       const newValueRaw: RuntimeValueRaw = {
         kind: 'Integer',
         value: Number(valueStr),
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+    } else if (valueStr.trim() === '') {
+      setIsInvalid(false);
+      props.onValueChange(makeUnset(runtimeValue));
+    } else {
+      setIsInvalid(true);
+      props.onValueChange(makeUnset(runtimeValue));
     }
   };
 
   const handleBlur = (): void => {
     if (displayValue.trim() === '') {
       props.onValueChange(makeUnset(runtimeValue));
+      setIsInvalid(false);
       return;
     }
     if (!isValidInt(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Integer'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(resetValue?.toString() ?? '');
+      // keep the user's partial invalid input; do not restore previous value
+      setIsInvalid(true);
     }
   };
 
   return (
     <div className="value-editor">
-      {isUnset && <UnsetBadge />}
+      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
       <input
         type="text"
         pattern={INT_PATTERN.source}
@@ -316,15 +329,17 @@ function DateEditor(props: DateEditorProps): ReactElement {
   };
 
   const [internalValue, setInternalValue] = useState(formatDate(initialValue));
+  const [isInvalid, setIsInvalid] = useState(false);
 
   // Update display value if prop changes externally
   useEffect(() => {
+    if (isInvalid) return;
     const newValue =
       runtimeValue?.value.kind === 'Date'
         ? runtimeValue.value.value
         : undefined;
     setInternalValue(formatDate(newValue));
-  }, [runtimeValue]);
+  }, [runtimeValue, isInvalid]);
 
   const parseDate = (
     dateString: string
@@ -345,22 +360,32 @@ function DateEditor(props: DateEditorProps): ReactElement {
     setInternalValue(dateStr);
 
     const newDate = parseDate(dateStr);
+    if (dateStr.trim() === '') {
+      setIsInvalid(false);
+      props.onValueChange(makeUnset(runtimeValue));
+      return;
+    }
     if (newDate) {
+      setIsInvalid(false);
       const newValueRaw: RuntimeValueRaw = { kind: 'Date', value: newDate };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+    } else {
+      setIsInvalid(true);
+      props.onValueChange(makeUnset(runtimeValue));
     }
   };
 
   const handleBlur = (): void => {
     if (internalValue === '') {
       props.onValueChange(makeUnset(runtimeValue));
+      setIsInvalid(false);
       return;
     }
   };
 
   return (
     <div className="value-editor">
-      {isUnset && <UnsetBadge />}
+      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
       <input
         type="date"
         value={internalValue}
@@ -396,9 +421,11 @@ function RatEditor(props: RatEditorProps): ReactElement {
   const [displayValue, setDisplayValue] = useState(
     initialValue?.toString() ?? ''
   );
+  const [isInvalid, setIsInvalid] = useState(false);
 
   // Update display value if prop changes externally
   useEffect(() => {
+    if (isInvalid) return;
     const newValue =
       runtimeValue?.value.kind === 'Decimal'
         ? runtimeValue.value.value
@@ -413,40 +440,43 @@ function RatEditor(props: RatEditorProps): ReactElement {
       return;
     }
     setDisplayValue(newValue?.toString() ?? '');
-  }, [runtimeValue]);
+  }, [runtimeValue, isInvalid]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
     setDisplayValue(valueStr);
 
-    // Only update if valid
     if (isValidRat(valueStr)) {
+      setIsInvalid(false);
       const newValueRaw: RuntimeValueRaw = {
         kind: 'Decimal',
         value: Number(valueStr),
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+    } else if (valueStr.trim() === '') {
+      setIsInvalid(false);
+      props.onValueChange(makeUnset(runtimeValue));
+    } else {
+      setIsInvalid(true);
+      props.onValueChange(makeUnset(runtimeValue));
     }
   };
 
   const handleBlur = (): void => {
     if (displayValue.trim() === '') {
       props.onValueChange(makeUnset(runtimeValue));
+      setIsInvalid(false);
       return;
     }
     if (!isValidRat(displayValue)) {
-      // Reset to the last valid value or empty string
-      const resetValue =
-        runtimeValue?.value.kind === 'Decimal'
-          ? runtimeValue.value.value
-          : undefined;
-      setDisplayValue(resetValue?.toString() ?? '');
+      // keep the user's partial invalid input; do not restore previous value
+      setIsInvalid(true);
     }
   };
 
   return (
     <div className="value-editor">
-      {isUnset && <UnsetBadge />}
+      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
       <input
         type="text"
         pattern={RAT_PATTERN.source}
@@ -534,9 +564,11 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   const [days, setDays] = useState<string>(
     initialValue?.days !== undefined ? String(initialValue.days) : ''
   );
+  const [isInvalid, setIsInvalid] = useState(false);
 
   // Update state if prop changes externally
   useEffect(() => {
+    if (isInvalid) return;
     const newValue =
       runtimeValue?.value.kind === 'Duration'
         ? runtimeValue.value.value
@@ -563,7 +595,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
       }
       return '';
     });
-  }, [runtimeValue]);
+  }, [runtimeValue, isInvalid]);
 
   const parseIntWithSign = (s: string): number | null => {
     if (s.trim() === '') return null;
@@ -581,6 +613,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
 
     if (yEmpty && mEmpty && dEmpty) {
       props.onValueChange(makeUnset(runtimeValue));
+      setIsInvalid(false);
       return;
     }
 
@@ -594,6 +627,8 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
       (!dEmpty && dParsed === null);
 
     if (anyInvalid) {
+      setIsInvalid(true);
+      props.onValueChange(makeUnset(runtimeValue));
       return;
     }
 
@@ -605,6 +640,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
         days: dParsed ?? 0,
       },
     };
+    setIsInvalid(false);
     props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
 
@@ -618,7 +654,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
 
   return (
     <div className="value-editor duration-editor">
-      {isUnset && <UnsetBadge />}
+      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
       <div className="duration-fields">
         <label>
           <FormattedMessage id="durationEditor.years" defaultMessage="Years:" />
@@ -714,34 +750,43 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const [displayValue, setDisplayValue] = useState(
     centsToDisplayValue(initialValue)
   );
+  const [isInvalid, setIsInvalid] = useState(false);
 
   // Update display value if prop changes externally
   useEffect(() => {
+    if (isInvalid) return;
     const newValue =
       runtimeValue?.value.kind === 'Money'
         ? runtimeValue.value.value
         : undefined;
     setDisplayValue(centsToDisplayValue(newValue));
-  }, [runtimeValue]);
+  }, [runtimeValue, isInvalid]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const valueStr = event.target.value;
     setDisplayValue(valueStr);
 
-    // Only update if valid
     if (isValidMoney(valueStr)) {
+      setIsInvalid(false);
       const centsValue = Math.round(parseFloat(valueStr) * 100);
       const newValueRaw: RuntimeValueRaw = {
         kind: 'Money',
         value: centsValue,
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+    } else if (valueStr.trim() === '') {
+      setIsInvalid(false);
+      props.onValueChange(makeUnset(runtimeValue));
+    } else {
+      setIsInvalid(true);
+      props.onValueChange(makeUnset(runtimeValue));
     }
   };
 
   const handleBlur = (): void => {
     if (displayValue.trim() === '') {
       props.onValueChange(makeUnset(runtimeValue));
+      setIsInvalid(false);
       return;
     }
   };
@@ -754,7 +799,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
 
   return (
     <div className={`value-editor money-editor ${currencyClass}`}>
-      {isUnset && <UnsetBadge />}
+      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
       <input
         type="text"
         pattern={MONEY_PATTERN.source}
