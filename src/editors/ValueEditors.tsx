@@ -34,10 +34,7 @@ export function createRuntimeValue(
 
 function makeUnset(originalRuntimeValue?: RuntimeValue): RuntimeValue {
   // Use Unset as a GUI placeholder; server/runtime should treat it as "impossible" value.
-  return createRuntimeValue(
-    { kind: 'Unset' } as RuntimeValueRaw,
-    originalRuntimeValue
-  );
+  return createRuntimeValue({ kind: 'Unset' }, originalRuntimeValue);
 }
 
 export function getDefaultValue(
