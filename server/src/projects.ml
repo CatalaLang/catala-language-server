@@ -579,6 +579,7 @@ let eq_item (i : Clerk_scan.item) (i' : Clerk_scan.item) =
     included_files = inc;
     has_inline_tests = _;
     has_scope_tests = _;
+    is_stdlib = _;
   } =
     i
   in
@@ -590,6 +591,7 @@ let eq_item (i : Clerk_scan.item) (i' : Clerk_scan.item) =
     included_files = inc';
     has_inline_tests = _;
     has_scope_tests = _;
+    is_stdlib = _;
   } =
     i'
   in
