@@ -210,7 +210,8 @@ let run_debugger
       result;
     }
 
-let load_program ((clerk_config : Clerk_config.t), root_dir) file scope =
+let load_program options ((clerk_config : Clerk_config.t), root_dir) file scope
+    =
   let find_scope (p : typed Dcalc.Ast.program) (scope : string) =
     let l : ScopeName.t list = ScopeName.Map.keys p.decl_ctx.ctx_scopes in
     List.find (fun s -> ScopeName.base s = scope) l
@@ -220,10 +221,12 @@ let load_program ((clerk_config : Clerk_config.t), root_dir) file scope =
   let stdlib_path = File.(root_dir / "_build" / "libcatala") in
   if not (File.exists stdlib_path) then
     failwith "Stdlib not found - Please compile your project first.";
-  let mod_uses, modules, _used_modules, _stdlib_modules =
+  let mod_uses, modules =
     try
-      Document_processing.load_modules ~stdlib_path root_dir
-        clerk_config.global.include_dirs surface
+      Driver.load_modules options
+        ~stdlib:(Some (Global.raw_file stdlib_path))
+        (List.map Global.raw_file clerk_config.global.include_dirs)
+        surface
     with e -> raise e
   in
   let ctx =
@@ -280,14 +283,14 @@ let run_debugger rpc ~file ~scope logger : debugger_state Lwt.t =
     | None -> "_build", (Clerk_config.default_config, ".")
     | Some (config, root) -> File.(root / "_build"), (config, root)
   in
-  let _options =
+  let options =
     Catala_utils.Global.enforce_options ~input_src:(FileName file)
       ~whole_program:true ~bin_dir:build_dir
       ~path_rewrite:(fun i -> (i :> string))
       ()
   in
   let* () = try_build_deps ~logger file in
-  let program, scope, pmap = load_program config_and_root file scope in
+  let program, scope, pmap = load_program options config_and_root file scope in
   let* () =
     Format.kasprintf logger "Program loaded - main scope: %a" ScopeName.format
       scope

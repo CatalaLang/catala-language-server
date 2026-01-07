@@ -53,185 +53,6 @@ let module_usage_error ({ mod_use_name; _ } : Surface.Ast.module_use) =
     suggestion = None;
   }
 
-(* TODO: memoize module interfaces - invalidate them on save *)
-let load_modules ~stdlib_path config_dir includes program :
-    ModuleName.t Ident.Map.t
-    * (Surface.Ast.module_content * ModuleName.t Ident.Map.t) ModuleName.Map.t
-    * ModuleName.t File.Map.t
-    * (Ident.t * Surface.Ast.module_content) ModuleName.Map.t =
-  let includes =
-    List.map File.Tree.build includes
-    |> List.fold_left File.Tree.union File.Tree.empty
-  in
-  let stdlib_root_module lang =
-    let lang = if Global.has_localised_stdlib lang then lang else Global.En in
-    "Stdlib_" ^ Cli.language_code lang
-  in
-  if program.Surface.Ast.program_used_modules <> [] then
-    Message.debug "Loading module interfaces...";
-  (* Recurse into program modules, looking up files in [using] and loading
-     them *)
-  let stdlib_includes = File.Tree.build stdlib_path in
-  let stdlib_use file =
-    let pos = Pos.from_info file 0 0 0 0 in
-    let lang = Cli.file_lang file in
-    {
-      Surface.Ast.mod_use_name = stdlib_root_module lang, pos;
-      Surface.Ast.mod_use_alias = "Stdlib", pos;
-    }
-  in
-  let err_req_pos chain =
-    List.map (fun mpos -> "Module required from", mpos) chain
-  in
-  let find_module in_stdlib req_chain (mname, mpos) =
-    let required_from_file = Pos.get_file mpos in
-    let includes =
-      if in_stdlib then stdlib_includes
-      else
-        File.Tree.union includes
-          (File.Tree.build (File.dirname required_from_file))
-    in
-    match
-      List.filter_map
-        (fun (ext, _) -> File.Tree.lookup includes (mname ^ ext))
-        [
-          ".catala_fr", "fr";
-          ".catala_fr.md", "fr";
-          ".catala_en", "en";
-          ".catala_en.md", "en";
-        ]
-    with
-    | [] ->
-      if in_stdlib then
-        Message.error
-          "The standard library module @{<magenta>%s@}@ could@ not@ be@ found@ \
-           at@ %a"
-          mname File.format
-          (stdlib_path :> string)
-      else
-        Message.error
-          ~extra_pos:(err_req_pos (mpos :: req_chain))
-          "Required module not found: @{<blue>%s@}" mname
-    | [f] -> f
-    | ms ->
-      Message.error
-        ~extra_pos:(err_req_pos (mpos :: req_chain))
-        "Required module @{<blue>%s@} matches multiple files:@;<1 2>%a" mname
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space File.format)
-        ms
-  in
-  let rec aux is_stdlib req_chain seen uses :
-      (ModuleName.t * Surface.Ast.module_content * ModuleName.t Ident.Map.t)
-      option
-      File.Map.t
-      * ModuleName.t Ident.Map.t =
-    List.fold_left
-      (fun (seen, use_map) use ->
-        let f = find_module is_stdlib req_chain use.Surface.Ast.mod_use_name in
-        match File.Map.find_opt f seen with
-        | Some (Some (modname, _, _)) ->
-          ( seen,
-            Ident.Map.add
-              (Mark.remove use.Surface.Ast.mod_use_alias)
-              modname use_map )
-        | Some None ->
-          Message.error
-            ~extra_pos:
-              (err_req_pos (Mark.get use.Surface.Ast.mod_use_name :: req_chain))
-            "Circular module dependency"
-        | None ->
-          let f = if is_stdlib then f else Utils.join_paths config_dir f in
-          let module_content =
-            if Global.options.whole_program then
-              Surface.Parser_driver.load_interface_and_code (Global.FileName f)
-            else Surface.Parser_driver.load_interface (Global.FileName f)
-          in
-          let modname =
-            ModuleName.fresh
-              module_content.Surface.Ast.module_modname.module_name
-          in
-          let seen = File.Map.add f None seen in
-          let seen, file_use_map =
-            aux is_stdlib
-              (Mark.get use.Surface.Ast.mod_use_name :: req_chain)
-              seen module_content.Surface.Ast.module_submodules
-          in
-          ( File.Map.add f (Some (modname, module_content, file_use_map)) seen,
-            Ident.Map.add
-              (Mark.remove use.Surface.Ast.mod_use_alias)
-              modname use_map ))
-      (seen, Ident.Map.empty) uses
-  in
-  let file =
-    match program.Surface.Ast.program_module with
-    | Some m -> Pos.get_file (Mark.get m.module_name)
-    | None -> List.hd program.Surface.Ast.program_source_files
-  in
-  let modules_map file_map =
-    File.Map.fold
-      (fun _ info acc ->
-        match info with
-        | None -> acc
-        | Some (mname, intf, use_map) ->
-          ModuleName.Map.add mname (intf, use_map) acc)
-      file_map ModuleName.Map.empty
-  in
-  let stdlib_modules, stdlib_files, stdlib_uses =
-    let stdlib_files, stdlib_use_map =
-      aux true [Pos.from_info file 0 0 0 0] File.Map.empty [stdlib_use file]
-    in
-    let stdlib_modules = modules_map stdlib_files in
-    let _, (_, stdlib_uses) =
-      (* Uses from the stdlib are "flattened" to the parent module, but can
-         still be overriden *)
-      ModuleName.Map.choose stdlib_modules
-    in
-    let stdlib_modules =
-      Ident.Map.bindings stdlib_uses
-      |> List.map (fun (x, y) -> y, x)
-      |> ModuleName.Map.of_list
-    in
-    ( stdlib_modules,
-      stdlib_files,
-      Ident.Map.union (fun _ _ m -> Some m) stdlib_uses stdlib_use_map )
-  in
-  let file_module_map, root_uses =
-    aux false [] stdlib_files program.Surface.Ast.program_used_modules
-  in
-  let file_module_map =
-    File.Map.mapi
-      (fun file ->
-        Option.map (fun (mname, intf, use_map) ->
-            ( mname,
-              intf,
-              if
-                File.Map.mem file stdlib_files
-                || intf.Surface.Ast.module_modname.module_external
-              then use_map
-              else Ident.Map.union (fun _ _ m -> Some m) stdlib_uses use_map )))
-      file_module_map
-  in
-  let mod_uses : ModuleName.t Ident.Map.t =
-    Ident.Map.union (fun _ _ m -> Some m) stdlib_uses root_uses
-  in
-  let modules :
-      (Surface.Ast.module_content * ModuleName.t Ident.Map.t) ModuleName.Map.t =
-    modules_map file_module_map
-  in
-  let stdlib_modules =
-    ModuleName.Map.mapi
-      (fun mn alias ->
-        let m_content, _ = ModuleName.Map.find mn modules in
-        alias, m_content)
-      stdlib_modules
-  in
-  let used_modules : ModuleName.t File.Map.t =
-    Ident.Map.union (fun _ _ m -> Some m) stdlib_uses root_uses
-    |> Ident.Map.bindings
-    |> File.Map.of_list
-  in
-  mod_uses, modules, used_modules, stdlib_modules
-
 let process
     ~(resolve_file_content : string -> string Global.input_src)
     {
@@ -265,7 +86,11 @@ let process
       FileName including_file.file_name, Some resolve_file_content
     end
   in
-  let _ = Catala_utils.Global.enforce_options ~input_src () in
+  let options =
+    Catala_utils.Global.enforce_options
+      ~path_rewrite:(fun rf -> (rf :> string))
+      ~input_src ()
+  in
   let l = ref [] in
   let on_error e =
     match e with
@@ -295,13 +120,18 @@ let process
             clerk_root_dir, clerk_config
           | No_clerk -> project.project_dir, Clerk_config.default_config
         in
-        let mod_uses, modules, used_modules, stdlib_modules =
-          let check stdlib_path k =
-            if File.exists stdlib_path then
-              load_modules ~stdlib_path root_dir
-                clerk_config.global.include_dirs prg
+        let includes =
+          List.map Global.raw_file clerk_config.global.include_dirs
+        in
+        let mod_uses, modules =
+          let check stdlib k =
+            if File.exists stdlib then
+              Driver.load_modules options
+                ~stdlib:(Some (Global.raw_file stdlib))
+                includes prg
             else k ()
           in
+
           let build_stdlib_path = File.(root_dir / "_build" / "libcatala") in
           check build_stdlib_path
           @@ fun () ->
@@ -310,8 +140,9 @@ let process
           check build_stdlib_path
           @@ fun () ->
           try
-            load_modules ~stdlib_path:root_dir root_dir
-              clerk_config.global.include_dirs prg
+            Driver.load_modules options
+              ~stdlib:(Some (Global.raw_file root_dir))
+              includes prg
           with e ->
             on_error
               {
@@ -356,9 +187,10 @@ let process
           ignore @@ Typing.program ~internal_check:true prg
         in
         let jump_table =
-          lazy
-            (Jump_table.populate input_src ctx ~stdlib_modules modules_contents
-               surface prg)
+          lazy (Jump_table.populate input_src ctx modules_contents surface prg)
+        in
+        let used_modules : ModuleName.t File.Map.t =
+          Ident.Map.bindings mod_uses |> File.Map.of_list
         in
         let result = { Server_state.prg; used_modules; jump_table } in
         Message.report_delayed_errors_if_any ();

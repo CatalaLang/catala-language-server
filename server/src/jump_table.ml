@@ -625,20 +625,11 @@ let add_scope_definitions
   List.fold_left process variables surface.program_items
 
 let populate_modules
-    ~stdlib_modules
     input_src
     (modules_contents : Surface.Ast.module_content ModuleName.Map.t)
     (prog : typed program)
     (surface : Surface.Ast.program)
     (acc : PMap.t) : PMap.t * (ModuleName.t -> mjump) =
-  let modules_contents =
-    let stdlib_modules_contents =
-      ModuleName.Map.map (fun (_, content) -> content) stdlib_modules
-    in
-    ModuleName.Map.union
-      (fun _ _ r -> Some r)
-      modules_contents stdlib_modules_contents
-  in
   let module C = Map.Make (String) in
   let convert_map =
     ModuleName.Map.fold
@@ -692,7 +683,9 @@ let populate_modules
     | None -> acc
     | Some { module_name; module_external = _ } -> (
       try
-        let interface = Surface.Parser_driver.load_interface input_src in
+        let interface =
+          Surface.Parser_driver.load_interface ~is_stdlib:false input_src
+        in
         let pos = Mark.get module_name in
         let mname = ModuleName.fresh module_name in
         let mjump = make_mjump mname interface in
@@ -709,13 +702,11 @@ let populate_modules
 let populate
     input_src
     (ctx : Desugared.Name_resolution.context)
-    ~(stdlib_modules : (Ident.t * Surface.Ast.module_content) ModuleName.Map.t)
     (modules_contents : Surface.Ast.module_content ModuleName.Map.t)
     (surface : Surface.Ast.program)
     (prog : typed program) : t =
   let variables, mod_lookup =
-    populate_modules ~stdlib_modules input_src modules_contents prog surface
-      PMap.empty
+    populate_modules input_src modules_contents prog surface PMap.empty
   in
   let variables, tctx = traverse ctx mod_lookup prog variables in
   let variables = add_scope_definitions tctx surface variables in
