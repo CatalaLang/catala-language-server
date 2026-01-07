@@ -84,8 +84,6 @@ function getTypeName(typ: Typ): string {
       return typ.value.enum_name.split('.').pop() ?? typ.value.enum_name;
     case 'TArray':
       return `${getTypeName(typ.value)}[]`;
-    case 'TLit':
-      return typ.value;
     case 'TInt':
       return 'Integer';
     case 'TBool':
@@ -98,8 +96,20 @@ function getTypeName(typ: Typ): string {
       return 'Date';
     case 'TDuration':
       return 'Duration';
-    default:
+    case 'TUnit':
+      return 'Unit';
+    case 'TTuple':
+      return 'Tuple';
+    case 'TOption':
+      return `${getTypeName(typ.value)}?`;
+    case 'TArrow':
+      return 'Function';
+    default: {
+      // Exhaustiveness check - ensures all Typ variants are handled
+      const _exhaustive: never = typ;
+      void _exhaustive;
       return 'Unknown';
+    }
   }
 }
 
