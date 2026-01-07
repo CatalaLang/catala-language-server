@@ -189,12 +189,16 @@ type Pos.attr += TestUi
 type Pos.attr += Uid of string
 type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
+type Pos.attr += ArrayItemLabel of string
 
 let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun decl_ctx e ->
   let pos = Expr.pos e in
   let attrs =
-    Pos.get_attrs pos (function Uid s -> Some (O.Uid s) | _ -> None)
+    Pos.get_attrs pos (function
+      | Uid s -> Some (O.Uid s)
+      | ArrayItemLabel s -> Some (O.ArrayItemLabel s)
+      | _ -> None)
   in
   let value =
     match Mark.remove e with
@@ -727,7 +731,8 @@ let print_attrs ppf (attrs : O.attr_def list) =
   pp_print_list
     (fun ppf (attr : O.attr_def) ->
       match attr with
-      | Uid (s : string) -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s
+      | Uid s -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s
+      | ArrayItemLabel s -> fprintf ppf "#[testcase.array_item_label = \"%s\"]@\n" s
       (* TODO error out if we come across TestDescription or TestTitle? *)
       | _ -> ())
     ppf attrs

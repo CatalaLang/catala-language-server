@@ -1,0 +1,57 @@
+> Using Torture_tier1
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = "Array within enum payload - tests enum constructors containing arrays"]
+#[testcase.test_title = ""]
+declaration scope ArrayInEnumPayload_test:
+  output array_in_enum_payload scope Torture_tier1.ArrayInEnumPayload
+  
+```
+
+```catala
+scope ArrayInEnumPayload_test:
+  definition array_in_enum_payload.records equals
+    [Torture_tier1.Record {
+       -- id: 1
+       
+       -- status: Torture_tier1.Status.Pending
+       
+     };
+     Torture_tier1.Record {
+       -- id: 2
+       
+       -- status: Torture_tier1.Status.Active content [Torture_tier1.Item {
+                                                         -- value: 100
+                                                         
+                                                       };
+                                                       Torture_tier1.Item {
+                                                         -- value: 200
+                                                         
+                                                       };
+                                                       Torture_tier1.Item {
+                                                         -- value: 300
+                                                         
+                                                       }]
+       
+     };
+     Torture_tier1.Record {
+       -- id: 3
+       
+       -- status: Torture_tier1.Status.Active content [Torture_tier1.Item {
+                                                         -- value: 999
+                                                         
+                                                       }]
+       
+     };
+     #[testcase.uid = "749cf53a-1ba1-46fc-9775-6ed11e151d33"]
+     Torture_tier1.Record {
+       -- id: #[testcase.uid = "749cf53a-1ba1-46fc-9775-6ed11e151d33"]
+       4
+       
+       -- status: Torture_tier1.Status.Pending
+       
+     }]
+  assertion (array_in_enum_payload.count = 0)
+```

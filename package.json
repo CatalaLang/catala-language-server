@@ -368,7 +368,10 @@
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx,md,json}": "npm run format",
-    "src/**/*.{js,ts,jsx,tsx}": "npm run lint:fix",
+    "src/**/*.{js,ts,jsx,tsx}": [
+      "npm run lint:fix",
+      "bash -c 'npx tsc --noEmit'"
+    ],
     "src/styles/*.css": "node lint_scripts/purgecss-check.js",
     "src/locales/*.json": "node lint_scripts/i18n.js",
     "src/**/*.tsx": "node lint_scripts/i18n.js"
