@@ -46,5 +46,8 @@
   "diff.addToExpected": "Ajouter à l'attendu",
   "diff.replaceExpected": "Remplacer l'attendu par la valeur calculée",
   "diff.removeFromExpected": "Supprimer de l'attendu",
-  "testEditor.diffsStale": "Les différences ne sont plus à jour. Relancez pour actualiser."
+  "testEditor.diffsStale": "Les différences ne sont plus à jour. Relancez pour actualiser.",
+  "tableView.noData": "Aucune donnée",
+  "tableView.addSubArrayItem": "Ajouter un élément au sous-tableau",
+  "tableView.addNewItemIn": "Ajouter {typeName} dans {fieldName}"
 }

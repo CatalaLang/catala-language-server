@@ -46,5 +46,8 @@
   "diff.addToExpected": "Add to expected",
   "diff.replaceExpected": "Replace expected with computed value",
   "diff.removeFromExpected": "Remove from expected",
-  "testEditor.diffsStale": "Diffs are out of date. Re-run to refresh."
+  "testEditor.diffsStale": "Diffs are out of date. Re-run to refresh.",
+  "tableView.noData": "No data",
+  "tableView.addSubArrayItem": "Add item to sub-array",
+  "tableView.addNewItemIn": "Add new {typeName} in {fieldName}"
 }

@@ -739,7 +739,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                                     setDropdownAnchor(e.currentTarget);
                                   }
                                 }}
-                                title="Add item to sub-array"
+                                title={intl.formatMessage({
+                                  id: 'tableView.addSubArrayItem',
+                                })}
                               >
                                 +
                               </button>
@@ -771,7 +773,11 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                                         );
                                       }}
                                     >
-                                      Add new {typeName} in '{fieldName}'
+                                      <FormattedMessage
+                                        id="tableView.addNewItemIn"
+                                        defaultMessage="Add new {typeName} in {fieldName}"
+                                        values={{ typeName, fieldName }}
+                                      />
                                     </div>
                                   );
                                 })}
