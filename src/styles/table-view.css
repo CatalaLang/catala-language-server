@@ -61,18 +61,6 @@
   min-width: 150px; /* Give content columns breathing room */
 }
 
-.table-header-number {
-  width: 60px;
-  min-width: 60px;
-  max-width: 60px;
-  text-align: center !important;
-  position: sticky;
-  left: 0;
-  z-index: 12;
-  background-color: var(--card-background-alt);
-  padding: var(--spacing8) var(--spacing4) !important;
-}
-
 .table-header-sub-array {
   width: 40px;
   min-width: 40px;
@@ -91,9 +79,9 @@
   font-size: 11px;
 }
 
-/* Combined header for row number + controls when editable */
+/* Combined header for row number + controls */
 .table-header-controls-combined {
-  width: 180px; /* 60px row number + 120px controls */
+  width: 180px; /* 60px row number + 120px controls when editable */
   min-width: 180px;
   max-width: 180px;
   text-align: center;
@@ -104,6 +92,14 @@
   border-right: 2px solid var(--card-border);
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
   padding: var(--spacing8);
+}
+
+/* Narrower header when not editable (detected by checking if tbody has narrow cells) */
+.table-view:has(.table-cell-controls:has(.table-row-controls > span:only-child))
+  .table-header-controls-combined {
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
 }
 
 /* Table body */
@@ -131,24 +127,7 @@
   border-bottom: 1px solid var(--card-border-light);
 }
 
-/* Row number cell */
-.table-row-number {
-  font-weight: 600;
-  color: var(--field-label-color);
-  text-align: center;
-  font-size: 13px;
-  width: 60px;
-  min-width: 60px;
-  max-width: 60px;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background-color: var(--card-background);
-  padding: var(--spacing8) var(--spacing4) !important;
-}
-
 /* Ensure sticky cells inherit row hover state */
-.table-view tbody tr:hover .table-row-number,
 .table-view tbody tr:hover .table-cell-controls {
   background-color: var(--tab-hover-background);
 }
@@ -261,7 +240,7 @@
   color: var(--vscode-list-activeSelectionForeground);
 }
 
-/* Row controls cell - now includes row number when editable */
+/* Row controls cell - always present, includes row number */
 .table-cell-controls {
   padding: var(--spacing8);
   width: 180px; /* Combined width: 60px number + 120px controls */
@@ -273,6 +252,24 @@
   background-color: var(--card-background);
   border-right: 2px solid var(--card-border);
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Color band on left edge of sticky cell */
+.table-cell-controls::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: var(--row-color);
+}
+
+/* Narrower controls cell when not editable (no buttons, just row number) */
+.table-cell-controls:has(.table-row-controls > span:only-child) {
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
 }
 
 /* Row number inside controls cell */
@@ -363,12 +360,6 @@
   font-size: 12px;
 }
 
-.sub-table .table-row-number {
-  font-size: 11px;
-  width: 60px;
-  max-width: 60px;
-}
-
 /* Sub-table row with left border for parent indication */
 .sub-table-row {
   transition: background-color 0.15s ease-in-out;
@@ -417,15 +408,6 @@
   .table-view td {
     padding: var(--spacing8) var(--spacing8);
     font-size: 13px;
-  }
-
-  .table-header-number {
-    width: 40px;
-  }
-
-  .table-row-number {
-    font-size: 12px;
-    padding-left: 16px !important;
   }
 
   .table-control-btn {

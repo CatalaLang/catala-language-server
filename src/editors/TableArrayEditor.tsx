@@ -595,10 +595,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
         <table className="table-view">
           <thead>
             <tr>
-              {editable && (
-                <th className="table-header-controls-combined">#</th>
-              )}
-              {!editable && <th className="table-header-number">#</th>}
+              <th className="table-header-controls-combined">#</th>
               {atomicColumns.map((col) => (
                 <th key={col.label} className="table-header" title={col.label}>
                   {col.label}
@@ -642,7 +639,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                   id={isSubTable ? undefined : `parent-row-${rowIndex}`}
                   data-row-index={rowIndex}
                   data-parent-row={metadata?.parentRowIndex}
-                  style={{ borderLeft: `4px solid ${borderColor}` }}
                   draggable={editable && !isSubTable}
                   onDragStart={() => !isSubTable && setDraggedIndex(rowIndex)}
                   onDragEnd={() => !isSubTable && setDraggedIndex(null)}
@@ -653,137 +649,139 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                     }
                   }}
                 >
-                  {/* Row controls (includes row number when editable) */}
-                  {editable && (
-                    <td className="table-cell-controls">
-                      <div className="table-row-controls">
-                        <span
-                          className={`table-row-number-inline ${metadata?.onNavigateToParent ? 'clickable-row-number' : ''}`}
-                          onClick={metadata?.onNavigateToParent}
-                          title={
-                            metadata
-                              ? `From row #${metadata.parentRowIndex + 1} - Click to navigate`
-                              : undefined
-                          }
-                        >
-                          #
-                          {metadata?.itemIndexWithinParent !== undefined
-                            ? metadata.itemIndexWithinParent + 1
-                            : rowIndex + 1}
-                        </span>
-                        <button
-                          className="table-control-btn"
-                          onClick={() =>
-                            metadata
-                              ? metadata.onMoveItem(
-                                  metadata.itemIndexWithinParent,
-                                  metadata.itemIndexWithinParent - 1
-                                )
-                              : handleMove(rowIndex, rowIndex - 1)
-                          }
-                          disabled={
-                            metadata
-                              ? metadata.itemIndexWithinParent === 0
-                              : rowIndex === 0
-                          }
-                          title={intl.formatMessage({
-                            id: 'arrayEditor.movePrevious',
-                          })}
-                        >
-                          <span className="codicon codicon-arrow-up"></span>
-                        </button>
-                        <button
-                          className="table-control-btn"
-                          onClick={() =>
-                            metadata
-                              ? metadata.onMoveItem(
-                                  metadata.itemIndexWithinParent,
-                                  metadata.itemIndexWithinParent + 1
-                                )
-                              : handleMove(rowIndex, rowIndex + 1)
-                          }
-                          disabled={rowIndex === currentArray.length - 1}
-                          title={intl.formatMessage({
-                            id: 'arrayEditor.moveNext',
-                          })}
-                        >
-                          <span className="codicon codicon-arrow-down"></span>
-                        </button>
-                        <button
-                          className="table-control-btn table-control-delete"
-                          onClick={() =>
-                            metadata
-                              ? metadata.onDeleteItem(
-                                  metadata.itemIndexWithinParent
-                                )
-                              : handleDelete(rowIndex)
-                          }
-                          title={intl.formatMessage({
-                            id: 'arrayEditor.deleteElement',
-                          })}
-                        >
-                          <span className="codicon codicon-trash"></span>
-                        </button>
-                        {arrayFields.length > 0 && (
-                          <>
-                            <button
-                              className="add-subarray-pill"
-                              onClick={(e) => {
-                                if (addDropdownRowIndex === rowIndex) {
+                  {/* Row controls (always present, includes row number) */}
+                  <td
+                    className="table-cell-controls"
+                    style={
+                      { '--row-color': borderColor } as React.CSSProperties
+                    }
+                  >
+                    <div className="table-row-controls">
+                      <span
+                        className={`table-row-number-inline ${metadata?.onNavigateToParent ? 'clickable-row-number' : ''}`}
+                        onClick={metadata?.onNavigateToParent}
+                        title={
+                          metadata
+                            ? `From row #${metadata.parentRowIndex + 1} - Click to navigate`
+                            : undefined
+                        }
+                      >
+                        #
+                        {metadata?.itemIndexWithinParent !== undefined
+                          ? metadata.itemIndexWithinParent + 1
+                          : rowIndex + 1}
+                      </span>
+                      {editable && (
+                        <>
+                          <button
+                            className="table-control-btn"
+                            onClick={() =>
+                              metadata
+                                ? metadata.onMoveItem(
+                                    metadata.itemIndexWithinParent,
+                                    metadata.itemIndexWithinParent - 1
+                                  )
+                                : handleMove(rowIndex, rowIndex - 1)
+                            }
+                            disabled={
+                              metadata
+                                ? metadata.itemIndexWithinParent === 0
+                                : rowIndex === 0
+                            }
+                            title={intl.formatMessage({
+                              id: 'arrayEditor.movePrevious',
+                            })}
+                          >
+                            <span className="codicon codicon-arrow-up"></span>
+                          </button>
+                          <button
+                            className="table-control-btn"
+                            onClick={() =>
+                              metadata
+                                ? metadata.onMoveItem(
+                                    metadata.itemIndexWithinParent,
+                                    metadata.itemIndexWithinParent + 1
+                                  )
+                                : handleMove(rowIndex, rowIndex + 1)
+                            }
+                            disabled={rowIndex === currentArray.length - 1}
+                            title={intl.formatMessage({
+                              id: 'arrayEditor.moveNext',
+                            })}
+                          >
+                            <span className="codicon codicon-arrow-down"></span>
+                          </button>
+                          <button
+                            className="table-control-btn table-control-delete"
+                            onClick={() =>
+                              metadata
+                                ? metadata.onDeleteItem(
+                                    metadata.itemIndexWithinParent
+                                  )
+                                : handleDelete(rowIndex)
+                            }
+                            title={intl.formatMessage({
+                              id: 'arrayEditor.deleteElement',
+                            })}
+                          >
+                            <span className="codicon codicon-trash"></span>
+                          </button>
+                          {arrayFields.length > 0 && (
+                            <>
+                              <button
+                                className="add-subarray-pill"
+                                onClick={(e) => {
+                                  if (addDropdownRowIndex === rowIndex) {
+                                    setAddDropdownRowIndex(null);
+                                    setDropdownAnchor(null);
+                                  } else {
+                                    setAddDropdownRowIndex(rowIndex);
+                                    setDropdownAnchor(e.currentTarget);
+                                  }
+                                }}
+                                title="Add item to sub-array"
+                              >
+                                +
+                              </button>
+                              <ContextMenu
+                                isOpen={addDropdownRowIndex === rowIndex}
+                                onClose={() => {
                                   setAddDropdownRowIndex(null);
                                   setDropdownAnchor(null);
-                                } else {
-                                  setAddDropdownRowIndex(rowIndex);
-                                  setDropdownAnchor(e.currentTarget);
-                                }
-                              }}
-                              title="Add item to sub-array"
-                            >
-                              +
-                            </button>
-                            <ContextMenu
-                              isOpen={addDropdownRowIndex === rowIndex}
-                              onClose={() => {
-                                setAddDropdownRowIndex(null);
-                                setDropdownAnchor(null);
-                              }}
-                              anchorElement={dropdownAnchor}
-                            >
-                              {arrayFields.map((arr) => {
-                                const elementType =
-                                  arr.arrayType.kind === 'TArray'
-                                    ? arr.arrayType.value
-                                    : arr.arrayType;
-                                const typeName = getTypeName(elementType);
-                                const fieldName = arr.label.split('.').pop();
-                                return (
-                                  <div
-                                    key={arr.label}
-                                    className="context-menu-item"
-                                    onClick={() => {
-                                      handleAddSubArrayItem(
-                                        rowIndex,
-                                        arr.fieldPath,
-                                        arr.label,
-                                        elementType
-                                      );
-                                    }}
-                                  >
-                                    Add new {typeName} in '{fieldName}'
-                                  </div>
-                                );
-                              })}
-                            </ContextMenu>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  )}
-
-                  {/* Row number when not editable */}
-                  {!editable && (
-                    <td className="table-row-number">#{rowIndex + 1}</td>
-                  )}
+                                }}
+                                anchorElement={dropdownAnchor}
+                              >
+                                {arrayFields.map((arr) => {
+                                  const elementType =
+                                    arr.arrayType.kind === 'TArray'
+                                      ? arr.arrayType.value
+                                      : arr.arrayType;
+                                  const typeName = getTypeName(elementType);
+                                  const fieldName = arr.label.split('.').pop();
+                                  return (
+                                    <div
+                                      key={arr.label}
+                                      className="context-menu-item"
+                                      onClick={() => {
+                                        handleAddSubArrayItem(
+                                          rowIndex,
+                                          arr.fieldPath,
+                                          arr.label,
+                                          elementType
+                                        );
+                                      }}
+                                    >
+                                      Add new {typeName} in '{fieldName}'
+                                    </div>
+                                  );
+                                })}
+                              </ContextMenu>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </td>
 
                   {/* Atomic columns */}
                   {isStruct && structData
