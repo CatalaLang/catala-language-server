@@ -23,6 +23,7 @@ import {
   canRemoveLast,
 } from '../diff/arrayPresence';
 import { confirm } from '../messaging/confirm';
+import { TableArrayEditor } from './TableArrayEditor';
 
 /**
  * Diffs are consumed only by ArrayEditor to compute "phantom" indices
@@ -212,6 +213,27 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   // if the array has nested subarrays, we lay it out vertically,
   // otherwise we use a flowing 'card' layout.
   const isVertical = hasNestedArrays(elementType);
+
+  // Use table view for all arrays of structs
+  // Nested arrays within struct fields will be rendered as sub-tables
+  const shouldUseTableView = elementType.kind === 'TStruct';
+
+  if (shouldUseTableView) {
+    return (
+      <TableArrayEditor
+        elementType={elementType}
+        structType={elementType.value}
+        valueDef={valueDef}
+        onValueChange={onValueChange}
+        editorHook={editorHook}
+        currentPath={currentPath}
+        diffs={props.diffs}
+        editable={editable}
+        onDiffResolved={props.onDiffResolved}
+        onInvalidateDiffs={props.onInvalidateDiffs}
+      />
+    );
+  }
 
   // State for drag and drop
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);

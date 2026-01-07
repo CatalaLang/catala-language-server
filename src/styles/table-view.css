@@ -1,0 +1,465 @@
+/* Table Array Editor Styles */
+
+.table-array-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing16);
+  margin-bottom: var(--spacing8);
+}
+
+/* Table wrapper for horizontal scrolling */
+.table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  border: 1px solid var(--card-border-light);
+  border-radius: 4px;
+}
+
+/* Empty state */
+.empty-table-message {
+  padding: var(--spacing32);
+  text-align: center;
+  color: var(--field-label-color);
+  font-size: 14px;
+  font-style: italic;
+  background-color: var(--level-2-background);
+  border-radius: 4px;
+}
+
+/* Main table */
+.table-view {
+  border-collapse: collapse;
+  background-color: var(--card-background);
+  width: 100%;
+}
+
+/* Table header */
+.table-view thead {
+  background-color: var(--card-background-alt);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.table-view th {
+  padding: var(--spacing8);
+  text-align: left;
+  font-weight: var(--field-label-font-weight);
+  font-size: var(--field-label-font-size);
+  color: var(--field-label-color);
+  text-transform: capitalize;
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 120px; /* Ensure content columns don't get compressed */
+}
+
+/* Regular content headers */
+.table-header {
+  min-width: 150px; /* Give content columns breathing room */
+}
+
+.table-header-number {
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
+  text-align: center !important;
+  position: sticky;
+  left: 0;
+  z-index: 12;
+  background-color: var(--card-background-alt);
+  padding: var(--spacing8) var(--spacing4) !important;
+}
+
+.table-header-sub-array {
+  width: 40px;
+  min-width: 40px;
+  max-width: 120px;
+  text-align: center !important;
+  white-space: normal !important;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  line-height: 1.2;
+  max-height: 2.4em; /* Approximately 2 lines */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  padding: var(--spacing4) var(--spacing4) !important;
+  font-size: 11px;
+}
+
+/* Combined header for row number + controls when editable */
+.table-header-controls-combined {
+  width: 180px; /* 60px row number + 120px controls */
+  min-width: 180px;
+  max-width: 180px;
+  text-align: center;
+  position: sticky;
+  left: 0;
+  z-index: 12;
+  background-color: var(--card-background-alt);
+  border-right: 2px solid var(--card-border);
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+  padding: var(--spacing8);
+}
+
+/* Table body */
+.table-view tbody tr {
+  border-bottom: 1px solid var(--card-border-light);
+  transition: background-color 0.15s ease-in-out;
+  background-color: var(--card-background);
+}
+
+.table-view tbody tr:last-child {
+  border-bottom: none;
+}
+
+.table-view tbody tr:hover {
+  background-color: var(--tab-hover-background);
+}
+
+.table-view tbody tr.dragging {
+  opacity: 0.5;
+}
+
+.table-view td {
+  padding: var(--spacing8);
+  vertical-align: middle;
+  border-bottom: 1px solid var(--card-border-light);
+}
+
+/* Row number cell */
+.table-row-number {
+  font-weight: 600;
+  color: var(--field-label-color);
+  text-align: center;
+  font-size: 13px;
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: var(--card-background);
+  padding: var(--spacing8) var(--spacing4) !important;
+}
+
+/* Ensure sticky cells inherit row hover state */
+.table-view tbody tr:hover .table-row-number,
+.table-view tbody tr:hover .table-cell-controls {
+  background-color: var(--tab-hover-background);
+}
+
+/* Table cells */
+.table-cell {
+  position: relative;
+  overflow: visible;
+}
+
+.table-cell > * {
+  max-width: 100%;
+}
+
+/* Override ValueEditor max-width in table context */
+.table-view .value-editor {
+  max-width: none !important;
+  display: block !important;
+}
+
+/* Let inputs/selects size naturally based on content */
+.table-view .value-editor input,
+.table-view .value-editor select {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Sub-array count cell */
+.table-cell-sub-array-count {
+  text-align: center;
+  padding: var(--spacing4) !important;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+}
+
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border: none;
+}
+
+.count-badge-clickable {
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.count-badge-clickable:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+/* Add sub-array pill */
+.add-subarray-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+  position: relative;
+}
+
+.add-subarray-pill:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+/* Dropdown for choosing sub-array type */
+.add-subarray-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background-color: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 200px;
+  overflow: hidden;
+}
+
+.add-subarray-dropdown-item {
+  padding: var(--spacing8) var(--spacing12);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--vscode-dropdown-foreground);
+  transition: background-color 0.15s ease-in-out;
+  white-space: nowrap;
+}
+
+.add-subarray-dropdown-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.add-subarray-dropdown-item:active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+/* Row controls cell - now includes row number when editable */
+.table-cell-controls {
+  padding: var(--spacing8);
+  width: 180px; /* Combined width: 60px number + 120px controls */
+  min-width: 180px;
+  max-width: 180px;
+  position: sticky;
+  left: 0;
+  z-index: 10; /* Higher z-index so dropdown appears above other content */
+  background-color: var(--card-background);
+  border-right: 2px solid var(--card-border);
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Row number inside controls cell */
+.table-cell-controls .table-row-number-inline {
+  font-weight: 600;
+  color: var(--field-label-color);
+  text-align: center;
+  font-size: 13px;
+  min-width: 40px;
+  margin-right: var(--spacing4);
+}
+
+.table-row-controls {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.table-control-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-editor-foreground);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s ease-in-out;
+  border-radius: 2px;
+  min-width: 24px;
+  height: 24px;
+}
+
+.table-control-btn:hover {
+  opacity: 1;
+  background-color: var(--tab-hover-background);
+}
+
+.table-control-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.table-control-delete:hover {
+  background-color: var(
+    --vscode-inputValidation-errorBackground,
+    rgba(255, 86, 48, 0.22)
+  );
+}
+
+/* Sub-table sections */
+.sub-table-section {
+  margin-top: var(--spacing16);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--card-border-light);
+}
+
+.sub-table-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing8);
+  padding: var(--spacing8);
+  background-color: var(--card-background-alt);
+  border-left: 4px solid var(--vscode-badge-background);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--field-label-color);
+  text-transform: capitalize;
+}
+
+.sub-table-content {
+  padding: 0;
+  background-color: var(--card-background);
+}
+
+/* Sub-tables within sub-table sections */
+.sub-table {
+  font-size: 12px;
+  border: 1px solid var(--card-border);
+}
+
+.sub-table th,
+.sub-table td {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.sub-table .table-row-number {
+  font-size: 11px;
+  width: 60px;
+  max-width: 60px;
+}
+
+/* Sub-table row with left border for parent indication */
+.sub-table-row {
+  transition: background-color 0.15s ease-in-out;
+}
+
+.sub-table-row:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+/* Clickable row number for navigation to parent */
+.clickable-row-number {
+  cursor: pointer;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.clickable-row-number:hover {
+  opacity: 0.7;
+  text-decoration: underline;
+}
+
+/* Flash animation for parent row when navigated to */
+@keyframes flash-highlight {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: var(--vscode-editor-findMatchHighlightBackground);
+  }
+}
+
+.flash-highlight {
+  animation: flash-highlight 1s ease-in-out;
+}
+
+/* Nested array editors in sub-tables */
+.sub-table-content .array-editor {
+  margin-bottom: 0;
+}
+
+/* Responsive behavior */
+/* Removed problematic display: block override - table-wrapper handles scrolling */
+
+@media screen and (max-width: 768px) {
+  .table-view th,
+  .table-view td {
+    padding: var(--spacing8) var(--spacing8);
+    font-size: 13px;
+  }
+
+  .table-header-number {
+    width: 40px;
+  }
+
+  .table-row-number {
+    font-size: 12px;
+    padding-left: 16px !important;
+  }
+
+  .table-control-btn {
+    min-width: 20px;
+    height: 20px;
+    padding: 2px;
+  }
+}
+
+/* Dark mode adjustments */
+.vscode-dark .table-view tbody tr:hover {
+  background-color: var(--level-2-background-dark);
+}
+
+.vscode-dark .empty-table-message {
+  background-color: var(--level-2-background-dark);
+}
+
+.vscode-dark .sub-table-content {
+  background-color: var(--level-2-background-dark);
+}
+
+/* Badge positioning within table cells */
+.table-cell .unset-badge,
+.table-cell .invalid-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 1;
+}
+
+/* Ensure badges don't overflow table cells */
+.table-cell {
+  overflow: visible;
+}
