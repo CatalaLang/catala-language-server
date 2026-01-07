@@ -96,8 +96,12 @@ let register () =
     | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestDescription s)
     | _ -> failwith "unexpected test description");
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"] ~contexts:[Desugared.Name_resolution.ScopeDecl]
-    @@ fun ~pos:_ value -> match value with
+    @@ (fun ~pos:_ value -> match value with
     | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestTitle s)
-    | _ -> failwith "unexpected test title"
+    | _ -> failwith "unexpected test title");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"] ~contexts:[Desugared.Name_resolution.Expression]
+    @@ fun ~pos:_ value -> match value with
+    | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.ArrayItemLabel s)
+    | _ -> failwith "unexpected array item label"
 
 let () = register ()

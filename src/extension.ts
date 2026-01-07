@@ -19,12 +19,12 @@ import { listEntrypoints } from './lspRequests';
 
 let client: LanguageClient;
 
-interface IRunArgs {
+interface RunArgs {
   uri: string;
   scope: string;
 }
 
-async function selectScope(): Promise<IRunArgs | undefined> {
+async function selectScope(): Promise<RunArgs | undefined> {
   if (!client) {
     vscode.window.showErrorMessage(
       'Catala LSP is not running: cannot select a scope.'
@@ -92,7 +92,7 @@ async function selectScope(): Promise<IRunArgs | undefined> {
 }
 
 async function runScope(): Promise<void> {
-  const args: IRunArgs | undefined = await selectScope();
+  const args: RunArgs | undefined = await selectScope();
   if (args) {
     const cwd = getCwd(args.uri);
     const termName = `${args.scope} execution`;
@@ -134,7 +134,7 @@ vscode.commands.registerCommand(
 );
 
 async function debugScope(): Promise<void> {
-  const args: IRunArgs | undefined = await selectScope();
+  const args: RunArgs | undefined = await selectScope();
   if (args) {
     await vscode.debug.startDebugging(undefined, {
       name: 'Run Catala program',

@@ -76,6 +76,7 @@ type attr_def = [
   | TestDescription of string
   | TestTitle of string
   | Uid of string
+  | ArrayItemLabel of string
   ] <ocaml repr="classic">
 
 type runtime_value = {
