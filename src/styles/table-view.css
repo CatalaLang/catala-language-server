@@ -230,22 +230,20 @@
   background-color: var(--vscode-button-hoverBackground);
 }
 
-/* Dropdown for choosing sub-array type */
-.add-subarray-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 4px;
+/* Context menu (rendered via portal) */
+.context-menu {
+  position: fixed;
   background-color: var(--vscode-dropdown-background);
   border: 1px solid var(--vscode-dropdown-border);
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  z-index: 10000;
   min-width: 200px;
-  overflow: hidden;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
-.add-subarray-dropdown-item {
+.context-menu-item {
   padding: var(--spacing8) var(--spacing12);
   cursor: pointer;
   font-size: 13px;
@@ -254,11 +252,11 @@
   white-space: nowrap;
 }
 
-.add-subarray-dropdown-item:hover {
+.context-menu-item:hover {
   background-color: var(--vscode-list-hoverBackground);
 }
 
-.add-subarray-dropdown-item:active {
+.context-menu-item:active {
   background-color: var(--vscode-list-activeSelectionBackground);
   color: var(--vscode-list-activeSelectionForeground);
 }

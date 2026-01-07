@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, useMemo, useState } from 'react';
 import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type {
@@ -16,6 +16,7 @@ import ValueEditor, {
   getDefaultValue,
 } from './ValueEditors';
 import { confirm } from '../messaging/confirm';
+import { ContextMenu } from '../ContextMenu';
 
 // Color cycle for parent row indication (matches VS Code chart colors)
 const PARENT_ROW_COLORS = [
@@ -502,27 +503,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
   const [addDropdownRowIndex, setAddDropdownRowIndex] = useState<number | null>(
     null
   );
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (addDropdownRowIndex === null) return;
-
-    const handleClickOutside = (event: MouseEvent): void => {
-      const target = event.target as HTMLElement;
-      // Check if click is outside dropdown
-      if (
-        !target.closest('.add-subarray-pill') &&
-        !target.closest('.add-subarray-dropdown')
-      ) {
-        setAddDropdownRowIndex(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return (): void => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [addDropdownRowIndex]);
+  const [dropdownAnchor, setDropdownAnchor] = useState<HTMLElement | null>(
+    null
+  );
 
   // Add an item to a sub-array and navigate to it with flash
   const handleAddSubArrayItem = (
@@ -554,6 +537,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
 
     // Close dropdown
     setAddDropdownRowIndex(null);
+    setDropdownAnchor(null);
 
     // Navigate to sub-table and flash the new item
     setTimeout(() => {
@@ -741,49 +725,56 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           <span className="codicon codicon-trash"></span>
                         </button>
                         {arrayFields.length > 0 && (
-                          <div style={{ position: 'relative' }}>
+                          <>
                             <button
                               className="add-subarray-pill"
-                              onClick={() => {
-                                setAddDropdownRowIndex(
-                                  addDropdownRowIndex === rowIndex
-                                    ? null
-                                    : rowIndex
-                                );
+                              onClick={(e) => {
+                                if (addDropdownRowIndex === rowIndex) {
+                                  setAddDropdownRowIndex(null);
+                                  setDropdownAnchor(null);
+                                } else {
+                                  setAddDropdownRowIndex(rowIndex);
+                                  setDropdownAnchor(e.currentTarget);
+                                }
                               }}
                               title="Add item to sub-array"
                             >
                               +
                             </button>
-                            {addDropdownRowIndex === rowIndex && (
-                              <div className="add-subarray-dropdown">
-                                {arrayFields.map((arr) => {
-                                  const elementType =
-                                    arr.arrayType.kind === 'TArray'
-                                      ? arr.arrayType.value
-                                      : arr.arrayType;
-                                  const typeName = getTypeName(elementType);
-                                  const fieldName = arr.label.split('.').pop();
-                                  return (
-                                    <div
-                                      key={arr.label}
-                                      className="add-subarray-dropdown-item"
-                                      onClick={() => {
-                                        handleAddSubArrayItem(
-                                          rowIndex,
-                                          arr.fieldPath,
-                                          arr.label,
-                                          elementType
-                                        );
-                                      }}
-                                    >
-                                      Add new {typeName} in '{fieldName}'
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
+                            <ContextMenu
+                              isOpen={addDropdownRowIndex === rowIndex}
+                              onClose={() => {
+                                setAddDropdownRowIndex(null);
+                                setDropdownAnchor(null);
+                              }}
+                              anchorElement={dropdownAnchor}
+                            >
+                              {arrayFields.map((arr) => {
+                                const elementType =
+                                  arr.arrayType.kind === 'TArray'
+                                    ? arr.arrayType.value
+                                    : arr.arrayType;
+                                const typeName = getTypeName(elementType);
+                                const fieldName = arr.label.split('.').pop();
+                                return (
+                                  <div
+                                    key={arr.label}
+                                    className="context-menu-item"
+                                    onClick={() => {
+                                      handleAddSubArrayItem(
+                                        rowIndex,
+                                        arr.fieldPath,
+                                        arr.label,
+                                        elementType
+                                      );
+                                    }}
+                                  >
+                                    Add new {typeName} in '{fieldName}'
+                                  </div>
+                                );
+                              })}
+                            </ContextMenu>
+                          </>
                         )}
                       </div>
                     </td>
