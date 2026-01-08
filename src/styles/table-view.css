@@ -443,3 +443,117 @@
 .table-cell {
   overflow: visible;
 }
+
+/* Phantom rows (actual-only diffs) */
+.phantom-row {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--vscode-inputValidation-warningBackground, rgba(255, 204, 0, 0.1)),
+    var(--vscode-inputValidation-warningBackground, rgba(255, 204, 0, 0.1)) 10px,
+    transparent 10px,
+    transparent 20px
+  ) !important;
+  border-left: 3px solid var(--vscode-inputValidation-warningBorder, #ffcc00);
+}
+
+.phantom-row:hover {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--vscode-inputValidation-warningBackground, rgba(255, 204, 0, 0.15)),
+    var(--vscode-inputValidation-warningBackground, rgba(255, 204, 0, 0.15))
+      10px,
+    var(--tab-hover-background, rgba(255, 255, 255, 0.1)) 10px,
+    var(--tab-hover-background, rgba(255, 255, 255, 0.1)) 20px
+  ) !important;
+}
+
+/* Remove colored border for phantom rows */
+.phantom-row .table-cell-controls::before {
+  display: none;
+}
+
+.phantom-row-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing4);
+  margin-bottom: var(--spacing8);
+  padding: var(--spacing4);
+  background-color: var(
+    --vscode-inputValidation-warningBackground,
+    rgba(255, 204, 0, 0.1)
+  );
+  border-radius: 4px;
+  border-left: 3px solid var(--vscode-inputValidation-warningBorder, #ffcc00);
+}
+
+.phantom-actual-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vscode-inputValidation-warningForeground, #ffcc00);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Accept button for phantom rows */
+.table-phantom-accept {
+  background-color: var(--vscode-button-background) !important;
+  color: var(--vscode-button-foreground) !important;
+  opacity: 1 !important;
+}
+
+.table-phantom-accept:hover {
+  background-color: var(--vscode-button-hoverBackground) !important;
+}
+
+/* Expected-only rows (should be removed) */
+.expected-only-row {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--vscode-inputValidation-errorBackground, rgba(255, 86, 48, 0.1)),
+    var(--vscode-inputValidation-errorBackground, rgba(255, 86, 48, 0.1)) 10px,
+    transparent 10px,
+    transparent 20px
+  ) !important;
+  border-left: 3px solid var(--vscode-inputValidation-errorBorder, #ff5630);
+}
+
+.expected-only-row:hover {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--vscode-inputValidation-errorBackground, rgba(255, 86, 48, 0.15)),
+    var(--vscode-inputValidation-errorBackground, rgba(255, 86, 48, 0.15)) 10px,
+    var(--tab-hover-background, rgba(255, 255, 255, 0.1)) 10px,
+    var(--tab-hover-background, rgba(255, 255, 255, 0.1)) 20px
+  ) !important;
+}
+
+.expected-only-row-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing4);
+  margin-bottom: var(--spacing8);
+  padding: var(--spacing4);
+  background-color: var(
+    --vscode-inputValidation-errorBackground,
+    rgba(255, 86, 48, 0.1)
+  );
+  border-radius: 4px;
+  border-left: 3px solid var(--vscode-inputValidation-errorBorder, #ff5630);
+}
+
+/* Remove button for expected-only rows */
+.table-phantom-remove {
+  background-color: var(
+    --vscode-inputValidation-errorBackground,
+    rgba(255, 86, 48, 0.2)
+  ) !important;
+  color: var(--vscode-inputValidation-errorForeground, #ff5630) !important;
+  opacity: 1 !important;
+}
+
+.table-phantom-remove:hover {
+  background-color: var(
+    --vscode-inputValidation-errorBackground,
+    rgba(255, 86, 48, 0.3)
+  ) !important;
+}

@@ -17,6 +17,15 @@ import ValueEditor, {
 } from './ValueEditors';
 import { confirm } from '../messaging/confirm';
 import { ContextMenu } from '../ContextMenu';
+import {
+  computeActualOnlyIndices,
+  indicesToRender as computeIndicesToRender,
+  findChildIndexDiff,
+  canAcceptAppend,
+  canRemoveLast,
+  isActualOnly,
+  isExpectedOnly,
+} from '../diff/arrayPresence';
 
 // Color cycle for parent row indication (matches VS Code chart colors)
 const PARENT_ROW_COLORS = [
@@ -33,6 +42,7 @@ type RowMetadata = {
   parentRowIndex: number;
   parentColor: string;
   itemIndexWithinParent: number;
+  isPhantom?: boolean; // True for actual-only diff items
   onNavigateToParent: () => void;
   onMoveItem: (fromIndex: number, toIndex: number) => void;
   onDeleteItem: (index: number) => Promise<void>;
@@ -66,6 +76,7 @@ interface ISubArrayItem {
   parentRowIndex: number;
   itemIndex: number; // Index within the parent's array
   value: RuntimeValue;
+  isPhantom?: boolean; // True for actual-only diff items
 }
 
 // Sub-array descriptor with items from all parent rows
@@ -285,9 +296,12 @@ function updateOrConstructStruct(
 }
 
 // Compute sub-arrays from all rows (grouped by field)
+// Also collects phantom items from actual-only diffs
 function computeSubArrays(
   rows: RuntimeValue[],
-  arrayFields: { label: string; fieldPath: string[]; arrayType: Typ }[]
+  arrayFields: { label: string; fieldPath: string[]; arrayType: Typ }[],
+  diffs: Diff[],
+  currentPath: PathSegment[]
 ): ISubArrayDescriptor[] {
   // Group by field name
   const groupedByField = new Map<string, ISubArrayDescriptor>();
@@ -305,9 +319,31 @@ function computeSubArrays(
       if (arrayValue?.value.kind === 'Array') {
         // Add all items from this parent row's array
         arrayValue.value.value.forEach((value, itemIndex) => {
-          items.push({ parentRowIndex, itemIndex, value });
+          items.push({ parentRowIndex, itemIndex, value, isPhantom: false });
         });
       }
+
+      // Collect phantom items for this parent's sub-array
+      const subArrayPath = [
+        ...currentPath,
+        { kind: 'ListIndex' as const, value: parentRowIndex },
+        ...fieldPath.map(
+          (f): PathSegment => ({ kind: 'StructField', value: f })
+        ),
+      ];
+      const phantomIndices = computeActualOnlyIndices(diffs, subArrayPath);
+      phantomIndices.forEach((phantomIdx) => {
+        // Find the actual-only diff for this index
+        const diff = findChildIndexDiff(diffs, subArrayPath, phantomIdx);
+        if (diff && isActualOnly(diff)) {
+          items.push({
+            parentRowIndex,
+            itemIndex: phantomIdx,
+            value: diff.actual as RuntimeValue,
+            isPhantom: true,
+          });
+        }
+      });
     });
 
     // Only create descriptor if there are items
@@ -661,8 +697,23 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
   );
 
   const subArrays = useMemo(
-    () => computeSubArrays(currentArray, arrayFields),
-    [currentArray, arrayFields]
+    () => computeSubArrays(currentArray, arrayFields, props.diffs, currentPath),
+    [currentArray, arrayFields, props.diffs, currentPath]
+  );
+
+  // Compute phantom row indices for actual-only diffs (only for main table, not sub-tables)
+  const phantomRowIndices = useMemo(
+    () =>
+      !isSubTable ? computeActualOnlyIndices(props.diffs, currentPath) : [],
+    [isSubTable, props.diffs, currentPath]
+  );
+
+  const rowIndicesToRender = useMemo(
+    () =>
+      !isSubTable
+        ? computeIndicesToRender(currentArray.length, phantomRowIndices)
+        : Array.from({ length: currentArray.length }, (_, i) => i),
+    [isSubTable, currentArray.length, phantomRowIndices]
   );
 
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -712,7 +763,8 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     }, 100);
   };
 
-  if (currentArray.length === 0) {
+  // Only show empty state if there are no rows AND no phantom rows
+  if (currentArray.length === 0 && phantomRowIndices.length === 0) {
     return (
       <div className="table-array-editor">
         <div className="empty-table-message">
@@ -757,12 +809,41 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
             </tr>
           </thead>
           <tbody>
-            {currentArray.map((row, rowIndex) => {
-              const uid = row.attrs?.find((attr) => attr.kind === 'Uid');
-              const key = uid?.kind === 'Uid' ? uid.value : rowIndex;
+            {rowIndicesToRender.map((rowIndex) => {
+              const row = currentArray[rowIndex];
+              const isPhantom = row === undefined;
 
               // Get metadata for this row if in flattened sub-table mode
               const metadata = rowMetadata?.[rowIndex];
+
+              // For phantom rows in sub-tables, use metadata.isPhantom
+              const isPhantomRow = isSubTable ? metadata?.isPhantom : isPhantom;
+
+              // Find the diff for both phantom rows and expected-only rows
+              const rowDiff = isPhantomRow
+                ? findChildIndexDiff(props.diffs, currentPath, rowIndex)
+                : findChildIndexDiff(props.diffs, currentPath, rowIndex);
+
+              // Skip phantom rows that aren't actual-only
+              if (isPhantomRow && !(rowDiff && isActualOnly(rowDiff))) {
+                return null;
+              }
+
+              // Check if this is an expected-only diff (present in expected, empty in actual)
+              const isExpectedOnlyRow =
+                !isPhantomRow && rowDiff && isExpectedOnly(rowDiff);
+
+              // For phantom rows, use the actual value from the diff
+              const displayRow = isPhantomRow
+                ? (rowDiff!.actual as RuntimeValue)
+                : row;
+
+              const uid = displayRow.attrs?.find((attr) => attr.kind === 'Uid');
+              const key = isPhantomRow
+                ? `phantom-${rowIndex}`
+                : uid?.kind === 'Uid'
+                  ? uid.value
+                  : rowIndex;
 
               // Use metadata color if available, otherwise cycle colors for main table
               const borderColor = metadata
@@ -770,22 +851,26 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                 : PARENT_ROW_COLORS[rowIndex % PARENT_ROW_COLORS.length];
 
               // Check if this is a successfully computed struct
-              const isStruct = isStructRow(row);
-              const structData = isStruct ? row.value.value[1] : undefined;
+              const isStruct = isStructRow(displayRow);
+              const structData = isStruct
+                ? displayRow.value.value[1]
+                : undefined;
 
               return (
                 <tr
                   key={key}
-                  className={`${isSubTable ? 'sub-table-row' : 'table-row'} ${draggedIndex === rowIndex ? 'dragging' : ''}`}
+                  className={`${isSubTable ? 'sub-table-row' : 'table-row'} ${isPhantomRow ? 'phantom-row' : ''} ${isExpectedOnlyRow ? 'expected-only-row' : ''} ${draggedIndex === rowIndex ? 'dragging' : ''}`}
                   id={isSubTable ? undefined : `parent-row-${rowIndex}`}
                   data-row-index={rowIndex}
                   data-parent-row={metadata?.parentRowIndex}
-                  draggable={editable && !isSubTable}
-                  onDragStart={() => !isSubTable && setDraggedIndex(rowIndex)}
+                  draggable={editable && !isSubTable && !isPhantomRow}
+                  onDragStart={() =>
+                    !isSubTable && !isPhantomRow && setDraggedIndex(rowIndex)
+                  }
                   onDragEnd={() => !isSubTable && setDraggedIndex(null)}
                   onDragOver={(e) => !isSubTable && e.preventDefault()}
                   onDrop={() => {
-                    if (!isSubTable && draggedIndex !== null) {
+                    if (!isSubTable && draggedIndex !== null && !isPhantomRow) {
                       handleMove(draggedIndex, rowIndex);
                     }
                   }}
@@ -797,6 +882,32 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       { '--row-color': borderColor } as React.CSSProperties
                     }
                   >
+                    {isPhantomRow && (
+                      <div className="phantom-row-indicator">
+                        <div className="empty-value-indicator expected">
+                          <FormattedMessage
+                            id="diff.emptyExpected"
+                            defaultMessage="Empty"
+                          />
+                        </div>
+                        <div className="phantom-actual-label">
+                          <FormattedMessage
+                            id="diff.actualValue"
+                            defaultMessage="Actual value"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {isExpectedOnlyRow && (
+                      <div className="expected-only-row-indicator">
+                        <div className="empty-value-indicator actual">
+                          <FormattedMessage
+                            id="diff.emptyActual"
+                            defaultMessage="Empty"
+                          />
+                        </div>
+                      </div>
+                    )}
                     <div className="table-row-controls">
                       <span
                         className={`table-row-number-inline ${metadata?.onNavigateToParent ? 'clickable-row-number' : ''}`}
@@ -812,7 +923,36 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           ? metadata.itemIndexWithinParent + 1
                           : rowIndex + 1}
                       </span>
-                      {editable && (
+                      {editable && isPhantomRow && (
+                        <>
+                          {canAcceptAppend(currentArray.length, rowIndex) && (
+                            <button
+                              className="table-control-btn table-phantom-accept"
+                              onClick={() => {
+                                const elementToInsert = rowDiff!
+                                  .actual as RuntimeValue;
+                                const newArray = [
+                                  ...currentArray,
+                                  elementToInsert,
+                                ];
+                                updateParent(newArray);
+                                // Resolve diff (path-stable)
+                                props.onDiffResolved?.([
+                                  ...currentPath,
+                                  { kind: 'ListIndex', value: rowIndex },
+                                ]);
+                              }}
+                              title={intl.formatMessage({
+                                id: 'diff.addToExpected',
+                                defaultMessage: 'Add to expected',
+                              })}
+                            >
+                              <span className="codicon codicon-check"></span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {editable && !isPhantomRow && !isExpectedOnlyRow && (
                         <>
                           <button
                             className="table-control-btn"
@@ -867,66 +1007,97 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           >
                             <span className="codicon codicon-trash"></span>
                           </button>
-                          {arrayFields.length > 0 && (
-                            <>
-                              <button
-                                className="add-subarray-pill"
-                                onClick={(e) => {
-                                  if (addDropdownRowIndex === rowIndex) {
-                                    setAddDropdownRowIndex(null);
-                                    setDropdownAnchor(null);
-                                  } else {
-                                    setAddDropdownRowIndex(rowIndex);
-                                    setDropdownAnchor(e.currentTarget);
-                                  }
-                                }}
-                                title={intl.formatMessage({
-                                  id: 'tableView.addSubArrayItem',
-                                })}
-                              >
-                                +
-                              </button>
-                              <ContextMenu
-                                isOpen={addDropdownRowIndex === rowIndex}
-                                onClose={() => {
-                                  setAddDropdownRowIndex(null);
-                                  setDropdownAnchor(null);
-                                }}
-                                anchorElement={dropdownAnchor}
-                              >
-                                {arrayFields.map((arr) => {
-                                  const elementType =
-                                    arr.arrayType.kind === 'TArray'
-                                      ? arr.arrayType.value
-                                      : arr.arrayType;
-                                  const typeName = getTypeName(elementType);
-                                  const fieldName = arr.label.split('.').pop();
-                                  return (
-                                    <div
-                                      key={arr.label}
-                                      className="context-menu-item"
-                                      onClick={() => {
-                                        handleAddSubArrayItem(
-                                          rowIndex,
-                                          arr.fieldPath,
-                                          arr.label,
-                                          elementType
-                                        );
-                                      }}
-                                    >
-                                      <FormattedMessage
-                                        id="tableView.addNewItemIn"
-                                        defaultMessage="Add new {typeName} in {fieldName}"
-                                        values={{ typeName, fieldName }}
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </ContextMenu>
-                            </>
+                        </>
+                      )}
+                      {editable && isExpectedOnlyRow && (
+                        <>
+                          {canRemoveLast(currentArray.length, rowIndex) && (
+                            <button
+                              className="table-control-btn table-phantom-remove"
+                              onClick={async () => {
+                                if (!(await confirm('DeleteArrayElement')))
+                                  return;
+                                const newArray = currentArray.filter(
+                                  (_, i) => i !== rowIndex
+                                );
+                                updateParent(newArray);
+                                // Resolve diff (path-stable - delete last)
+                                props.onDiffResolved?.([
+                                  ...currentPath,
+                                  { kind: 'ListIndex', value: rowIndex },
+                                ]);
+                              }}
+                              title={intl.formatMessage({
+                                id: 'diff.removeFromExpected',
+                                defaultMessage: 'Remove from expected',
+                              })}
+                            >
+                              <span className="codicon codicon-trash"></span>
+                            </button>
                           )}
                         </>
                       )}
+                      {editable &&
+                        !isPhantomRow &&
+                        !isExpectedOnlyRow &&
+                        arrayFields.length > 0 && (
+                          <>
+                            <button
+                              className="add-subarray-pill"
+                              onClick={(e) => {
+                                if (addDropdownRowIndex === rowIndex) {
+                                  setAddDropdownRowIndex(null);
+                                  setDropdownAnchor(null);
+                                } else {
+                                  setAddDropdownRowIndex(rowIndex);
+                                  setDropdownAnchor(e.currentTarget);
+                                }
+                              }}
+                              title={intl.formatMessage({
+                                id: 'tableView.addSubArrayItem',
+                              })}
+                            >
+                              +
+                            </button>
+                            <ContextMenu
+                              isOpen={addDropdownRowIndex === rowIndex}
+                              onClose={() => {
+                                setAddDropdownRowIndex(null);
+                                setDropdownAnchor(null);
+                              }}
+                              anchorElement={dropdownAnchor}
+                            >
+                              {arrayFields.map((arr) => {
+                                const elementType =
+                                  arr.arrayType.kind === 'TArray'
+                                    ? arr.arrayType.value
+                                    : arr.arrayType;
+                                const typeName = getTypeName(elementType);
+                                const fieldName = arr.label.split('.').pop();
+                                return (
+                                  <div
+                                    key={arr.label}
+                                    className="context-menu-item"
+                                    onClick={() => {
+                                      handleAddSubArrayItem(
+                                        rowIndex,
+                                        arr.fieldPath,
+                                        arr.label,
+                                        elementType
+                                      );
+                                    }}
+                                  >
+                                    <FormattedMessage
+                                      id="tableView.addNewItemIn"
+                                      defaultMessage="Add new {typeName} in {fieldName}"
+                                      values={{ typeName, fieldName }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </ContextMenu>
+                          </>
+                        )}
                     </div>
                   </td>
 
@@ -939,7 +1110,10 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                     const value =
                       isStruct && structData
                         ? getNestedValue(structData, col.fieldPath)
-                        : { value: row.value, attrs: row.attrs || [] };
+                        : {
+                            value: displayRow.value,
+                            attrs: displayRow.attrs || [],
+                          };
 
                     const onChange = isStruct
                       ? (newValue: RuntimeValue) =>
@@ -959,8 +1133,8 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           onChange,
                           cellPath,
                           props.editorHook,
-                          props.diffs,
-                          editable,
+                          isPhantomRow ? [] : props.diffs, // Stop diff propagation for phantom rows
+                          editable && !isPhantomRow && !isExpectedOnlyRow, // Phantom and expected-only cells are read-only
                           props.onDiffResolved,
                           props.onInvalidateDiffs
                         )}
@@ -1082,6 +1256,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           item.parentRowIndex % PARENT_ROW_COLORS.length
                         ],
                       itemIndexWithinParent: item.itemIndex,
+                      isPhantom: item.isPhantom,
                       onNavigateToParent: (): void => {
                         const mainTableRow = document.getElementById(
                           `parent-row-${item.parentRowIndex}`
@@ -1115,11 +1290,30 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                         );
                       },
                       onDeleteItem: async (index: number): Promise<void> => {
-                        await handleSubArrayItemDelete(
-                          item.parentRowIndex,
-                          subArray.fieldPath,
-                          index
-                        );
+                        // For phantom items, resolve the diff instead of deleting
+                        if (item.isPhantom) {
+                          const subArrayPath = [
+                            ...currentPath,
+                            {
+                              kind: 'ListIndex' as const,
+                              value: item.parentRowIndex,
+                            },
+                            ...subArray.fieldPath.map(
+                              (f): PathSegment => ({
+                                kind: 'StructField',
+                                value: f,
+                              })
+                            ),
+                            { kind: 'ListIndex' as const, value: index },
+                          ];
+                          props.onDiffResolved?.(subArrayPath);
+                        } else {
+                          await handleSubArrayItemDelete(
+                            item.parentRowIndex,
+                            subArray.fieldPath,
+                            index
+                          );
+                        }
                       },
                     };
                   })}
