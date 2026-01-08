@@ -475,6 +475,25 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     updateParent(newArray);
   };
 
+  // Update a cell for non-Struct rows (Unset/Invalid/etc.)
+  // Constructs a full struct when editing any field
+  const handleNonStructCellUpdate = (
+    rowIndex: number,
+    fieldPath: string[],
+    newValue: RuntimeValue
+  ): void => {
+    const row = currentArray[rowIndex];
+    const newRow = updateOrConstructStruct(
+      row,
+      structType,
+      fieldPath,
+      newValue
+    );
+    const newArray = [...currentArray];
+    newArray[rowIndex] = newRow;
+    updateParent(newArray);
+  };
+
   // Update a specific parent row's sub-array
   const handleParentSubArrayUpdate = (
     parentRowIndex: number,
@@ -548,6 +567,92 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     const [movedItem] = newSubArray.splice(fromIndex, 1);
     newSubArray.splice(toIndex, 0, movedItem);
     handleParentSubArrayUpdate(parentRowIndex, arrayFieldPath, newSubArray);
+  };
+
+  // Handle sub-table changes (batch updates to avoid stale closures)
+  const handleSubTableChange = (
+    subArray: ISubArrayDescriptor,
+    itemStructDecl: StructDeclaration,
+    newValue: RuntimeValue
+  ): void => {
+    // Handle updates to the flattened array
+    if (newValue.value.kind !== 'Array') return;
+    const newItems = newValue.value.value;
+
+    // Group items by parent row
+    const updatesByParent = new Map<
+      number,
+      {
+        fieldPath: string[];
+        updates: Map<number, RuntimeValue>;
+      }
+    >();
+
+    subArray.items.forEach((item, flatIndex) => {
+      if (flatIndex < newItems.length) {
+        if (!updatesByParent.has(item.parentRowIndex)) {
+          updatesByParent.set(item.parentRowIndex, {
+            fieldPath: subArray.fieldPath,
+            updates: new Map(),
+          });
+        }
+
+        updatesByParent
+          .get(item.parentRowIndex)!
+          .updates.set(item.itemIndex, newItems[flatIndex]);
+      }
+    });
+
+    // Apply all updates to all parent rows in a single batch
+    // This avoids stale closure issues where each update reads the old currentArray
+    const newMainArray = [...currentArray];
+
+    updatesByParent.forEach(({ fieldPath, updates }, parentRowIndex) => {
+      const row = newMainArray[parentRowIndex];
+      // Skip non-Struct parent rows - they have no sub-arrays to update
+      if (row?.value.kind !== 'Struct') return;
+
+      const [, structData] = row.value.value;
+      const arrayValue = getNestedValue(structData, fieldPath);
+      if (arrayValue?.value.kind !== 'Array') return;
+
+      const currentSubArray = arrayValue.value.value;
+      const newSubArray = [...currentSubArray];
+
+      // Apply all updates for this parent
+      updates.forEach((newValue, itemIndex) => {
+        const item = currentSubArray[itemIndex];
+        // Empty fieldPath [] means replace the entire item (not update a field)
+        newSubArray[itemIndex] = updateOrConstructStruct(
+          item,
+          itemStructDecl,
+          [],
+          newValue
+        );
+      });
+
+      // Update the parent row in newMainArray (not via handleParentSubArrayUpdate)
+      const newArrayValue: RuntimeValue = createRuntimeValue(
+        { kind: 'Array', value: newSubArray },
+        arrayValue
+      );
+      const newStructData = setNestedValue(
+        structData,
+        fieldPath,
+        newArrayValue,
+        structType
+      );
+      newMainArray[parentRowIndex] = {
+        ...row,
+        value: {
+          kind: 'Struct',
+          value: [row.value.value[0], newStructData],
+        },
+      };
+    });
+
+    // Now update the parent once with all changes
+    updateParent(newMainArray);
   };
 
   const { atomicColumns, arrayFields } = useMemo(
@@ -826,80 +931,42 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                   </td>
 
                   {/* Atomic columns */}
-                  {isStruct && structData
-                    ? // Render struct fields in separate columns
-                      atomicColumns.map((col) => {
-                        const value = getNestedValue(structData, col.fieldPath);
-                        const cellPath = buildCellPath(rowIndex, col.fieldPath);
-                        return (
-                          <td key={col.label} className="table-cell">
-                            {renderTableCell(
-                              col.fieldType,
-                              value,
-                              (newValue) => {
-                                handleCellUpdate(
-                                  rowIndex,
-                                  col.fieldPath,
-                                  newValue
-                                );
-                              },
-                              cellPath,
-                              props.editorHook,
-                              props.diffs,
-                              editable,
-                              props.onDiffResolved,
-                              props.onInvalidateDiffs
-                            )}
-                          </td>
-                        );
-                      })
-                    : // For Unset/Invalid/Impossible/etc., render individual cells for each field
-                      // Each cell shows the same state (Unset/Invalid/Impossible/etc.) as the parent item
-                      atomicColumns.map((col) => {
-                        const cellPath = [
-                          ...currentPath,
-                          { kind: 'ListIndex' as const, value: rowIndex },
-                          ...col.fieldPath.map((field) => ({
-                            kind: 'StructField' as const,
-                            value: field,
-                          })),
-                        ];
+                  {atomicColumns.map((col) => {
+                    const cellPath = buildCellPath(rowIndex, col.fieldPath);
 
-                        // Create a RuntimeValue with the same state as the parent item
-                        // (Unset/Invalid/Impossible/Conflict/etc.) for this specific field
-                        const cellValue: RuntimeValue = {
-                          value: row.value, // Preserve the state (Unset/Invalid/Impossible/etc.)
-                          attrs: row.attrs || [],
-                        };
+                    // For valid Structs: extract real field values
+                    // For Unset/Invalid/etc.: show parent state for all cells
+                    const value =
+                      isStruct && structData
+                        ? getNestedValue(structData, col.fieldPath)
+                        : { value: row.value, attrs: row.attrs || [] };
 
-                        return (
-                          <td key={col.label} className="table-cell">
-                            {renderTableCell(
-                              col.fieldType,
-                              cellValue,
-                              (newValue) => {
-                                // Use helper to handle both Struct and Unset/Invalid items
-                                const newRow = updateOrConstructStruct(
-                                  row,
-                                  structType,
-                                  col.fieldPath,
-                                  newValue
-                                );
+                    const onChange = isStruct
+                      ? (newValue: RuntimeValue) =>
+                          handleCellUpdate(rowIndex, col.fieldPath, newValue)
+                      : (newValue: RuntimeValue) =>
+                          handleNonStructCellUpdate(
+                            rowIndex,
+                            col.fieldPath,
+                            newValue
+                          );
 
-                                const newArray = [...currentArray];
-                                newArray[rowIndex] = newRow;
-                                updateParent(newArray);
-                              },
-                              cellPath,
-                              props.editorHook,
-                              props.diffs,
-                              editable,
-                              props.onDiffResolved,
-                              props.onInvalidateDiffs
-                            )}
-                          </td>
-                        );
-                      })}
+                    return (
+                      <td key={col.label} className="table-cell">
+                        {renderTableCell(
+                          col.fieldType,
+                          value,
+                          onChange,
+                          cellPath,
+                          props.editorHook,
+                          props.diffs,
+                          editable,
+                          props.onDiffResolved,
+                          props.onInvalidateDiffs
+                        )}
+                      </td>
+                    );
+                  })}
 
                   {/* Sub-array count badges */}
                   {arrayFields.map((arr) => {
@@ -992,91 +1059,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       attrs: [],
                     },
                   }}
-                  onValueChange={(newValue) => {
-                    // Handle updates to the flattened array
-                    if (newValue.value.kind !== 'Array') return;
-                    const newItems = newValue.value.value;
-
-                    // Group items by parent row
-                    const updatesByParent = new Map<
-                      number,
-                      {
-                        fieldPath: string[];
-                        updates: Map<number, RuntimeValue>;
-                      }
-                    >();
-
-                    subArray.items.forEach((item, flatIndex) => {
-                      if (flatIndex < newItems.length) {
-                        if (!updatesByParent.has(item.parentRowIndex)) {
-                          updatesByParent.set(item.parentRowIndex, {
-                            fieldPath: subArray.fieldPath,
-                            updates: new Map(),
-                          });
-                        }
-
-                        updatesByParent
-                          .get(item.parentRowIndex)!
-                          .updates.set(item.itemIndex, newItems[flatIndex]);
-                      }
-                    });
-
-                    // Apply all updates to all parent rows in a single batch
-                    // This avoids stale closure issues where each update reads the old currentArray
-                    const newMainArray = [...currentArray];
-
-                    updatesByParent.forEach(
-                      ({ fieldPath, updates }, parentRowIndex) => {
-                        const row = newMainArray[parentRowIndex];
-                        // Skip non-Struct parent rows - they have no sub-arrays to update
-                        if (row?.value.kind !== 'Struct') return;
-
-                        const [, structData] = row.value.value;
-                        const arrayValue = getNestedValue(
-                          structData,
-                          fieldPath
-                        );
-                        if (arrayValue?.value.kind !== 'Array') return;
-
-                        const currentSubArray = arrayValue.value.value;
-                        const newSubArray = [...currentSubArray];
-
-                        // Apply all updates for this parent
-                        updates.forEach((newValue, itemIndex) => {
-                          const item = currentSubArray[itemIndex];
-                          // Empty fieldPath [] means replace the entire item (not update a field)
-                          newSubArray[itemIndex] = updateOrConstructStruct(
-                            item,
-                            itemStructDecl,
-                            [],
-                            newValue
-                          );
-                        });
-
-                        // Update the parent row in newMainArray (not via handleParentSubArrayUpdate)
-                        const newArrayValue: RuntimeValue = createRuntimeValue(
-                          { kind: 'Array', value: newSubArray },
-                          arrayValue
-                        );
-                        const newStructData = setNestedValue(
-                          structData,
-                          fieldPath,
-                          newArrayValue,
-                          structType
-                        );
-                        newMainArray[parentRowIndex] = {
-                          ...row,
-                          value: {
-                            kind: 'Struct',
-                            value: [row.value.value[0], newStructData],
-                          },
-                        };
-                      }
-                    );
-
-                    // Now update the parent once with all changes
-                    updateParent(newMainArray);
-                  }}
+                  onValueChange={(newValue) =>
+                    handleSubTableChange(subArray, itemStructDecl, newValue)
+                  }
                   currentPath={[
                     ...currentPath,
                     ...subArray.fieldPath.map((f) => ({
