@@ -76,6 +76,16 @@ interface ISubArrayDescriptor {
   items: ISubArrayItem[]; // All items from all parent rows
 }
 
+// Type guard: Check if a RuntimeValue is a Struct
+function isStructRow(row: RuntimeValue | undefined): row is RuntimeValue & {
+  value: {
+    kind: 'Struct';
+    value: [StructDeclaration, Map<string, RuntimeValue>];
+  };
+} {
+  return row?.value.kind === 'Struct';
+}
+
 // Get display name for a type
 function getTypeName(typ: Typ): string {
   switch (typ.kind) {
@@ -287,6 +297,7 @@ function computeSubArrays(
 
     // Collect items from all parent rows for this field
     rows.forEach((row, parentRowIndex) => {
+      // Skip non-Struct rows since they have no fields to extract arrays from
       if (row.value.kind !== 'Struct') return;
       const structData = row.value.value[1];
       const arrayValue = getNestedValue(structData, fieldPath);
@@ -366,24 +377,46 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
   const currentArray =
     runtimeValue?.value.kind === 'Array' ? runtimeValue.value.value : [];
 
-  console.log('[TableArrayEditor] Rendering with:', {
-    isSubTable,
-    structName: structType.struct_name,
-    arrayLength: currentArray.length,
-    arrayItemKinds: currentArray.map((v) => v.value.kind),
-  });
-
   const updateParent = (newArray: RuntimeValue[]): void => {
-    console.log('[updateParent] Calling parent onValueChange with:', {
-      arrayLength: newArray.length,
-      arrayItemKinds: newArray.map((v) => v.value.kind),
-    });
     const newValueRaw: RuntimeValueRaw = { kind: 'Array', value: newArray };
     onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
   };
 
   const invalidateArrayDiffs = (): void => {
     props.onInvalidateDiffs?.(currentPath);
+  };
+
+  // Helper: Build cell path for a specific row and field
+  const buildCellPath = (
+    rowIndex: number,
+    fieldPath: string[]
+  ): PathSegment[] => [
+    ...currentPath,
+    { kind: 'ListIndex', value: rowIndex },
+    ...fieldPath.map(
+      (field): PathSegment => ({ kind: 'StructField', value: field })
+    ),
+  ];
+
+  // Helper: Navigate to sub-table and flash child rows
+  const navigateAndFlashSubTable = (
+    subTableId: string,
+    parentRowIndex: number,
+    delay: number = 100
+  ): void => {
+    const element = document.getElementById(subTableId);
+    element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    setTimeout(() => {
+      const childRows = document.querySelectorAll(
+        `[data-parent-row="${parentRowIndex}"]`
+      );
+      childRows.forEach((row) => row.classList.add('flash-highlight'));
+
+      setTimeout(() => {
+        childRows.forEach((row) => row.classList.remove('flash-highlight'));
+      }, 1000);
+    }, delay);
   };
 
   const handleAdd = (): void => {
@@ -448,13 +481,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     fieldPath: string[],
     newArrayValue: RuntimeValue[]
   ): void => {
-    console.log('[handleParentSubArrayUpdate] Called with:', {
-      parentRowIndex,
-      fieldPath,
-      newArrayLength: newArrayValue.length,
-      newArrayItemKinds: newArrayValue.map((v) => v.value.kind),
-    });
-
     const row = currentArray[parentRowIndex];
     if (row?.value.kind !== 'Struct') return;
 
@@ -577,29 +603,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     // Navigate to sub-table and flash the new item
     setTimeout(() => {
       const subTableId = `sub-table-${arrayLabel}`;
-      const element = document.getElementById(subTableId);
-      element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-      // Flash the newly added row (last item from this parent)
-      setTimeout(() => {
-        const newItemIndex = currentSubArray.length;
-        const childRows = document.querySelectorAll(
-          `[data-parent-row="${parentRowIndex}"]`
-        );
-        // Find the row for the new item (it's the last one from this parent)
-        const targetRow = Array.from(childRows).find((row) => {
-          const rowElement = row as HTMLElement;
-          // Check if this is the new item by matching the item index in the row number
-          return rowElement.textContent?.includes(`#${newItemIndex + 1}`);
-        });
-
-        if (targetRow) {
-          targetRow.classList.add('flash-highlight');
-          setTimeout(() => {
-            targetRow.classList.remove('flash-highlight');
-          }, 1000);
-        }
-      }, 500);
+      navigateAndFlashSubTable(subTableId, parentRowIndex, 500);
     }, 100);
   };
 
@@ -661,11 +665,8 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                 : PARENT_ROW_COLORS[rowIndex % PARENT_ROW_COLORS.length];
 
               // Check if this is a successfully computed struct
-              const isStruct = row.value.kind === 'Struct';
-              const structData =
-                isStruct && row.value.kind === 'Struct'
-                  ? row.value.value[1]
-                  : undefined;
+              const isStruct = isStructRow(row);
+              const structData = isStruct ? row.value.value[1] : undefined;
 
               return (
                 <tr
@@ -829,14 +830,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                     ? // Render struct fields in separate columns
                       atomicColumns.map((col) => {
                         const value = getNestedValue(structData, col.fieldPath);
-                        const cellPath = [
-                          ...currentPath,
-                          { kind: 'ListIndex' as const, value: rowIndex },
-                          ...col.fieldPath.map((field) => ({
-                            kind: 'StructField' as const,
-                            value: field,
-                          })),
-                        ];
+                        const cellPath = buildCellPath(rowIndex, col.fieldPath);
                         return (
                           <td key={col.label} className="table-cell">
                             {renderTableCell(
@@ -928,26 +922,11 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           <button
                             className="count-badge count-badge-clickable"
                             onClick={() => {
-                              const element =
-                                document.getElementById(subTableId);
-                              element?.scrollIntoView({
-                                behavior: 'smooth',
-                                block: 'start',
-                              });
-                              // Flash child rows belonging to this parent AFTER scroll
-                              setTimeout(() => {
-                                const childRows = document.querySelectorAll(
-                                  `[data-parent-row="${rowIndex}"]`
-                                );
-                                childRows.forEach((row) => {
-                                  row.classList.add('flash-highlight');
-                                });
-                                setTimeout(() => {
-                                  childRows.forEach((row) => {
-                                    row.classList.remove('flash-highlight');
-                                  });
-                                }, 1000);
-                              }, 500); // Wait for scroll animation
+                              navigateAndFlashSubTable(
+                                subTableId,
+                                rowIndex,
+                                500
+                              );
                             }}
                             title={`Go to ${arr.label} for row #${rowIndex + 1}`}
                           >
@@ -1014,31 +993,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                     },
                   }}
                   onValueChange={(newValue) => {
-                    console.log(
-                      '[Sub-table onValueChange] Called for:',
-                      subArray.label
-                    );
                     // Handle updates to the flattened array
                     if (newValue.value.kind !== 'Array') return;
                     const newItems = newValue.value.value;
-
-                    console.log('[Sub-table onValueChange] Items:', {
-                      originalCount: subArray.items.length,
-                      newCount: newItems.length,
-                      originalItemKinds: subArray.items.map(
-                        (i) => i.value.value.kind
-                      ),
-                      newItemKinds: newItems.map((i) => i.value.kind),
-                    });
-                    console.log(
-                      '[Sub-table onValueChange] Detailed new items:',
-                      newItems.map((item, i) => ({
-                        index: i,
-                        kind: item.value.kind,
-                        parentIndex: subArray.items[i]?.parentRowIndex,
-                        itemIndex: subArray.items[i]?.itemIndex,
-                      }))
-                    );
 
                     // Group items by parent row
                     const updatesByParent = new Map<
@@ -1051,10 +1008,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
 
                     subArray.items.forEach((item, flatIndex) => {
                       if (flatIndex < newItems.length) {
-                        console.log(
-                          `[Sub-table onValueChange] Processing item ${flatIndex}`
-                        );
-
                         if (!updatesByParent.has(item.parentRowIndex)) {
                           updatesByParent.set(item.parentRowIndex, {
                             fieldPath: subArray.fieldPath,
@@ -1075,6 +1028,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                     updatesByParent.forEach(
                       ({ fieldPath, updates }, parentRowIndex) => {
                         const row = newMainArray[parentRowIndex];
+                        // Skip non-Struct parent rows - they have no sub-arrays to update
                         if (row?.value.kind !== 'Struct') return;
 
                         const [, structData] = row.value.value;
@@ -1087,17 +1041,10 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                         const currentSubArray = arrayValue.value.value;
                         const newSubArray = [...currentSubArray];
 
-                        console.log(
-                          `[Batch update] Parent ${parentRowIndex}, current sub-array:`,
-                          currentSubArray.map((v, i) => `${i}:${v?.value.kind}`)
-                        );
-
                         // Apply all updates for this parent
                         updates.forEach((newValue, itemIndex) => {
                           const item = currentSubArray[itemIndex];
-                          console.log(
-                            `[Batch update] Item ${itemIndex}: ${item?.value.kind} -> ${newValue.value.kind}`
-                          );
+                          // Empty fieldPath [] means replace the entire item (not update a field)
                           newSubArray[itemIndex] = updateOrConstructStruct(
                             item,
                             itemStructDecl,
@@ -1105,11 +1052,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                             newValue
                           );
                         });
-
-                        console.log(
-                          `[Batch update] After updates:`,
-                          newSubArray.map((v, i) => `${i}:${v?.value.kind}`)
-                        );
 
                         // Update the parent row in newMainArray (not via handleParentSubArrayUpdate)
                         const newArrayValue: RuntimeValue = createRuntimeValue(
@@ -1132,9 +1074,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       }
                     );
 
-                    console.log(
-                      '[Batch update] Calling updateParent with all changes'
-                    );
                     // Now update the parent once with all changes
                     updateParent(newMainArray);
                   }}
