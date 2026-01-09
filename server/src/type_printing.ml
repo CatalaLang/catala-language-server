@@ -72,6 +72,11 @@ let topdef_s = function
   | Fr -> "déclaration"
   | Pl -> assert false
 
+let external_type_s = function
+  | Global.En -> "external type"
+  | Fr -> "type externe"
+  | Pl -> assert false
+
 let alias_s = function
   | Global.En -> "as"
   | Fr -> "en tant que"
@@ -113,6 +118,8 @@ let pp_typ locale fmt (ty : typ) =
     | TOption o -> fprintf fmt "@[<hov 2>%a@ <option>@]" pp_typ o
     | TArray a -> fprintf fmt "@[<hov 2>%s@ %a@]" (list_of locale) pp_typ a
     | TDefault d -> fprintf fmt "@[<hov 2>%a@ <%s>@]" pp_typ d (default locale)
+    | TAbstract t ->
+      fprintf fmt "@[<hov 2>%a <abstract>@]" AbstractType.format t
     | TClosureEnv -> fprintf fmt "<closure_env>"
     | TError -> fprintf fmt "<error>"
   in
@@ -140,6 +147,7 @@ let pp_typ_no_box locale fmt (ty : typ) =
     | TOption o -> fprintf fmt "%a@ <option>" pp_typ o
     | TArray a -> fprintf fmt "%s@ %a" (list_of locale) pp_typ a
     | TDefault d -> fprintf fmt "%a@ <%s>" pp_typ d (default locale)
+    | TAbstract t -> fprintf fmt "%a <abstract>" AbstractType.format t
     | TClosureEnv -> fprintf fmt "<closure_env>"
     | TError -> fprintf fmt "<error>"
   in
@@ -222,7 +230,7 @@ let data_type
   | TLit _
   | TArrow (_, _)
   | TTuple _ | TOption _ | TArray _ | TDefault _ | TForAll _ | TVar _
-  | TClosureEnv | TError ->
+  | TAbstract _ | TClosureEnv | TError ->
     expr_type ~markdown locale typ
   | TStruct sname -> (
     let struct_ctx = ctx.ctx_structs in
@@ -325,6 +333,8 @@ let pp_module locale fmt (mcontent : Surface.Ast.module_content) =
       fprintf fmt "%s %s" (enum_s locale) (Mark.remove edecl.enum_decl_name)
     | Topdef top_def ->
       fprintf fmt "%s %s" (topdef_s locale) (Mark.remove top_def.topdef_name)
+    | AbstractTypeDecl t ->
+      fprintf fmt "%s %s" (external_type_s locale) (Mark.remove t)
     | ScopeUse _ -> ()
   in
   match mcontent.module_items with

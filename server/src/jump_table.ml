@@ -350,7 +350,7 @@ let rec traverse_typ (tctx : traversal_ctxt) ((typ, pos) : naked_typ * Pos.t) m
   | TTuple tl -> List.fold_right (traverse_typ tctx) tl m
   | TOption typ | TArray typ | TDefault typ -> traverse_typ tctx typ m
   | TLit _lit -> PMap.add pos (Literal (typ, pos)) m
-  | TForAll _ | TVar _ | TClosureEnv | TError -> m
+  | TForAll _ | TVar _ | TClosureEnv | TError | TAbstract _ -> m
 
 let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
   let open Shared_ast in
@@ -617,7 +617,9 @@ let add_scope_definitions
             let sjump = ScopeName.Map.find scope_uid tctx.scope_lookup in
             let var = Scope_def sjump in
             PMap.add pos var vars
-          | ScopeDecl _ | StructDecl _ | EnumDecl _ | Topdef _ -> vars)
+          | AbstractTypeDecl _ | ScopeDecl _ | StructDecl _ | EnumDecl _
+          | Topdef _ ->
+            vars)
         vars_acc cb
     | LawHeading (_, ls) -> List.fold_left process vars_acc ls
     | LawInclude _ | ModuleDef _ | ModuleUse _ | LawText _ -> vars_acc

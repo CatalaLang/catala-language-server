@@ -180,7 +180,8 @@ let process
         in
         let () =
           let _type_ordering =
-            Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_structs
+            Scopelang.Dependency.check_type_cycles
+              prg.program_ctx.ctx_abstract_types prg.program_ctx.ctx_structs
               prg.program_ctx.ctx_enums
           in
           let prg = Dcalc.From_scopelang.translate_program prg in
