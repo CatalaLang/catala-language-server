@@ -140,6 +140,7 @@ let rec get_typ ?module_name decl_ctx = function
   | TVar _, _ -> raise (Unsupported "type variable")
   | TClosureEnv, _ -> raise (Unsupported "closure type")
   | TError, _ -> raise (Unsupported "error type")
+  | TAbstract _, _ -> raise (Unsupported "abstract type")
 
 and get_struct ?module_name decl_ctx struct_name =
   let fields_map = StructName.Map.find struct_name decl_ctx.ctx_structs in
@@ -307,6 +308,7 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
     | TVar _ -> raise (Unsupported "type variable")
     | TClosureEnv -> raise (Unsupported "closure type")
     | TError -> raise (Unsupported "error type")
+    | TAbstract _ -> raise (Unsupported "abstract type")
   in
   List.fold_left process_typ ModuleName.Set.empty filtered_input_typs
   |> ModuleName.Set.elements
