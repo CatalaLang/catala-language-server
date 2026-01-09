@@ -849,6 +849,7 @@ let typ_to_json (decl_ctx : Shared_ast.decl_ctx) (typ : Shared_ast.typ) :
         }
     | TArray ty -> O.TArray (loop ty)
     | TOption ty -> O.TOption (loop ty)
+    | TAbstract _ -> assert false
     | TLit TPos -> assert false
     | TDefault ty -> loop ty
     | TVar _ -> assert false
@@ -994,6 +995,7 @@ let has_no_lambda
       EnumConstructor.Map.for_all (fun _ typ -> has_no_lambda typ) enum
     | TArray ty | TDefault ty | TOption ty -> has_no_lambda ty
     | TVar _ -> true
+    | TAbstract _ -> true
     | TForAll m ->
       let _, ty = Bindlib.unmbind m in
       has_no_lambda ty
