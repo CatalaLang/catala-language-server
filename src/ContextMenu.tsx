@@ -1,3 +1,6 @@
+// Minimal context menu implementation. If we need nested menus, focus trapping,
+// or more complex behavior, consider @radix-ui/react-dropdown-menu or @floating-ui/react.
+
 import { useEffect, useRef } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -26,8 +29,7 @@ export function ContextMenu({
       if (
         menuRef.current &&
         !menuRef.current.contains(event.target as Node) &&
-        anchorElement &&
-        !anchorElement.contains(event.target as Node)
+        (!anchorElement?.contains(event.target as Node))
       ) {
         onClose();
       }
