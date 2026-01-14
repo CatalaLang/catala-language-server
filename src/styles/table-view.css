@@ -243,9 +243,9 @@
 /* Row controls cell - always present, includes row number */
 .table-cell-controls {
   padding: var(--spacing8);
-  width: 180px; /* Combined width: 60px number + 120px controls */
-  min-width: 180px;
-  max-width: 180px;
+  width: 240px; /* Combined width: 60px number + 180px label/controls */
+  min-width: 240px;
+  max-width: 240px;
   position: sticky;
   left: 0;
   z-index: 10; /* Higher z-index so dropdown appears above other content */
@@ -302,7 +302,7 @@
   font-weight: 500;
   padding: 2px 4px;
   min-width: 60px;
-  max-width: 120px;
+  max-width: 180px;
   margin-right: var(--spacing4);
   transition:
     border-color 0.15s ease-in-out,
