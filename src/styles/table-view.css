@@ -461,6 +461,21 @@
   animation: flash-highlight 1s ease-in-out;
 }
 
+/* Sticky cells need their own animation since they have explicit background */
+@keyframes flash-highlight-sticky {
+  0%,
+  100% {
+    background-color: var(--card-background);
+  }
+  50% {
+    background-color: var(--vscode-editor-findMatchHighlightBackground);
+  }
+}
+
+.flash-highlight .table-cell-controls {
+  animation: flash-highlight-sticky 1s ease-in-out;
+}
+
 /* Nested array editors in sub-tables */
 .sub-table-content .array-editor {
   margin-bottom: 0;
