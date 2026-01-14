@@ -172,9 +172,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     const element = document.getElementById(subTableId);
     element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    const childRows = document.querySelectorAll(
-      `[data-parent-row="${parentRowIndex}"]`
-    );
+    // Scope query to this sub-table only (not all sub-tables)
+    const childRows =
+      element?.querySelectorAll(`[data-parent-row="${parentRowIndex}"]`) ?? [];
     flashElements(childRows, ANIMATION.NAV_DELAY_MS);
   };
 

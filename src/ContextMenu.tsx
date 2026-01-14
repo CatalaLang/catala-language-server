@@ -29,7 +29,7 @@ export function ContextMenu({
       if (
         menuRef.current &&
         !menuRef.current.contains(event.target as Node) &&
-        (!anchorElement?.contains(event.target as Node))
+        !anchorElement?.contains(event.target as Node)
       ) {
         onClose();
       }
