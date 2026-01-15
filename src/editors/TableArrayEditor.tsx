@@ -667,19 +667,12 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                             attrs: displayRow.attrs || [],
                           };
 
-                    const onChange = isStruct
-                      ? (newValue: RuntimeValue): void =>
-                          handlers.handleCellUpdate(
-                            rowIndex,
-                            col.fieldPath,
-                            newValue
-                          )
-                      : (newValue: RuntimeValue): void =>
-                          handlers.handleNonStructCellUpdate(
-                            rowIndex,
-                            col.fieldPath,
-                            newValue
-                          );
+                    const onChange = (newValue: RuntimeValue): void =>
+                      handlers.handleCellUpdate(
+                        rowIndex,
+                        col.fieldPath,
+                        newValue
+                      );
 
                     return (
                       <td key={col.label} className="table-cell">
@@ -959,8 +952,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
             </div>
           );
         } else {
-          // For non-struct arrays (primitives), keep manual rendering for now
-          return null; // TODO: implement primitive array rendering
+          // Non-struct sub-arrays (primitives, enums) are rendered inline in parent cells,
+          // not as separate sub-tables. This is intentional.
+          return null;
         }
       })}
     </div>

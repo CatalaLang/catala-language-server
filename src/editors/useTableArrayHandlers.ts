@@ -41,11 +41,6 @@ type TableArrayHandlers = {
     fieldPath: string[],
     newValue: RuntimeValue
   ) => void;
-  handleNonStructCellUpdate: (
-    rowIndex: number,
-    fieldPath: string[],
-    newValue: RuntimeValue
-  ) => void;
   handleParentSubArrayUpdate: (
     parentRowIndex: number,
     fieldPath: string[],
@@ -187,28 +182,8 @@ export function useTableArrayHandlers(
     updateParent(newArray);
   };
 
+  // Handles both existing struct rows and unset/invalid rows (constructs struct if needed)
   const handleCellUpdate = (
-    rowIndex: number,
-    fieldPath: string[],
-    newValue: RuntimeValue
-  ): void => {
-    const row = currentArray[rowIndex];
-    if (row?.value.kind !== 'Struct') return;
-
-    const [structDecl, structData] = row.value.value;
-    const newMap = setNestedValue(structData, fieldPath, newValue, structDecl);
-
-    const newRow: RuntimeValue = {
-      ...row,
-      value: { kind: 'Struct', value: [structDecl, newMap] },
-    };
-
-    const newArray = [...currentArray];
-    newArray[rowIndex] = newRow;
-    updateParent(newArray);
-  };
-
-  const handleNonStructCellUpdate = (
     rowIndex: number,
     fieldPath: string[],
     newValue: RuntimeValue
@@ -422,7 +397,6 @@ export function useTableArrayHandlers(
     handleDuplicate,
     handleLabelChange,
     handleCellUpdate,
-    handleNonStructCellUpdate,
     handleParentSubArrayUpdate,
     handleSubArrayItemDelete,
     handleSubArrayItemMove,
