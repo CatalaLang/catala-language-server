@@ -426,8 +426,64 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       </div>
                     )}
                     <div className="table-row-controls">
+                      {/* Phantom/expected-only rows: show action button instead of label */}
+                      {editable && isPhantomRow && (
+                        <>
+                          {canAcceptAppend(currentArray.length, rowIndex) && (
+                            <button
+                              className="phantom-action-btn phantom-accept"
+                              onClick={() => {
+                                const elementToInsert = rowDiff!
+                                  .actual as RuntimeValue;
+                                const newArray = [
+                                  ...currentArray,
+                                  elementToInsert,
+                                ];
+                                handlers.updateParent(newArray);
+                                props.onDiffResolved?.([
+                                  ...currentPath,
+                                  { kind: 'ListIndex', value: rowIndex },
+                                ]);
+                              }}
+                            >
+                              <span className="codicon codicon-check"></span>
+                              <FormattedMessage
+                                id="diff.addToExpected"
+                                defaultMessage="Add to expected"
+                              />
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {editable && isExpectedOnlyRow && (
+                        <>
+                          {canRemoveLast(currentArray.length, rowIndex) && (
+                            <button
+                              className="phantom-action-btn phantom-remove"
+                              onClick={async () => {
+                                if (!(await confirm('DeleteArrayElement')))
+                                  return;
+                                const newArray = currentArray.filter(
+                                  (_, i) => i !== rowIndex
+                                );
+                                handlers.updateParent(newArray);
+                                props.onDiffResolved?.([
+                                  ...currentPath,
+                                  { kind: 'ListIndex', value: rowIndex },
+                                ]);
+                              }}
+                            >
+                              <span className="codicon codicon-trash"></span>
+                              <FormattedMessage
+                                id="diff.removeFromExpected"
+                                defaultMessage="Remove from expected"
+                              />
+                            </button>
+                          )}
+                        </>
+                      )}
                       {/* Row identifier: editable label for top-level, parent nav for sub-table */}
-                      {metadata ? (
+                      {!isPhantomRow && !isExpectedOnlyRow && metadata ? (
                         // Sub-table row: show parent navigation
                         <span
                           className="parent-nav-link"
@@ -445,7 +501,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                             </span>
                           )}
                         </span>
-                      ) : (
+                      ) : !isPhantomRow && !isExpectedOnlyRow ? (
                         // Top-level row: editable label
                         <input
                           type="text"
@@ -463,38 +519,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                             id: 'tableEditor.labelPlaceholder',
                             defaultMessage: 'Name...',
                           })}
-                          disabled={!editable || isPhantomRow}
+                          disabled={!editable}
                         />
-                      )}
-                      {editable && isPhantomRow && (
-                        <>
-                          {canAcceptAppend(currentArray.length, rowIndex) && (
-                            <button
-                              className="table-control-btn table-phantom-accept"
-                              onClick={() => {
-                                const elementToInsert = rowDiff!
-                                  .actual as RuntimeValue;
-                                const newArray = [
-                                  ...currentArray,
-                                  elementToInsert,
-                                ];
-                                handlers.updateParent(newArray);
-                                // Resolve diff (path-stable)
-                                props.onDiffResolved?.([
-                                  ...currentPath,
-                                  { kind: 'ListIndex', value: rowIndex },
-                                ]);
-                              }}
-                              title={intl.formatMessage({
-                                id: 'diff.addToExpected',
-                                defaultMessage: 'Add to expected',
-                              })}
-                            >
-                              <span className="codicon codicon-check"></span>
-                            </button>
-                          )}
-                        </>
-                      )}
+                      ) : null}
                       {editable && !isPhantomRow && !isExpectedOnlyRow && (
                         <>
                           <button
@@ -555,34 +582,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           >
                             <span className="codicon codicon-trash"></span>
                           </button>
-                        </>
-                      )}
-                      {editable && isExpectedOnlyRow && (
-                        <>
-                          {canRemoveLast(currentArray.length, rowIndex) && (
-                            <button
-                              className="table-control-btn table-phantom-remove"
-                              onClick={async () => {
-                                if (!(await confirm('DeleteArrayElement')))
-                                  return;
-                                const newArray = currentArray.filter(
-                                  (_, i) => i !== rowIndex
-                                );
-                                handlers.updateParent(newArray);
-                                // Resolve diff (path-stable - delete last)
-                                props.onDiffResolved?.([
-                                  ...currentPath,
-                                  { kind: 'ListIndex', value: rowIndex },
-                                ]);
-                              }}
-                              title={intl.formatMessage({
-                                id: 'diff.removeFromExpected',
-                                defaultMessage: 'Remove from expected',
-                              })}
-                            >
-                              <span className="codicon codicon-trash"></span>
-                            </button>
-                          )}
                         </>
                       )}
                       {editable &&

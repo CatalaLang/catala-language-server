@@ -104,7 +104,7 @@ describe('TableArrayEditor - Phantom diff support', () => {
     expect(phantomIndicators).toHaveLength(1);
 
     // Check for "Accept" button
-    const acceptButtons = container.querySelectorAll('.table-phantom-accept');
+    const acceptButtons = container.querySelectorAll('.phantom-accept');
     expect(acceptButtons).toHaveLength(1);
   });
 
@@ -152,7 +152,7 @@ describe('TableArrayEditor - Phantom diff support', () => {
     expect(expectedOnlyIndicators).toHaveLength(1);
 
     // Check for "Remove" button
-    const removeButtons = container.querySelectorAll('.table-phantom-remove');
+    const removeButtons = container.querySelectorAll('.phantom-remove');
     expect(removeButtons).toHaveLength(1);
   });
 

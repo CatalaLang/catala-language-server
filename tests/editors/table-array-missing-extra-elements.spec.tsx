@@ -280,7 +280,7 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
       });
 
       // Accept button should be present (index === arrayLength)
-      const acceptButton = container.querySelector('.table-phantom-accept');
+      const acceptButton = container.querySelector('.phantom-accept');
       expect(acceptButton).toBeTruthy();
     });
 
@@ -326,7 +326,7 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
       });
 
       // This phantom is at index 3, array length is 2, so NOT appendable (3 !== 2)
-      const acceptButton = container.querySelector('.table-phantom-accept');
+      const acceptButton = container.querySelector('.phantom-accept');
       expect(acceptButton).toBeFalsy();
     });
   });
@@ -408,7 +408,7 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
       });
 
       // Remove button should be present for last item
-      const removeButton = container.querySelector('.table-phantom-remove');
+      const removeButton = container.querySelector('.phantom-remove');
       expect(removeButton).toBeTruthy();
     });
 
@@ -451,7 +451,7 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
       });
 
       // Remove button should NOT be present for middle item
-      const removeButton = container.querySelector('.table-phantom-remove');
+      const removeButton = container.querySelector('.phantom-remove');
       expect(removeButton).toBeFalsy();
     });
 
@@ -578,7 +578,7 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
         onDiffResolved,
       });
 
-      const acceptButton = container.querySelector('.table-phantom-accept');
+      const acceptButton = container.querySelector('.phantom-accept');
       expect(acceptButton).toBeTruthy();
 
       fireEvent.click(acceptButton!);
@@ -625,7 +625,7 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
         onDiffResolved,
       });
 
-      const removeButton = container.querySelector('.table-phantom-remove');
+      const removeButton = container.querySelector('.phantom-remove');
       expect(removeButton).toBeTruthy();
 
       fireEvent.click(removeButton!);

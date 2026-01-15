@@ -575,15 +575,44 @@
   letter-spacing: 0.5px;
 }
 
-/* Accept button for phantom rows */
-.table-phantom-accept {
-  background-color: var(--vscode-button-background) !important;
-  color: var(--vscode-button-foreground) !important;
-  opacity: 1 !important;
+/* Action buttons for phantom/expected-only rows (larger with text) */
+.phantom-action-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing8);
+  padding: var(--spacing4) var(--spacing12);
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+  white-space: nowrap;
 }
 
-.table-phantom-accept:hover {
-  background-color: var(--vscode-button-hoverBackground) !important;
+.phantom-action-btn.phantom-accept {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.phantom-action-btn.phantom-accept:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.phantom-action-btn.phantom-remove {
+  background-color: var(
+    --vscode-inputValidation-errorBackground,
+    rgba(255, 86, 48, 0.2)
+  );
+  color: var(--vscode-errorForeground, #ff5630);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #ff5630);
+}
+
+.phantom-action-btn.phantom-remove:hover {
+  background-color: var(
+    --vscode-inputValidation-errorBackground,
+    rgba(255, 86, 48, 0.3)
+  );
 }
 
 /* Expected-only rows (should be removed) */
@@ -620,21 +649,4 @@
   );
   border-radius: 4px;
   border-left: 3px solid var(--vscode-inputValidation-errorBorder, #ff5630);
-}
-
-/* Remove button for expected-only rows */
-.table-phantom-remove {
-  background-color: var(
-    --vscode-inputValidation-errorBackground,
-    rgba(255, 86, 48, 0.2)
-  ) !important;
-  color: var(--vscode-inputValidation-errorForeground, #ff5630) !important;
-  opacity: 1 !important;
-}
-
-.table-phantom-remove:hover {
-  background-color: var(
-    --vscode-inputValidation-errorBackground,
-    rgba(255, 86, 48, 0.3)
-  ) !important;
 }
