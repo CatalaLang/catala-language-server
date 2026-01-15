@@ -349,10 +349,17 @@ export function setNestedValue(
 
     if (fieldType?.kind === 'TStruct') {
       const nestedStructDecl = fieldType.value;
-      const currentNestedData =
-        currentValue?.value.kind === 'Struct'
-          ? currentValue.value.value[1]
-          : new Map<string, RuntimeValue>();
+      let currentNestedData: Map<string, RuntimeValue>;
+
+      if (currentValue?.value.kind === 'Struct') {
+        currentNestedData = currentValue.value.value[1];
+      } else {
+        // Initialize all fields of the nested struct with defaults
+        currentNestedData = new Map<string, RuntimeValue>();
+        for (const [fieldName, fieldTyp] of nestedStructDecl.fields.entries()) {
+          currentNestedData.set(fieldName, getDefaultValue(fieldTyp));
+        }
+      }
 
       const updatedNestedData = setNestedValue(
         currentNestedData,
