@@ -262,6 +262,8 @@ export type EntrypointsParams = {
   no_variables?: boolean;
 }
 
+export type JsonInput = any
+
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
     case 'TBool':
@@ -1175,6 +1177,14 @@ export function readEntrypointsParams(x: any, context: any = x): EntrypointsPara
     no_lambdas: _atd_read_optional_field(_atd_read_bool, x['no_lambdas'], x),
     no_variables: _atd_read_optional_field(_atd_read_bool, x['no_variables'], x),
   };
+}
+
+export function writeJsonInput(x: JsonInput, context: any = x): any {
+  return ((x: any, context): any => x)(x, context);
+}
+
+export function readJsonInput(x: any, context: any = x): JsonInput {
+  return ((x: any, context): any => x)(x, context);
 }
 
 

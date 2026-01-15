@@ -270,3 +270,5 @@ type entrypoints_params = {
   ?no_lambdas : bool option ;
   ?no_variables : bool option ;
 }
+
+type json_input = abstract

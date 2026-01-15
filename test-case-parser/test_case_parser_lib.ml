@@ -383,7 +383,7 @@ let read_program includes path_to_build options =
   in
   Driver.Passes.desugared options ~stdlib ~includes
 
-let generate_test
+let generate_test_no_print
     tested_scope
     ?(testing_scope = tested_scope ^ "_test")
     include_dirs
@@ -395,11 +395,12 @@ let generate_test
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
   in
-  let test =
-    get_scope_test prg testing_scope tested_scope
-      ~tested_module:(Option.map fst prg.I.program_module_name)
-  in
-  print_tests [test]
+  get_scope_test prg testing_scope tested_scope
+    ~tested_module:(Option.map fst prg.I.program_module_name)
+
+let generate_test tested_scope ?testing_scope include_dirs options =
+  print_tests
+    [generate_test_no_print tested_scope ?testing_scope include_dirs options]
 
 exception InvalidTestingScope of string
 
@@ -1000,7 +1001,11 @@ let proj_diff get_value ({ path; expected; actual } : diff) : O.diff =
   let actual = get_value actual in
   { O.path = List.map proj_path path; expected; actual }
 
-let run_test testing_scope include_dirs options =
+let run_test
+    testing_scope
+    include_dirs
+    options
+    (scope_input_opt : Yojson.Safe.t option) =
   let path_to_build, include_dirs =
     if include_dirs = [] then
       let _path_to_build, include_dirs = lookup_include_dirs options in
@@ -1021,7 +1026,10 @@ let run_test testing_scope include_dirs options =
     | Some (TScope (sname, _)) -> sname
     | _ -> Message.error "No scope %S was found in the program" testing_scope
   in
-  let test = get_catala_test (desugared_prg, naming_ctx) testing_scope_name in
+  let test =
+    try get_catala_test (desugared_prg, naming_ctx) testing_scope_name
+    with _ -> generate_test_no_print testing_scope include_dirs options
+  in
   let dcalc_prg : ((dcalc, dcalc, typed) base_gexpr * typed mark) program =
     let prg =
       Scopelang.From_desugared.(
@@ -1029,6 +1037,42 @@ let run_test testing_scope include_dirs options =
     in
     let prg = Scopelang.Ast.type_program prg in
     Dcalc.From_scopelang.translate_program prg
+  in
+  let test_input_opt =
+    let f test_input_json =
+      let in_struct =
+        (ScopeName.Map.find testing_scope_name dcalc_prg.decl_ctx.ctx_scopes)
+          .in_struct_name
+      in
+      let ty = TStruct in_struct, Pos.void in
+      let encoding = Encoding.make_encoding dcalc_prg.decl_ctx ty in
+      Lexing.from_string (Yojson.Safe.to_string test_input_json)
+      |> J.read_test_inputs (Yojson.init_lexer ())
+      |> function
+      | fields ->
+        let dummy_decl = { O.struct_name = "dummy"; fields = [] } in
+        let value =
+          O.Struct
+            ( dummy_decl,
+              List.map
+                (fun (field_name, { J.value; typ = _ }) ->
+                  let value = (Option.get value).value in
+                  field_name, value)
+                fields )
+        in
+        let normalized_json =
+          Converter.convert_to_json_input { value; attrs = [] }
+        in
+        let module Json_encoding = Json_encoding.Make (Json_repr.Yojson) in
+        let rval = Json_encoding.destruct encoding normalized_json in
+        Encoding.convert_to_dcalc dcalc_prg.decl_ctx
+          (Typed { pos = Pos.void; ty })
+          ty rval
+        |> Expr.unbox
+        |> Interpreter.addcustom
+        |> Expr.box
+    in
+    Option.map f scope_input_opt
   in
   Interpreter.load_runtime_modules
     ~hashf:Hash.(finalise ~monomorphize_types:false)
@@ -1054,26 +1098,34 @@ let run_test testing_scope include_dirs options =
   let () =
     Catala_utils.Message.register_lsp_error_absorber on_assert_failures
   in
+  let to_interp =
+    match test_input_opt with
+    | None -> program_expr
+    | Some in_struct ->
+      Expr.make_app (Expr.box program_fun) [in_struct]
+        [Expr.ty in_struct]
+        (Expr.pos program_fun)
+      |> Expr.unbox
+  in
   let result_struct =
-    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr
+    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang to_interp
   in
   Message.report_delayed_errors_if_any ();
   let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
       =
-    match result_struct with
-    | EStruct { fields; _ }, _ -> (
+    match result_struct, scope_input_opt with
+    | (EStruct { fields; _ }, _), None -> (
       match StructField.Map.choose fields with
       | _, (EStruct { fields; name }, _) ->
         let b = StructField.Map.bindings fields in
         ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
           StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
       | _ -> assert false)
+    | (EStruct { fields; name }, _), Some _ ->
+      let b = StructField.Map.bindings fields in
+      ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
+        StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
     | _ -> assert false
-  in
-  let expected_results = retrieve_assertions_values dcalc_prg in
-  let diffs =
-    compute_diff expected_results actual_results
-    |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
   in
   let test_outputs =
     List.map
@@ -1088,10 +1140,20 @@ let run_test testing_scope include_dirs options =
           } ))
       actual_results
   in
-  let test = { test with test_outputs } in
-  let assert_failures = not (!failed_asserts = []) in
-  let test_run = { O.test; O.assert_failures; O.diffs } in
-  write_stdout J.write_test_run test_run
+  let test = O.{ test with test_outputs } in
+  match scope_input_opt with
+  | None ->
+    let expected_results = retrieve_assertions_values dcalc_prg in
+    let diffs =
+      compute_diff expected_results actual_results
+      |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
+    in
+    let assert_failures = not (!failed_asserts = []) in
+    let test_run = { O.test; O.assert_failures; O.diffs } in
+    write_stdout J.write_test_run test_run
+  | Some _ ->
+    write_stdout J.write_test_run
+      O.{ test; assert_failures = false; diffs = [] }
 
 let print_scopes scopes = write_stdout J.write_scope_def_list scopes
 

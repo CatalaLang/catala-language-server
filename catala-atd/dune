@@ -20,6 +20,6 @@
 (library
  (package catala-lsp)
  (name catala_types_atd)
- (modules catala_types_t catala_types_j)
+ (modules converter catala_types_t catala_types_j)
  (libraries atdgen-runtime)
 )

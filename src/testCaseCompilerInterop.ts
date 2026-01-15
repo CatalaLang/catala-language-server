@@ -3,11 +3,13 @@ import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
   ScopeDefList,
   TestGenerateResults,
+  TestInputs,
 } from './generated/catala_types';
 import {
   readScopeDefList,
   readTestList,
   readTestRun,
+  writeTestInputs,
   writeTestList,
   type ParseResults,
   type TestList,
@@ -94,7 +96,8 @@ export function atdToCatala(tests: TestList, lang: string): string {
 
 export function runTestScope(
   filename: string,
-  testScope: string
+  testScope: string,
+  inputs?: TestInputs
 ): TestRunResults {
   /*
    * Notes:
@@ -106,7 +109,12 @@ export function runTestScope(
    * these could be handled externally as well)
    */
 
-  const args = ['testcase', 'run', '--scope', testScope, filename];
+  let input_args: string[] = []
+  if (inputs) {
+    const serialized_inputs = JSON.stringify(writeTestInputs(inputs));
+    input_args = ["--input", serialized_inputs]
+  }
+  let args: string[] = ['testcase', 'run', '--scope', testScope, filename].concat(input_args);
   logger.log(`Exec: ${catalaPath} ${args.join(' ')}`);
   try {
     const cwd = getCwd(filename);
@@ -120,8 +128,10 @@ export function runTestScope(
     // Here we *do* want to fail on asserts, as we catch failures through
     // the `register_lsp_error_notifier` hook.
     const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
+    logger.log(`result: ${result.toString()}`);
     const testRun = readTestRun(JSON.parse(result.toString()));
     logger.log(`diffs: ${JSON.stringify(testRun.diffs)}`);
+    logger.log(`outputs: ${JSON.stringify(testRun.test.test_outputs)}`);
     return {
       kind: 'Ok',
       value: {
@@ -164,6 +174,8 @@ export function generate(scope: string, filename: string): TestGenerateResults {
   try {
     const results = execFileSync(cmd, args);
     const test = readTestList(JSON.parse(results.toString()));
+    logger.log(`test list: ${JSON.stringify(test)}`);
+
     return {
       kind: 'Results',
       value: test,

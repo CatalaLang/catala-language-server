@@ -16,6 +16,7 @@ import { clerkPath, getCwd, hasResourceUri } from './util_client';
 import { initTests } from './testAndCoverage';
 import type { CatalaEntrypoint } from './lspRequests';
 import { listEntrypoints } from './lspRequests';
+import { ScopeInputController } from './scope_input_editor/ScopeInputController';
 
 let client: LanguageClient;
 
@@ -33,10 +34,10 @@ async function selectScope(): Promise<IRunArgs | undefined> {
   }
   const entrypoints: Array<CatalaEntrypoint> = await listEntrypoints(
     client,
-    [{ kind: 'Test' }, { kind: 'NoInputScope' }],
+    [{ kind: 'InputScope' }],
     undefined,
     false,
-    true
+    false
   );
   const uniq_sorted_files: vscode.QuickPickItem[] = Array.from(
     new Set(entrypoints.map((file) => file.path))
@@ -64,7 +65,7 @@ async function selectScope(): Promise<IRunArgs | undefined> {
             label: e.entrypoint.value.value.scope,
           };
           return [item, ...acc];
-        } else if (e.entrypoint.kind == 'NoInputScope') {
+        } else if (e.entrypoint.kind == 'InputScope') {
           const item: vscode.QuickPickItem = {
             label: e.entrypoint.value.scope,
           };
@@ -104,6 +105,7 @@ async function runScope(): Promise<void> {
     );
   }
 }
+
 vscode.commands.registerCommand('catala.run', runScope);
 
 async function listTestableScopes(
@@ -261,8 +263,8 @@ export async function activate(
   if (is_binary_path_configured && !configured_binary_exists) {
     vscode.window.showErrorMessage(
       "Configured LSP path (catala.lspServerPath): '" +
-        lsp_server_config_path +
-        "' not found. Using default values..."
+      lsp_server_config_path +
+      "' not found. Using default values..."
     );
   }
 
@@ -329,6 +331,24 @@ export async function activate(
 
   // Always register the custom editor provider
   context.subscriptions.push(TestCaseEditorProvider.register(context));
+
+
+  // register_memoryFileProvider(context);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.openWithScopeInputEditor',
+      async (x?: IRunArgs) => {
+        if (x == undefined) {
+          const y = await selectScope();
+          if (y == undefined) return;
+          x = y
+        }
+        const inputWebView = new ScopeInputController()
+        inputWebView.createWebview(context, x.uri, x.scope)
+      }
+    )
+  );
 
   // Ensure the logger is disposed when the extension is deactivated
   context.subscriptions.push({ dispose: () => logger.dispose() });

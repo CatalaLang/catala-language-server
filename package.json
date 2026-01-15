@@ -48,6 +48,10 @@
         "title": "%command.catala.openWithTestEditor.title%",
         "category": "%category.catala%",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "catala.openWithScopeInputEditor",
+        "title": "Scope Input Editor"
       }
     ],
     "menus": {
@@ -206,6 +210,10 @@
           }
         ],
         "priority": "option"
+      },
+      {
+        "viewType": "catala.scopeInputEditor",
+        "displayName": "Scope Input Editor"
       }
     ],
     "languages": [
@@ -295,7 +303,6 @@
     }
   },
   "activationEvents": [
-    "onCommand:catala.openWithTestEditor",
     "workspaceContains:**/clerk.toml",
     "workspaceContains:**/*.catala_en",
     "workspaceContains:**/*.catala_fr"
