@@ -53,5 +53,6 @@
   "tableView.addNewItemIn": "Ajouter {typeName} dans {fieldName}",
   "tableView.duplicateBefore": "Dupliquer au-dessus",
   "tableView.duplicateAfter": "Dupliquer en-dessous",
+  "tableView.addNewItem": "Ajouter un élément",
   "tableEditor.labelPlaceholder": "Nom..."
 }

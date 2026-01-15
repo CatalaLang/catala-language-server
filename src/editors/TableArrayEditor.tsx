@@ -80,6 +80,7 @@ type RowMetadata = {
   onMoveItem: (fromIndex: number, toIndex: number) => void;
   onDeleteItem: (index: number) => Promise<void>;
   onDuplicateItem: (index: number, position: 'before' | 'after') => void;
+  onAddItem: () => void; // Add new item to same parent's sub-array
 };
 
 type TableArrayEditorProps = {
@@ -771,6 +772,25 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
             defaultMessage="Duplicate below"
           />
         </div>
+        <div
+          className="context-menu-item"
+          onClick={() => {
+            if (rowContextMenu) {
+              if (isSubTable && rowMetadata) {
+                rowMetadata[rowContextMenu.rowIndex]?.onAddItem();
+              } else {
+                handlers.handleAdd();
+              }
+              setRowContextMenu(null);
+            }
+          }}
+        >
+          <span className="codicon codicon-add"></span>
+          <FormattedMessage
+            id="tableView.addNewItem"
+            defaultMessage="Add new item"
+          />
+        </div>
       </ContextMenu>
 
       {/* Add button - only show for top-level arrays, not sub-tables */}
@@ -922,6 +942,13 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           subArray.fieldPath,
                           index,
                           position
+                        );
+                      },
+                      onAddItem: (): void => {
+                        handlers.handleAddSubArrayItem(
+                          item.parentRowIndex,
+                          subArray.fieldPath,
+                          elementType
                         );
                       },
                     }));
