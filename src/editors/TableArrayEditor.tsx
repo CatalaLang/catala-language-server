@@ -386,19 +386,21 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       handlers.handleMove(draggedIndex, rowIndex);
                     }
                   }}
-                  onContextMenu={(e) => {
-                    // Show context menu for non-phantom, non-expected-only rows
-                    if (editable && !isPhantomRow && !isExpectedOnlyRow) {
-                      e.preventDefault();
-                      setRowContextMenu({
-                        rowIndex,
-                        position: { x: e.clientX, y: e.clientY },
-                      });
-                    }
-                  }}
                 >
                   {/* Row controls (always present, includes row number) */}
-                  <td className="table-cell-controls">
+                  <td
+                    className="table-cell-controls"
+                    onContextMenu={(e) => {
+                      // Show context menu for non-phantom, non-expected-only rows
+                      if (editable && !isPhantomRow && !isExpectedOnlyRow) {
+                        e.preventDefault();
+                        setRowContextMenu({
+                          rowIndex,
+                          position: { x: e.clientX, y: e.clientY },
+                        });
+                      }
+                    }}
+                  >
                     {isPhantomRow && (
                       <div className="phantom-row-indicator">
                         <div className="empty-value-indicator expected">
@@ -674,7 +676,13 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       );
 
                     return (
-                      <td key={col.label} className="table-cell">
+                      <td
+                        key={col.label}
+                        className="table-cell"
+                        // Disable default VS Code context menu on data cells - it's non-functional
+                        // and confusing. Context menu is only available on row headers.
+                        onContextMenu={(e) => e.preventDefault()}
+                      >
                         {renderTableCell(
                           col.fieldType,
                           value,
@@ -706,6 +714,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       <td
                         key={arr.label}
                         className="table-cell-sub-array-count"
+                        // Disable default VS Code context menu - it shows non-functional
+                        // cut/copy/paste. Context menu is only available on row headers.
+                        onContextMenu={(e) => e.preventDefault()}
                       >
                         {count > 0 && (
                           <button
