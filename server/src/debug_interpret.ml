@@ -538,7 +538,7 @@ let rec evaluate_operator
         in
         Lwt.return (EArray l)
       with Invalid_argument _ ->
-        raise Catala_runtime.(Error (NotSameLength, [Expr.pos_to_runtime opos]))
+        raise Catala_runtime.(Error (NotSameLength, [Expr.pos_to_runtime opos], None))
       )
     | Reduce, [_; default; (EArray [], _)] ->
       let* r =
@@ -1077,7 +1077,7 @@ let rec evaluate_expr_with_env :
     | ELit (LBool false) ->
       if Global.options.stop_on_error then
         raise
-          Catala_runtime.(Error (AssertionFailed, [Expr.pos_to_runtime pos]))
+          Catala_runtime.(Error (AssertionFailed, [Expr.pos_to_runtime pos], None))
       else
         let* partially_evaluated_assertion_failure_expr =
           partially_evaluate_expr_for_assertion_failure_message
@@ -1108,14 +1108,14 @@ let rec evaluate_expr_with_env :
         "Expected a boolean literal for the result of this assertion (should \
          not happen if the term was well-typed)")
   | EFatalError err ->
-    raise (Catala_runtime.Error (err, [Expr.pos_to_runtime pos]))
+    raise (Catala_runtime.Error (err, [Expr.pos_to_runtime pos], None))
   | EErrorOnEmpty e' -> (
     let* r = evaluate_expr_with_env ~on_expr env ctx lang e' in
     match r with
     | (EEmpty, _), _ ->
-      raise Catala_runtime.(Error (NoValue, [Expr.pos_to_runtime pos]))
+      raise Catala_runtime.(Error (NoValue, [Expr.pos_to_runtime pos], None))
     | exception Catala_runtime.Empty ->
-      raise Catala_runtime.(Error (NoValue, [Expr.pos_to_runtime pos]))
+      raise Catala_runtime.(Error (NoValue, [Expr.pos_to_runtime pos], None))
     | e, _env -> Lwt.return (e, env))
   | EDefault { excepts; just; cons } -> (
     let* l =
@@ -1144,7 +1144,7 @@ let rec evaluate_expr_with_env :
             else Some Expr.(pos_to_runtime (pos ex)))
           excepts
       in
-      raise Catala_runtime.(Error (Conflict, poslist)))
+      raise Catala_runtime.(Error (Conflict, poslist, None)))
   | EPureDefault e ->
     let* e, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
     Lwt.return (e, env)
@@ -1174,7 +1174,7 @@ let interpret_with_env
   in
   match r with
   | ((EStruct _, _) as e), _env -> Lwt.return e
-  | exception Catala_runtime.Error (err, rpos) ->
+  | exception Catala_runtime.Error (err, rpos, _) ->
     Message.error
       ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) rpos)
       "%a" Format.pp_print_text
