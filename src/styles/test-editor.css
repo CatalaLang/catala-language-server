@@ -211,27 +211,56 @@
   width: 100%;
 }
 
-.test-title-input {
-  font: inherit;
-  background-color: var(--vscode-editor-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid;
-  border-radius: var(--spacing4);
-  padding: var(--spacing8) var(--spacing12);
-  width: 100%;
-  box-sizing: border-box;
+.test-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing8);
+  margin-bottom: var(--spacing16);
 }
 
-.test-title-input::placeholder {
-  color: var(--vscode-input-placeholderForeground);
+.test-title-editable {
+  outline: none;
+  padding: var(--spacing4) var(--spacing8);
+  margin: 0 0 0 calc(-1 * var(--spacing8));
+  border-radius: var(--spacing4);
+  transition: background-color 0.15s ease-in-out;
+  display: inline-block;
+  min-width: 200px;
+  max-width: 100%;
+}
+
+.test-title-editable:hover,
+.test-title-editable:focus {
+  cursor: text;
+}
+
+.test-title-editable:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.test-title-editable:focus {
+  background-color: var(--vscode-editor-selectionBackground);
+}
+
+.test-title-edit-icon {
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+  font-size: 16px;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.test-title-wrapper:hover .test-title-edit-icon,
+.test-title-editable:focus + .test-title-edit-icon {
+  opacity: 0.6;
+}
+
+.test-title-wrapper:hover .test-title-edit-icon:hover {
   opacity: 1;
 }
 
-.test-title-input:focus {
-  border-color: var(--vscode-focusBorder);
-  outline: 1px solid var(--vscode-focusBorder);
-}
-
-.test-title-input:hover {
-  border-color: inherit;
+.test-title-editable:empty::before {
+  content: attr(aria-label);
+  color: var(--vscode-input-placeholderForeground);
+  font-style: italic;
 }

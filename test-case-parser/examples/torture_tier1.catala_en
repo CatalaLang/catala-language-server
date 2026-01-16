@@ -1,0 +1,81 @@
+> Module Torture_tier1
+
+# Tier 1: High-Risk Complex Structures
+#
+# These structures are designed to stress-test the table array editor with
+# combinations that are most likely to cause rendering issues.
+
+```catala-metadata
+# =============================================================================
+# Fixture 1: Array within enum payload
+# Status = Pending | Active(items: Item[])
+# =============================================================================
+
+declaration structure Item:
+  data value content integer
+
+declaration enumeration Status:
+  -- Pending
+  -- Active content list of Item
+
+declaration structure Record:
+  data id content integer
+  data status content Status
+
+declaration scope ArrayInEnumPayload:
+  input records content list of Record
+  output count content integer
+
+# =============================================================================
+# Fixture 2: Sibling arrays in same struct
+# Person { code, children: Child[], pets: Pet[] }
+# =============================================================================
+
+declaration structure Child:
+  data age content integer
+
+declaration structure Pet:
+  data weight content integer
+
+declaration structure Person:
+  data code content integer
+  data children content list of Child
+  data pets content list of Pet
+
+declaration scope SiblingArrays:
+  input people content list of Person
+  output total_children content integer
+
+# =============================================================================
+# Fixture 3: Array of enums with struct payloads
+# events: Event[] where Event = Started(Info) | Stopped | Error(Info)
+# =============================================================================
+
+declaration structure Info:
+  data code content integer
+  data amount content money
+
+declaration enumeration Event:
+  -- Started content Info
+  -- Stopped
+  -- Error content Info
+
+declaration structure Log:
+  data timestamp content date
+  data events content list of Event
+
+declaration scope ArrayOfEnumsWithPayloads:
+  input logs content list of Log
+  output error_count content integer
+```
+
+```catala
+scope ArrayInEnumPayload:
+  definition count equals 0
+
+scope SiblingArrays:
+  definition total_children equals 0
+
+scope ArrayOfEnumsWithPayloads:
+  definition error_count equals 0
+```

@@ -1,0 +1,44 @@
+> Using Torture_tier1
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = "Sibling arrays - struct with two array fields side by side"]
+#[testcase.test_title = ""]
+declaration scope SiblingArrays_test:
+  output sibling_arrays scope Torture_tier1.SiblingArrays
+
+```
+
+```catala
+scope SiblingArrays_test:
+  definition sibling_arrays.people equals
+    [Torture_tier1.Person {
+       -- code: 1
+
+       -- children: [Torture_tier1.Child { -- age: 10 };
+                     Torture_tier1.Child { -- age: 8 }]
+
+       -- pets: [Torture_tier1.Pet { -- weight: 20 };
+                 Torture_tier1.Pet { -- weight: 15 }]
+
+     };
+     Torture_tier1.Person {
+       -- code: 2
+
+       -- children: [Torture_tier1.Child { -- age: 5 }]
+
+       -- pets: []
+
+     };
+     Torture_tier1.Person {
+       -- code: 3
+
+       -- children: []
+
+       -- pets: [Torture_tier1.Pet { -- weight: 1 };
+                 Torture_tier1.Pet { -- weight: 2 };
+                 Torture_tier1.Pet { -- weight: 3 }]
+
+     }]
+```

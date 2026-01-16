@@ -1,0 +1,69 @@
+> Using Torture_tier2
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = "Mixed primitive and complex fields - Task with primitives, enum with payload, array, and nested struct"]
+#[testcase.test_title = ""]
+declaration scope MixedComplexity_test:
+  output mixed_complexity scope Torture_tier2.MixedComplexity
+
+```
+
+```catala
+scope MixedComplexity_test:
+  definition mixed_complexity.tasks equals
+    [Torture_tier2.Task {
+       -- id: 1
+
+       -- budget: $1000.00
+
+       -- priority: Torture_tier2.Priority.High content |2024-12-31|
+
+       -- tags: [Torture_tier2.Tag { -- score: 5 };
+                 Torture_tier2.Tag { -- score: 8 };
+                 Torture_tier2.Tag { -- score: 3 }]
+
+       -- metadata: Torture_tier2.Metadata {
+                      -- version: 2
+
+                      -- active: true
+
+                    }
+
+     };
+     Torture_tier2.Task {
+       -- id: 2
+
+       -- budget: $500.50
+
+       -- priority: Torture_tier2.Priority.Medium
+
+       -- tags: [Torture_tier2.Tag { -- score: 7 }]
+
+       -- metadata: Torture_tier2.Metadata {
+                      -- version: 1
+
+                      -- active: false
+
+                    }
+
+     };
+     Torture_tier2.Task {
+       -- id: 3
+
+       -- budget: $250.00
+
+       -- priority: Torture_tier2.Priority.Low
+
+       -- tags: []
+
+       -- metadata: Torture_tier2.Metadata {
+                      -- version: 3
+
+                      -- active: true
+
+                    }
+
+     }]
+```

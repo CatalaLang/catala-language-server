@@ -51,16 +51,18 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
         item.editor as {
           props: {
             testIO?: {
-              value?: { value?: { value?: { kind?: string; value?: any } } };
+              value?: {
+                value?: { value?: { kind?: string; value?: unknown[] } };
+              };
             };
           };
         }
       ).props;
 
       // Look for testIO prop which might contain our array value
-      if (editorProps?.testIO?.value?.value?.value?.kind === 'Array') {
-        const arrayValue = editorProps.testIO.value.value.value.value;
-        return `${item.label} (${arrayValue.length})`;
+      const arrayValue = editorProps?.testIO?.value?.value?.value;
+      if (arrayValue?.kind === 'Array' && arrayValue.value) {
+        return `${item.label} (${arrayValue.value.length})`;
       }
     }
 

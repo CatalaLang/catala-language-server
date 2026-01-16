@@ -4,13 +4,13 @@
  *
  * Checks:
  *  - For each key in src/locales/*.json, ensure the literal key text appears
- *    at least once in some TSX file under src/.
- *  - If a key never appears in any TSX file, exit with code 1.
+ *    at least once in some TS/TSX file under src/.
+ *  - If a key never appears in any TS/TSX file, exit with code 1.
  *
  * Notes:
- *  - Uses the TypeScript parser only to collect string literals from TSX.
+ *  - Uses the TypeScript parser to collect string literals from TS/TSX.
  *  - Conservative by design: we only report a key when its literal text is
- *    absent from all string literals in TSX sources.
+ *    absent from all string literals in TS/TSX sources.
  *  - Dynamic IDs are not detected; this is acceptable for this check.
  */
 
@@ -51,18 +51,23 @@ function flattenKeys(obj, prefix = '') {
 }
 
 /**
- * Collect all string literals from TSX using the TS AST.
+ * Collect all string literals from TS/TSX using the TS AST.
  */
 function collectStringsFromAst(fileName, sourceText) {
   const found = new Set();
 
   try {
+    // Determine script kind based on file extension
+    const scriptKind = fileName.endsWith('.tsx')
+      ? ts.ScriptKind.TSX
+      : ts.ScriptKind.TS;
+
     const sf = ts.createSourceFile(
       fileName,
       sourceText,
       ts.ScriptTarget.Latest,
       /*setParentNodes*/ true,
-      ts.ScriptKind.TSX
+      scriptKind
     );
 
     function visit(node) {
@@ -94,9 +99,12 @@ function collectStringsFromAst(fileName, sourceText) {
 }
 
 function main() {
-  console.log('Scanning TSX files and locale keys for i18n usage...');
+  console.log('Scanning TS/TSX files and locale keys for i18n usage...');
 
-  const tsxFiles = glob.sync('src/**/*.tsx', { nodir: true });
+  const tsxFiles = glob.sync('src/**/*.{ts,tsx}', {
+    nodir: true,
+    ignore: ['**/*.d.ts'],
+  });
   const localeFiles = glob.sync('src/locales/*.json', { nodir: true });
 
   if (localeFiles.length === 0) {
@@ -108,13 +116,13 @@ function main() {
 
   if (tsxFiles.length === 0) {
     console.error(
-      'Error: No TSX files found under src/**/*.tsx. Cannot verify i18n keys.'
+      'Error: No TS/TSX files found under src/**/*.{ts,tsx}. Cannot verify i18n keys.'
     );
     process.exit(1);
   }
 
   console.log(
-    `Found ${localeFiles.length} locale file(s) and ${tsxFiles.length} TSX file(s).`
+    `Found ${localeFiles.length} locale file(s) and ${tsxFiles.length} TS/TSX file(s).`
   );
 
   // Gather all strings from TSX (AST + regex fallback) and also keep raw text for an absolute substring search
