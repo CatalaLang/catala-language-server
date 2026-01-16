@@ -1,0 +1,103 @@
+> Using Torture_tier2
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = "Deeply nested structure (4 levels) - Company > Department[] > Team[] > Member[]"]
+#[testcase.test_title = ""]
+declaration scope DeepNesting_test:
+  output deep_nesting scope Torture_tier2.DeepNesting
+
+```
+
+```catala
+scope DeepNesting_test:
+  definition deep_nesting.companies equals
+    [Torture_tier2.Company {
+       -- company_id: 1
+
+       -- departments: [Torture_tier2.Department {
+                         -- dept_id: 10
+
+                         -- teams: [Torture_tier2.Team {
+                                      -- team_id: 100
+
+                                      -- members: [Torture_tier2.Member {
+                                                     -- id: 1001
+
+                                                     -- role: Torture_tier2.Role.Manager
+
+                                                   };
+                                                   Torture_tier2.Member {
+                                                     -- id: 1002
+
+                                                     -- role: Torture_tier2.Role.Developer
+
+                                                   }]
+
+                                    };
+                                    Torture_tier2.Team {
+                                      -- team_id: 101
+
+                                      -- members: [Torture_tier2.Member {
+                                                     -- id: 1003
+
+                                                     -- role: Torture_tier2.Role.Intern
+
+                                                   }]
+
+                                    }]
+
+                       };
+                       Torture_tier2.Department {
+                         -- dept_id: 11
+
+                         -- teams: [Torture_tier2.Team {
+                                      -- team_id: 110
+
+                                      -- members: [Torture_tier2.Member {
+                                                     -- id: 1004
+
+                                                     -- role: Torture_tier2.Role.Developer
+
+                                                   };
+                                                   Torture_tier2.Member {
+                                                     -- id: 1005
+
+                                                     -- role: Torture_tier2.Role.Developer
+
+                                                   };
+                                                   Torture_tier2.Member {
+                                                     -- id: 1006
+
+                                                     -- role: Torture_tier2.Role.Intern
+
+                                                   }]
+
+                                    }]
+
+                       }]
+
+     };
+     Torture_tier2.Company {
+       -- company_id: 2
+
+       -- departments: [Torture_tier2.Department {
+                         -- dept_id: 20
+
+                         -- teams: [Torture_tier2.Team {
+                                      -- team_id: 200
+
+                                      -- members: [Torture_tier2.Member {
+                                                     -- id: 2001
+
+                                                     -- role: Torture_tier2.Role.Manager
+
+                                                   }]
+
+                                    }]
+
+                       }]
+
+     }]
+```

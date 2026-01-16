@@ -1,0 +1,73 @@
+> Module Torture_tier2
+
+# Tier 2: Edge Case Complex Structures
+#
+# These structures test deeply nested hierarchies and mixed field types.
+
+```catala-metadata
+# =============================================================================
+# Fixture 1: Deeply nested structure (4 levels)
+# Company > Department[] > Team[] > Member[]
+# =============================================================================
+
+declaration enumeration Role:
+  -- Manager
+  -- Developer
+  -- Intern
+
+declaration structure Member:
+  data id content integer
+  data role content Role
+
+declaration structure Team:
+  data team_id content integer
+  data members content list of Member
+
+declaration structure Department:
+  data dept_id content integer
+  data teams content list of Team
+
+declaration structure Company:
+  data company_id content integer
+  data departments content list of Department
+
+declaration scope DeepNesting:
+  input companies content list of Company
+  output total_members content integer
+
+# =============================================================================
+# Fixture 2: Mixed primitive and complex fields
+# Task with id, budget, priority enum (with date payload), tags array, nested metadata struct
+# =============================================================================
+
+declaration enumeration Priority:
+  -- Low
+  -- Medium
+  -- High content date
+
+declaration structure Tag:
+  data score content integer
+
+declaration structure Metadata:
+  data version content integer
+  data active content boolean
+
+declaration structure Task:
+  data id content integer
+  data budget content money
+  data priority content Priority
+  data tags content list of Tag
+  data metadata content Metadata
+
+declaration scope MixedComplexity:
+  input tasks content list of Task
+  output high_priority_count content integer
+```
+
+```catala
+scope DeepNesting:
+  definition total_members equals 0
+
+scope MixedComplexity:
+  definition high_priority_count equals 0
+```
