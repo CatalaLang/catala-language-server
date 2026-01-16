@@ -281,7 +281,7 @@ let handle_evaluate logger rpc :
     in
     let* () =
       Format.kasprintf logger "@[<v 2>Message:@\n%s@]"
-        (Printexc.to_string (Catala_runtime.Error (error, pl)))
+        (Printexc.to_string (Catala_runtime.Error (error, pl, None)))
     in
     send_stop ~description:"Exception" Reason.Exception
   | `Ok { DE.value = Exn { pos; exn = Internal pp }; _ }
@@ -703,13 +703,13 @@ let () =
   (* Dummy registration *)
   Driver.Plugin.register_subcommands "testcase" ~doc:"" ~man:[] [];
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
-    ~contexts:[Desugared.Name_resolution.Expression] (fun ~pos:_ _ -> Some Nil);
+    ~contexts:(function Desugared.Name_resolution.Expression _ -> true | _ -> false) (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
-    ~contexts:[Desugared.Name_resolution.ScopeDecl] (fun ~pos:_ _ -> Some Nil);
+    ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false) (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
-    ~contexts:[Desugared.Name_resolution.ScopeDecl] (fun ~pos:_ _ -> Some Nil);
+    ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false) (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
-    ~contexts:[Desugared.Name_resolution.ScopeDecl] (fun ~pos:_ _ -> Some Nil)
+    ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false) (fun ~pos:_ _ -> Some Nil)
 
 let main () =
   let rpc = Debug_rpc.create ~in_:Lwt_io.stdin ~out:Lwt_io.stdout () in

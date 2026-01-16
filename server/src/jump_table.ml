@@ -440,7 +440,7 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
       populate_scopecall tctx pos scope args acc (f bnd_ctx)
     | EApp _ -> Expr.shallow_fold (f bnd_ctx) e acc
     | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | ETuple _ | ETupleAccess _
-    | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ | EPos _ | EBad ->
+    | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ | EPos _ | EAssert _ | EBad ->
       Expr.shallow_fold (f bnd_ctx) e acc
   in
   f Bindlib.empty_ctxt e m
@@ -456,7 +456,7 @@ let traverse_scope_def tctx (rule : typed rule) m : PMap.pmap =
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
     let m = traverse_typ tctx typ m in
     traverse_expr tctx e m
-  | Assertion e -> traverse_expr tctx e m
+  | Assertion e -> traverse_expr tctx e.e m
 
 let traverse_scope_sig tctx (scope : _ scope_decl) m : PMap.pmap =
   ScopeVar.Map.fold
