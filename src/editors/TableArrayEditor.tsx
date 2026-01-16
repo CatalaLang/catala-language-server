@@ -490,11 +490,13 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                         <span
                           className="parent-nav-link"
                           onClick={metadata.onNavigateToParent}
-                          title={
-                            metadata.parentLabel
-                              ? `Go to parent: ${metadata.parentLabel}`
-                              : 'Go to parent row'
-                          }
+                          title={intl.formatMessage(
+                            {
+                              id: 'tableEditor.goToParent',
+                              defaultMessage: 'Go to parent: {parentLabel}',
+                            },
+                            { parentLabel: metadata.parentLabel || '' }
+                          )}
                         >
                           <span className="codicon codicon-reply" />
                           {metadata.parentLabel && (

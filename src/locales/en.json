@@ -54,5 +54,6 @@
   "tableView.duplicateBefore": "Duplicate above",
   "tableView.duplicateAfter": "Duplicate below",
   "tableView.addNewItem": "Add new item",
-  "tableEditor.labelPlaceholder": "Name..."
+  "tableEditor.labelPlaceholder": "Name...",
+  "tableEditor.goToParent": "Go to parent: {parentLabel}"
 }
