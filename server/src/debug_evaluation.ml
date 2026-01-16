@@ -153,7 +153,7 @@ let run_debugger
             env = !last_step.env;
           };
         ]
-    | Error (Catala_runtime.Error (a, b)) ->
+    | Error (Catala_runtime.Error (a, b, _)) ->
       let pos = get_step_pos !last_step in
       Lwt.return
         [

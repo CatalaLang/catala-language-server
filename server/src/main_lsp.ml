@@ -50,19 +50,19 @@ let () =
   (* Dummy registration *)
   Driver.Plugin.register_subcommands "testcase" ~doc:"" ~man:[] [];
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
-    ~contexts:[Desugared.Name_resolution.Expression] (fun ~pos:_ _ -> Some Nil);
+    ~contexts:(function Desugared.Name_resolution.Expression _ -> true | _ -> false) (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
-    ~contexts:[Desugared.Name_resolution.ScopeDecl] (fun ~pos:_ _ ->
+    ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false) (fun ~pos:_ _ ->
       Some Projects.TestUI);
   (Driver.Plugin.register_attribute ~plugin:"testcase"
      ~path:["test_description"]
-     ~contexts:[Desugared.Name_resolution.ScopeDecl]
+     ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
   @@ fun ~pos:_ value ->
   match value with
   | Shared_ast.String (s, _pos) -> Some (Projects.TestDescription s)
   | _ -> failwith "unexpected test description");
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
-    ~contexts:[Desugared.Name_resolution.ScopeDecl]
+    ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
   @@ fun ~pos:_ value ->
   match value with
   | Shared_ast.String (s, _pos) -> Some (Projects.TestTitle s)
