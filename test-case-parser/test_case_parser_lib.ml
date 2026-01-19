@@ -374,7 +374,45 @@ let read_program includes path_to_build options =
   in
   Driver.Passes.desugared options ~stdlib ~includes
 
-let generate_test
+let rec generate_default_value (typ : O.typ) : O.runtime_value =
+  let value =
+    match typ with
+    | TBool -> O.Bool false
+    | TInt -> O.Integer 0
+    | TRat -> O.Decimal 0.
+    | TMoney -> O.Money 0
+    | TDate -> O.Date { year = 2000; month = 1; day = 1 }
+    | TDuration -> O.Duration { years = 0; months = 0; days = 0 }
+    | TTuple l -> O.Array (List.map generate_default_value l |> Array.of_list)
+    | TStruct decl ->
+      O.Struct
+        (decl, List.map (fun (s, t) -> s, generate_default_value t) decl.fields)
+    | TEnum decl ->
+      let elt =
+        let cn, ty =
+          List.find_opt
+            (function _, None -> true | _ -> false)
+            decl.constructors
+          |> function Some s -> s | None -> List.hd decl.constructors
+        in
+        cn, Option.map generate_default_value ty
+      in
+      O.Enum (decl, elt)
+    | TOption typ ->
+      let option_decl =
+        {
+          O.enum_name = "Optional";
+          constructors = ["Absent", None; "Present", Some typ];
+        }
+      in
+      Enum (option_decl, ("Absent", None))
+    | TArray _ -> O.Array [||]
+    | TUnit -> raise (Unsupported "unit type")
+    | TArrow _ -> raise (Unsupported "arrow type")
+  in
+  { value; attrs = [] }
+
+let generate_test_no_print
     tested_scope
     ?(testing_scope = tested_scope ^ "_test")
     include_dirs
@@ -390,7 +428,22 @@ let generate_test
     get_scope_test prg testing_scope tested_scope
       ~tested_module:(Option.map fst prg.I.program_module_name)
   in
-  print_tests [test]
+  let open O in
+  let test_inputs =
+    List.map
+      (fun (s, io) ->
+        ( s,
+          {
+            io with
+            value = Some { value = generate_default_value io.typ; pos = None };
+          } ))
+      test.test_inputs
+  in
+  { test with test_inputs }
+
+let generate_test tested_scope ?testing_scope include_dirs options =
+  print_tests
+    [generate_test_no_print tested_scope ?testing_scope include_dirs options]
 
 exception InvalidTestingScope of string
 
