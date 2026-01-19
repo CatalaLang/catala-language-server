@@ -7,10 +7,7 @@ import type {
   ParseResults,
   Test,
   TestGenerateResults,
-  TestInputs,
-  TestRunRequest,
   TestRunResults,
-  UpMessage,
 } from '../generated/catala_types';
 import {
   type DownMessage,
@@ -39,7 +36,7 @@ export class ScopeInputController {
   context: vscode.ExtensionContext
   panel: vscode.WebviewPanel
   scope: string
-  inputs: TestInputs
+  test: Test | undefined
 
   // We want to restrict shell -> webview messages to instances
   // of DownMessage
@@ -77,25 +74,18 @@ export class ScopeInputController {
           break;
         case 'GuiEdit':
           if (typed_msg.value.length > 0 && typed_msg.value[0].length > 0) {
-            this.inputs = typed_msg.value[0][0].test_inputs
+            this.test = typed_msg.value[0][0]
             logger.log("good gui edit")
           }
           break;
         case 'TestRunRequest':
           let values_present = true
-          this.inputs.forEach((value, _key) => {
-            if (value == undefined) { values_present = false; }
-          }); // FIXME do recursion
-          logger.log("typed message: " + JSON.stringify(typed_msg));
-          if (!values_present) { logger.log("cannot execute scope with missing values"); break }
-          logger.log("TESTINPUTS: " + JSON.stringify(this.inputs));
-          const results: TestRunResults = runTestScope(file, scope, this.inputs);
-          
+          if (!this.test) break;
+          const results: TestRunResults = runTestScope(file, scope, this.test.test_inputs);
           this.postMessageToWebView({
             kind: 'TestRunResults',
             value: { scope, reset_outputs: false, results },
           });
-          logger.log(JSON.stringify(writeTestRunResults(results)))
           break;
         default: break;
       }

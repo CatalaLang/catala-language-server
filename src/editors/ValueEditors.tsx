@@ -204,10 +204,30 @@ export default function ValueEditor(props: Props): ReactElement {
         />
       );
       break;
-    case 'TTuple':
     case 'TOption':
-      // TODO: When implementing TOption editor, mirror the enum "actual preview" handling for None vs Some(complex) diffs.
-      editor = <i>Unimplemented Editor</i>;
+      const constructors = new Map<string, Option<Typ>>();
+      constructors.set('Absent', null)
+      constructors.set('Present', { value: typ.value })
+      const option_decl: EnumDeclaration = {
+        enum_name: "Optional",
+        constructors
+      };
+      editor = (
+        <EnumEditor
+          enumDeclaration={option_decl}
+          valueDef={valueDef}
+          onValueChange={handleValueChange}
+          editorHook={editorHook}
+          currentPath={currentPath}
+          diffs={props.diffs}
+          editable={editable}
+          onDiffResolved={props.onDiffResolved}
+          onInvalidateDiffs={props.onInvalidateDiffs}
+        />
+      );
+      break;
+    case 'TTuple':
+      editor = <i>Unimplemented Tuple type</i>;
       break;
     case 'TArrow':
     case 'TUnit':

@@ -13,6 +13,7 @@ import {
   readDownMessage,
   ParseResults,
   writeDownMessage,
+  TestRunOutput,
 } from '../generated/catala_types';
 import TestInputsEditor from '../TestInputsEditor';
 import TestOutputsEditor from '../TestOutputsEditor';
@@ -22,7 +23,8 @@ import { WebviewApi } from 'vscode-webview';
 import { isPathPrefix, pathEquals } from '../diff/highlight';
 import { assertUnreachable } from '../util';
 import { logger } from '../logger';
-import ScopeOutputsEditor from './ScopeOutputsEditor';
+import ScopeOutputsEditor from './ScopeOutputs';
+import ScopeOutputs from './ScopeOutputs';
 
 
 
@@ -30,14 +32,14 @@ type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
   | { state: 'emptyTestListMismatch' }
-  | { state: 'success'; tests: TestList };
+  | { state: 'success'; test: Test };
 
-export type TestRunStatus = 'stall' | 'running' | 'success' | 'error' | 'cancelled';
-
-type TestRunState = {
-  status: TestRunStatus;
-  results?: TestRunResults;
-};
+export type TestRunState =
+  | { status: 'stall' }
+  | { status: 'running' }
+  | { status: 'success'; results: TestRunOutput }
+  | { status: 'error' }
+  | { status: 'cancelled' }
 
 type Props = { contents: UIState; vscode: WebviewApi<unknown>; scopename: string };
 
@@ -54,21 +56,13 @@ export default function ScopeInputEditor({
   }, [vscode]);
 
   const onTestChange = useCallback(
-    (newValue: Test, mayBeBatched: boolean): void => {
+    (newValue: Test): void => {
       if (state.state === 'success') {
-        const idx = state.tests.findIndex(
-          (tst) => tst.testing_scope === newValue.testing_scope
-        );
-        const newTestState = [...state.tests];
-        newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
-
-        // optimistic update
-        setState({ state: 'success', tests: newTestState });
-
+        setState({ state: 'success', test: newValue });
         vscode.postMessage(
           writeUpMessage({
             kind: 'GuiEdit',
-            value: [newTestState, mayBeBatched],
+            value: [[newValue], false],
           })
         );
       }
@@ -76,7 +70,7 @@ export default function ScopeInputEditor({
     [state, vscode, setTestRunState]
   );
 
-  const _onTestRun = (resetOutputs: boolean) => {
+  const _onTestRun = () => {
     return (testScope: string): void => {
       setTestRunState((prev) => ({ status: 'running' }));
       vscode.postMessage(
@@ -84,7 +78,7 @@ export default function ScopeInputEditor({
           kind: 'TestRunRequest',
           value: {
             scope: testScope,
-            reset_outputs: resetOutputs,
+            reset_outputs: false,
           },
         })
       );
@@ -93,19 +87,16 @@ export default function ScopeInputEditor({
 
   // The 'run test' and 'reset test outputs' commands are
   // very similar, so we factor them
-  const onTestRun = useCallback(_onTestRun(false), [vscode]);
-  const onTestOutputsReset = useCallback(_onTestRun(true), [vscode]);
+  const onTestRun = useCallback(_onTestRun(), [vscode]);
+  const onTestOutputsReset = useCallback(_onTestRun(), [vscode]);
 
-
-
-
-  function _resultsToStatus(results: TestRunResults): TestRunStatus {
+  function _resultsToState(results: TestRunResults): TestRunState {
     if (results.kind === 'Ok') {
-      return 'success';
+      return { status: 'success', results: results.value };
     } else if (results.kind === 'Cancelled') {
-      return 'cancelled';
+      return { status: 'cancelled' };
     } else {
-      return 'error';
+      return { status: 'error' };
     }
   }
 
@@ -117,16 +108,8 @@ export default function ScopeInputEditor({
           setState(parseResultsToUiState(message.value));
           break;
         case 'TestRunResults': {
-          console.log("IN TESTRUNRESULTS");
-          console.log(JSON.stringify(writeDownMessage(message)));
-          const { scope, reset_outputs, results } = message.value;
           setTestRunState((prev) => {
-            const next: TestRunState = {
-              status: _resultsToStatus(results),
-              results
-            };
-            console.log("bla");
-            console.log(next)
+            const next: TestRunState = _resultsToState(message.value.results);
             return next;
           });
           break;
@@ -164,16 +147,14 @@ export default function ScopeInputEditor({
     case 'success': {
       return (
         <div className="test-editor-container">
-          {state.tests.map((test) => (
-            <ScopeInputComponent
-              title={scopename}
-              test={test}
-              key={test.testing_scope}
-              onTestChange={onTestChange}
-              onTestRun={onTestRun}
-              runState={testRunState}
-            />
-          ))}
+          <ScopeInputComponent
+            title={scopename}
+            test={state.test}
+            key={state.test.testing_scope}
+            onTestChange={onTestChange}
+            onTestRun={onTestRun}
+            runState={testRunState}
+          />
         </div>
       );
     }
@@ -246,26 +227,21 @@ function parseResultsToUiState(tests: ParseResults): UIState {
     case 'EmptyTestListMismatch':
       return { state: 'emptyTestListMismatch' };
     case 'Results':
-      return { state: 'success', tests: tests.value };
+      return { state: 'success', test: tests.value[0] };
     default:
       assertUnreachable(tests);
   }
 }
 
-
-type Props2 = {
+type PropsInputComp = {
   title: string;
   test: Test;
-  onTestChange(newValue: Test, mayBeBatched: boolean): void;
+  onTestChange(newValue: Test): void;
   onTestRun(testScope: string): void;
-  runState?: {
-    status: TestRunStatus;
-    results?: TestRunResults;
-    stale?: boolean;
-  };
+  runState: TestRunState;
 };
 
-function ScopeInputComponent(props: Props2): ReactElement {
+function ScopeInputComponent(props: PropsInputComp): ReactElement {
   const intl = useIntl();
 
   function onTestInputsChange(newValue: TestInputs): void {
@@ -273,8 +249,7 @@ function ScopeInputComponent(props: Props2): ReactElement {
       {
         ...props.test,
         test_inputs: newValue,
-      },
-      false
+      }
     );
   }
 
@@ -282,7 +257,6 @@ function ScopeInputComponent(props: Props2): ReactElement {
   // Scope for searching the first '.invalid-badge' or '.unset-badge' before running; used to scroll into view
   const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
-
 
 
   function containsUnsetInRuntime(rv: RuntimeValue): boolean {
@@ -306,14 +280,11 @@ function ScopeInputComponent(props: Props2): ReactElement {
     }
   }
 
-  function hasUnsetInTest(test: Test): boolean {
+  function hasUnsetInTestInputs(test: Test): boolean {
     const inputsHas = Array.from(test.test_inputs.values()).some(
-      (io) => io.value && containsUnsetInRuntime(io.value.value)
+      (io) => !io.value || !io.value.value || containsUnsetInRuntime(io.value.value)
     );
-    const outputsHas = Array.from(test.test_outputs.values()).some(
-      (io) => io.value && containsUnsetInRuntime(io.value.value)
-    );
-    return inputsHas || outputsHas;
+    return inputsHas;
   }
 
   const scrollToFirstUnset = (): void => {
@@ -330,22 +301,20 @@ function ScopeInputComponent(props: Props2): ReactElement {
   };
 
   const runWithUnsetCheck = async (): Promise<void> => {
-    if (hasUnsetInTest(props.test)) {
+    if (hasUnsetInTestInputs(props.test)) {
       scrollToFirstUnset();
       const confirmed = await confirm('RunTestWithUnsetValues');
       if (!confirmed) return;
     }
     props.onTestRun(props.test.tested_scope.name);
   };
-  console.log("XXX comp render")
-  console.log(props);
+
   return (
     <div className="test-editor" ref={unsetElementRef}>
-      <h2> {props.title} </h2>
       <div className="test-editor-content">
         <div className="test-section">
           <h2 className="test-section-title heading-h2">
-            <FormattedMessage id="testEditor.inputs" />
+            {props.title} : <FormattedMessage id="testEditor.inputs" />
           </h2>
           <TestInputsEditor
             test_inputs={props.test.test_inputs}
@@ -361,20 +330,18 @@ function ScopeInputComponent(props: Props2): ReactElement {
           <div className="test-result-header">
             <div className="test-result-action-bar"></div>
             <button
-              className={`button-action-dvp ${props.runState?.status ?? ''}`}
+              className={`button-action-dvp ${props.runState ?? ''}`}
               title={intl.formatMessage({ id: 'testEditor.run' })}
               onClick={runWithUnsetCheck}
-              disabled={props.runState?.status === 'running'}
+              disabled={props.runState.status === 'running'}
             >
               <span
                 className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
-              ></span>{' '}
-              Lancer le test
+              ></span>Run
             </button>
-            {props.runState && props.runState.results ? (
-              <ScopeOutputsEditor
-                test_run_output={props.runState.results}
-              />) : <pre>Run to display results</pre>}
+            <ScopeOutputs
+              test_run_output={props.runState}
+            />
           </div>
         </div>
       </div>

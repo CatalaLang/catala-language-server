@@ -3,6 +3,7 @@ import { FormattedMessage, useIntl } from 'react-intl';
 import { getDefaultValue } from '../editors/ValueEditors';
 import ValueEditor from '../editors/ValueEditors';
 import type { Test, TestIo, Diff, PathSegment, TestRunOutput, TestRunResults } from '../generated/catala_types';
+import { TestRunState } from './ScopeInputEditor';
 
 /* An editor for test outputs. Outputs are named and typed, and
    are *always* optional -- each defined output corresponds to
@@ -22,19 +23,17 @@ import type { Test, TestIo, Diff, PathSegment, TestRunOutput, TestRunResults } f
 */
 
 type Props = {
-  test_run_output: TestRunResults;
+  test_run_output: TestRunState;
 };
 
-export default function ScopeOutputsEditor({
+export default function ScopeOutputs({
   test_run_output
 }: Props): ReactElement {
   const intl = useIntl();
-  console.log("NEW OUTPUT")
-  if (test_run_output && test_run_output.kind == "Ok") {      console.log(test_run_output)
-
+  if (test_run_output && test_run_output.status == "success") {
+    const outputs = test_run_output.results.test_outputs;
     let items =
-      Array.from(test_run_output.value.test_outputs, ([outputName, v]) => {
-        const outputData = test_run_output.value.test_outputs.get(outputName);
+      Array.from(outputs, ([outputName, v]) => {
         return (
           <>
             <span>{outputName}</span>
@@ -43,23 +42,13 @@ export default function ScopeOutputsEditor({
               onValueChange={() => { }}
               currentPath={[]}
               diffs={[]}
+              editable={false}
             />
           </>
         );
-
       });
-    return (
-      <div className="test-outputs-editor">
-        <div className="test-outputs data-card">
-          {items}
-        </div>
-      </div>
-    );
+    return <>{items}</>;
   } else {
-    if (!test_run_output) { console.log("CACA") } else {
-      console.log(test_run_output)
-    }
-
-    return <div>CACA</div>
+    return <div>No results to display</div>
   }
 }
