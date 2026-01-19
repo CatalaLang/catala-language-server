@@ -173,7 +173,7 @@ let lookup_document_symbols file =
 
 let lookup_lenses file =
   let*? { jump_table = (lazy jt); _ } = file.last_valid_result in
-  let mk_lens scope range =
+  let mk_no_input_lens scope range =
     let arguments =
       [
         `Assoc
@@ -185,17 +185,33 @@ let lookup_lenses file =
     in
     let open Linol_lwt in
     let run_command =
-      Command.create ~arguments ~command:"catala.runScope" ~title:"▶ Run scope"
-        ()
+      Command.create ~arguments ~command:"catala.runScope" ~title:"▶ Run" ()
     in
     let debug_command =
-      Command.create ~arguments ~command:"catala.debugScope"
-        ~title:"🛠 Debug scope" ()
+      Command.create ~arguments ~command:"catala.debugScope" ~title:"🛠 Debug" ()
     in
     [
       CodeLens.create ~command:run_command ~range ();
       CodeLens.create ~command:debug_command ~range ();
     ]
+  in
+  let mk_input_lens scope range =
+    let arguments =
+      [
+        `Assoc
+          [
+            "uri", `String (file.document_id :> string);
+            "scope", `String (ScopeName.base scope);
+          ];
+      ]
+    in
+    let open Linol_lwt in
+    let run_command =
+      Command.create ~arguments ~command:"catala.openWithScopeInputEditor"
+        ~title:"▶ Run with..." ()
+    in
+    (* TODO debug with inputs *)
+    [CodeLens.create ~command:run_command ~range ()]
   in
   let scope_lenses =
     let is_input_or_context_var = function
@@ -216,8 +232,8 @@ let lookup_lenses file =
                 ScopeVar.Map.for_all
                   (fun _scope_var v -> is_input_or_context_var v)
                   scope_sig
-              then mk_lens scope_decl_name (range_of_pos p) @ acc
-              else acc
+              then mk_no_input_lens scope_decl_name (range_of_pos p) @ acc
+              else mk_input_lens scope_decl_name (range_of_pos p) @ acc
             | _ -> acc)
           vl acc)
       jt.variables []
