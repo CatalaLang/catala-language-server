@@ -107,6 +107,7 @@ async function runScope(): Promise<void> {
 }
 
 vscode.commands.registerCommand('catala.run', runScope);
+vscode.commands.registerCommand('catala.selectScope', selectScope);
 
 async function listTestableScopes(
   path: string

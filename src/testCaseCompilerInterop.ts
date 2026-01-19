@@ -11,6 +11,7 @@ import {
   readTestRun,
   writeTestInputs,
   writeTestList,
+  writeTestRun,
   type ParseResults,
   type TestList,
   type TestRunResults,
@@ -110,6 +111,7 @@ export function runTestScope(
    */
 
   let input_args: string[] = []
+  logger.log("inputs in runtestscope: " + JSON.stringify(inputs))
   if (inputs) {
     const serialized_inputs = JSON.stringify(writeTestInputs(inputs));
     input_args = ["--input", serialized_inputs]
@@ -131,7 +133,7 @@ export function runTestScope(
     logger.log(`result: ${result.toString()}`);
     const testRun = readTestRun(JSON.parse(result.toString()));
     logger.log(`diffs: ${JSON.stringify(testRun.diffs)}`);
-    logger.log(`outputs: ${JSON.stringify(testRun.test.test_outputs)}`);
+    logger.log(`outputs: ${JSON.stringify(writeTestRun(testRun))}`);
     return {
       kind: 'Ok',
       value: {

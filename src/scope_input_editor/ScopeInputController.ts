@@ -16,6 +16,7 @@ import {
   type DownMessage,
   readUpMessage,
   writeDownMessage,
+  writeTestRunResults,
 } from '../generated/catala_types';
 import * as path from 'path';
 import PQueue from 'p-queue';
@@ -85,14 +86,16 @@ export class ScopeInputController {
           this.inputs.forEach((value, _key) => {
             if (value == undefined) { values_present = false; }
           }); // FIXME do recursion
+          logger.log("typed message: " + JSON.stringify(typed_msg));
           if (!values_present) { logger.log("cannot execute scope with missing values"); break }
+          logger.log("TESTINPUTS: " + JSON.stringify(this.inputs));
           const results: TestRunResults = runTestScope(file, scope, this.inputs);
           
           this.postMessageToWebView({
             kind: 'TestRunResults',
             value: { scope, reset_outputs: false, results },
           });
-          logger.log(JSON.stringify(results))
+          logger.log(JSON.stringify(writeTestRunResults(results)))
           break;
         default: break;
       }

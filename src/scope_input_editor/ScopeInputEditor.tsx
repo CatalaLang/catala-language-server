@@ -12,6 +12,7 @@ import {
   Diff,
   readDownMessage,
   ParseResults,
+  writeDownMessage,
 } from '../generated/catala_types';
 import TestInputsEditor from '../TestInputsEditor';
 import TestOutputsEditor from '../TestOutputsEditor';
@@ -20,6 +21,8 @@ import { setVsCodeApi } from '../webviewApi';
 import { WebviewApi } from 'vscode-webview';
 import { isPathPrefix, pathEquals } from '../diff/highlight';
 import { assertUnreachable } from '../util';
+import { logger } from '../logger';
+import ScopeOutputsEditor from './ScopeOutputsEditor';
 
 
 
@@ -29,14 +32,11 @@ type UIState =
   | { state: 'emptyTestListMismatch' }
   | { state: 'success'; tests: TestList };
 
-export type TestRunStatus = 'running' | 'success' | 'error' | 'cancelled';
+export type TestRunStatus = 'stall' | 'running' | 'success' | 'error' | 'cancelled';
 
 type TestRunState = {
-  [scope: string]: {
-    status: TestRunStatus;
-    results?: TestRunResults;
-    stale?: boolean;
-  };
+  status: TestRunStatus;
+  results?: TestRunResults;
 };
 
 type Props = { contents: UIState; vscode: WebviewApi<unknown>; scopename: string };
@@ -48,7 +48,7 @@ export default function ScopeInputEditor({
   scopename,
 }: Props): ReactElement {
   const [state, setState] = useState(contents);
-  const [testRunState, setTestRunState] = useState<TestRunState>({});
+  const [testRunState, setTestRunState] = useState<TestRunState>({ status: 'stall' });
   useEffect(() => {
     setVsCodeApi(vscode);
   }, [vscode]);
@@ -76,35 +76,9 @@ export default function ScopeInputEditor({
     [state, vscode, setTestRunState]
   );
 
-  const onTestDelete = useCallback(
-    (testScope: string): void => {
-      if (state.state === 'success') {
-        const newTestState = state.tests.filter(
-          (test) => test.testing_scope !== testScope
-        );
-        console.log('Deleting test:', testScope);
-        console.log('New test state:', newTestState);
-
-        // optimistic update
-        setState({ state: 'success', tests: newTestState });
-
-        vscode.postMessage(
-          writeUpMessage({
-            kind: 'GuiEdit',
-            value: [newTestState, false],
-          })
-        );
-      }
-    },
-    [state, vscode]
-  );
-
   const _onTestRun = (resetOutputs: boolean) => {
     return (testScope: string): void => {
-      setTestRunState((prev) => ({
-        ...prev,
-        [testScope]: { status: 'running' },
-      }));
+      setTestRunState((prev) => ({ status: 'running' }));
       vscode.postMessage(
         writeUpMessage({
           kind: 'TestRunRequest',
@@ -122,66 +96,8 @@ export default function ScopeInputEditor({
   const onTestRun = useCallback(_onTestRun(false), [vscode]);
   const onTestOutputsReset = useCallback(_onTestRun(true), [vscode]);
 
-  // NOTE: Paths passed to onDiffResolved MUST be ABSOLUTE from the test outputs root.
-  // Example: [{ kind: 'StructField', value: '<outputName>' }, { kind: 'ListIndex', value: 0 }, ...]
-  // Diff policy: path-stable single-diff removal (exact path match). See ArrayEditor for path-unstable cases.
-  const onDiffResolved = useCallback(
-    (scope: string, path: PathSegment[]): void => {
-      setTestRunState((prev) => {
-        const entry = prev[scope];
-        if (entry?.results?.kind !== 'Ok') return prev;
-        const currentDiffs = entry.results.value.diffs;
-        const filtered: Diff[] = currentDiffs.filter(
-          (d) => !pathEquals(d.path, path)
-        );
-        return {
-          ...prev,
-          [scope]: {
-            ...entry,
-            results: {
-              kind: 'Ok',
-              value: { ...entry.results.value, diffs: filtered },
-            },
-          },
-        };
-      });
-    },
-    []
-  );
 
-  // Invalidate all diffs under a given path prefix (array subtree), mark stale.
-  // Diff policy: path-unstable array edits clear diffs under prefix and mark results stale; requires a rerun.
-  const onInvalidateDiffs = useCallback(
-    (scope: string, pathPrefix: PathSegment[]): void => {
-      setTestRunState((prev) => {
-        const entry = prev[scope];
-        if (entry?.results?.kind !== 'Ok') return prev;
-        const filtered: Diff[] = entry.results.value.diffs.filter(
-          (d) => !isPathPrefix(pathPrefix, d.path)
-        );
-        return {
-          ...prev,
-          [scope]: {
-            ...entry,
-            stale: true,
-            results: {
-              kind: 'Ok',
-              value: { ...entry.results.value, diffs: filtered },
-            },
-          },
-        };
-      });
-    },
-    []
-  );
 
-  const onAddNewTest = useCallback((): void => {
-    vscode.postMessage(
-      writeUpMessage({
-        kind: 'OpenTestScopePicker',
-      })
-    );
-  }, [vscode]);
 
   function _resultsToStatus(results: TestRunResults): TestRunStatus {
     if (results.kind === 'Ok') {
@@ -201,19 +117,16 @@ export default function ScopeInputEditor({
           setState(parseResultsToUiState(message.value));
           break;
         case 'TestRunResults': {
+          console.log("IN TESTRUNRESULTS");
+          console.log(JSON.stringify(writeDownMessage(message)));
           const { scope, reset_outputs, results } = message.value;
           setTestRunState((prev) => {
             const next: TestRunState = {
-              ...prev,
-              [scope]: {
-                status: _resultsToStatus(results),
-                results,
-                stale: false,
-              },
+              status: _resultsToStatus(results),
+              results
             };
-            if (reset_outputs && results.kind === 'Ok') {
-              delete next[scope];
-            }
+            console.log("bla");
+            console.log(next)
             return next;
           });
           break;
@@ -249,21 +162,6 @@ export default function ScopeInputEditor({
         </strong>
       );
     case 'success': {
-      if (state.tests.length === 0) {
-        return (
-          <>
-            <div className="test-editor-empty">
-              <p className="test-editor-empty-message">
-                <FormattedMessage id="testFile.noTests" />
-              </p>
-              <button className="test-editor-add-button" onClick={onAddNewTest}>
-                <span className="codicon codicon-add"></span>
-                <FormattedMessage id="testFile.addTest" />
-              </button>
-            </div>
-          </>
-        );
-      }
       return (
         <div className="test-editor-container">
           {state.tests.map((test) => (
@@ -273,7 +171,7 @@ export default function ScopeInputEditor({
               key={test.testing_scope}
               onTestChange={onTestChange}
               onTestRun={onTestRun}
-              runState={testRunState[test.testing_scope]}
+              runState={testRunState}
             />
           ))}
         </div>
@@ -385,23 +283,7 @@ function ScopeInputComponent(props: Props2): ReactElement {
   const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
 
-  useEffect(() => {
-    const runState = props.runState;
-    const shouldFocus =
-      !!runState &&
-      runState.results?.kind === 'Ok' &&
-      runState.results.value.assert_failures;
 
-    if (shouldFocus) {
-      setTimeout(() => {
-        expectedSectionRef.current?.focus();
-        expectedSectionRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        });
-      }, 0);
-    }
-  }, [props.runState]);
 
   function containsUnsetInRuntime(rv: RuntimeValue): boolean {
     switch (rv.value.kind) {
@@ -453,9 +335,10 @@ function ScopeInputComponent(props: Props2): ReactElement {
       const confirmed = await confirm('RunTestWithUnsetValues');
       if (!confirmed) return;
     }
-    props.onTestRun(props.test.testing_scope);
+    props.onTestRun(props.test.tested_scope.name);
   };
-
+  console.log("XXX comp render")
+  console.log(props);
   return (
     <div className="test-editor" ref={unsetElementRef}>
       <h2> {props.title} </h2>
@@ -475,76 +358,24 @@ function ScopeInputComponent(props: Props2): ReactElement {
           ref={expectedSectionRef}
           tabIndex={-1}
         >
-          <h2 className="test-section-title heading-h2">
-            <FormattedMessage id="testEditor.expectedValues" />
-          </h2>
           <div className="test-result-header">
-            <div className="test-result-action-bar">
-              <button
-                className={`button-action-dvp ${props.runState?.status ?? ''}`}
-                title={intl.formatMessage({ id: 'testEditor.run' })}
-                onClick={runWithUnsetCheck}
-                disabled={props.runState?.status === 'running'}
-              >
-                <span
-                  className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
-                ></span>{' '}
-                Lancer le test
-              </button>
-            </div>
-            <div className="test-result">
-              {props.runState?.status === 'success' &&
-                props.runState?.results?.kind === 'Ok' &&
-                !props.runState.results.value.assert_failures && (
-                  <p className="test-run-result test-run-success body-1">
-                    <span className="codicon codicon-check-all"></span>
-                    <FormattedMessage
-                      id="testEditor.passed"
-                      defaultMessage="Passed"
-                    />
-                  </p>
-                )}
-              {(props.runState?.status === 'error' ||
-                (props.runState?.results?.kind === 'Ok' &&
-                  props.runState.results.value.assert_failures)) && (
-                  <div className="test-result-information">
-                    <p className="test-run-result test-run-error body-1">
-                      <span className="codicon codicon-warning"></span>
-                      <FormattedMessage
-                        id="testEditor.failed"
-                        defaultMessage="Failed"
-                      />
-                    </p>
-                  </div>
-                )}
-            </div>
-            {props.runState?.stale && (
-              <div className="test-result-information">
-                <p className="body-3">
-                  <span className="codicon codicon-history"></span>{' '}
-                  <FormattedMessage
-                    id="testEditor.diffsStale"
-                    defaultMessage="Diffs are out of date. Re-run to refresh."
-                  />
-                </p>
-              </div>
-            )}
+            <div className="test-result-action-bar"></div>
+            <button
+              className={`button-action-dvp ${props.runState?.status ?? ''}`}
+              title={intl.formatMessage({ id: 'testEditor.run' })}
+              onClick={runWithUnsetCheck}
+              disabled={props.runState?.status === 'running'}
+            >
+              <span
+                className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
+              ></span>{' '}
+              Lancer le test
+            </button>
+            {props.runState && props.runState.results ? (
+              <ScopeOutputsEditor
+                test_run_output={props.runState.results}
+              />) : <pre>Run to display results</pre>}
           </div>
-
-          <pre>TODO adapt this</pre>
-          <TestOutputsEditor
-            test={props.test}
-            onTestChange={(test) => {
-              props.onTestChange(test, false);
-            }}
-            diffs={
-              props.runState?.results?.kind === 'Ok'
-                ? props.runState.results.value.diffs
-                : []
-            }
-            onDiffResolved={(_) => { }}
-            onInvalidateDiffs={() => { }}
-          />
         </div>
       </div>
     </div>
