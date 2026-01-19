@@ -10,10 +10,14 @@ let rec convert_to_json_input ({ value ; _ } : R.runtime_value) : Yojson.Safe.t 
     | Date {year;month;day} -> `String (Format.sprintf "%04d-%02d-%02d" year month day)
     | Duration {years; months; days} ->
       `Assoc [ "years", `Int years ; "months", `Int months ; "days", `Int days ;   ]
+    | Enum (_decl, ("Absent", None)) -> `Null
+    | Enum (_decl, ("Present", Some x)) -> convert_to_json_input x
     | Enum (_decl, (constr, None)) -> `String constr
     | Enum (_decl, (constr, Some v)) -> `Assoc [constr, convert_to_json_input v]
     | Struct (_decl, fl) ->
-      `Assoc (List.map (fun (fname, v) -> fname, convert_to_json_input v) fl)
+      `Assoc (List.filter_map (function
+          | (_, ({value = Enum (_decl, ("Absent", None)); _ } : R.runtime_value)) -> None
+          | (fname, v) -> Some (fname, convert_to_json_input v)) fl)
     | Array l -> `List (Array.to_list l |> List.map convert_to_json_input)
     | Unset -> failwith "convert_to_json_input: cannot convert 'unset' values"
     | Empty -> failwith "convert_to_json_input: cannot convert 'empty' values"
