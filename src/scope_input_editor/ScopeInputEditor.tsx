@@ -38,7 +38,7 @@ export type TestRunState =
   | { status: 'stall' }
   | { status: 'running' }
   | { status: 'success'; results: TestRunOutput }
-  | { status: 'error' }
+  | { status: 'error'; message: string }
   | { status: 'cancelled' }
 
 type Props = { contents: UIState; vscode: WebviewApi<unknown>; scopename: string };
@@ -96,7 +96,7 @@ export default function ScopeInputEditor({
     } else if (results.kind === 'Cancelled') {
       return { status: 'cancelled' };
     } else {
-      return { status: 'error' };
+      return { status: 'error', message: results.value };
     }
   }
 

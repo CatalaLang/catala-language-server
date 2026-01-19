@@ -36,7 +36,7 @@ export class ScopeInputController {
   context: vscode.ExtensionContext
   panel: vscode.WebviewPanel
   scope: string
-  test: Test | undefined
+  test: Test
 
   // We want to restrict shell -> webview messages to instances
   // of DownMessage
@@ -71,6 +71,7 @@ export class ScopeInputController {
             kind: 'Update',
             value
           });
+          this.test = generatedTest.value[0]
           break;
         case 'GuiEdit':
           if (typed_msg.value.length > 0 && typed_msg.value[0].length > 0) {
@@ -79,8 +80,6 @@ export class ScopeInputController {
           }
           break;
         case 'TestRunRequest':
-          let values_present = true
-          if (!this.test) break;
           const results: TestRunResults = runTestScope(file, scope, this.test.test_inputs);
           this.postMessageToWebView({
             kind: 'TestRunResults',
