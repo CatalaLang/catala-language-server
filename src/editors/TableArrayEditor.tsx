@@ -81,6 +81,7 @@ type RowMetadata = {
   onDeleteItem: (index: number) => Promise<void>;
   onDuplicateItem: (index: number, position: 'before' | 'after') => void;
   onAddItem: () => void; // Add new item to same parent's sub-array
+  onLabelChange: (index: number, newLabel: string) => void; // Update item's label
 };
 
 type TableArrayEditorProps = {
@@ -500,9 +501,8 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           )}
                         </>
                       )}
-                      {/* Row identifier: editable label for top-level, parent nav for sub-table */}
-                      {!isPhantomRow && !isExpectedOnlyRow && metadata ? (
-                        // Sub-table row: show parent navigation
+                      {/* Back arrow for sub-table rows with parent label */}
+                      {!isPhantomRow && !isExpectedOnlyRow && metadata && (
                         <span
                           className="parent-nav-link"
                           onClick={metadata.onNavigateToParent}
@@ -511,7 +511,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                               id: 'tableEditor.goToParent',
                               defaultMessage: 'Go to parent: {parentLabel}',
                             },
-                            { parentLabel: metadata.parentLabel || '' }
+                            { parentLabel: metadata.parentLabel ?? '' }
                           )}
                         >
                           <span className="codicon codicon-reply" />
@@ -521,14 +521,23 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                             </span>
                           )}
                         </span>
-                      ) : !isPhantomRow && !isExpectedOnlyRow ? (
-                        // Top-level row: editable label
+                      )}
+                      {/* Editable label for all rows (top-level and sub-table) */}
+                      {!isPhantomRow && !isExpectedOnlyRow && (
                         <input
                           type="text"
                           className="row-label-input"
                           value={getArrayItemLabel(displayRow.attrs) ?? ''}
                           onChange={(e) =>
-                            handlers.handleLabelChange(rowIndex, e.target.value)
+                            metadata
+                              ? metadata.onLabelChange(
+                                  metadata.itemIndexWithinParent,
+                                  e.target.value
+                                )
+                              : handlers.handleLabelChange(
+                                  rowIndex,
+                                  e.target.value
+                                )
                           }
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === 'Escape') {
@@ -541,7 +550,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           })}
                           disabled={!editable}
                         />
-                      ) : null}
+                      )}
                       {editable && !isPhantomRow && !isExpectedOnlyRow && (
                         <>
                           <button
@@ -970,6 +979,17 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                           item.parentRowIndex,
                           subArray.fieldPath,
                           elementType
+                        );
+                      },
+                      onLabelChange: (
+                        index: number,
+                        newLabel: string
+                      ): void => {
+                        handlers.handleSubArrayItemLabelChange(
+                          item.parentRowIndex,
+                          subArray.fieldPath,
+                          index,
+                          newLabel
                         );
                       },
                     }));

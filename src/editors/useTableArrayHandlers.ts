@@ -63,6 +63,12 @@ type TableArrayHandlers = {
     itemIndex: number,
     position: 'before' | 'after'
   ) => void;
+  handleSubArrayItemLabelChange: (
+    parentRowIndex: number,
+    arrayFieldPath: string[],
+    itemIndex: number,
+    newLabel: string
+  ) => void;
   handleSubTableChange: (
     subArray: SubArrayDescriptor,
     itemStructDecl: StructDeclaration,
@@ -299,6 +305,33 @@ export function useTableArrayHandlers(
     handleParentSubArrayUpdate(parentRowIndex, arrayFieldPath, newSubArray);
   };
 
+  const handleSubArrayItemLabelChange = (
+    parentRowIndex: number,
+    arrayFieldPath: string[],
+    itemIndex: number,
+    newLabel: string
+  ): void => {
+    const row = currentArray[parentRowIndex];
+    if (row?.value.kind !== 'Struct') return;
+
+    const [, structData] = row.value.value;
+    const arrayValue = getNestedValue(structData, arrayFieldPath);
+    if (arrayValue?.value.kind !== 'Array') return;
+
+    const currentSubArray = arrayValue.value.value;
+    const item = currentSubArray[itemIndex];
+    if (!item) return;
+
+    const newItem: RuntimeValue = {
+      ...item,
+      attrs: setArrayItemLabel(item.attrs, newLabel),
+    };
+
+    const newSubArray = [...currentSubArray];
+    newSubArray[itemIndex] = newItem;
+    handleParentSubArrayUpdate(parentRowIndex, arrayFieldPath, newSubArray);
+  };
+
   const handleSubTableChange = (
     subArray: SubArrayDescriptor,
     itemStructDecl: StructDeclaration,
@@ -401,6 +434,7 @@ export function useTableArrayHandlers(
     handleSubArrayItemDelete,
     handleSubArrayItemMove,
     handleSubArrayItemDuplicate,
+    handleSubArrayItemLabelChange,
     handleSubTableChange,
     handleAddSubArrayItem,
   };

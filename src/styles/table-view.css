@@ -81,9 +81,9 @@
 
 /* Combined header for row number + controls */
 .table-header-controls-combined {
-  width: 180px; /* 60px row number + 120px controls when editable */
-  min-width: 180px;
-  max-width: 180px;
+  width: 240px; /* Combined width: 60px number + 180px label/controls */
+  min-width: 240px;
+  max-width: 240px;
   text-align: center;
   position: sticky;
   left: 0;
@@ -92,6 +92,13 @@
   border-right: 2px solid var(--card-border);
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
   padding: var(--spacing8);
+}
+
+/* Widen header in sub-tables to match wider controls cell */
+.sub-table-content .table-header-controls-combined {
+  width: 320px; /* +80px for parent label */
+  min-width: 320px;
+  max-width: 320px;
 }
 
 /* Narrower header when not editable (detected by checking if tbody has narrow cells) */
@@ -252,6 +259,13 @@
   background-color: var(--card-background);
   border-right: 2px solid var(--card-border);
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Widen controls cell in sub-tables to accommodate parent label */
+.sub-table-content .table-cell-controls {
+  width: 320px; /* +80px for parent label: 60px number + 260px label/parent/controls */
+  min-width: 320px;
+  max-width: 320px;
 }
 
 /* Thin border on left edge for sub-table rows only */
