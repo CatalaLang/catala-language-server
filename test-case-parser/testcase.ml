@@ -21,7 +21,7 @@ let cmd_generate =
           "Generate the test structure from the given scope in the given \
            program, and print it to stdout in JSON.")
     Term.(
-      const (Lib.generate_test ?testing_scope:None)
+      const (Lib.generate_cmd ?testing_scope:None)
       $ Cli.Flags.ex_scope
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options)

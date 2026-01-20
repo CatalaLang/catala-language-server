@@ -450,7 +450,7 @@ let generate_test_no_print
   in
   { test with test_inputs }
 
-let generate_test tested_scope ?testing_scope include_dirs options =
+let generate_cmd tested_scope ?testing_scope include_dirs options =
   print_tests
     [generate_test_no_print tested_scope ?testing_scope include_dirs options]
 
