@@ -159,6 +159,8 @@ type test_generate_results = [
 type test_run_request = {
   scope: string;
   reset_outputs: bool;
+  in_shell: bool;
+  debug: bool;
 }
 
 type test_generate_request = {

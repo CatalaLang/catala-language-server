@@ -122,6 +122,8 @@ export default function TestFileEditor({
           value: {
             scope: testScope,
             reset_outputs: resetOutputs,
+            in_shell: false,
+            debug: false
           },
         })
       );

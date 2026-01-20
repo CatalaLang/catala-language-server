@@ -159,6 +159,8 @@ export type TestGenerateResults =
 export type TestRunRequest = {
   scope: string;
   reset_outputs: boolean;
+  in_shell: boolean;
+  debug: boolean;
 }
 
 export type TestGenerateRequest = {
@@ -804,6 +806,8 @@ export function writeTestRunRequest(x: TestRunRequest, context: any = x): any {
   return {
     'scope': _atd_write_required_field('TestRunRequest', 'scope', _atd_write_string, x.scope, x),
     'reset_outputs': _atd_write_required_field('TestRunRequest', 'reset_outputs', _atd_write_bool, x.reset_outputs, x),
+    'in_shell': _atd_write_required_field('TestRunRequest', 'in_shell', _atd_write_bool, x.in_shell, x),
+    'debug': _atd_write_required_field('TestRunRequest', 'debug', _atd_write_bool, x.debug, x),
   };
 }
 
@@ -811,6 +815,8 @@ export function readTestRunRequest(x: any, context: any = x): TestRunRequest {
   return {
     scope: _atd_read_required_field('TestRunRequest', 'scope', _atd_read_string, x['scope'], x),
     reset_outputs: _atd_read_required_field('TestRunRequest', 'reset_outputs', _atd_read_bool, x['reset_outputs'], x),
+    in_shell: _atd_read_required_field('TestRunRequest', 'in_shell', _atd_read_bool, x['in_shell'], x),
+    debug: _atd_read_required_field('TestRunRequest', 'debug', _atd_read_bool, x['debug'], x),
   };
 }
 

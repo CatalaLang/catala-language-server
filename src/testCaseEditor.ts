@@ -269,7 +269,7 @@ export class TestCaseEditorProvider
         }
         case 'TestGenerateRequest': {
           const { scope_under_test, filename } = typed_msg.value;
-          const results = generate(scope_under_test, filename);
+          const results = generate(scope_under_test, filename, false, true);
           if (results.kind === 'Results') {
             const newTest = results.value;
 
@@ -366,7 +366,7 @@ export class TestCaseEditorProvider
 
             if (!filename || !scopeUnderTest) break;
 
-            const results = generate(scopeUnderTest, filename);
+            const results = generate(scopeUnderTest, filename, false, true);
             if (results.kind === 'Results') {
               const newTest = results.value;
 

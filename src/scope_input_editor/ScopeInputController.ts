@@ -1,8 +1,6 @@
 import * as vscode from 'vscode';
 import { logger } from '../logger';
 import { assertUnreachable } from '../util';
-import { getLocalizedMessages } from '../i18n/messages';
-
 import type {
   ParseResults,
   Test,
@@ -22,6 +20,7 @@ import {
   parseTestFile,
   generate,
   getAvailableScopes,
+  serializeInputs,
 } from '../testCaseCompilerInterop';
 import { renameIfNeeded } from '../testCaseUtils';
 import { fail } from 'assert';
@@ -59,9 +58,10 @@ export class ScopeInputController {
     this.panel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
       logger.log(`RECEIVED MESSAGE: ${typed_msg.kind}`)
+      logger.log(`PAYLOAD: ${JSON.stringify(typed_msg)}`)
       switch (typed_msg.kind) {
         case 'Ready':
-          const generatedTest: TestGenerateResults = generate(scope, file)
+          const generatedTest: TestGenerateResults = generate(scope, file, true, false)
           if (generatedTest.kind == "Error") {
             logger.log(`ERROR WHILE GENERATING SCOPE`);
             return;
@@ -76,17 +76,43 @@ export class ScopeInputController {
         case 'GuiEdit':
           if (typed_msg.value.length > 0 && typed_msg.value[0].length > 0) {
             this.test = typed_msg.value[0][0]
-            logger.log("good gui edit")
           }
           break;
         case 'TestRunRequest':
-          const results: TestRunResults = runTestScope(file, scope, this.test.test_inputs);
+          if (typed_msg.value.in_shell) {
+            const result = serializeInputs(this.test.test_inputs);
+            if (result.kind == 'Ok')
+              vscode.commands.executeCommand('catala.runScope', { uri: file, scope: this.scope, inputs: result.json })
+            else
+              throw new Error(`Error on test scope run with inputs: ${result.message}`);
+          } else if (typed_msg.value.debug) {
+            logger.log(`LAUNCH DEBUG`)
+            const result = serializeInputs(this.test.test_inputs);
+            if (result.kind == 'Ok')
+              vscode.commands.executeCommand('catala.debugScope', { uri: file, scope: this.scope, inputs: result.json })
+          } else {
+            const results: TestRunResults = runTestScope(file, scope, this.test.test_inputs);
+            this.postMessageToWebView({
+              kind: 'TestRunResults',
+              value: { scope, reset_outputs: false, results },
+            })
+          };
+          break;
+        case 'ConfirmRequest': {
           this.postMessageToWebView({
-            kind: 'TestRunResults',
-            value: { scope, reset_outputs: false, results },
+            kind: 'ConfirmResult',
+            value: { id: typed_msg.value.id, confirmed: true },
           });
           break;
-        default: break;
+        }
+        case 'OpenInTextEditor':
+          throw new Error(`Trying to open text editor while in input scope mode`);
+        case 'OpenTestScopePicker':
+          throw new Error(`Trying to select scope while in input scope mode`);
+        case 'TestGenerateRequest':
+          throw new Error(`Trying to generate scope while in input scope mode`);
+        default:
+          assertUnreachable(typed_msg);
       }
     }
     )

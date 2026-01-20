@@ -104,7 +104,8 @@ let build_dir_rel ?buffer_path options =
     in
     lookup_clerk_toml dir
     |> function
-    | None -> None | Some (_config, rel) -> Some (to_relative File.(dir / rel))
+    | None -> None
+    | Some (_config, rel) -> Some (to_relative File.(dir / rel))
   in
   match options.Global.input_src with
   | FileName file | Contents (_, file) -> f (Filename.dirname file)
@@ -381,7 +382,7 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
     | TInt -> O.Integer 0
     | TRat -> O.Decimal 0.
     | TMoney -> O.Money 0
-    | TDate -> O.Date { year = 1970; month = 1; day = 1 }
+    | TDate -> O.Date { year = 2000; month = 1; day = 1 }
     | TDuration -> O.Duration { years = 0; months = 0; days = 0 }
     | TTuple l -> O.Array (List.map generate_default_value l |> Array.of_list)
     | TStruct decl ->
@@ -412,9 +413,11 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
   in
   { value; attrs = [] }
 
-let generate_test_no_print
+let generate_test
     tested_scope
+    ?(enforce_module = true)
     ?(testing_scope = tested_scope ^ "_test")
+    ?(with_default_values = false)
     include_dirs
     options =
   let path_to_build, include_dirs =
@@ -424,26 +427,43 @@ let generate_test_no_print
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
   in
-  let test =
-    get_scope_test prg testing_scope tested_scope
-      ~tested_module:(Option.map fst prg.I.program_module_name)
+  let tested_module =
+    if enforce_module then Option.map fst prg.I.program_module_name
+    else
+      Option.map fst prg.I.program_module_name
+      |> function
+      | None -> Some (ModuleName.fresh ("no_module", Pos.void))
+      | Some m -> Some m
   in
-  let open O in
-  let test_inputs =
-    List.map
-      (fun (s, io) ->
-        ( s,
-          {
-            io with
-            value = Some { value = generate_default_value io.typ; pos = None };
-          } ))
-      test.test_inputs
-  in
-  { test with test_inputs }
+  let test = get_scope_test prg testing_scope tested_scope ~tested_module in
+  if with_default_values then
+    let test_inputs =
+      List.map
+        (fun (s, io) ->
+          ( s,
+            O.
+              {
+                io with
+                value =
+                  Some { value = generate_default_value io.typ; pos = None };
+              } ))
+        test.test_inputs
+    in
+    { test with test_inputs }
+  else test
 
-let generate_cmd tested_scope ?testing_scope include_dirs options =
+let generate_cmd
+    tested_scope
+    ?testing_scope
+    include_dirs
+    options
+    with_default_values
+    enforce_module =
   print_tests
-    [generate_test_no_print tested_scope ?testing_scope include_dirs options]
+    [
+      generate_test ~with_default_values tested_scope ?testing_scope
+        include_dirs options ~enforce_module;
+    ]
 
 exception InvalidTestingScope of string
 
@@ -454,8 +474,8 @@ let invalid_testing_scope fmt =
 let get_test_scopes prg =
   prg.I.program_root.module_scopes
   |> ScopeName.Map.filter (fun scope_name _scope ->
-         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
-         && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
+      Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
+      && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
   |> ScopeName.Map.keys
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
@@ -687,10 +707,16 @@ let get_value_strings = function
    for well-known stdlib aliases. TODO: when the compiler surfaces active
    imports/aliases for the target module, use that information instead and drop
    this local list. *)
-let implicit_stdlib_aliases = function
-  | Catala_utils.Global.Fr ->
+let implicit_stdlib_aliases =
+  let en_names =
+    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+  in
+  let fr_names =
     ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
-  | En -> ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+  in
+  function
+  | Catala_utils.Global.Fr -> fr_names @ List.map (fun s -> s ^ "_fr") en_names
+  | En -> List.concat_map (fun s -> [s; s ^ "_en"]) en_names
   | _ -> []
 
 let is_implicit_stdlib_alias lang alias =
@@ -1044,11 +1070,7 @@ let proj_diff get_value ({ path; expected; actual } : diff) : O.diff =
   let actual = get_value actual in
   { O.path = List.map proj_path path; expected; actual }
 
-let run_test
-    testing_scope
-    include_dirs
-    options
-    (scope_input_opt : Yojson.Safe.t option) =
+let retrieve_program include_dirs options scope_name =
   let path_to_build, include_dirs =
     if include_dirs = [] then
       let _path_to_build, include_dirs = lookup_include_dirs options in
@@ -1063,15 +1085,11 @@ let run_test
   in
   let testing_scope_name =
     match
-      Ident.Map.find_opt testing_scope
+      Ident.Map.find_opt scope_name
         Desugared.Name_resolution.(naming_ctx.local.typedefs)
     with
     | Some (TScope (sname, _)) -> sname
-    | _ -> Message.error "No scope %S was found in the program" testing_scope
-  in
-  let test =
-    try get_catala_test (desugared_prg, naming_ctx) testing_scope_name
-    with _ -> generate_test_no_print testing_scope include_dirs options
+    | _ -> Message.error "No scope %S was found in the program" scope_name
   in
   let dcalc_prg : ((dcalc, dcalc, typed) base_gexpr * typed mark) program =
     let prg =
@@ -1081,55 +1099,13 @@ let run_test
     let prg = Scopelang.Ast.type_program prg in
     Dcalc.From_scopelang.translate_program prg
   in
-  let test_input_opt =
-    let f test_input_json =
-      let in_struct =
-        (ScopeName.Map.find testing_scope_name dcalc_prg.decl_ctx.ctx_scopes)
-          .in_struct_name
-      in
-      let ty = TStruct in_struct, Pos.void in
-      let encoding = Encoding.make_encoding dcalc_prg.decl_ctx ty in
-      Lexing.from_string (Yojson.Safe.to_string test_input_json)
-      |> J.read_test_inputs (Yojson.init_lexer ())
-      |> function
-      | fields ->
-        let dummy_decl = { O.struct_name = "dummy"; fields = [] } in
-        let value =
-          O.Struct
-            ( dummy_decl,
-              List.map
-                (fun (field_name, { J.value; typ = _ }) ->
-                  let value = (Option.get value).value in
-                  field_name, value)
-                fields )
-        in
-        let normalized_json =
-          Converter.convert_to_json_input { value; attrs = [] }
-        in
-        let module Json_encoding = Json_encoding.Make (Json_repr.Yojson) in
-        let rval = Json_encoding.destruct encoding normalized_json in
-        Encoding.convert_to_dcalc dcalc_prg.decl_ctx
-          (Typed { pos = Pos.void; ty })
-          ty rval
-        |> Expr.unbox
-        |> Interpreter.addcustom
-        |> Expr.box
-    in
-    Option.map f scope_input_opt
-  in
+  desugared_prg, naming_ctx, testing_scope_name, dcalc_prg
+
+let interpret_program dcalc_prg scope_name build_term_to_interp =
   Interpreter.load_runtime_modules
     ~hashf:Hash.(finalise ~monomorphize_types:false)
     (dcalc_prg : typed Dcalc.Ast.program);
-  let program_fun = Expr.unbox (Program.to_expr dcalc_prg testing_scope_name) in
-  let program_fun =
-    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_fun
-  in
   Message.report_delayed_errors_if_any ();
-  let _args, program_expr =
-    match program_fun with
-    | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
-    | _ -> assert false
-  in
   let failed_asserts = ref [] in
   let on_assert_failures e =
     match e with
@@ -1141,30 +1117,75 @@ let run_test
   let () =
     Catala_utils.Message.register_lsp_error_absorber on_assert_failures
   in
-  let to_interp =
-    match test_input_opt with
-    | None -> program_expr
-    | Some in_struct ->
-      Expr.make_app (Expr.box program_fun) [in_struct]
-        [Expr.ty in_struct]
-        (Expr.pos program_fun)
-      |> Expr.unbox
+  let program_fun =
+    Expr.unbox (Program.to_expr dcalc_prg scope_name)
+    |> Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang
   in
-  let result_struct =
+  let to_interp = build_term_to_interp program_fun in
+  let results =
     Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang to_interp
   in
   Message.report_delayed_errors_if_any ();
+  results, !failed_asserts
+
+let run_with_inputs
+    include_dirs
+    options
+    tested_scope_name
+    (scope_input : Yojson.Safe.t) =
+  let desugared_prg, _naming_ctx, scope_name, dcalc_prg =
+    retrieve_program include_dirs options tested_scope_name
+  in
+  let test =
+    get_scope_test desugared_prg "<abstract>" scope_name
+      ~tested_module:(Some (ModuleName.fresh ("abstract", Pos.void)))
+  in
+  let input_expr =
+    let in_struct =
+      (ScopeName.Map.find scope_name dcalc_prg.decl_ctx.ctx_scopes)
+        .in_struct_name
+    in
+    let ty = TStruct in_struct, Pos.void in
+    let encoding = Encoding.make_encoding dcalc_prg.decl_ctx ty in
+    Lexing.from_string (Yojson.Safe.to_string scope_input)
+    |> J.read_test_inputs (Yojson.init_lexer ())
+    |> function
+    | fields ->
+      let dummy_decl = { O.struct_name = "dummy"; fields = [] } in
+      let value =
+        O.Struct
+          ( dummy_decl,
+            List.map
+              (fun (field_name, { J.value; typ = _ }) ->
+                let value = (Option.get value).value in
+                field_name, value)
+              fields )
+      in
+      let normalized_json =
+        Converter.convert_to_json_input { value; attrs = [] }
+      in
+      let module Json_encoding = Json_encoding.Make (Json_repr.Yojson) in
+      let rval = Json_encoding.destruct encoding normalized_json in
+      Encoding.convert_to_dcalc dcalc_prg.decl_ctx
+        (Typed { pos = Pos.void; ty })
+        ty rval
+      |> Expr.unbox
+      |> Interpreter.addcustom
+      |> Expr.box
+  in
+  let build_term program_fun =
+    Expr.make_app (Expr.box program_fun) [input_expr]
+      [Expr.ty input_expr]
+      (Expr.pos program_fun)
+    |> Expr.unbox
+  in
+  let result_struct, failed_asserts =
+    interpret_program dcalc_prg scope_name build_term
+  in
   let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
       =
-    match result_struct, scope_input_opt with
-    | (EStruct { fields; _ }, _), None -> (
-      match StructField.Map.choose fields with
-      | _, (EStruct { fields; name }, _) ->
-        let b = StructField.Map.bindings fields in
-        ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
-          StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
-      | _ -> assert false)
-    | (EStruct { fields; name }, _), Some _ ->
+    match result_struct with
+    | EStruct { fields; name }, _ ->
       let b = StructField.Map.bindings fields in
       ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
         StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
@@ -1183,20 +1204,65 @@ let run_test
           } ))
       actual_results
   in
+  let assert_failures = not (failed_asserts = []) in
   let test = O.{ test with test_outputs } in
-  match scope_input_opt with
-  | None ->
-    let expected_results = retrieve_assertions_values dcalc_prg in
-    let diffs =
-      compute_diff expected_results actual_results
-      |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
+  write_stdout J.write_test_run O.{ test; assert_failures; diffs = [] }
+
+let run_test include_dirs options testing_scope =
+  let desugared_prg, naming_ctx, testing_scope_name, dcalc_prg =
+    retrieve_program include_dirs options testing_scope
+  in
+  let test = get_catala_test (desugared_prg, naming_ctx) testing_scope_name in
+  let build_term program_fun =
+    let _args, program_expr =
+      match program_fun with
+      | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
+      | _ -> assert false
     in
-    let assert_failures = not (!failed_asserts = []) in
-    let test_run = { O.test; O.assert_failures; O.diffs } in
-    write_stdout J.write_test_run test_run
-  | Some _ ->
-    write_stdout J.write_test_run
-      O.{ test; assert_failures = false; diffs = [] }
+    program_expr
+  in
+  let result_struct, failed_asserts =
+    interpret_program dcalc_prg testing_scope_name build_term
+  in
+  let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
+      =
+    match result_struct with
+    | EStruct { fields; _ }, _ -> (
+      match StructField.Map.choose fields with
+      | _, (EStruct { fields; name }, _) ->
+        let b = StructField.Map.bindings fields in
+        ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
+          StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
+      | _ -> assert false)
+    | _ -> assert false
+  in
+  let test_outputs =
+    List.map
+      (fun (field, value_expr) ->
+        let pos = Some (get_source_position (Expr.pos value_expr)) in
+        ( StructField.to_string field,
+          {
+            O.value =
+              Some { value = get_value dcalc_prg.decl_ctx value_expr; pos };
+            typ =
+              get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
+          } ))
+      actual_results
+  in
+  let test = O.{ test with test_outputs } in
+  let expected_results = retrieve_assertions_values dcalc_prg in
+  let diffs =
+    compute_diff expected_results actual_results
+    |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
+  in
+  let assert_failures = not (failed_asserts = []) in
+  let test_run = { O.test; O.assert_failures; O.diffs } in
+  write_stdout J.write_test_run test_run
+
+let run_test_cmd include_dirs options test_scope_name scope_input_opt =
+  match scope_input_opt with
+  | None -> run_test include_dirs options test_scope_name
+  | Some json -> run_with_inputs include_dirs options test_scope_name json
 
 let print_scopes scopes = write_stdout J.write_scope_def_list scopes
 
@@ -1227,3 +1293,27 @@ let list_scopes include_dirs options =
     |> List.map snd
   in
   print_scopes filtered_scopes
+
+let serialize_inputs (scope_input : Yojson.Safe.t option) =
+  let scope_input =
+    match scope_input with
+    | None -> failwith "serliaze-inputs command requires --input argument"
+    | Some i -> i
+  in
+  Lexing.from_string (Yojson.Safe.to_string scope_input)
+  |> J.read_test_inputs (Yojson.init_lexer ())
+  |> function
+  | fields ->
+    let dummy_decl = { O.struct_name = "dummy"; fields = [] } in
+    let value =
+      O.Struct
+        ( dummy_decl,
+          List.map
+            (fun (field_name, { J.value; typ = _ }) ->
+              let value = (Option.get value).value in
+              field_name, value)
+            fields )
+    in
+    let json = Converter.convert_to_json_input { value; attrs = [] } in
+    Format.(
+      fprintf std_formatter "%a@." (Yojson.Safe.pretty_print ~std:true) json)

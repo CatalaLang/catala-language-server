@@ -23,9 +23,10 @@ let client: LanguageClient;
 interface IRunArgs {
   uri: string;
   scope: string;
+  inputs?: JSON;
 }
 
-async function selectScope(): Promise<IRunArgs | undefined> {
+async function selectScope(with_inputs: boolean): Promise<IRunArgs | undefined> {
   if (!client) {
     vscode.window.showErrorMessage(
       'Catala LSP is not running: cannot select a scope.'
@@ -34,10 +35,10 @@ async function selectScope(): Promise<IRunArgs | undefined> {
   }
   const entrypoints: Array<CatalaEntrypoint> = await listEntrypoints(
     client,
-    [{ kind: 'InputScope' }],
+    with_inputs ? [{ kind: 'InputScope' }] : [{ kind: 'Test' }, { kind: 'NoInputScope' }],
     undefined,
     false,
-    false
+    with_inputs ? false : true
   );
   const uniq_sorted_files: vscode.QuickPickItem[] = Array.from(
     new Set(entrypoints.map((file) => file.path))
@@ -92,16 +93,19 @@ async function selectScope(): Promise<IRunArgs | undefined> {
   }
 }
 
-async function runScope(): Promise<void> {
-  const args: IRunArgs | undefined = await selectScope();
+async function runScope(args?: IRunArgs): Promise<void> {
+  const inputs = args?.inputs
+  args ??= await selectScope(inputs ? true : false);
+  logger.log("calling runscope with " + JSON.stringify(inputs));
   if (args) {
     const cwd = getCwd(args.uri);
     const termName = `${args.scope} execution`;
+    const extra_args = inputs ? ['--input', `'${JSON.stringify(inputs)}'`] : []
     let term = vscode.window.terminals.find((t) => t.name === termName);
     term ??= vscode.window.createTerminal({ name: termName, cwd });
     term.show();
     term.sendText(
-      [clerkPath, 'run', args.uri, '--scope', args.scope].join(' ')
+      [clerkPath, 'run', args.uri, '--scope', args.scope, ...extra_args].join(' ')
     );
   }
 }
@@ -137,7 +141,7 @@ vscode.commands.registerCommand(
 );
 
 async function debugScope(): Promise<void> {
-  const args: IRunArgs | undefined = await selectScope();
+  const args: IRunArgs | undefined = await selectScope(false);
   if (args) {
     await vscode.debug.startDebugging(undefined, {
       name: 'Run Catala program',
@@ -191,7 +195,7 @@ export async function activate(
     },
   });
 
-  vscode.commands.registerCommand('catala.debugScope', async (args) => {
+  vscode.commands.registerCommand('catala.debugScope', async (args: IRunArgs) => {
     const file = args.uri;
     const scope = args.scope;
     const workspace = vscode.workspace.getWorkspaceFolder(
@@ -210,16 +214,7 @@ export async function activate(
     }
   });
 
-  vscode.commands.registerCommand('catala.runScope', async (args) => {
-    const file = args.uri;
-    const scope = args.scope;
-    const cwd = getCwd(file);
-    const termName = `${scope} execution`;
-    let term = vscode.window.terminals.find((t) => t.name === termName);
-    term ??= vscode.window.createTerminal({ name: termName, cwd });
-    term.show();
-    term.sendText([clerkPath, 'run', file, '--scope', scope].join(' '));
-  });
+  vscode.commands.registerCommand('catala.runScope', runScope);
 
   // Open the current resource with the custom Test Case Editor
   context.subscriptions.push(
@@ -341,7 +336,7 @@ export async function activate(
       'catala.openWithScopeInputEditor',
       async (x?: IRunArgs) => {
         if (x == undefined) {
-          const y = await selectScope();
+          const y = await selectScope(true);
           if (y == undefined) return;
           x = y
         }

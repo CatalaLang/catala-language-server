@@ -197,7 +197,7 @@ end
 module Custom_launch = struct
   let type_ = "launch"
 
-  type payload = { uri : string; scope : string }
+  type payload = { uri : string; scope : string; inputs : string option }
   [@@deriving yojson { strict = true }]
 
   module Arguments = struct

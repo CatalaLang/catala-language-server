@@ -65,13 +65,12 @@ let all_symbols_as_warning (doc_id : Doc_id.t) processing_result =
                let declaration = Option.map (fun x -> [x]) declaration in
                [declaration; definitions; usages; types]
                |> List.filter_map (function
-                    | None -> None
-                    | Some r -> (
-                      List.filter
-                        (fun r ->
-                          Catala_utils.Pos.get_file r = (doc_id :> File.t))
-                        r
-                      |> function [] -> None | r -> Some r))
+                 | None -> None
+                 | Some r -> (
+                   List.filter
+                     (fun r -> Catala_utils.Pos.get_file r = (doc_id :> File.t))
+                     r
+                   |> function [] -> None | r -> Some r))
                |> List.concat
                |> List.map build) );
     ]
@@ -210,7 +209,6 @@ let lookup_lenses file =
       Command.create ~arguments ~command:"catala.openWithScopeInputEditor"
         ~title:"▶ Run with..." ()
     in
-    (* TODO debug with inputs *)
     [CodeLens.create ~command:run_command ~range ()]
   in
   let scope_lenses =

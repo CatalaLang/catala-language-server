@@ -92,6 +92,7 @@ let should_stop (e : dcalc_expr) =
   | ELocation _ -> .
 
 let run_debugger
+    ?inputs
     (rpc : Debug_rpc.t)
     (logger : string -> unit Lwt.t)
     (file : Doc_id.t)
@@ -132,7 +133,9 @@ let run_debugger
   let* result =
     Lwt.catch
       (fun () ->
-        let* r = Debug_interpret.interpret_with_env ~on_expr program scope in
+        let* r =
+          Debug_interpret.interpret_with_env ?inputs ~on_expr program scope
+        in
         Catala_utils.Message.report_delayed_errors_if_any ();
         Lwt.return_ok r)
       (fun exn -> Lwt.return_error exn)
@@ -173,18 +176,16 @@ let run_debugger
       (* Scope result variables *)
       StructField.Map.bindings fields
       |> List.rev_map (fun (sf, v) ->
-             let var =
-               Bindlib.new_var
-                 (fun _ -> Mark.remove v)
-                 (StructField.to_string sf)
-             in
-             let expr =
-               let field_pos = snd (StructField.get_info sf) in
-               let (Typed { pos = _; ty }) = Mark.get v in
-               Mark.add (Typed { pos = field_pos; ty }) (EVar var)
-             in
-             let env = Env (Var.Map.singleton var (v, Env Var.Map.empty)) in
-             { value = Expr expr; env; breakpoint = false })
+          let var =
+            Bindlib.new_var (fun _ -> Mark.remove v) (StructField.to_string sf)
+          in
+          let expr =
+            let field_pos = snd (StructField.get_info sf) in
+            let (Typed { pos = _; ty }) = Mark.get v in
+            Mark.add (Typed { pos = field_pos; ty }) (EVar var)
+          in
+          let env = Env (Var.Map.singleton var (v, Env Var.Map.empty)) in
+          { value = Expr expr; env; breakpoint = false })
       |> Lwt.return
     | Ok result ->
       let result_var = Bindlib.new_var (fun _ -> Mark.remove result) "Result" in
@@ -276,7 +277,7 @@ let try_build_deps ~logger file =
       "Trying to launch debugger anyway... If it fails, make sure that you \
        declared a `clerk.toml` file in your project."
 
-let run_debugger rpc ~file ~scope logger : debugger_state Lwt.t =
+let run_debugger ?inputs rpc ~file ~scope logger : debugger_state Lwt.t =
   let* () = logger "Initializing Catala debugger.." in
   let build_dir, config_and_root =
     match Utils.lookup_clerk_toml file with
@@ -302,7 +303,10 @@ let run_debugger rpc ~file ~scope logger : debugger_state Lwt.t =
   Log.debug (fun m ->
       m "Evaluating with debug info (scope %a from %a)" ScopeName.format scope
         Doc_id.format file);
-  let* full_state = run_debugger rpc logger file scope program pmap in
+  let inputs =
+    Option.map (fun json_s -> Yojson.Safe.from_string json_s) inputs
+  in
+  let* full_state = run_debugger ?inputs rpc logger file scope program pmap in
   Log.debug (fun m ->
       m "Program fully evaluated (%d steps)" full_state.final_index);
   let* () = logger "Catala debugger ready" in
@@ -407,8 +411,8 @@ let find_breakpoint (pos_map : PMap.t) doc_id (bp : Source_breakpoint.t) :
     |> Option.map (PMap.DS.filter should_stop)
     |> Option.map PMap.DS.choose
     |> Option.map (fun e ->
-           let pos = get_pos e in
-           pos, expr_to_breakpoint e)
+        let pos = get_pos e in
+        pos, expr_to_breakpoint e)
 
 let set_breakpoints
     (state : debugger_state)

@@ -13,6 +13,19 @@ let buffer_path =
   in
   arg
 
+let with_defaults =
+  Arg.(
+    value
+    & flag
+    & info ["default-values"] ~doc:"Generate default values for the program.")
+
+let enforce_module =
+  Arg.(
+    value
+    & flag
+    & info ["enforce-module"]
+        ~doc:"Ensure that the tested scope is part of a Catala module.")
+
 let cmd_generate =
   Cmd.v
     Cmd.(
@@ -24,7 +37,9 @@ let cmd_generate =
       const (Lib.generate_cmd ?testing_scope:None)
       $ Cli.Flags.ex_scope
       $ Cli.Flags.include_dirs
-      $ Cli.Flags.Global.options)
+      $ Cli.Flags.Global.options
+      $ with_defaults
+      $ enforce_module)
 
 let cmd_read =
   Cmd.v
@@ -49,10 +64,10 @@ let cmd_run =
            as $(b,read)). Exits with 1 in case the test results differ from \
            what was expected, 10 if the test could not be run.")
     Term.(
-      const Lib.run_test
-      $ Cli.Flags.ex_scope
+      const Lib.run_test_cmd
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
+      $ Cli.Flags.ex_scope
       $ Cli.Flags.scope_input)
 
 let cmd_write =
@@ -72,6 +87,13 @@ let cmd_list_scopes =
     Term.(
       const Lib.list_scopes $ Cli.Flags.include_dirs $ Cli.Flags.Global.options)
 
+let cmd_serialize_inputs =
+  Cmd.v
+    Cmd.(
+      info "serialize-inputs"
+        ~doc:"Returns the normalized JSON of the given inputs.")
+    Term.(const Lib.serialize_inputs $ Cli.Flags.scope_input)
+
 let man =
   [
     `S Manpage.s_description;
@@ -84,7 +106,14 @@ let man =
 let register () =
   Driver.Plugin.register_subcommands "testcase"
     ~doc:"Catala plugin for the handling of scope test cases" ~man
-    [cmd_generate; cmd_read; cmd_run; cmd_write; cmd_list_scopes];
+    [
+      cmd_generate;
+      cmd_read;
+      cmd_run;
+      cmd_write;
+      cmd_list_scopes;
+      cmd_serialize_inputs;
+    ];
   (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
      ~contexts:(function
      | Desugared.Name_resolution.Expression _ -> true

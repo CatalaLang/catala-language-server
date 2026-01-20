@@ -372,8 +372,10 @@ let set_handlers rpc =
       | None ->
         Lwt.fail_with
           "Unexpected arguments provided in the launch configuration"
-      | Some { uri; scope } ->
-        let* final_state = DE.run_debugger rpc ~file:uri ~scope logger in
+      | Some { uri; scope; inputs } ->
+        let* final_state =
+          DE.run_debugger rpc ~file:uri ~scope ?inputs logger
+        in
         state := Some final_state;
         let* () = Debug_rpc.send_event rpc (module Initialized_event) () in
         let* () =
@@ -464,7 +466,8 @@ let set_handlers rpc =
            breakpoints;
            lines = _ (* deprecated apparently *);
            source_modified;
-         } ->
+         }
+       ->
       let open Set_breakpoints_command.Result in
       let no_breakpoints = { breakpoints = [] } in
       if path = None then
@@ -703,13 +706,21 @@ let () =
   (* Dummy registration *)
   Driver.Plugin.register_subcommands "testcase" ~doc:"" ~man:[] [];
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
-    ~contexts:(function Desugared.Name_resolution.Expression _ -> true | _ -> false) (fun ~pos:_ _ -> Some Nil);
+    ~contexts:(function
+      | Desugared.Name_resolution.Expression _ -> true | _ -> false)
+    (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
-    ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false) (fun ~pos:_ _ -> Some Nil);
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
-    ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false) (fun ~pos:_ _ -> Some Nil);
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ _ -> Some Nil);
   Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
-    ~contexts:(function Desugared.Name_resolution.ScopeDecl -> true | _ -> false) (fun ~pos:_ _ -> Some Nil)
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ _ -> Some Nil)
 
 let main () =
   let rpc = Debug_rpc.create ~in_:Lwt_io.stdin ~out:Lwt_io.stdout () in

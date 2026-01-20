@@ -1,32 +1,22 @@
-import type { ChangeEvent } from 'react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
   type Test,
   type TestInputs,
   type TestRunResults,
-  type PathSegment,
   type RuntimeValue,
-  TestList,
   writeUpMessage,
-  Diff,
   readDownMessage,
   ParseResults,
-  writeDownMessage,
   TestRunOutput,
 } from '../generated/catala_types';
 import TestInputsEditor from '../TestInputsEditor';
-import TestOutputsEditor from '../TestOutputsEditor';
 import { confirm, resolveConfirmResult } from '../messaging/confirm';
 import { setVsCodeApi } from '../webviewApi';
 import { WebviewApi } from 'vscode-webview';
-import { isPathPrefix, pathEquals } from '../diff/highlight';
 import { assertUnreachable } from '../util';
 import { logger } from '../logger';
-import ScopeOutputsEditor from './ScopeOutputs';
 import ScopeOutputs from './ScopeOutputs';
-
-
 
 type UIState =
   | { state: 'initializing' }
@@ -70,25 +60,23 @@ export default function ScopeInputEditor({
     [state, vscode, setTestRunState]
   );
 
-  const _onTestRun = () => {
-    return (testScope: string): void => {
-      setTestRunState((prev) => ({ status: 'running' }));
+  const _onTestRun =
+    (args: { testScope: string, action: 'Run' | 'Terminal' | 'Debug' }): void => {
+      if (args.action == 'Terminal') setTestRunState((prev) => ({ status: 'running' }));
       vscode.postMessage(
         writeUpMessage({
           kind: 'TestRunRequest',
           value: {
-            scope: testScope,
+            scope: args.testScope,
             reset_outputs: false,
+            in_shell: args.action == 'Terminal',
+            debug: args.action == 'Debug',
           },
         })
       );
     };
-  };
 
-  // The 'run test' and 'reset test outputs' commands are
-  // very similar, so we factor them
-  const onTestRun = useCallback(_onTestRun(), [vscode]);
-  const onTestOutputsReset = useCallback(_onTestRun(), [vscode]);
+  const onTestRun = useCallback(_onTestRun, [vscode]);
 
   function _resultsToState(results: TestRunResults): TestRunState {
     if (results.kind === 'Ok') {
@@ -237,7 +225,7 @@ type PropsInputComp = {
   title: string;
   test: Test;
   onTestChange(newValue: Test): void;
-  onTestRun(testScope: string): void;
+  onTestRun(args: { testScope: string, action: 'Run' | 'Terminal' | 'Debug' }): void;
   runState: TestRunState;
 };
 
@@ -301,12 +289,24 @@ function ScopeInputComponent(props: PropsInputComp): ReactElement {
   };
 
   const runWithUnsetCheck = async (): Promise<void> => {
-    if (hasUnsetInTestInputs(props.test)) {
+    if (hasUnsetInTestInputs(props.test))
+      scrollToFirstUnset()
+    else
+      props.onTestRun({ testScope: props.test.tested_scope.name, action: 'Run' });
+  };
+
+  const runInTermWithUnsetCheck = async (): Promise<void> => {
+    if (hasUnsetInTestInputs(props.test))
       scrollToFirstUnset();
-      const confirmed = await confirm('RunTestWithUnsetValues');
-      if (!confirmed) return;
-    }
-    props.onTestRun(props.test.tested_scope.name);
+    else
+      props.onTestRun({ testScope: props.test.tested_scope.name, action: 'Terminal' });
+  };
+
+  const debugWithUnsetCheck = async (): Promise<void> => {
+    if (hasUnsetInTestInputs(props.test))
+      scrollToFirstUnset()
+    else
+      props.onTestRun({ testScope: props.test.tested_scope.name, action: 'Debug' });
   };
 
   return (
@@ -327,22 +327,39 @@ function ScopeInputComponent(props: PropsInputComp): ReactElement {
           ref={expectedSectionRef}
           tabIndex={-1}
         >
-          <div className="test-result-header">
-            <div className="test-result-action-bar"></div>
+          <div className="test-result-action-bar">
             <button
-              className={`button-action-dvp ${props.runState ?? ''}`}
+              className={`button-action-dvp ${props.runState.status ?? ''}`}
               title={intl.formatMessage({ id: 'testEditor.run' })}
               onClick={runWithUnsetCheck}
-              disabled={props.runState.status === 'running'}
-            >
+              disabled={props.runState.status === 'running'}>
               <span
-                className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
-              ></span>Run
+                className={`codicon ${props.runState?.status === 'running'
+                  ? 'codicon-loading codicon-modifier-spin'
+                  : 'codicon-play'}`}
+              />
+              <FormattedMessage id='testEditor.run' />
             </button>
-            <ScopeOutputs
-              test_run_output={props.runState}
-            />
+            <button
+              className={`button-action-dvp ${props.runState ?? ''}`}
+              title={intl.formatMessage({ id: 'testEditor.shell_run' })}
+              onClick={runInTermWithUnsetCheck}
+              disabled={props.runState.status === 'running'}>
+              <span className='codicon codicon-play' />
+              <FormattedMessage id='testEditor.shell_run' />
+            </button>
+            <button
+              className={`button-action-dvp ${props.runState ?? ''}`}
+              title={intl.formatMessage({ id: 'testEditor.debug_run' })}
+              onClick={debugWithUnsetCheck}
+              disabled={props.runState.status === 'running'}>
+              <span className='codicon codicon-play' />
+              <FormattedMessage id='testEditor.debug_run' />
+            </button>
           </div>
+        </div>
+        <div className="test-result">
+          <ScopeOutputs test_run_output={props.runState} />
         </div>
       </div>
     </div>
