@@ -50,6 +50,7 @@ jobs:
           npm run webview:test
           xvfb-run -a npm run test
           (cd tests/round_trip && opam exec -- ./round_trip.sh)
+          (cd tests && opam exec -- clerk start)
           (cd tests/regressions && opam exec -- ./enum_path_test.sh)
 
   release:
