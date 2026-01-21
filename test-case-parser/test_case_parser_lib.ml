@@ -104,7 +104,8 @@ let build_dir_rel ?buffer_path options =
     in
     lookup_clerk_toml dir
     |> function
-    | None -> None | Some (_config, rel) -> Some (to_relative File.(dir / rel))
+    | None -> None
+    | Some (_config, rel) -> Some (to_relative File.(dir / rel))
   in
   match options.Global.input_src with
   | FileName file | Contents (_, file) -> f (Filename.dirname file)
@@ -412,9 +413,11 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
   in
   { value; attrs = [] }
 
-let generate_test_no_print
+let generate_test
     tested_scope
+    ?(enforce_module = true)
     ?(testing_scope = tested_scope ^ "_test")
+    ?(with_default_values = false)
     include_dirs
     options =
   let path_to_build, include_dirs =
@@ -424,26 +427,43 @@ let generate_test_no_print
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
   in
-  let test =
-    get_scope_test prg testing_scope tested_scope
-      ~tested_module:(Option.map fst prg.I.program_module_name)
+  let tested_module =
+    if enforce_module then Option.map fst prg.I.program_module_name
+    else
+      Option.map fst prg.I.program_module_name
+      |> function
+      | None -> Some (ModuleName.fresh ("no_module", Pos.void))
+      | Some m -> Some m
   in
-  let open O in
-  let test_inputs =
-    List.map
-      (fun (s, io) ->
-        ( s,
-          {
-            io with
-            value = Some { value = generate_default_value io.typ; pos = None };
-          } ))
-      test.test_inputs
-  in
-  { test with test_inputs }
+  let test = get_scope_test prg testing_scope tested_scope ~tested_module in
+  if with_default_values then
+    let test_inputs =
+      List.map
+        (fun (s, io) ->
+          ( s,
+            O.
+              {
+                io with
+                value =
+                  Some { value = generate_default_value io.typ; pos = None };
+              } ))
+        test.test_inputs
+    in
+    { test with test_inputs }
+  else test
 
-let generate_test tested_scope ?testing_scope include_dirs options =
+let generate_cmd
+    tested_scope
+    ?testing_scope
+    include_dirs
+    options
+    with_default_values
+    enforce_module =
   print_tests
-    [generate_test_no_print tested_scope ?testing_scope include_dirs options]
+    [
+      generate_test ~with_default_values tested_scope ?testing_scope
+        include_dirs options ~enforce_module;
+    ]
 
 exception InvalidTestingScope of string
 
@@ -454,8 +474,8 @@ let invalid_testing_scope fmt =
 let get_test_scopes prg =
   prg.I.program_root.module_scopes
   |> ScopeName.Map.filter (fun scope_name _scope ->
-         Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
-         && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
+      Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
+      && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
   |> ScopeName.Map.keys
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
@@ -687,10 +707,16 @@ let get_value_strings = function
    for well-known stdlib aliases. TODO: when the compiler surfaces active
    imports/aliases for the target module, use that information instead and drop
    this local list. *)
-let implicit_stdlib_aliases = function
-  | Catala_utils.Global.Fr ->
+let implicit_stdlib_aliases =
+  let en_names =
+    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+  in
+  let fr_names =
     ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
-  | En -> ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+  in
+  function
+  | Catala_utils.Global.Fr -> fr_names @ List.map (fun s -> s ^ "_fr") en_names
+  | En -> List.concat_map (fun s -> [s; s ^ "_en"]) en_names
   | _ -> []
 
 let is_implicit_stdlib_alias lang alias =
@@ -1044,7 +1070,7 @@ let proj_diff get_value ({ path; expected; actual } : diff) : O.diff =
   let actual = get_value actual in
   { O.path = List.map proj_path path; expected; actual }
 
-let run_test testing_scope include_dirs options =
+let retrieve_program include_dirs options scope_name =
   let path_to_build, include_dirs =
     if include_dirs = [] then
       let _path_to_build, include_dirs = lookup_include_dirs options in
@@ -1059,13 +1085,12 @@ let run_test testing_scope include_dirs options =
   in
   let testing_scope_name =
     match
-      Ident.Map.find_opt testing_scope
+      Ident.Map.find_opt scope_name
         Desugared.Name_resolution.(naming_ctx.local.typedefs)
     with
     | Some (TScope (sname, _)) -> sname
-    | _ -> Message.error "No scope %S was found in the program" testing_scope
+    | _ -> Message.error "No scope %S was found in the program" scope_name
   in
-  let test = get_catala_test (desugared_prg, naming_ctx) testing_scope_name in
   let dcalc_prg : ((dcalc, dcalc, typed) base_gexpr * typed mark) program =
     let prg =
       Scopelang.From_desugared.(
@@ -1074,19 +1099,39 @@ let run_test testing_scope include_dirs options =
     let prg = Scopelang.Ast.type_program prg in
     Dcalc.From_scopelang.translate_program prg
   in
+  desugared_prg, naming_ctx, testing_scope_name, dcalc_prg
+
+let rec convert_atd_to_runtime_value :
+    O.runtime_value -> Catala_runtime.runtime_value =
+ fun v ->
+  let open Catala_runtime in
+  match v.value with
+  | O.Bool b -> Bool b
+  | Money m -> Money (Z.of_int m)
+  | Integer i -> Integer (Z.of_int i)
+  | Decimal d -> Decimal (Q.of_float d)
+  | Date { year; month; day } -> Date (Dates_calc.make_date ~year ~month ~day)
+  | Duration { years; months; days } ->
+    Duration (Dates_calc.make_period ~years ~months ~days)
+  | Enum (decl, (cstr_s, v_opt)) ->
+    let v =
+      Option.map convert_atd_to_runtime_value v_opt
+      |> Option.value ~default:Unit
+    in
+    Enum (decl.enum_name, (cstr_s, v))
+  | Struct (decl, fvl) ->
+    Struct
+      ( decl.struct_name,
+        List.map (fun (s, v) -> s, convert_atd_to_runtime_value v) fvl )
+  | Array l -> Array (Array.map convert_atd_to_runtime_value l)
+  | Unset -> failwith "Cannot convert 'Unset' atd value to Catala runtime value"
+  | Empty -> failwith "Cannot convert 'Empty' atd value to Catala runtime value"
+
+let interpret_program dcalc_prg scope_name build_term_to_interp =
   Interpreter.load_runtime_modules
     ~hashf:Hash.(finalise ~monomorphize_types:false)
     (dcalc_prg : typed Dcalc.Ast.program);
-  let program_fun = Expr.unbox (Program.to_expr dcalc_prg testing_scope_name) in
-  let program_fun =
-    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_fun
-  in
   Message.report_delayed_errors_if_any ();
-  let _args, program_expr =
-    match program_fun with
-    | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
-    | _ -> assert false
-  in
   let failed_asserts = ref [] in
   let on_assert_failures e =
     match e with
@@ -1098,26 +1143,112 @@ let run_test testing_scope include_dirs options =
   let () =
     Catala_utils.Message.register_lsp_error_absorber on_assert_failures
   in
-  let result_struct =
-    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang program_expr
+  let program_fun =
+    Expr.unbox (Program.to_expr dcalc_prg scope_name)
+    |> Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang
+  in
+  let to_interp = build_term_to_interp program_fun in
+  let results =
+    Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang to_interp
   in
   Message.report_delayed_errors_if_any ();
+  results, !failed_asserts
+
+let rec convert_to_json_input ({ value; _ } : O.runtime_value) : Yojson.Safe.t =
+  let open O in
+  let convert_runtime_raw = function
+    | Bool b -> `Bool b
+    | Money i -> `String (string_of_float (float i /. 100.))
+    | Integer i -> `String (string_of_int i)
+    | Decimal f -> `String (string_of_float f)
+    | Date { year; month; day } ->
+      `String (Format.sprintf "%04d-%02d-%02d" year month day)
+    | Duration { years; months; days } ->
+      `Assoc ["years", `Int years; "months", `Int months; "days", `Int days]
+    | Enum (_decl, ("Absent", None)) -> `Null
+    | Enum (_decl, ("Present", Some x)) -> convert_to_json_input x
+    | Enum (_decl, (constr, None)) -> `String constr
+    | Enum (_decl, (constr, Some v)) -> `Assoc [constr, convert_to_json_input v]
+    | Struct (_decl, fl) ->
+      `Assoc
+        (List.filter_map
+           (function
+             | ( _,
+                 ({ value = Enum (_decl, ("Absent", None)); _ } :
+                   O.runtime_value) ) ->
+               None
+             | fname, v -> Some (fname, convert_to_json_input v))
+           fl)
+    | Array l -> `List (Array.to_list l |> List.map convert_to_json_input)
+    | Unset -> failwith "convert_to_json_input: cannot convert 'unset' values"
+    | Empty -> failwith "convert_to_json_input: cannot convert 'empty' values"
+  in
+  convert_runtime_raw value
+
+let run_with_inputs
+    include_dirs
+    options
+    tested_scope_name
+    (scope_input : Yojson.Safe.t) =
+  let desugared_prg, _naming_ctx, scope_name, dcalc_prg =
+    retrieve_program include_dirs options tested_scope_name
+  in
+  let test =
+    get_scope_test desugared_prg "<abstract>" scope_name
+      ~tested_module:(Some (ModuleName.fresh ("abstract", Pos.void)))
+  in
+  let input_expr =
+    let in_struct =
+      (ScopeName.Map.find scope_name dcalc_prg.decl_ctx.ctx_scopes)
+        .in_struct_name
+    in
+    let ty = TStruct in_struct, Pos.void in
+    let atd_test_inputs : O.runtime_value =
+      Lexing.from_string (Yojson.Safe.to_string scope_input)
+      |> J.read_test_inputs (Yojson.init_lexer ())
+      |> fun fields ->
+      {
+        O.attrs = [];
+        value =
+          O.Struct
+            ( (* Dummy declaration *)
+              { O.struct_name = StructName.to_string in_struct; fields = [] },
+              List.map
+                (fun (field_name, { O.value; typ = _ }) ->
+                  let value = (Option.get value).value in
+                  field_name, value)
+                fields );
+      }
+    in
+    let encoding = Encoding.make_encoding dcalc_prg.decl_ctx ty in
+    let module JsonE = Json_encoding.Make (Json_repr.Yojson) in
+    let rval =
+      JsonE.destruct encoding (convert_to_json_input atd_test_inputs)
+    in
+    Encoding.convert_to_dcalc dcalc_prg.decl_ctx
+      (Typed { pos = Pos.void; ty })
+      ty rval
+    |> Expr.unbox
+    |> Interpreter.addcustom
+    |> Expr.box
+  in
+  let build_term program_fun =
+    Expr.make_app (Expr.box program_fun) [input_expr]
+      [Expr.ty input_expr]
+      (Expr.pos program_fun)
+    |> Expr.unbox
+  in
+  let result_struct, failed_asserts =
+    interpret_program dcalc_prg scope_name build_term
+  in
   let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
       =
     match result_struct with
-    | EStruct { fields; _ }, _ -> (
-      match StructField.Map.choose fields with
-      | _, (EStruct { fields; name }, _) ->
-        let b = StructField.Map.bindings fields in
-        ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
-          StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
-      | _ -> assert false)
+    | EStruct { fields; name }, _ ->
+      let b = StructField.Map.bindings fields in
+      ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
+        StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
     | _ -> assert false
-  in
-  let expected_results = retrieve_assertions_values dcalc_prg in
-  let diffs =
-    compute_diff expected_results actual_results
-    |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
   in
   let test_outputs =
     List.map
@@ -1132,10 +1263,65 @@ let run_test testing_scope include_dirs options =
           } ))
       actual_results
   in
-  let test = { test with test_outputs } in
-  let assert_failures = not (!failed_asserts = []) in
+  let assert_failures = not (failed_asserts = []) in
+  let test = O.{ test with test_outputs } in
+  write_stdout J.write_test_run O.{ test; assert_failures; diffs = [] }
+
+let run_test include_dirs options testing_scope =
+  let desugared_prg, naming_ctx, testing_scope_name, dcalc_prg =
+    retrieve_program include_dirs options testing_scope
+  in
+  let test = get_catala_test (desugared_prg, naming_ctx) testing_scope_name in
+  let build_term program_fun =
+    let _args, program_expr =
+      match program_fun with
+      | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
+      | _ -> assert false
+    in
+    program_expr
+  in
+  let result_struct, failed_asserts =
+    interpret_program dcalc_prg testing_scope_name build_term
+  in
+  let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
+      =
+    match result_struct with
+    | EStruct { fields; _ }, _ -> (
+      match StructField.Map.choose fields with
+      | _, (EStruct { fields; name }, _) ->
+        let b = StructField.Map.bindings fields in
+        ( List.map (fun (f, e) -> f, Interpreter.delcustom e) b,
+          StructName.Map.find name dcalc_prg.decl_ctx.ctx_structs )
+      | _ -> assert false)
+    | _ -> assert false
+  in
+  let test_outputs =
+    List.map
+      (fun (field, value_expr) ->
+        let pos = Some (get_source_position (Expr.pos value_expr)) in
+        ( StructField.to_string field,
+          {
+            O.value =
+              Some { value = get_value dcalc_prg.decl_ctx value_expr; pos };
+            typ =
+              get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
+          } ))
+      actual_results
+  in
+  let test = O.{ test with test_outputs } in
+  let expected_results = retrieve_assertions_values dcalc_prg in
+  let diffs =
+    compute_diff expected_results actual_results
+    |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
+  in
+  let assert_failures = not (failed_asserts = []) in
   let test_run = { O.test; O.assert_failures; O.diffs } in
   write_stdout J.write_test_run test_run
+
+let run_test_cmd include_dirs options test_scope_name scope_input_opt =
+  match scope_input_opt with
+  | None -> run_test include_dirs options test_scope_name
+  | Some json -> run_with_inputs include_dirs options test_scope_name json
 
 let print_scopes scopes = write_stdout J.write_scope_def_list scopes
 
@@ -1166,3 +1352,58 @@ let list_scopes include_dirs options =
     |> List.map snd
   in
   print_scopes filtered_scopes
+
+let rec convert_to_json_input ({ value; _ } : J.runtime_value) : Yojson.Safe.t =
+  let open O in
+  let convert_runtime_raw = function
+    | Bool b -> `Bool b
+    | Money i -> `String (string_of_float (float i /. 100.))
+    | Integer i -> `String (string_of_int i)
+    | Decimal f -> `String (string_of_float f)
+    | Date { year; month; day } ->
+      `String (Format.sprintf "%04d-%02d-%02d" year month day)
+    | Duration { years; months; days } ->
+      `Assoc ["years", `Int years; "months", `Int months; "days", `Int days]
+    | Enum (_decl, ("Absent", None)) -> `Null
+    | Enum (_decl, ("Present", Some x)) -> convert_to_json_input x
+    | Enum (_decl, (constr, None)) -> `String constr
+    | Enum (_decl, (constr, Some v)) -> `Assoc [constr, convert_to_json_input v]
+    | Struct (_decl, fl) ->
+      `Assoc
+        (List.filter_map
+           (function
+             | ( _,
+                 ({ value = Enum (_decl, ("Absent", None)); _ } :
+                   O.runtime_value) ) ->
+               None
+             | fname, v -> Some (fname, convert_to_json_input v))
+           fl)
+    | Array l -> `List (Array.to_list l |> List.map convert_to_json_input)
+    | Unset -> failwith "Cannot convert 'Unset' atd values to JSON"
+    | Empty -> failwith "Cannot convert 'Empty' atd values to JSON"
+  in
+  convert_runtime_raw value
+
+let serialize_inputs (scope_input : Yojson.Safe.t option) =
+  let scope_input =
+    match scope_input with
+    | None -> failwith "serliaze-inputs command requires --input argument"
+    | Some i -> i
+  in
+  Lexing.from_string (Yojson.Safe.to_string scope_input)
+  |> J.read_test_inputs (Yojson.init_lexer ())
+  |> function
+  | fields ->
+    let dummy_decl = { O.struct_name = "dummy"; fields = [] } in
+    let value =
+      O.Struct
+        ( dummy_decl,
+          List.map
+            (fun (field_name, { J.value; typ = _ }) ->
+              let value = (Option.get value).value in
+              field_name, value)
+            fields )
+    in
+    let json = convert_to_json_input { value; attrs = [] } in
+    Format.(
+      fprintf std_formatter "%a@." (Yojson.Safe.pretty_print ~std:true) json)
