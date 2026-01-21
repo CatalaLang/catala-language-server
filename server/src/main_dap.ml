@@ -366,6 +366,13 @@ let set_handlers rpc =
   Debug_rpc.set_command_handler rpc
     (module Custom_launch)
     (fun { args; stop_on_entry } ->
+      let* () =
+        match args with
+        | None -> Format.ksprintf logger "%s@." __LOC__
+        | Some args ->
+          let json = Custom_launch.payload_to_yojson args in
+          Format.kasprintf logger "%s@." (Yojson.Safe.pretty_to_string json)
+      in
       protect logger
       @@ fun () ->
       match args with

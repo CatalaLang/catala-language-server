@@ -303,9 +303,6 @@ let run_debugger ?inputs rpc ~file ~scope logger : debugger_state Lwt.t =
   Log.debug (fun m ->
       m "Evaluating with debug info (scope %a from %a)" ScopeName.format scope
         Doc_id.format file);
-  let inputs =
-    Option.map (fun json_s -> Yojson.Safe.from_string json_s) inputs
-  in
   let* full_state = run_debugger ?inputs rpc logger file scope program pmap in
   Log.debug (fun m ->
       m "Program fully evaluated (%d steps)" full_state.final_index);

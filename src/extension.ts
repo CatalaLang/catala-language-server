@@ -89,7 +89,7 @@ async function selectScope(with_inputs: boolean): Promise<IRunArgs | undefined> 
       await vscode.window.showQuickPick(scopes_to_choose);
     vscode.workspace.openTextDocument(vscode.Uri.file(file.label));
 
-    if (scope) return { uri: file.label, scope: scope.label };
+    if (scope) return { uri: file.label, scope: scope.label, inputs: undefined };
   }
 }
 
@@ -140,17 +140,27 @@ vscode.commands.registerCommand(
   listTestableScopes
 );
 
-async function debugScope(): Promise<void> {
-  const args: IRunArgs | undefined = await selectScope(false);
-  if (args) {
-    await vscode.debug.startDebugging(undefined, {
-      name: 'Run Catala program',
-      type: 'catala-debugger',
-      request: 'launch',
-      args: args,
-      stopOnEntry: true,
-    });
+async function debugScope(args: IRunArgs | undefined): Promise<void> {
+  args ??= await selectScope(false);
+  if (!args) return;
+  const file = args.uri;
+  const scope = args.scope;
+  const workspace = vscode.workspace.getWorkspaceFolder(
+    vscode.Uri.parse(file)
+  );
+  logger.log(JSON.stringify(args));
+  const config: vscode.DebugConfiguration = {
+    type: 'catala-debugger',
+    request: 'launch',
+    stopOnEntry: true,
+    name: `Debug: ${scope}`,
+    args: args,
+  };
+  const success = await vscode.debug.startDebugging(workspace, config);
+  if (!success) {
+    vscode.window.showErrorMessage('Failed to start a debugging session');
   }
+
 }
 vscode.commands.registerCommand('catala.debug', debugScope);
 
@@ -195,24 +205,7 @@ export async function activate(
     },
   });
 
-  vscode.commands.registerCommand('catala.debugScope', async (args: IRunArgs) => {
-    const file = args.uri;
-    const scope = args.scope;
-    const workspace = vscode.workspace.getWorkspaceFolder(
-      vscode.Uri.parse(file)
-    );
-    const config: vscode.DebugConfiguration = {
-      type: 'catala-debugger',
-      request: 'launch',
-      stopOnEntry: true,
-      name: `Debug: ${scope}`,
-      args: args,
-    };
-    const success = await vscode.debug.startDebugging(workspace, config);
-    if (!success) {
-      vscode.window.showErrorMessage('Fail to start a debugging session');
-    }
-  });
+  vscode.commands.registerCommand('catala.debugScope', debugScope);
 
   vscode.commands.registerCommand('catala.runScope', runScope);
 

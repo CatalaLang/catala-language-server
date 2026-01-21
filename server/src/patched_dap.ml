@@ -181,7 +181,11 @@ end
 module Custom_attach = struct
   let type_ = "attach"
 
-  type payload = { uri : string; scope : string }
+  type payload = {
+    uri : string;
+    scope : string;
+    inputs : string option; [@default None]
+  }
   [@@deriving yojson { strict = true }]
 
   module Arguments = struct
@@ -197,7 +201,11 @@ end
 module Custom_launch = struct
   let type_ = "launch"
 
-  type payload = { uri : string; scope : string; inputs : string option }
+  type payload = {
+    uri : string;
+    scope : string;
+    inputs : Yojson.Safe.t option; [@default None]
+  }
   [@@deriving yojson { strict = true }]
 
   module Arguments = struct
