@@ -1,0 +1,16 @@
+> Module My_scope
+
+> Using My_enum as MME
+> Using My_struct as MMS
+
+```catala-metadata
+declaration scope S:
+  input e content MME.E
+  input s content MMS.S
+  output re content MMS.ME.E
+  output rs content MMS.S
+
+scope S:
+  definition re equals e
+  definition rs equals s
+```

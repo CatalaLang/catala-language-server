@@ -1,0 +1,7 @@
+> Module My_enum 
+
+```catala-metadata
+declaration enumeration E:
+  -- A
+  -- B
+```
