@@ -1,0 +1,8 @@
+> Module My_struct
+
+> Using My_enum as ME
+
+```catala-metadata
+declaration structure S:
+  data e content ME.E
+```
