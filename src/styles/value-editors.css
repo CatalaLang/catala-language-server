@@ -51,9 +51,9 @@
   max-width: none;
 }
 
-/* Make action buttons used in assertion editor align with inputs */
+/* Make action buttons used in assertion editor shrink to content */
 .assertion-editor .button-action-dvp {
-  width: 100%;
+  width: fit-content;
   /* keep original vertical padding and right padding; align left padding with inputs */
   padding: var(--spacing8) var(--spacing12) var(--spacing8) var(--spacing16);
   box-sizing: border-box;
