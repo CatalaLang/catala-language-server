@@ -166,9 +166,16 @@
 .table-cell-sub-array-count {
   text-align: center;
   padding: var(--spacing4) !important;
-  width: 40px;
-  min-width: 40px;
-  max-width: 40px;
+  width: 70px;
+  min-width: 70px;
+  max-width: 70px;
+}
+
+.sub-array-cell-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing4);
 }
 
 .count-badge {
@@ -192,6 +199,14 @@
 
 .count-badge-clickable:hover {
   background-color: var(--vscode-button-hoverBackground);
+}
+
+.count-badge-zero {
+  opacity: 0.5;
+  cursor: default;
+  min-width: 24px;
+  max-width: 24px;
+  box-sizing: border-box;
 }
 
 /* Add sub-array pill */

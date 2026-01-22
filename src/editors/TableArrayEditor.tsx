@@ -725,7 +725,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                     );
                   })}
 
-                  {/* Sub-array count badges */}
+                  {/* Sub-array count badges and add buttons */}
                   {arrayFields.map((arr) => {
                     const arrayValue = structData
                       ? getNestedValue(structData, arr.fieldPath)
@@ -736,6 +736,10 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                         : 0;
 
                     const subTableId = `sub-table-${arr.label}`;
+                    const elementType =
+                      arr.arrayType.kind === 'TArray'
+                        ? arr.arrayType.value
+                        : arr.arrayType;
 
                     return (
                       <td
@@ -745,17 +749,41 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                         // cut/copy/paste. Context menu is only available on row headers.
                         onContextMenu={(e) => e.preventDefault()}
                       >
-                        {count > 0 && (
-                          <button
-                            className="count-badge count-badge-clickable"
-                            onClick={() => {
-                              navigateAndFlashSubTable(subTableId, rowIndex);
-                            }}
-                            title={`Go to ${arr.label} for row #${rowIndex + 1}`}
-                          >
-                            {count}
-                          </button>
-                        )}
+                        <div className="sub-array-cell-content">
+                          {count > 0 ? (
+                            <button
+                              className="count-badge count-badge-clickable"
+                              onClick={() => {
+                                navigateAndFlashSubTable(subTableId, rowIndex);
+                              }}
+                              title={`Go to ${arr.label} for row #${rowIndex + 1}`}
+                            >
+                              {count}
+                            </button>
+                          ) : (
+                            <span className="count-badge count-badge-zero">
+                              0
+                            </span>
+                          )}
+                          {editable && !isPhantomRow && !isExpectedOnlyRow && (
+                            <button
+                              className="add-subarray-pill"
+                              onClick={() => {
+                                handleAddSubArrayItem(
+                                  rowIndex,
+                                  arr.fieldPath,
+                                  arr.label,
+                                  elementType
+                                );
+                              }}
+                              title={intl.formatMessage({
+                                id: 'tableView.addSubArrayItem',
+                              })}
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
                       </td>
                     );
                   })}
