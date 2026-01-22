@@ -687,11 +687,13 @@ let populate_modules
     | None -> acc
     | Some { module_name; module_external = _ } -> (
       try
+        let mname = C.find (Mark.remove module_name) convert_map in
+        let mcontent = ModuleName.Map.find mname modules_contents in
         let interface =
-          Surface.Parser_driver.load_interface ~is_stdlib:false input_src
+          Surface.Parser_driver.load_interface
+            ~is_stdlib:mcontent.module_is_stdlib input_src
         in
         let pos = Mark.get module_name in
-        let mname = ModuleName.fresh module_name in
         let mjump = make_mjump mname interface in
         PMap.add pos (Module_def mjump) acc
       with exn ->
