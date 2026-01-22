@@ -212,24 +212,42 @@ export function useTableArrayHandlers(
     newArrayValue: RuntimeValue[]
   ): void => {
     const row = currentArray[parentRowIndex];
-    if (row?.value.kind !== 'Struct') return;
-
-    const [structDecl, structData] = row.value.value;
     const newArrayRuntimeValue: RuntimeValue = {
       value: { kind: 'Array', value: newArrayValue },
       attrs: [],
     };
-    const newMap = setNestedValue(
-      structData,
-      fieldPath,
-      newArrayRuntimeValue,
-      structDecl
-    );
 
-    const newRow: RuntimeValue = {
-      ...row,
-      value: { kind: 'Struct', value: [structDecl, newMap] },
-    };
+    let newRow: RuntimeValue;
+    if (row?.value.kind === 'Struct') {
+      // Existing struct - update the sub-array field
+      const [structDecl, structData] = row.value.value;
+      const newMap = setNestedValue(
+        structData,
+        fieldPath,
+        newArrayRuntimeValue,
+        structDecl
+      );
+      newRow = {
+        ...row,
+        value: { kind: 'Struct', value: [structDecl, newMap] },
+      };
+    } else {
+      // Unset/Invalid row - construct a full struct with defaults, then set the sub-array
+      const newItemMap = new Map<string, RuntimeValue>();
+      for (const [fieldName, fieldType] of structType.fields.entries()) {
+        newItemMap.set(fieldName, getDefaultValue(fieldType));
+      }
+      const newMap = setNestedValue(
+        newItemMap,
+        fieldPath,
+        newArrayRuntimeValue,
+        structType
+      );
+      newRow = {
+        value: { kind: 'Struct', value: [structType, newMap] },
+        attrs: row?.attrs ?? [],
+      };
+    }
 
     const newArray = [...currentArray];
     newArray[parentRowIndex] = newRow;
@@ -409,13 +427,16 @@ export function useTableArrayHandlers(
     subElementType: Typ
   ): void => {
     const row = currentArray[parentRowIndex];
-    if (row?.value.kind !== 'Struct') return;
 
-    const [, structData] = row.value.value;
-    const arrayValue = getNestedValue(structData, arrayFieldPath);
-
-    const currentSubArray =
-      arrayValue?.value.kind === 'Array' ? arrayValue.value.value : [];
+    // Get existing sub-array items if row is a Struct, otherwise start with empty array
+    let currentSubArray: RuntimeValue[] = [];
+    if (row?.value.kind === 'Struct') {
+      const [, structData] = row.value.value;
+      const arrayValue = getNestedValue(structData, arrayFieldPath);
+      if (arrayValue?.value.kind === 'Array') {
+        currentSubArray = arrayValue.value.value;
+      }
+    }
 
     const newElement = cloneWithNewUid(getDefaultValue(subElementType));
     const newSubArray = [...currentSubArray, newElement];
