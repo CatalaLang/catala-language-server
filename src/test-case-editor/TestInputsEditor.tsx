@@ -1,7 +1,7 @@
 import { type ReactElement } from 'react';
-import type { TestInputs, TestIo } from './generated/catala_types';
-import ValueEditor from './editors/ValueEditors';
-import { CompositeEditor, type EditorItem } from './editors/CompositeEditor';
+import type { TestInputs, TestIo } from '../generated/catala_types';
+import ValueEditor from '../editors/ValueEditors';
+import { CompositeEditor, type EditorItem } from '../editors/CompositeEditor';
 
 type Props = {
   test_inputs: TestInputs;

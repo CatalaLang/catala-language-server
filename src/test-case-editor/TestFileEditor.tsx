@@ -9,13 +9,13 @@ import {
   type Diff,
   readDownMessage,
   writeUpMessage,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 import TestEditor from './TestEditor';
-import { assertUnreachable } from './util';
-import { pathEquals, isPathPrefix } from './diff/highlight';
+import { assertUnreachable } from '../shared/util';
+import { pathEquals, isPathPrefix } from '../diff/highlight';
 import type { WebviewApi } from 'vscode-webview';
-import { setVsCodeApi } from './webviewApi';
-import { resolveConfirmResult } from './messaging/confirm';
+import { setVsCodeApi } from '../shared/webviewApi';
+import { resolveConfirmResult } from '../messaging/confirm';
 
 // Note:
 //

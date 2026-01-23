@@ -1,7 +1,7 @@
 import { type ReactElement } from 'react';
 import { IntlProvider } from 'react-intl';
-import TestFileEditor from './TestFileEditor';
-import ScopeInputEditor from './scope_input_editor/ScopeInputEditor';
+import TestFileEditor from './test-case-editor/TestFileEditor';
+import ScopeInputEditor from './scope-editor/ScopeInputEditor';
 
 import { type WebviewApi } from 'vscode-webview';
 

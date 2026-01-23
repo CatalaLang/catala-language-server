@@ -14,11 +14,11 @@ import {
   writeUpMessage,
   readDownMessage,
 } from '../generated/catala_types';
-import TestInputsEditor from '../TestInputsEditor';
+import TestInputsEditor from '../test-case-editor/TestInputsEditor';
 import { resolveConfirmResult } from '../messaging/confirm';
-import { setVsCodeApi } from '../webviewApi';
+import { setVsCodeApi } from '../shared/webviewApi';
 import type { WebviewApi } from 'vscode-webview';
-import { assertUnreachable } from '../util';
+import { assertUnreachable } from '../shared/util';
 import ScopeOutputs from './ScopeOutputs';
 import {
   hasUnsetInTest,

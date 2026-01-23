@@ -4,11 +4,11 @@ import type {
   Entrypoint,
   EntrypointParamKind,
   EntrypointsParams,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 import {
   writeEntrypointsParams,
   readEntrypoints,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 
 // Atd prevents us to obtain direct vscode's ranges, we convert them here.
 export type CatalaEntrypoint = Omit<Entrypoint, 'range'> & {

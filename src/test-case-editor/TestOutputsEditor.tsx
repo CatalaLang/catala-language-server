@@ -1,9 +1,14 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
-import { confirm } from './messaging/confirm';
-import type { Test, TestIo, Diff, PathSegment } from './generated/catala_types';
+import { confirm } from '../messaging/confirm';
+import type {
+  Test,
+  TestIo,
+  Diff,
+  PathSegment,
+} from '../generated/catala_types';
 import AssertionValueEditor from './AssertionValueEditor';
-import { getDefaultValue } from './editors/ValueEditors';
+import { getDefaultValue } from '../editors/ValueEditors';
 
 type Props = {
   test: Test;

@@ -4,7 +4,7 @@ import type {
   ScopeDefList,
   TestGenerateResults,
   TestInputs,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 import {
   readScopeDefList,
   readTestList,
@@ -14,8 +14,8 @@ import {
   type ParseResults,
   type TestList,
   type TestRunResults,
-} from './generated/catala_types';
-import { logger } from './logger';
+} from '../generated/catala_types';
+import { logger } from '../extension/logger';
 import { Uri, window, workspace } from 'vscode';
 import path from 'path';
 import fs from 'fs';

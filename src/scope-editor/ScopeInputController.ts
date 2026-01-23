@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { assertUnreachable } from '../util';
+import { assertUnreachable } from '../shared/util';
 import type {
   ParseResults,
   Test,
@@ -15,7 +15,7 @@ import {
   runTestScope,
   generate,
   serializeInputs,
-} from '../testCaseCompilerInterop';
+} from '../test-case-editor/testCaseCompilerInterop';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the

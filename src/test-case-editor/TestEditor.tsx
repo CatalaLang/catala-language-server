@@ -6,15 +6,15 @@ import {
   type TestInputs,
   type TestRunResults,
   type PathSegment,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
 import { type TestRunStatus } from './TestFileEditor';
-import { confirm } from './messaging/confirm';
+import { confirm } from '../messaging/confirm';
 import {
   hasUnsetInTest,
   scrollToFirstInvalidOrUnset,
-} from './editors/unsetValidation';
+} from '../editors/unsetValidation';
 
 type Props = {
   test: Test;

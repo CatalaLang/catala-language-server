@@ -2,21 +2,21 @@ import type { LanguageClient } from 'vscode-languageclient/node';
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { sep } from 'path';
-import { clerkPath, getCwd } from './util_client';
+import { clerkPath, getCwd } from '../shared/util_client';
 import type { CatalaEntrypoint } from './lspRequests';
 import { listEntrypoints } from './lspRequests';
 import {
   focusDiffInCustomEditor,
   updateOpenCustomEditorWithResults,
-} from './testCaseEditor';
-import { runTestScope } from './testCaseCompilerInterop';
+} from './testCaseEditorProvider';
+import { runTestScope } from '../test-case-editor/testCaseCompilerInterop';
 import type {
   Diff,
   RuntimeValue,
   SourcePosition,
   TestOutputs,
   TestRunResults,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 
 type ClerkLocation = {
   file: string;

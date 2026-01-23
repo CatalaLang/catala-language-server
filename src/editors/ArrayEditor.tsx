@@ -14,7 +14,7 @@ import ValueEditor, {
   createRuntimeValue,
   getDefaultValue,
 } from './ValueEditors';
-import { assertUnreachable } from '../util';
+import { assertUnreachable } from '../shared/util';
 import {
   computeActualOnlyIndices,
   indicesToRender as computeIndicesToRender,

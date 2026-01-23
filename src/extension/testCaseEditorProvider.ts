@@ -1,18 +1,18 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
-import { assertUnreachable } from './util';
-import { getLocalizedMessages } from './i18n/messages';
+import { assertUnreachable } from '../shared/util';
+import { getLocalizedMessages } from '../i18n/messages';
 
 import type {
   ParseResults,
   TestRunResults,
   UpMessage,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 import {
   type DownMessage,
   readUpMessage,
   writeDownMessage,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 import * as path from 'path';
 import PQueue from 'p-queue';
 import {
@@ -20,9 +20,9 @@ import {
   parseTestFile,
   generate,
   getAvailableScopes,
-} from './testCaseCompilerInterop';
-import { renameIfNeeded } from './testCaseUtils';
-import { CatalaTestCaseDocument } from './CatalaTestCaseDocument';
+} from '../test-case-editor/testCaseCompilerInterop';
+import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
+import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
 
 export function parseContents(
   content: Uint8Array,

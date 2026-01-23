@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import enMessages from '../src/locales/en.json';
-import AssertionValueEditor from '../src/AssertionValueEditor';
+import AssertionValueEditor from '../src/test-case-editor/AssertionValueEditor';
 import type {
   Diff,
   EnumDeclaration,

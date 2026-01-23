@@ -1,6 +1,6 @@
-import type { Test, TestList, RuntimeValue } from './generated/catala_types';
-import { isAtomicRaw } from './diff/diff';
-import { getLocalizedMessages } from './i18n/messages';
+import type { Test, TestList, RuntimeValue } from '../generated/catala_types';
+import { isAtomicRaw } from '../diff/diff';
+import { getLocalizedMessages } from '../i18n/messages';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
