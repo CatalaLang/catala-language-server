@@ -323,6 +323,16 @@ let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
     module_deps = retrieve_scope_module_deps prg sc;
   }
 
+(** Default placeholder for uninitialized inputs: empty array for TArray,
+    explicit Unset for everything else. *)
+let unset_default_value (typ : O.typ) : O.value_def =
+  let value =
+    match typ with
+    | TArray _ -> { O.value = O.Array [||]; attrs = [] }
+    | _ -> { O.value = O.Unset; attrs = [] }
+  in
+  { O.value; pos = None }
+
 let get_scope_test
     (prg : I.program)
     (testing_scope : string)
@@ -347,7 +357,9 @@ let get_scope_test
       ~tested_module
   in
   let test_inputs =
-    List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.inputs
+    List.map
+      (fun (v, typ) -> v, { O.typ; value = Some (unset_default_value typ) })
+      tested_scope.inputs
   in
   let test_outputs =
     List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.outputs
@@ -541,7 +553,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
             with Ident.Map.Not_found _ | I.ScopeDef.Map.Not_found _ -> []
           in
           match rules with
-          | [] -> None
+          | [] -> Some (unset_default_value test_in.O.typ)
           | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
             let value = get_value prg.program_ctx e in
