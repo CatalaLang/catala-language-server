@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { writeUpMessage } from './generated/catala_types';
-import App from './App';
+import App, { InputApp } from './App';
 import './styles/index.css';
 import '../node_modules/@vscode/codicons/dist/codicon.css';
 
@@ -10,5 +10,12 @@ export function renderUi(language: string): void {
 
   const root = createRoot(document.getElementById('root') as HTMLElement);
   root.render(createElement(App, { language, vscode }));
+  vscode.postMessage(writeUpMessage({ kind: 'Ready' }));
+}
+
+export function renderInputScopeUi(language: string, scopename: string): void {
+  const vscode = acquireVsCodeApi();
+  const root = createRoot(document.getElementById('root') as HTMLElement);
+  root.render(createElement(InputApp, { language, vscode, scopename }));
   vscode.postMessage(writeUpMessage({ kind: 'Ready' }));
 }

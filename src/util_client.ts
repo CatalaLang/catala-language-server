@@ -1,6 +1,12 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
+export type RunArgs = {
+  uri: string;
+  scope: string;
+  inputs?: JSON;
+};
+
 function pathFromConfig(confId: string, defaultCmd: string): string {
   const confPath = vscode.workspace
     .getConfiguration('catala')

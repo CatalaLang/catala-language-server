@@ -13,18 +13,15 @@ import cmd_exists from 'command-exists';
 import * as net from 'net';
 import { spawn } from 'child_process';
 import { clerkPath, getCwd, hasResourceUri } from './util_client';
+import type { RunArgs } from './util_client';
 import { initTests } from './testAndCoverage';
 import type { CatalaEntrypoint } from './lspRequests';
 import { listEntrypoints } from './lspRequests';
+import { ScopeInputController } from './scope_input_editor/ScopeInputController';
 
 let client: LanguageClient;
 
-interface IRunArgs {
-  uri: string;
-  scope: string;
-}
-
-async function selectScope(): Promise<IRunArgs | undefined> {
+async function selectScope(with_inputs: boolean): Promise<RunArgs | undefined> {
   if (!client) {
     vscode.window.showErrorMessage(
       'Catala LSP is not running: cannot select a scope.'
@@ -33,10 +30,12 @@ async function selectScope(): Promise<IRunArgs | undefined> {
   }
   const entrypoints: Array<CatalaEntrypoint> = await listEntrypoints(
     client,
-    [{ kind: 'Test' }, { kind: 'NoInputScope' }],
+    with_inputs
+      ? [{ kind: 'InputScope' }]
+      : [{ kind: 'Test' }, { kind: 'NoInputScope' }],
     undefined,
     false,
-    true
+    with_inputs ? false : true
   );
   const uniq_sorted_files: vscode.QuickPickItem[] = Array.from(
     new Set(entrypoints.map((file) => file.path))
@@ -64,7 +63,7 @@ async function selectScope(): Promise<IRunArgs | undefined> {
             label: e.entrypoint.value.value.scope,
           };
           return [item, ...acc];
-        } else if (e.entrypoint.kind == 'NoInputScope') {
+        } else if (e.entrypoint.kind == 'InputScope') {
           const item: vscode.QuickPickItem = {
             label: e.entrypoint.value.scope,
           };
@@ -87,24 +86,31 @@ async function selectScope(): Promise<IRunArgs | undefined> {
       await vscode.window.showQuickPick(scopes_to_choose);
     vscode.workspace.openTextDocument(vscode.Uri.file(file.label));
 
-    if (scope) return { uri: file.label, scope: scope.label };
+    if (scope)
+      return { uri: file.label, scope: scope.label, inputs: undefined };
   }
 }
 
-async function runScope(): Promise<void> {
-  const args: IRunArgs | undefined = await selectScope();
+async function runScope(args?: RunArgs): Promise<void> {
+  const inputs = args?.inputs;
+  args ??= await selectScope(inputs ? true : false);
   if (args) {
     const cwd = getCwd(args.uri);
     const termName = `${args.scope} execution`;
     vscode.window.terminals.find((t) => t.name === termName)?.dispose();
     const term = vscode.window.createTerminal({ name: termName, cwd });
+    const extra_args = inputs ? ['--input', `'${JSON.stringify(inputs)}'`] : [];
     term.show();
     term.sendText(
-      [clerkPath, 'run', args.uri, '--scope', args.scope].join(' ')
+      [clerkPath, 'run', args.uri, '--scope', args.scope, ...extra_args].join(
+        ' '
+      )
     );
   }
 }
+
 vscode.commands.registerCommand('catala.run', runScope);
+vscode.commands.registerCommand('catala.selectScope', selectScope);
 
 async function listTestableScopes(
   path: string
@@ -133,16 +139,22 @@ vscode.commands.registerCommand(
   listTestableScopes
 );
 
-async function debugScope(): Promise<void> {
-  const args: IRunArgs | undefined = await selectScope();
-  if (args) {
-    await vscode.debug.startDebugging(undefined, {
-      name: 'Run Catala program',
-      type: 'catala-debugger',
-      request: 'launch',
-      args: args,
-      stopOnEntry: true,
-    });
+async function debugScope(args: RunArgs | undefined): Promise<void> {
+  args ??= await selectScope(false);
+  if (!args) return;
+  const file = args.uri;
+  const scope = args.scope;
+  const workspace = vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(file));
+  const config: vscode.DebugConfiguration = {
+    type: 'catala-debugger',
+    request: 'launch',
+    stopOnEntry: true,
+    name: `Debug: ${scope}`,
+    args: args,
+  };
+  const success = await vscode.debug.startDebugging(workspace, config);
+  if (!success) {
+    vscode.window.showErrorMessage('Failed to start a debugging session');
   }
 }
 vscode.commands.registerCommand('catala.debug', debugScope);
@@ -188,35 +200,9 @@ export async function activate(
     },
   });
 
-  vscode.commands.registerCommand('catala.debugScope', async (args) => {
-    const file = args.uri;
-    const scope = args.scope;
-    const workspace = vscode.workspace.getWorkspaceFolder(
-      vscode.Uri.parse(file)
-    );
-    const config: vscode.DebugConfiguration = {
-      type: 'catala-debugger',
-      request: 'launch',
-      stopOnEntry: true,
-      name: `Debug: ${scope}`,
-      args: args,
-    };
-    const success = await vscode.debug.startDebugging(workspace, config);
-    if (!success) {
-      vscode.window.showErrorMessage('Fail to start a debugging session');
-    }
-  });
+  vscode.commands.registerCommand('catala.debugScope', debugScope);
 
-  vscode.commands.registerCommand('catala.runScope', async (args) => {
-    const file = args.uri;
-    const scope = args.scope;
-    const cwd = getCwd(file);
-    const termName = `${scope} execution`;
-    let term = vscode.window.terminals.find((t) => t.name === termName);
-    term ??= vscode.window.createTerminal({ name: termName, cwd });
-    term.show();
-    term.sendText([clerkPath, 'run', file, '--scope', scope].join(' '));
-  });
+  vscode.commands.registerCommand('catala.runScope', runScope);
 
   // Open the current resource with the custom Test Case Editor
   context.subscriptions.push(
@@ -329,6 +315,23 @@ export async function activate(
 
   // Always register the custom editor provider
   context.subscriptions.push(TestCaseEditorProvider.register(context));
+
+  // register_memoryFileProvider(context);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.openInputEditor',
+      async (x?: RunArgs) => {
+        if (x == undefined) {
+          const y = await selectScope(true);
+          if (y == undefined) return;
+          x = y;
+        }
+        const inputWebView = new ScopeInputController();
+        inputWebView.createWebview(context, x.uri, x.scope);
+      }
+    )
+  );
 
   // Ensure the logger is disposed when the extension is deactivated
   context.subscriptions.push({ dispose: () => logger.dispose() });

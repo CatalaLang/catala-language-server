@@ -63,8 +63,7 @@ let lwt_map2 f l l' =
 
 (* Typing shenanigan to add custom terms to the AST type. *)
 let addcustom e =
-  let rec f :
-      type c d.
+  let rec f : type c d.
       ((d, c) interpr_kind, 't) gexpr -> ((d, yes) interpr_kind, 't) gexpr boxed
       = function
     | (ECustom _, _) as e -> Expr.map ~f e
@@ -93,8 +92,7 @@ let addcustom e =
        traversal would do a reboxing of all bound variables *)
   else id e
 
-let rec runtime_to_val :
-    type d.
+let rec runtime_to_val : type d.
     (decl_ctx ->
     ((d, _) interpr_kind, 'm) gexpr ->
     ((d, _) interpr_kind, 'm) gexpr Lwt.t) ->
@@ -200,8 +198,7 @@ let rec runtime_to_val :
   | TAbstract _ -> Lwt.return (ECustom { obj = o; targs = []; tret = ty }, m)
   | TError -> assert false
 
-and val_to_runtime :
-    type d.
+and val_to_runtime : type d.
     (decl_ctx ->
     ((d, _) interpr_kind, 'm) gexpr ->
     ((d, _) interpr_kind, 'm) gexpr Lwt.t) ->
@@ -538,8 +535,9 @@ let rec evaluate_operator
         in
         Lwt.return (EArray l)
       with Invalid_argument _ ->
-        raise Catala_runtime.(Error (NotSameLength, [Expr.pos_to_runtime opos], None))
-      )
+        raise
+          Catala_runtime.(
+            Error (NotSameLength, [Expr.pos_to_runtime opos], None)))
     | Reduce, [_; default; (EArray [], _)] ->
       let* r =
         eval_application evaluate_expr default
@@ -761,8 +759,7 @@ let rec evaluate_operator
   in
   Lwt.return (Mark.add m r)
 
-let rec partially_evaluate_expr_for_assertion_failure_message :
-    type d.
+let rec partially_evaluate_expr_for_assertion_failure_message : type d.
     (((d, _) interpr_kind, 'm) gexpr -> ((d, _) interpr_kind, 'm) gexpr Lwt.t) ->
     decl_ctx ->
     Global.backend_lang ->
@@ -801,8 +798,7 @@ let rec partially_evaluate_expr_for_assertion_failure_message :
 
 let on_expr_void _ _ = Lwt.return_unit
 
-let rec evaluate_expr_with_env :
-    type d.
+let rec evaluate_expr_with_env : type d.
     on_expr:(((d, yes) interpr_kind, 't) gexpr -> (d, 't) env -> unit Lwt.t) ->
     (d, 't) env ->
     decl_ctx ->
@@ -1077,7 +1073,8 @@ let rec evaluate_expr_with_env :
     | ELit (LBool false) ->
       if Global.options.stop_on_error then
         raise
-          Catala_runtime.(Error (AssertionFailed, [Expr.pos_to_runtime pos], None))
+          Catala_runtime.(
+            Error (AssertionFailed, [Expr.pos_to_runtime pos], None))
       else
         let* partially_evaluated_assertion_failure_expr =
           partially_evaluate_expr_for_assertion_failure_message
@@ -1152,6 +1149,7 @@ let rec evaluate_expr_with_env :
   | _ -> .
 
 let interpret_with_env
+    ?inputs
     ?(on_expr = on_expr_void)
     (p : (yes Shared_ast__Definitions.dcalc_lcalc, typed) gexpr program)
     scope =
@@ -1160,8 +1158,24 @@ let interpret_with_env
   let scope_info = ScopeName.Map.find scope ctx.ctx_scopes in
   let scope_input_struct = scope_info.in_struct_name in
   let app_term =
-    Scope.empty_input_struct_dcalc ctx scope_input_struct
-      (Typed { pos = Pos.void; ty = TStruct scope_input_struct, Pos.void })
+    match inputs with
+    | None ->
+      Scope.empty_input_struct_dcalc ctx scope_input_struct
+        (Typed { pos = Pos.void; ty = TStruct scope_input_struct, Pos.void })
+    | Some json ->
+      let in_scope_ty =
+        let scope_info = ScopeName.Map.find scope ctx.ctx_scopes in
+        TStruct scope_info.in_struct_name, Mark.get (ScopeName.get_info scope)
+      in
+      let encoding = Encoding.make_encoding ctx in_scope_ty in
+      let rval = Encoding.parse_json encoding json in
+      let mark =
+        Expr.with_ty (Typed { pos = Pos.void; ty = in_scope_ty }) in_scope_ty
+      in
+      Encoding.convert_to_dcalc ctx mark in_scope_ty rval
+      |> Expr.unbox
+      |> addcustom
+      |> Expr.box
   in
   let to_interpret =
     Expr.make_app (Expr.box e) [app_term]

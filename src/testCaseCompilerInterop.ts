@@ -3,11 +3,13 @@ import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
   ScopeDefList,
   TestGenerateResults,
+  TestInputs,
 } from './generated/catala_types';
 import {
   readScopeDefList,
   readTestList,
   readTestRun,
+  writeTestInputs,
   writeTestList,
   type ParseResults,
   type TestList,
@@ -94,7 +96,8 @@ export function atdToCatala(tests: TestList, lang: string): string {
 
 export function runTestScope(
   filename: string,
-  testScope: string
+  testScope: string,
+  inputs?: TestInputs
 ): TestRunResults {
   /*
    * Notes:
@@ -106,8 +109,19 @@ export function runTestScope(
    * these could be handled externally as well)
    */
 
-  const args = ['testcase', 'run', '--scope', testScope, filename];
-  logger.log(`Exec: ${catalaPath} ${args.join(' ')}`);
+  let input_args: string[] = [];
+  if (inputs) {
+    const serialized_inputs = JSON.stringify(writeTestInputs(inputs));
+    input_args = ['--input', serialized_inputs];
+  }
+  let args: string[] = [
+    'testcase',
+    'run',
+    '--scope',
+    testScope,
+    filename,
+  ].concat(input_args);
+  logger.log(`Running ${catalaPath} ${args.join(' ')}`);
   try {
     const cwd = getCwd(filename);
     if (cwd) {
@@ -120,15 +134,18 @@ export function runTestScope(
     // Here we *do* want to fail on asserts, as we catch failures through
     // the `register_lsp_error_notifier` hook.
     const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
-    const testRun = readTestRun(JSON.parse(result.toString()));
-    logger.log(`diffs: ${JSON.stringify(testRun.diffs)}`);
+    const {
+      test: { test_outputs },
+      assert_failures,
+      diffs,
+    } = readTestRun(JSON.parse(result.toString()));
     return {
       kind: 'Ok',
       value: {
         // TODO remove type TestRunOutput?
-        test_outputs: testRun.test.test_outputs,
-        assert_failures: testRun.assert_failures,
-        diffs: testRun.diffs,
+        test_outputs,
+        assert_failures,
+        diffs,
       },
     };
   } catch (error) {
@@ -157,12 +174,28 @@ export function getAvailableScopes(filename: string): ScopeDefList {
   }
 }
 
-export function generate(scope: string, filename: string): TestGenerateResults {
+export function generate(
+  scope: string,
+  filename: string,
+  default_values?: boolean,
+  force_module?: boolean
+): TestGenerateResults {
   const cmd = catalaPath;
-  const args = ['testcase', 'generate', '--scope', scope, filename];
-  logger.log(`${cmd} ${args}`);
+  const with_defaults = default_values ? ['--default-values'] : [];
+  const enforce_module = force_module ? ['--enforce-module'] : [];
+  const args = [
+    'testcase',
+    'generate',
+    '--scope',
+    scope,
+    filename,
+    ...with_defaults,
+    ...enforce_module,
+  ];
+  logger.log(`Running ${cmd} ${args.join(' ')}`);
+  const cwd = getCwd(filename);
   try {
-    const results = execFileSync(cmd, args);
+    const results = execFileSync(cmd, args, { ...(cwd && { cwd }) });
     const test = readTestList(JSON.parse(results.toString()));
     return {
       kind: 'Results',
@@ -172,6 +205,34 @@ export function generate(scope: string, filename: string): TestGenerateResults {
     return {
       kind: 'Error',
       value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
+    };
+  }
+}
+export function serializeInputs(
+  inputs: TestInputs
+): { kind: 'Ok'; json: JSON } | { kind: 'Error'; message: string } {
+  const serialized_inputs = JSON.stringify(writeTestInputs(inputs));
+  let args: string[] = [
+    'testcase',
+    'serialize-inputs',
+    '--input',
+    serialized_inputs,
+  ];
+  logger.log(`Running ${catalaPath} ${args.join(' ')}`);
+  try {
+    const result = execFileSync(catalaPath, args);
+    return {
+      kind: 'Ok',
+      json: JSON.parse(result.toString()),
+    };
+  } catch (error) {
+    const errorMsg = String(
+      (error as SpawnSyncReturns<string | Buffer>).stderr
+    );
+    window.showErrorMessage(errorMsg);
+    return {
+      kind: 'Error',
+      message: errorMsg,
     };
   }
 }
