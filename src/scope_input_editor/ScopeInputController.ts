@@ -44,6 +44,7 @@ export class ScopeInputController {
       vscode.ViewColumn.One,
       {
         enableScripts: true,
+        retainContextWhenHidden: true,
       }
     );
     this.scope = scope;
