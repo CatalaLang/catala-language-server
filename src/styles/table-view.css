@@ -540,12 +540,9 @@
   background-color: var(--level-2-background-dark);
 }
 
-/* Badge positioning within table cells */
+/* Badge z-index within table cells */
 .table-cell .unset-badge,
 .table-cell .invalid-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
   z-index: 1;
 }
 
