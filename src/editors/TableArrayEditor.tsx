@@ -297,7 +297,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
               <th className="table-header-controls-combined">#</th>
               {atomicColumns.map((col) => (
                 <th key={col.label} className="table-header" title={col.label}>
-                  {col.label}
+                  {col.label.split('.').pop()}
                 </th>
               ))}
               {arrayFields.map((arr) => (
@@ -306,7 +306,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                   className="table-header-sub-array"
                   title={arr.label}
                 >
-                  {arr.label}
+                  {arr.label.split('.').pop()}
                 </th>
               ))}
             </tr>
