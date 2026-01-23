@@ -72,7 +72,7 @@ export default function ScopeInputEditor({
     testScope: string;
     action: 'Run' | 'Terminal' | 'Debug';
   }): void => {
-    if (args.action != 'Terminal')
+    if (args.action == 'Run')
       setTestRunState((_prev) => ({ status: 'running' }));
     vscode.postMessage(
       writeUpMessage({
@@ -324,18 +324,21 @@ function ScopeInputComponent(props: PropsInputComp): ReactElement {
               <FormattedMessage id="scopeEditor.shell_run" />
             </button>
             <button
-              className={`button-action-dvp ${props.runState ?? ''}`}
+              className="button-action-dvp"
               title={intl.formatMessage({ id: 'scopeEditor.debug_run' })}
               onClick={debugWithUnsetCheck}
-              disabled={props.runState.status === 'running'}
             >
               <span className="codicon codicon-play" />
               <FormattedMessage id="scopeEditor.debug_run" />
             </button>
           </div>
         </div>
-        <div className="test-result">
-          <ScopeOutputs test_run_output={props.runState} />
+        <div className="test-outputs-editor">
+          <div className="test-outputs data-card">
+            <div className="test-result">
+              <ScopeOutputs test_run_output={props.runState} />
+            </div>
+          </div>
         </div>
       </div>
     </div>

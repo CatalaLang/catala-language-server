@@ -15,11 +15,12 @@ function _sameSegment(a: PathSegment, b: PathSegment): boolean {
     case 'StructField':
     case 'EnumPayload':
       return (
-        _normalizeStr((a as any).value) === _normalizeStr((b as any).value)
+        _normalizeStr(a.value) ===
+        _normalizeStr((b as { kind: typeof a.kind; value: string }).value)
       );
     case 'ListIndex':
     case 'TupleIndex':
-      return (a as any).value === (b as any).value;
+      return a.value === (b as { kind: typeof a.kind; value: number }).value;
     default:
       return false;
   }

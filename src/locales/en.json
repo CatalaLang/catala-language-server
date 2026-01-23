@@ -19,6 +19,7 @@
   "testEditor.inputs": "Input data",
   "testEditor.expectedValues": "Expected results",
   "testEditor.resetExpected": "Reset Expected Values",
+  "testEditor.resetExpectedButton": "Replace with execution output",
   "assertion.delete": "Delete assertion",
   "testOutputs.addExpectedValue": "Add expected value",
   "arrayEditor.addElement": "Add {elementType}",
@@ -49,5 +50,13 @@
   "diff.addToExpected": "Add to expected",
   "diff.replaceExpected": "Replace expected with computed value",
   "diff.removeFromExpected": "Remove from expected",
-  "testEditor.diffsStale": "Diffs are out of date. Re-run to refresh."
+  "testEditor.diffsStale": "Diffs are out of date. Re-run to refresh.",
+  "tableView.noData": "No data",
+  "tableView.addSubArrayItem": "Add item to sub-array",
+  "tableView.addNewItemIn": "Add new {typeName} in {fieldName}",
+  "tableView.duplicateBefore": "Duplicate above",
+  "tableView.duplicateAfter": "Duplicate below",
+  "tableView.addNewItem": "Add new item",
+  "tableEditor.labelPlaceholder": "Name...",
+  "tableEditor.goToParent": "Go to parent: {parentLabel}"
 }

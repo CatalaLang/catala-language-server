@@ -52,11 +52,11 @@ export default function TestEditor(props: Props): ReactElement {
     );
   }
 
-  function onTitleChange(event: ChangeEvent<HTMLInputElement>): void {
+  function onTitleChange(newTitle: string): void {
     props.onTestChange(
       {
         ...props.test,
-        title: event.target.value,
+        title: newTitle,
       },
       true
     );
@@ -97,9 +97,7 @@ export default function TestEditor(props: Props): ReactElement {
       }
       case 'Enum': {
         const payload = rv.value.value[1][1];
-        return payload !== null && payload.value
-          ? containsUnsetInRuntime(payload.value)
-          : false;
+        return payload?.value ? containsUnsetInRuntime(payload.value) : false;
       }
       default:
         return false;
@@ -152,15 +150,55 @@ export default function TestEditor(props: Props): ReactElement {
       <div className="test-editor-breadcrumb body-b3">
         {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
       </div>
-      <h2 className="test-section-title heading-h2">
-        <FormattedMessage id="testEditor.title" defaultMessage="Title" />
-      </h2>
-      <input
-        type="text"
-        className="test-title-input heading-h2"
-        value={props.test.title}
-        onChange={onTitleChange}
-      />
+      <div className="test-title-wrapper">
+        <h2
+          className="test-title-editable heading-h2"
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-label={intl.formatMessage({
+            id: 'testEditor.title',
+            defaultMessage: 'Title',
+          })}
+          onBlur={(e) => onTitleChange(e.currentTarget.textContent || '')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === 'Escape') {
+              e.preventDefault();
+              (e.target as HTMLElement).blur();
+
+              if (e.key === 'Escape') {
+                // Move focus to next focusable element
+                const focusableElements = Array.from(
+                  document.querySelectorAll(
+                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                  )
+                );
+                const currentIndex = focusableElements.indexOf(
+                  e.target as HTMLElement
+                );
+                const nextElement = focusableElements[
+                  currentIndex + 1
+                ] as HTMLElement;
+                nextElement?.focus();
+              }
+            }
+          }}
+          onPaste={(e) => {
+            e.preventDefault();
+            const text = e.clipboardData.getData('text/plain');
+            document.execCommand('insertText', false, text);
+          }}
+          dangerouslySetInnerHTML={{ __html: props.test.title }}
+        />
+        <span
+          className="codicon codicon-edit test-title-edit-icon"
+          onClick={(e) => {
+            const h2 = e.currentTarget.previousElementSibling as HTMLElement;
+            h2?.focus();
+          }}
+          aria-hidden="true"
+        ></span>
+      </div>
       <div className="test-editor-content">
         <div className="test-section">
           <h2 className="test-section-title heading-h2">
@@ -207,8 +245,8 @@ export default function TestEditor(props: Props): ReactElement {
                 title={intl.formatMessage({ id: 'testEditor.resetExpected' })}
                 onClick={resetWithUnsetCheck}
               >
-                <span className="codicon codicon-refresh"></span> Remplacer avec
-                les valeurs attendues
+                <span className="codicon codicon-refresh"></span>{' '}
+                <FormattedMessage id="testEditor.resetExpectedButton" />
               </button>
               <button
                 className={`button-action-dvp ${props.runState?.status ?? ''}`}

@@ -85,6 +85,7 @@ export type AttrDef =
 | { kind: 'TestDescription'; value: string }
 | { kind: 'TestTitle'; value: string }
 | { kind: 'Uid'; value: string }
+| { kind: 'ArrayItemLabel'; value: string }
 
 export type RuntimeValue = {
   value: RuntimeValueRaw;
@@ -516,6 +517,8 @@ export function writeAttrDef(x: AttrDef, context: any = x): any {
       return ['TestTitle', _atd_write_string(x.value, x)]
     case 'Uid':
       return ['Uid', _atd_write_string(x.value, x)]
+    case 'ArrayItemLabel':
+      return ['ArrayItemLabel', _atd_write_string(x.value, x)]
   }
 }
 
@@ -528,6 +531,8 @@ export function readAttrDef(x: any, context: any = x): AttrDef {
       return { kind: 'TestTitle', value: _atd_read_string(x[1], x) }
     case 'Uid':
       return { kind: 'Uid', value: _atd_read_string(x[1], x) }
+    case 'ArrayItemLabel':
+      return { kind: 'ArrayItemLabel', value: _atd_read_string(x[1], x) }
     default:
       _atd_bad_json('AttrDef', x, context)
       throw new Error('impossible')

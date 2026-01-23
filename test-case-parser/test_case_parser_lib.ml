@@ -189,12 +189,16 @@ type Pos.attr += TestUi
 type Pos.attr += Uid of string
 type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
+type Pos.attr += ArrayItemLabel of string
 
 let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun decl_ctx e ->
   let pos = Expr.pos e in
   let attrs =
-    Pos.get_attrs pos (function Uid s -> Some (O.Uid s) | _ -> None)
+    Pos.get_attrs pos (function
+      | Uid s -> Some (O.Uid s)
+      | ArrayItemLabel s -> Some (O.ArrayItemLabel s)
+      | _ -> None)
   in
   let value =
     match Mark.remove e with
@@ -319,6 +323,16 @@ let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
     module_deps = retrieve_scope_module_deps prg sc;
   }
 
+(** Default placeholder for uninitialized inputs: empty array for TArray,
+    explicit Unset for everything else. *)
+let unset_default_value (typ : O.typ) : O.value_def =
+  let value =
+    match typ with
+    | TArray _ -> { O.value = O.Array [||]; attrs = [] }
+    | _ -> { O.value = O.Unset; attrs = [] }
+  in
+  { O.value; pos = None }
+
 let get_scope_test
     (prg : I.program)
     (testing_scope : string)
@@ -343,7 +357,9 @@ let get_scope_test
       ~tested_module
   in
   let test_inputs =
-    List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.inputs
+    List.map
+      (fun (v, typ) -> v, { O.typ; value = Some (unset_default_value typ) })
+      tested_scope.inputs
   in
   let test_outputs =
     List.map (fun (v, typ) -> v, { O.typ; value = None }) tested_scope.outputs
@@ -413,6 +429,81 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
   in
   { value; attrs = [] }
 
+let patch_paths
+    (modl : ModuleName.t)
+    ({ tested_scope; test_inputs; test_outputs; _ } as test : O.test) =
+  let open O in
+  let patch_name s =
+    if String.contains s '.' then s
+    else Format.sprintf "%s.%s" (ModuleName.to_string modl) s
+  in
+  let rec patch_enum_decl = function
+    | { O.enum_name; constructors } ->
+      {
+        enum_name = patch_name enum_name;
+        constructors =
+          List.map (fun (c, t) -> c, Option.map patch_typ t) constructors;
+      }
+  and patch_struct_decl = function
+    | { struct_name; fields } ->
+      {
+        struct_name = patch_name struct_name;
+        fields = List.map (fun (fl, t) -> fl, patch_typ t) fields;
+      }
+  and patch_typ : O.typ -> O.typ =
+   fun t ->
+    match t with
+    | TBool | TInt | TRat | TMoney | TDate | TDuration | TUnit -> t
+    | TTuple l -> TTuple (List.map patch_typ l)
+    | TStruct sdecl -> TStruct (patch_struct_decl sdecl)
+    | TEnum edecl -> TEnum (patch_enum_decl edecl)
+    | TOption t -> TOption (patch_typ t)
+    | TArray t -> TArray (patch_typ t)
+    | TArrow (tl, t) -> TArrow (List.map patch_typ tl, patch_typ t)
+  in
+  let rec patch_value : O.runtime_value -> O.runtime_value =
+   fun ({ value; attrs } as v) ->
+    match value with
+    | O.Bool _ | O.Money _ | O.Integer _ | O.Decimal _ | O.Date _ | O.Duration _
+    | O.Empty | O.Unset ->
+      v
+    | O.Enum (enum_decl, (cstr, rv_opt)) ->
+      {
+        value =
+          O.Enum
+            (patch_enum_decl enum_decl, (cstr, Option.map patch_value rv_opt));
+        attrs;
+      }
+    | O.Struct (struct_decl, fields) ->
+      {
+        value =
+          O.Struct
+            ( patch_struct_decl struct_decl,
+              List.map (fun (fl, v) -> fl, patch_value v) fields );
+        attrs;
+      }
+    | O.Array t -> { value = O.Array (Array.map patch_value t); attrs }
+  in
+  let patch_value_def (x : O.value_def) =
+    { x with value = patch_value x.value }
+  in
+  let patch_test_io : O.test_io -> O.test_io =
+   fun { typ; value } ->
+    { typ = patch_typ typ; value = Option.map patch_value_def value }
+  in
+  let tested_scope =
+    {
+      tested_scope with
+      inputs = List.map (fun (x, t) -> x, patch_typ t) tested_scope.inputs;
+      outputs = List.map (fun (x, t) -> x, patch_typ t) tested_scope.outputs;
+    }
+  in
+  let test_inputs = List.map (fun (x, io) -> x, patch_test_io io) test_inputs in
+  let test_outputs =
+    List.map (fun (x, io) -> x, patch_test_io io) test_outputs
+  in
+  { test with tested_scope; test_inputs; test_outputs }
+
 let generate_test
     tested_scope
     ?(enforce_module = true)
@@ -436,6 +527,14 @@ let generate_test
       | Some m -> Some m
   in
   let test = get_scope_test prg testing_scope tested_scope ~tested_module in
+  let test =
+    (* As our root module is not the test file but the scope's file (which is
+       not the case for read), qualified name do not have the expected module
+       set. We patch types to retroactively add it so that the test structure is
+       fully operational. *)
+    Option.map (fun modl -> patch_paths modl test) tested_module
+    |> Option.value ~default:test
+  in
   if with_default_values then
     let test_inputs =
       List.map
@@ -537,7 +636,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
             with Ident.Map.Not_found _ | I.ScopeDef.Map.Not_found _ -> []
           in
           match rules with
-          | [] -> None
+          | [] -> Some (unset_default_value test_in.O.typ)
           | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
             let value = get_value prg.program_ctx e in
@@ -727,7 +826,9 @@ let print_attrs ppf (attrs : O.attr_def list) =
   pp_print_list
     (fun ppf (attr : O.attr_def) ->
       match attr with
-      | Uid (s : string) -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s
+      | Uid s -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s
+      | ArrayItemLabel s ->
+        fprintf ppf "#[testcase.array_item_label = \"%s\"]@\n" s
       (* TODO error out if we come across TestDescription or TestTitle? *)
       | _ -> ())
     ppf attrs

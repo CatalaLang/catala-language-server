@@ -309,7 +309,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor">
+    <div className="value-editor int-editor-wrapper">
       {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
       <input
         type="text"
@@ -402,7 +402,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor">
+    <div className="value-editor date-editor-wrapper">
       {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
       <input
         type="date"
@@ -493,7 +493,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor">
+    <div className="value-editor rat-editor-wrapper">
       {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
       <input
         type="text"
@@ -535,7 +535,7 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor">
+    <div className="value-editor bool-editor-wrapper">
       {isUnset && <UnsetBadge />}
       <select
         value={selectValue}

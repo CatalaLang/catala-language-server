@@ -23,6 +23,9 @@ import {
   canRemoveLast,
 } from '../diff/arrayPresence';
 import { confirm } from '../messaging/confirm';
+import { TableArrayEditor } from './TableArrayEditor';
+import { getTypeDisplayName } from './typeNameUtils';
+import { structIsFlattenable } from './tableArrayUtils';
 
 /**
  * Diffs are consumed only by ArrayEditor to compute "phantom" indices
@@ -83,57 +86,6 @@ export function hasNestedArrays(typ: Typ): boolean {
  */
 function isEmptyValue(value: RuntimeValue): boolean {
   return value.value.kind === 'Empty';
-}
-
-// Get a display name for a type that can be used in UI messages
-function getTypeDisplayName(
-  typ: Typ,
-  intl: ReturnType<typeof useIntl>
-): string {
-  switch (typ.kind) {
-    case 'TBool':
-      return intl.formatMessage({ id: 'type.boolean' });
-    case 'TInt':
-      return intl.formatMessage({ id: 'type.integer' });
-    case 'TRat':
-      return intl.formatMessage({ id: 'type.decimal' });
-    case 'TMoney':
-      return intl.formatMessage({ id: 'type.money' });
-    case 'TDate':
-      return intl.formatMessage({ id: 'type.date' });
-    case 'TDuration':
-      return intl.formatMessage({ id: 'type.duration' });
-    case 'TArray': {
-      const baseType = getTypeDisplayName(typ.value, intl);
-      return intl.formatMessage({ id: 'type.array' }, { baseType });
-    }
-    case 'TOption': {
-      const baseType = getTypeDisplayName(typ.value, intl);
-      return intl.formatMessage({ id: 'type.optional' }, { baseType });
-    }
-    case 'TTuple':
-      return intl.formatMessage({ id: 'type.tuple' });
-    case 'TStruct': {
-      // For structs, extract just the name part without the package
-      const fullName = typ.value.struct_name;
-      const nameParts = fullName.split('.');
-      return nameParts[nameParts.length - 1];
-    }
-    case 'TEnum': {
-      // For enums, extract just the name part without the package
-      const fullName = typ.value.enum_name;
-      const nameParts = fullName.split('.');
-      return nameParts[nameParts.length - 1];
-    }
-    case 'TArrow': {
-      throw new Error(`Unexpected type: TArrow`);
-    }
-    case 'TUnit': {
-      throw new Error(`Unexpected type: TUnit`);
-    }
-    default:
-      assertUnreachable(typ);
-  }
 }
 
 export function ArrayEditor(props: ArrayEditorProps): ReactElement {
@@ -212,6 +164,30 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   // if the array has nested subarrays, we lay it out vertically,
   // otherwise we use a flowing 'card' layout.
   const isVertical = hasNestedArrays(elementType);
+
+  // Use table view for arrays of structs that can be flattened.
+  // A struct is flattenable if its fields can be rendered as columns or sub-tables.
+  // Structs with arrays hidden inside enums/options/tuples are not flattenable.
+  // See docs/tabular-view-complex-types.md for design rationale.
+  const shouldUseTableView =
+    elementType.kind === 'TStruct' && structIsFlattenable(elementType.value);
+
+  if (shouldUseTableView) {
+    return (
+      <TableArrayEditor
+        elementType={elementType}
+        structType={elementType.value}
+        valueDef={valueDef}
+        onValueChange={onValueChange}
+        editorHook={editorHook}
+        currentPath={currentPath}
+        diffs={props.diffs}
+        editable={editable}
+        onDiffResolved={props.onDiffResolved}
+        onInvalidateDiffs={props.onInvalidateDiffs}
+      />
+    );
+  }
 
   // State for drag and drop
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);

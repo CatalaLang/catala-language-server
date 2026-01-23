@@ -26,17 +26,34 @@
   background-color: var(--vscode-inputValidation-errorBackground) !important;
 }
 
-/* Value editor container */
+/* Value editor container - base style without width constraint */
 .value-editor,
 .assertion-editor {
   text-align: left;
   vertical-align: top;
+}
+
+/* Apply max-width constraint only to primitive editors (simple inputs) */
+/* Primitive editors: int, bool, rat, date, duration, money */
+.value-editor.int-editor-wrapper,
+.value-editor.bool-editor-wrapper,
+.value-editor.rat-editor-wrapper,
+.value-editor.date-editor-wrapper,
+.value-editor.duration-editor,
+.value-editor.money-editor {
   max-width: 250px;
 }
 
-/* Make action buttons used in assertion editor align with inputs */
+/* Complex editors (struct, enum, array) get no max-width constraint */
+/* This allows nested content like arrays in enum payloads to use full available width */
+.value-editor.struct-editor,
+.value-editor.enum-editor {
+  max-width: none;
+}
+
+/* Make action buttons used in assertion editor shrink to content */
 .assertion-editor .button-action-dvp {
-  width: 100%;
+  width: fit-content;
   /* keep original vertical padding and right padding; align left padding with inputs */
   padding: var(--spacing8) var(--spacing12) var(--spacing8) var(--spacing16);
   box-sizing: border-box;

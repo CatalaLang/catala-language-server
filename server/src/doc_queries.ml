@@ -172,12 +172,19 @@ let lookup_document_symbols file =
 
 let lookup_lenses file =
   let*? { jump_table = (lazy jt); _ } = file.last_valid_result in
+  let main_doc_id =
+    match Projects.including_files file.document_id file.project with
+    | [] -> file.document_id
+    | h :: _ ->
+      (* We only consider the first one *)
+      h
+  in
   let mk_no_input_lens scope range =
     let arguments =
       [
         `Assoc
           [
-            "uri", `String (file.document_id :> string);
+            "uri", `String (main_doc_id :> string);
             "scope", `String (ScopeName.base scope);
           ];
       ]
@@ -199,7 +206,7 @@ let lookup_lenses file =
       [
         `Assoc
           [
-            "uri", `String (file.document_id :> string);
+            "uri", `String (main_doc_id :> string);
             "scope", `String (ScopeName.base scope);
           ];
       ]

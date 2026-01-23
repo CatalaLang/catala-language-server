@@ -105,11 +105,26 @@
   margin-right: 8px;
 }
 
+/* Assertion rows: spacing between pairs */
+.test-output-row {
+  margin-bottom: var(--spacing16);
+}
+
+.test-output-row:last-child {
+  margin-bottom: 0;
+}
+
 /* Assertion row label and delete button alignment */
 .test-output-row .test-output-label {
   display: flex;
   align-items: center;
   gap: var(--spacing8);
+}
+
+/* Indent value editor / add button under the label */
+.test-output-row > .assertion-editor,
+.test-output-row > .assertion-value-editor {
+  margin-left: var(--spacing16);
 }
 
 .assertion-delete-btn {

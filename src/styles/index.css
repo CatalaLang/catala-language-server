@@ -4,5 +4,6 @@
 @import './value-editors.css';
 @import './composite-editor.css';
 @import './array-editor.css';
+@import './table-view.css';
 @import './struct-editor.css';
 @import './misc.css';

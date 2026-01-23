@@ -1,0 +1,51 @@
+> Using Torture_tier1
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = "Array of enums with struct payloads - each array item is an enum with complex payload"]
+#[testcase.test_title = ""]
+declaration scope ArrayOfEnumsWithPayloads_test:
+  output array_of_enums_with_payloads scope Torture_tier1.ArrayOfEnumsWithPayloads
+
+```
+
+```catala
+scope ArrayOfEnumsWithPayloads_test:
+  definition array_of_enums_with_payloads.logs equals
+    [Torture_tier1.Log {
+       -- timestamp: |2024-01-15|
+
+       -- events: [Torture_tier1.Event.Started content Torture_tier1.Info {
+                                                         -- code: 100
+
+                                                         -- amount: $50.00
+
+                                                       };
+                   Torture_tier1.Event.Stopped;
+                   Torture_tier1.Event.Error content Torture_tier1.Info {
+                                                       -- code: 500
+
+                                                       -- amount: $0.00
+
+                                                     }]
+
+     };
+     Torture_tier1.Log {
+       -- timestamp: |2024-01-16|
+
+       -- events: [Torture_tier1.Event.Started content Torture_tier1.Info {
+                                                         -- code: 101
+
+                                                         -- amount: $100.00
+
+                                                       };
+                   Torture_tier1.Event.Started content Torture_tier1.Info {
+                                                         -- code: 102
+
+                                                         -- amount: $75.50
+
+                                                       }]
+
+     }]
+```

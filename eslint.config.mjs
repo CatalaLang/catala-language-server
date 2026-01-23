@@ -70,7 +70,7 @@ export default [
       // Enforce naming conventions
       '@typescript-eslint/naming-convention': [
         'error',
-        { selector: 'interface', format: ['PascalCase'], prefix: ['I'] },
+        { selector: 'interface', format: ['PascalCase'] },
         { selector: 'typeAlias', format: ['PascalCase'] },
         { selector: 'enum', format: ['PascalCase'] },
       ],

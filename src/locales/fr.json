@@ -19,6 +19,7 @@
   "testEditor.inputs": "Données d'entrée",
   "testEditor.expectedValues": "Résultats attendus",
   "testEditor.resetExpected": "Réinitialiser les valeurs attendues",
+  "testEditor.resetExpectedButton": "Remplacer par la sortie de l'exécution",
   "assertion.delete": "Supprimer l'assertion",
   "testOutputs.addExpectedValue": "Ajouter une valeur attendue",
   "arrayEditor.addElement": "Ajouter {elementType}",
@@ -49,5 +50,13 @@
   "diff.addToExpected": "Ajouter à l'attendu",
   "diff.replaceExpected": "Remplacer l'attendu par la valeur calculée",
   "diff.removeFromExpected": "Supprimer de l'attendu",
-  "testEditor.diffsStale": "Les différences ne sont plus à jour. Relancez pour actualiser."
+  "testEditor.diffsStale": "Les différences ne sont plus à jour. Relancez pour actualiser.",
+  "tableView.noData": "Aucune donnée",
+  "tableView.addSubArrayItem": "Ajouter un élément au sous-tableau",
+  "tableView.addNewItemIn": "Ajouter {typeName} dans {fieldName}",
+  "tableView.duplicateBefore": "Dupliquer au-dessus",
+  "tableView.duplicateAfter": "Dupliquer en-dessous",
+  "tableView.addNewItem": "Ajouter un élément",
+  "tableEditor.labelPlaceholder": "Nom...",
+  "tableEditor.goToParent": "Aller au parent : {parentLabel}"
 }
