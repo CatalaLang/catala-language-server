@@ -131,8 +131,9 @@ let process
                 includes prg
             else k ()
           in
-
-          let build_stdlib_path = File.(root_dir / "_build" / "libcatala") in
+          let build_stdlib_path =
+            File.(root_dir / clerk_config.global.build_dir / "libcatala")
+          in
           check build_stdlib_path
           @@ fun () ->
           Log.debug (fun m -> m "Stdlib not found - calling `clerk start`");
@@ -141,7 +142,7 @@ let process
           @@ fun () ->
           try
             Driver.load_modules options
-              ~stdlib:(Some (Global.raw_file root_dir))
+              ~stdlib:(Some (Global.raw_file build_stdlib_path))
               includes prg
           with e ->
             on_error

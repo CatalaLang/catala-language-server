@@ -224,8 +224,7 @@ let format_file ppf { file; including_files; used_by } =
   let open Format in
   fprintf ppf "file: %s, %aused by: %a" file.file_name
     (fun fmt -> function
-      | [] -> ()
-      | l -> fprintf fmt "%a, " (pp_print_list pp_print_string) l)
+      | [] -> () | l -> fprintf fmt "%a, " (pp_print_list pp_print_string) l)
     (ScanItemFiles.elements including_files
     |> List.map (fun { Clerk_scan.file_name; _ } -> file_name))
     (pp_print_list pp_print_string)
@@ -293,7 +292,7 @@ let find_module_candidate
     Option.value ~default:ScanItemFiles.empty
       (ModuleMap.find_opt used_module_name known_modules)
     |> ScanItemFiles.filter (fun m ->
-           List.mem (File.dirname m.Clerk_scan.file_name) includes)
+        List.mem (File.dirname m.Clerk_scan.file_name) includes)
     |> ScanItemFiles.elements
   in
   match possible_modules with
@@ -843,9 +842,9 @@ let typ_to_json (decl_ctx : Shared_ast.decl_ctx) (typ : Shared_ast.typ) :
           constructors =
             EnumConstructor.Map.bindings enum
             |> List.map (fun (cstr, ty) ->
-                   let ty = loop ty in
-                   let ty = if ty = O.TUnit then None else Some ty in
-                   EnumConstructor.to_string cstr, ty);
+                let ty = loop ty in
+                let ty = if ty = O.TUnit then None else Some ty in
+                EnumConstructor.to_string cstr, ty);
         }
     | TArray ty -> O.TArray (loop ty)
     | TOption ty -> O.TOption (loop ty)

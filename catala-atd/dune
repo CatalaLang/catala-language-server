@@ -11,15 +11,17 @@
   (run atdgen -t %{deps})))
 
 (rule
- (mode (promote (into ../src/generated)))
+ (mode
+  (promote
+   (into ../src/generated)))
  (target catala_types.ts)
  (deps catala_types.atd)
  (enabled_if %{bin-available:atdts})
- (action (run atdts %{deps})))
+ (action
+  (run atdts %{deps})))
 
 (library
  (package catala-lsp)
  (name catala_types_atd)
  (modules catala_types_t catala_types_j)
- (libraries atdgen-runtime)
-)
+ (libraries atdgen-runtime))

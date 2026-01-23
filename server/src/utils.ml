@@ -188,30 +188,29 @@ let lookup_clerk_toml (path : string) =
     match lookup cwd with Some rel -> Some rel | None -> None
   in
   try
-    begin
-      match
-        find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
-      with
-      | None ->
-        Log.debug (fun m -> m "no 'clerk.toml' config file found");
-        None
-      | Some dir -> (
-        Log.debug (fun m ->
-            m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
-        try
-          let config = Clerk_config.read File.(dir / "clerk.toml") in
-          let include_dirs =
-            List.map (fun p -> join_paths dir p) config.global.include_dirs
-          in
-          let config =
-            { config with global = { config.global with include_dirs } }
-          in
-          Some (config, dir)
-        with Message.CompilerError c ->
-          Log.err (fun m ->
-              let pp fmt = Message.Content.emit ~ppf:fmt c Error in
-              m "error while parsing config file: %t" pp);
-          None)
+    begin match
+      find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
+    with
+    | None ->
+      Log.debug (fun m -> m "no 'clerk.toml' config file found");
+      None
+    | Some dir -> (
+      Log.debug (fun m ->
+          m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
+      try
+        let config = Clerk_config.read File.(dir / "clerk.toml") in
+        let include_dirs =
+          List.map (fun p -> join_paths dir p) config.global.include_dirs
+        in
+        let config =
+          { config with global = { config.global with include_dirs } }
+        in
+        Some (config, dir)
+      with Message.CompilerError c ->
+        Log.err (fun m ->
+            let pp fmt = Message.Content.emit ~ppf:fmt c Error in
+            m "error while parsing config file: %t" pp);
+        None)
     end
   with _ ->
     Log.err (fun m -> m "failed to lookup config file");

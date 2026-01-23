@@ -96,8 +96,8 @@ async function runScope(): Promise<void> {
   if (args) {
     const cwd = getCwd(args.uri);
     const termName = `${args.scope} execution`;
-    let term = vscode.window.terminals.find((t) => t.name === termName);
-    term ??= vscode.window.createTerminal({ name: termName, cwd });
+    vscode.window.terminals.find((t) => t.name === termName)?.dispose();
+    const term = vscode.window.createTerminal({ name: termName, cwd });
     term.show();
     term.sendText(
       [clerkPath, 'run', args.uri, '--scope', args.scope].join(' ')

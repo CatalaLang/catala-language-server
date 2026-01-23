@@ -112,14 +112,15 @@ let pp_typ locale fmt (ty : typ) =
       fprintf fmt "@[<hov 2>(%a)@]"
         (pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt ",@ ") pp_typ)
         tys
-    | TStruct s -> fprintf fmt "@[<hov 2>%a <struct>@]" StructName.format s
+    | TStruct s ->
+      fprintf fmt "@[<hov 2>%a <struct>@]" StructName.format_shortpath s
     | TEnum e ->
-      fprintf fmt "@[<hov 2>%a <%s>@]" EnumName.format e (enum locale)
+      fprintf fmt "@[<hov 2>%a <%s>@]" EnumName.format_shortpath e (enum locale)
     | TOption o -> fprintf fmt "@[<hov 2>%a@ <option>@]" pp_typ o
     | TArray a -> fprintf fmt "@[<hov 2>%s@ %a@]" (list_of locale) pp_typ a
     | TDefault d -> fprintf fmt "@[<hov 2>%a@ <%s>@]" pp_typ d (default locale)
     | TAbstract t ->
-      fprintf fmt "@[<hov 2>%a <abstract>@]" AbstractType.format t
+      fprintf fmt "@[<hov 2>%a <abstract>@]" AbstractType.format_shortpath t
     | TClosureEnv -> fprintf fmt "<closure_env>"
     | TError -> fprintf fmt "<error>"
   in
@@ -142,12 +143,12 @@ let pp_typ_no_box locale fmt (ty : typ) =
       fprintf fmt "(%a)"
         (pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt ",@ ") pp_typ)
         tys
-    | TStruct s -> fprintf fmt "%a <struct>" StructName.format s
-    | TEnum e -> fprintf fmt "%a <%s>" EnumName.format e (enum locale)
+    | TStruct s -> fprintf fmt "%a <struct>" StructName.format_shortpath s
+    | TEnum e -> fprintf fmt "%a <%s>" EnumName.format_shortpath e (enum locale)
     | TOption o -> fprintf fmt "%a@ <option>" pp_typ o
     | TArray a -> fprintf fmt "%s@ %a" (list_of locale) pp_typ a
     | TDefault d -> fprintf fmt "%a@ <%s>" pp_typ d (default locale)
-    | TAbstract t -> fprintf fmt "%a <abstract>" AbstractType.format t
+    | TAbstract t -> fprintf fmt "%a <abstract>" AbstractType.format_shortpath t
     | TClosureEnv -> fprintf fmt "<closure_env>"
     | TError -> fprintf fmt "<error>"
   in
@@ -173,8 +174,8 @@ let pp_struct_code
     locale
     fmt
     ((struct_name : StructName.t), (field_map : typ StructField.Map.t)) =
-  fprintf fmt "@[<v 2>%s %s:@ %a@]" (struct_header locale)
-    (StructName.to_string struct_name)
+  fprintf fmt "@[<v 2>%s %a:@ %a@]" (struct_header locale)
+    StructName.format_shortpath struct_name
     (pp_print_list ~pp_sep:pp_print_cut (pp_struct_field locale))
     (StructField.Map.bindings field_map)
 
@@ -203,8 +204,8 @@ let pp_enum_code
     locale
     fmt
     ((enum_name : EnumName.t), (field_map : typ EnumConstructor.Map.t)) =
-  fprintf fmt "@[<v 2>%s %s:@ %a@]" (enum_header locale)
-    (EnumName.to_string enum_name)
+  fprintf fmt "@[<v 2>%s %a:@ %a@]" (enum_header locale)
+    EnumName.format_shortpath enum_name
     (pp_print_list ~pp_sep:pp_print_cut (pp_enum_field locale))
     (EnumConstructor.Map.bindings field_map)
 

@@ -96,7 +96,7 @@ module Make_trie (D : Data) = struct
     List.find_all (fun (Node { itv; _ }) -> is_in_line itv l) trie
     |> all_nodes
     |> List.filter (fun (Node { itv = (li, _), (lj, _); _ }) ->
-           not (li <> l || lj <> l))
+        not (li <> l || lj <> l))
     |> List.map (fun (Node { data; _ }) -> data)
     |> function [] -> None | l -> Some l
 
@@ -291,7 +291,8 @@ module Make (D : Data) = struct
   let fold_on_file file f pmap acc =
     Doc_id.Map.find_opt file pmap
     |> function
-    | None -> acc | Some pmap -> fold f (Doc_id.Map.singleton file pmap) acc
+    | None -> acc
+    | Some pmap -> fold f (Doc_id.Map.singleton file pmap) acc
 
   let iter f pmap = fold (fun k v () -> f k v) pmap ()
   let empty = Doc_id.Map.empty

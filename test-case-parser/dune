@@ -2,8 +2,8 @@
  (name test_case_parser_lib)
  (modules test_case_parser_lib)
  (libraries catala.driver catala.clerk_lib catala_types_atd)
- (flags (:standard -open Catala_types_atd))
-)
+ (flags
+  (:standard -open Catala_types_atd)))
 
 (executable
  (name testcase)
@@ -11,11 +11,11 @@
  (modules testcase)
  (libraries yojson atdgen-runtime test_case_parser_lib)
  (embed_in_plugin_libraries
-   otoml
-   catala.clerk_lib
-   atdgen-runtime
-   catala_types_atd
-   test_case_parser_lib))
+  otoml
+  catala.clerk_lib
+  atdgen-runtime
+  catala_types_atd
+  test_case_parser_lib))
 
 (install
  (files

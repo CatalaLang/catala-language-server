@@ -38,7 +38,8 @@ let pp_lookup_entry fmt { declaration; definitions; usages; types } =
     "declaration: %a@\n\
      @[<v 2>definitions:@ %a@]@\n\
      @[<v 2>usages:@ %a@]@\n\
-     @[<v 2>types:@ %a@]" (pp_opt pp_pos) declaration
+     @[<v 2>types:@ %a@]"
+    (pp_opt pp_pos) declaration
     (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
     definitions
     (pp_opt (pp_print_list ~pp_sep:pp_print_cut pp_pos))
@@ -440,7 +441,8 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
       populate_scopecall tctx pos scope args acc (f bnd_ctx)
     | EApp _ -> Expr.shallow_fold (f bnd_ctx) e acc
     | EEmpty | EIfThenElse _ | EArray _ | EAppOp _ | ETuple _ | ETupleAccess _
-    | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ | EPos _ | EAssert _ | EBad ->
+    | EFatalError _ | EPureDefault _ | EErrorOnEmpty _ | EPos _ | EAssert _
+    | EBad ->
       Expr.shallow_fold (f bnd_ctx) e acc
   in
   f Bindlib.empty_ctxt e m
@@ -685,11 +687,13 @@ let populate_modules
     | None -> acc
     | Some { module_name; module_external = _ } -> (
       try
+        let mname = C.find (Mark.remove module_name) convert_map in
+        let mcontent = ModuleName.Map.find mname modules_contents in
         let interface =
-          Surface.Parser_driver.load_interface ~is_stdlib:false input_src
+          Surface.Parser_driver.load_interface
+            ~is_stdlib:mcontent.module_is_stdlib input_src
         in
         let pos = Mark.get module_name in
-        let mname = ModuleName.fresh module_name in
         let mjump = make_mjump mname interface in
         PMap.add pos (Module_def mjump) acc
       with exn ->
