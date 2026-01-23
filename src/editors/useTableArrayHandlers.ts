@@ -21,11 +21,6 @@ import {
   type SubArrayDescriptor,
 } from './tableArrayUtils';
 
-type RowMetadata = {
-  itemIndexWithinParent: number;
-  onDuplicateItem: (index: number, position: 'before' | 'after') => void;
-};
-
 type TableArrayHandlers = {
   updateParent: (newArray: RuntimeValue[]) => void;
   handleAdd: () => void;
@@ -89,8 +84,6 @@ type UseTableArrayHandlersProps = {
   onValueChange: (newValue: RuntimeValue) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
   currentPath: PathSegment[];
-  isSubTable: boolean;
-  rowMetadata?: RowMetadata[];
 };
 
 export function useTableArrayHandlers(
@@ -104,8 +97,6 @@ export function useTableArrayHandlers(
     onValueChange,
     onInvalidateDiffs,
     currentPath,
-    isSubTable,
-    rowMetadata,
   } = props;
 
   const updateParent = (newArray: RuntimeValue[]): void => {
@@ -150,15 +141,6 @@ export function useTableArrayHandlers(
     index: number,
     position: 'before' | 'after'
   ): number | null => {
-    // For sub-tables, delegate to the parent via metadata callback
-    if (isSubTable && rowMetadata) {
-      const metadata = rowMetadata[index];
-      if (metadata) {
-        metadata.onDuplicateItem(metadata.itemIndexWithinParent, position);
-        return null;
-      }
-    }
-
     const original = currentArray[index];
     if (!original) {
       throw new Error(`handleDuplicate: invalid index ${index}`);

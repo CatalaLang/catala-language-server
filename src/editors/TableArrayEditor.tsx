@@ -162,8 +162,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     onValueChange,
     onInvalidateDiffs: props.onInvalidateDiffs,
     currentPath,
-    isSubTable,
-    rowMetadata,
   });
 
   // Store refs to row elements for sub-table navigation
@@ -255,11 +253,20 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     index: number,
     position: 'before' | 'after'
   ): void => {
-    const insertAt = handlers.handleDuplicate(index, position);
-    if (insertAt !== null) {
-      setTimeout(() => {
-        flashElement(document.querySelector(`[data-row-index="${insertAt}"]`));
-      }, ANIMATION.RENDER_DELAY_MS);
+    if (isSubTable && rowMetadata) {
+      const metadata = rowMetadata[index];
+      if (metadata) {
+        metadata.onDuplicateItem(metadata.itemIndexWithinParent, position);
+      }
+    } else {
+      const insertAt = handlers.handleDuplicate(index, position);
+      if (insertAt !== null) {
+        setTimeout(() => {
+          flashElement(
+            document.querySelector(`[data-row-index="${insertAt}"]`)
+          );
+        }, ANIMATION.RENDER_DELAY_MS);
+      }
     }
   };
 
