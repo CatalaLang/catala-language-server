@@ -246,10 +246,8 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     setDropdownAnchor(null);
 
     // Navigate to sub-table and flash the new item
-    setTimeout(() => {
-      const subTableId = `sub-table-${arrayLabel}`;
-      navigateAndFlashSubTable(subTableId, parentRowIndex);
-    }, ANIMATION.SCROLL_SETTLE_MS);
+    const subTableId = `sub-table-${arrayLabel}`;
+    navigateAndFlashSubTable(subTableId, parentRowIndex);
   };
 
   // Wrapper for handleDuplicate that adds flash effect
