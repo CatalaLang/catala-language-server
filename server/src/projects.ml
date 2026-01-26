@@ -354,7 +354,7 @@ let retrieve_project_files
     (clerk_config : Clerk_config.t)
     ~project_dir =
   let open Clerk_scan in
-  Log.info (fun m -> m "building inclusion graph");
+  Log.info (fun m -> m "building inclusion graph of directory %s" project_dir);
   let tree = tree project_dir in
   let known_items : (string, item) Hashtbl.t = Hashtbl.create 10 in
   let known_modules =
@@ -456,11 +456,12 @@ let retrieve_project_files
   in
   project_files, known_modules
 
-let project_of_folder ~on_error project_dir =
-  match Utils.lookup_clerk_toml project_dir with
+let project_of_dir ~on_error dir =
+  match Utils.lookup_clerk_toml dir with
   | None ->
     Log.warn (fun m ->
         m "no clerk config file found, assuming default configuration");
+    let project_dir = dir in
     let project_files, known_modules =
       retrieve_project_files ~on_error Clerk_config.default_config ~project_dir
     in
@@ -470,6 +471,7 @@ let project_of_folder ~on_error project_dir =
   | Some (clerk_config, clerk_root_dir) ->
     Log.debug (fun m -> m "clerk file found in '%s' directory" clerk_root_dir);
     let project_kind = Clerk { clerk_root_dir; clerk_config } in
+    let project_dir = clerk_root_dir in
     let project_files, known_modules =
       retrieve_project_files ~on_error clerk_config ~project_dir
     in
@@ -483,7 +485,7 @@ let project_of_workspace_folder ~on_error workspace_folder =
       (Linol_lwt.DocumentUri.to_path
          workspace_folder.Linol_lwt.WorkspaceFolder.uri)
   in
-  project_of_folder ~on_error project_dir
+  project_of_dir ~on_error project_dir
 
 let init ~on_error (params : Linol_lwt.InitializeParams.t) : projects =
   let ( let*? ) (x, err_msg) f =
@@ -513,10 +515,10 @@ let init ~on_error (params : Linol_lwt.InitializeParams.t) : projects =
     Projects.empty workspace_folders
 
 let find_file_in_project doc_id (project : project) =
-  Doc_id.(Map.find_opt doc_id project.project_files)
+  Doc_id.Map.find_opt doc_id project.project_files
 
 let reload_project ~on_error project projects =
-  let project = project_of_folder ~on_error project.project_dir in
+  let project = project_of_dir ~on_error project.project_dir in
   project, Projects.add project projects
 
 exception Project_not_found
@@ -524,7 +526,7 @@ exception Project_not_found
 let find_or_populate_project ~on_error (doc_id : Doc_id.t) projects =
   let scan_dir () =
     let new_project =
-      project_of_folder ~on_error (Filename.dirname (doc_id :> File.t))
+      project_of_dir ~on_error (Filename.dirname (doc_id :> File.t))
     in
     match find_file_in_project doc_id new_project with
     | None ->
