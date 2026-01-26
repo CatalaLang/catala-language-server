@@ -168,11 +168,6 @@ let unlocked_send_all_diagnostics
   in
   unlocked_raw_send_all_diagnostics ~notify_back all_diagnostics
 
-let send_all_diagnostics ?doc_id ~notify_back server_state =
-  St.use_now server_state
-  @@ fun unlocked_sstate ->
-  unlocked_send_all_diagnostics ?doc_id ~notify_back unlocked_sstate
-
 let unlocked_process_document document open_documents :
     bool * St.document_state * diagnostics =
   Log.info (fun m ->
@@ -237,10 +232,14 @@ let process_affected_files project possibly_affected_files server_state =
           let _processed_file, document, new_diags =
             unlocked_process_document document open_documents
           in
+          let is_empty =
+            Doc_id.Map.is_empty new_diags
+            || Doc_id.Map.for_all (fun _ rm -> Range.Map.is_empty rm) new_diags
+          in
           let new_diags =
-            if Doc_id.Map.is_empty new_diags then
+            if is_empty then
               Doc_id.Map.add document.document_id Range.Map.empty diagnostics
-            else new_diags
+            else merge_diags new_diags diagnostics
           in
           new_diags, new_open_documents)
       possibly_affected_files
@@ -364,10 +363,11 @@ let unlocked_process_file
   in
   { new_server_state with diagnostics }
 
-let process_saved_file server_state doc_id =
+let process_saved_file ~notify_back server_state doc_id =
   St.use_and_update server_state
   @@ fun unlocked_server_state ->
   let new_state = unlocked_process_file St.Saved doc_id unlocked_server_state in
+  let* () = unlocked_send_all_diagnostics ~doc_id ~notify_back new_state in
   Lwt.return new_state
 
 let server_initialized, resolve_init =
@@ -444,9 +444,7 @@ class catala_lsp_server =
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
-        @@ fun () ->
-        let* () = process_saved_file server_state doc_id in
-        send_all_diagnostics ~doc_id ~notify_back server_state
+        @@ fun () -> process_saved_file ~notify_back server_state doc_id
 
     method on_notif_doc_did_open ~notify_back d ~content:_ =
       let doc_id = Doc_id.of_lsp_uri d.uri in
