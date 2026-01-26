@@ -31,7 +31,7 @@ import {
   buildCellPath,
   type SubArrayItem,
 } from './tableArrayUtils';
-import { getTypeName } from './typeNameUtils';
+import { extractSimpleName, getTypeName } from './typeNameUtils';
 import { useTableArrayHandlers } from './useTableArrayHandlers';
 
 // Animation timing constants
@@ -286,7 +286,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
             <FormattedMessage
               id="arrayEditor.addElement"
               defaultMessage="Add {elementType}"
-              values={{ elementType: structType.struct_name.split('.').pop() }}
+              values={{
+                elementType: extractSimpleName(structType.struct_name),
+              }}
             />
           </button>
         )}
@@ -654,7 +656,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                                     ? arr.arrayType.value
                                     : arr.arrayType;
                                 const typeName = getTypeName(elementType);
-                                const fieldName = arr.label.split('.').pop();
+                                const fieldName = arr.fieldPath.at(-1);
                                 return (
                                   <div
                                     key={arr.label}
@@ -866,7 +868,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
           <FormattedMessage
             id="arrayEditor.addElement"
             defaultMessage="Add {elementType}"
-            values={{ elementType: structType.struct_name.split('.').pop() }}
+            values={{ elementType: extractSimpleName(structType.struct_name) }}
           />
         </button>
       )}
