@@ -4,6 +4,7 @@
   border: 1px solid var(--vscode-editorError-foreground, #f14c4c);
   padding: 5px;
   border-radius: 4px;
+  min-width: 0; /* Allow flex shrinking so nested tables can scroll */
 }
 
 .atomic-diff {
