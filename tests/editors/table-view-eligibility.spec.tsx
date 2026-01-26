@@ -4,8 +4,6 @@
  * These tests verify that:
  * 1. structIsFlattenable correctly identifies types that would break table rendering
  * 2. ArrayEditor falls back to tree/card view for structs with problematic types
- *
- * See docs/tabular-view-complex-types.md for design rationale.
  */
 
 import { describe, it, expect, vi } from 'vitest';

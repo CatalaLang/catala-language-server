@@ -168,7 +168,6 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   // Use table view for arrays of structs that can be flattened.
   // A struct is flattenable if its fields can be rendered as columns or sub-tables.
   // Structs with arrays hidden inside enums/options/tuples are not flattenable.
-  // See docs/tabular-view-complex-types.md for design rationale.
   const shouldUseTableView =
     elementType.kind === 'TStruct' && structIsFlattenable(elementType.value);
 
