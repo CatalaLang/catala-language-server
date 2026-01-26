@@ -13,6 +13,7 @@
   "scopeEditor.debug_run": "Débugger",
   "testEditor.description": "Description",
   "testEditor.title": "Titre",
+  "testEditor.titlePlaceholder": "Titre du test...",
   "testEditor.descriptionPlaceholder": "Entrez une description du test...",
   "testEditor.passed": "Le test a réussi",
   "testEditor.failed": "Le test a échoué",

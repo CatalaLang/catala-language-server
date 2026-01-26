@@ -9,6 +9,7 @@
   "testFile.openTextEditor": "Open in Text Editor",
   "testEditor.description": "Description",
   "testEditor.title": "Title",
+  "testEditor.titlePlaceholder": "Test title...",
   "testEditor.descriptionPlaceholder": "Enter test description...",
   "testEditor.runTest": "Run test",
   "scopeEditor.run": "Run",
