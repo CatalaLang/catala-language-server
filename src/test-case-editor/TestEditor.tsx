@@ -116,53 +116,24 @@ export default function TestEditor(props: Props): ReactElement {
         {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
       </div>
       <div className="test-title-wrapper">
-        <h2
-          className="test-title-editable heading-h2"
-          contentEditable
-          suppressContentEditableWarning
-          role="textbox"
+        <input
+          type="text"
+          className="test-title-input heading-h2"
+          value={props.test.title}
+          onChange={(e) => onTitleChange(e.target.value)}
           aria-label={intl.formatMessage({
             id: 'testEditor.title',
             defaultMessage: 'Title',
           })}
-          onBlur={(e) => onTitleChange(e.currentTarget.textContent || '')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === 'Escape') {
-              e.preventDefault();
-              (e.target as HTMLElement).blur();
-
-              if (e.key === 'Escape') {
-                // Move focus to next focusable element
-                const focusableElements = Array.from(
-                  document.querySelectorAll(
-                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-                  )
-                );
-                const currentIndex = focusableElements.indexOf(
-                  e.target as HTMLElement
-                );
-                const nextElement = focusableElements[
-                  currentIndex + 1
-                ] as HTMLElement;
-                nextElement?.focus();
-              }
-            }
-          }}
-          onPaste={(e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData('text/plain');
-            document.execCommand('insertText', false, text);
-          }}
-          dangerouslySetInnerHTML={{ __html: props.test.title }}
+          placeholder={intl.formatMessage({
+            id: 'testEditor.titlePlaceholder',
+            defaultMessage: 'Test title...',
+          })}
         />
         <span
           className="codicon codicon-edit test-title-edit-icon"
-          onClick={(e) => {
-            const h2 = e.currentTarget.previousElementSibling as HTMLElement;
-            h2?.focus();
-          }}
           aria-hidden="true"
-        ></span>
+        />
       </div>
       <div className="test-editor-content">
         <div className="test-section">
