@@ -256,9 +256,18 @@ function deepCloneRuntimeValue(value: RuntimeValue): RuntimeValue {
     }
   };
 
+  // Regenerate UID if present, preserve other attrs
+  const clonedAttrs = value.attrs
+    ? value.attrs.map((attr) =>
+        attr.kind === 'Uid'
+          ? { kind: 'Uid' as const, value: String(crypto.randomUUID()) }
+          : attr
+      )
+    : [];
+
   return {
     value: cloneValue(value.value),
-    attrs: value.attrs ? [...value.attrs] : [],
+    attrs: clonedAttrs,
   };
 }
 
