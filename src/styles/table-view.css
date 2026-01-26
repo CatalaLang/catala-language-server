@@ -5,12 +5,14 @@
   flex-direction: column;
   gap: var(--spacing16);
   margin-bottom: var(--spacing8);
+  min-width: 0; /* Allow flex shrinking so table-wrapper can scroll */
 }
 
 /* Table wrapper for horizontal scrolling */
 .table-wrapper {
   overflow-x: auto;
   width: 100%;
+  min-width: 0; /* Allow flex shrinking below content size */
   border: 1px solid var(--card-border-light);
   border-radius: 4px;
 }
@@ -432,7 +434,6 @@
 .sub-table-section {
   margin-top: var(--spacing16);
   border-radius: 4px;
-  overflow: hidden;
   border: 1px solid var(--card-border-light);
 }
 
