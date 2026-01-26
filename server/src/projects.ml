@@ -200,6 +200,35 @@ module Project_graph = struct
       succ_edges
 end
 
+let[@ocaml.warning "-32"] print_project_graph project_graph =
+  let module M = Graph.Graphviz.Dot (struct
+    include Project_graph.G
+
+    let edge_attributes (_, e, _) =
+      [
+        `Label
+          (match e with
+          | Project_graph.Used_by -> "used by"
+          | Including -> "including");
+        `Color 4711;
+      ]
+
+    let default_edge_attributes _ = []
+    let get_subgraph _ = None
+    let vertex_attributes _ = [`Shape `Box]
+
+    let vertex_name (v : Doc_id.t) =
+      File.(basename (v :> string) |> fun f -> f -.- "")
+
+    let default_vertex_attributes _ = []
+    let graph_attributes _ = []
+  end) in
+  let f = Filename.temp_file "graph" ".dot" in
+  let oc = open_out f in
+  M.output_graph oc project_graph;
+  close_out oc;
+  Log.debug (fun m -> m "Project graph generated in '%s'" f)
+
 type project = {
   project_dir : string;
   project_kind : project_kind;
@@ -445,32 +474,6 @@ let project_of_folder ~on_error project_dir =
       retrieve_project_files ~on_error clerk_config ~project_dir
     in
     let project_graph = Project_graph.build_graph project_files in
-
-    (* let module M = Graph.Graphviz.Dot (struct *)
-    (*   include Project_graph.G *)
-
-    (*   let edge_attributes (_, e, _) = *)
-    (*     [ *)
-    (*       `Label *)
-    (*         (match e with *)
-    (*         | Project_graph.Used_by -> "used by" *)
-    (*         | Including -> "including"); *)
-    (*       `Color 4711; *)
-    (*     ] *)
-
-    (*   let default_edge_attributes _ = [] *)
-    (*   let get_subgraph _ = None *)
-    (*   let vertex_attributes _ = [`Shape `Box] *)
-
-    (*   let vertex_name (v : Doc_id.t) = *)
-    (*     File.(basename (v :> string) |> fun f -> f -.- "") *)
-
-    (*   let default_vertex_attributes _ = [] *)
-    (*   let graph_attributes _ = [] *)
-    (* end) in *)
-    (* let f = Filename.temp_file "graph" "" in *)
-    (* let oc = open_out f in *)
-    (* M.output_graph oc project_graph; *)
     { project_dir; project_kind; project_files; project_graph; known_modules }
 
 let project_of_workspace_folder ~on_error workspace_folder =
