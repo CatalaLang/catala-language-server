@@ -73,6 +73,8 @@ let should_ignore (uri : Doc_id.t) =
   b
 
 let retrieve_existing_document_if_ready doc_id server_state =
+  protect_project_not_found_opt
+  @@ fun () ->
   St.use_if_ready server_state
   @@ fun { open_documents; diagnostics; _ } ->
   match Doc_id.Map.find_opt doc_id open_documents with
@@ -80,6 +82,8 @@ let retrieve_existing_document_if_ready doc_id server_state =
   | Some doc -> Lwt.return_some (doc, diagnostics)
 
 let retrieve_existing_document_when_ready doc_id server_state =
+  protect_project_not_found_opt
+  @@ fun () ->
   St.use_when_ready server_state
   @@ fun { open_documents; diagnostics; _ } ->
   match Doc_id.Map.find_opt doc_id open_documents with
@@ -87,6 +91,8 @@ let retrieve_existing_document_when_ready doc_id server_state =
   | Some doc -> Lwt.return_some (doc, diagnostics)
 
 let retrieve_existing_document_now doc_id server_state =
+  protect_project_not_found_opt
+  @@ fun () ->
   St.use_now server_state
   @@ fun { open_documents; diagnostics; _ } ->
   match Doc_id.Map.find_opt doc_id open_documents with
@@ -94,6 +100,8 @@ let retrieve_existing_document_now doc_id server_state =
   | Some doc -> Lwt.return_some (doc, diagnostics)
 
 let retrieve_existing_document doc_id server_state =
+  protect_project_not_found_opt
+  @@ fun () ->
   St.use server_state
   @@ fun { open_documents; diagnostics; _ } ->
   match Doc_id.Map.find_opt doc_id open_documents with
@@ -886,8 +894,6 @@ class catala_lsp_server =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        protect_project_not_found_opt
-        @@ fun () ->
         let*? doc, _ = retrieve_existing_document doc_id server_state in
         let all_symbols = DQ.lookup_document_symbols doc in
         Lwt.return_some (`SymbolInformation all_symbols)
@@ -898,8 +904,6 @@ class catala_lsp_server =
       if should_ignore doc_id then Lwt.return_nil
       else
         let* r =
-          protect_project_not_found_opt
-          @@ fun () ->
           let*? doc, _ =
             retrieve_existing_document_when_ready doc_id server_state
           in
