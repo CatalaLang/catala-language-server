@@ -16,7 +16,7 @@ import type {
   Diff,
 } from '../generated/catala_types';
 import { ArrayEditor } from './ArrayEditor';
-import { assertUnreachable } from '../util';
+import { assertUnreachable } from '../shared/util';
 import { CompositeEditor } from './CompositeEditor';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';

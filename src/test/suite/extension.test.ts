@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 
 import * as vscode from 'vscode';
-import { TestCaseEditorProvider } from '../../testCaseEditor';
+import { TestCaseEditorProvider } from '../../extension/testCaseEditorProvider';
 
 suite('Extension Test Suite', () => {
   suiteTeardown(() => {

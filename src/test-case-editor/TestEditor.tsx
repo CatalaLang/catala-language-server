@@ -6,12 +6,15 @@ import {
   type TestInputs,
   type TestRunResults,
   type PathSegment,
-  type RuntimeValue,
-} from './generated/catala_types';
+} from '../generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
 import { type TestRunStatus } from './TestFileEditor';
-import { confirm } from './messaging/confirm';
+import { confirm } from '../messaging/confirm';
+import {
+  hasUnsetInTest,
+  scrollToFirstInvalidOrUnset,
+} from '../editors/unsetValidation';
 
 type Props = {
   test: Test;
@@ -85,46 +88,8 @@ export default function TestEditor(props: Props): ReactElement {
     }
   }, [props.runState]);
 
-  function containsUnsetInRuntime(rv: RuntimeValue): boolean {
-    switch (rv.value.kind) {
-      case 'Unset':
-        return true;
-      case 'Array':
-        return rv.value.value.some(containsUnsetInRuntime);
-      case 'Struct': {
-        const map = rv.value.value[1];
-        return Array.from(map.values()).some(containsUnsetInRuntime);
-      }
-      case 'Enum': {
-        const payload = rv.value.value[1][1];
-        return payload?.value ? containsUnsetInRuntime(payload.value) : false;
-      }
-      default:
-        return false;
-    }
-  }
-
-  function hasUnsetInTest(test: Test): boolean {
-    const inputsHas = Array.from(test.test_inputs.values()).some(
-      (io) => io.value && containsUnsetInRuntime(io.value.value)
-    );
-    const outputsHas = Array.from(test.test_outputs.values()).some(
-      (io) => io.value && containsUnsetInRuntime(io.value.value)
-    );
-    return inputsHas || outputsHas;
-  }
-
   const scrollToFirstUnset = (): void => {
-    setTimeout(() => {
-      const container = unsetElementRef.current ?? document;
-      const el = container.querySelector(
-        '.invalid-badge, .unset-badge'
-      ) as HTMLElement | null;
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        (el as HTMLElement)?.focus?.();
-      }
-    }, 0);
+    scrollToFirstInvalidOrUnset(unsetElementRef.current ?? document, 0);
   };
 
   const runWithUnsetCheck = async (): Promise<void> => {
@@ -151,53 +116,24 @@ export default function TestEditor(props: Props): ReactElement {
         {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
       </div>
       <div className="test-title-wrapper">
-        <h2
-          className="test-title-editable heading-h2"
-          contentEditable
-          suppressContentEditableWarning
-          role="textbox"
+        <input
+          type="text"
+          className="test-title-input heading-h2"
+          value={props.test.title}
+          onChange={(e) => onTitleChange(e.target.value)}
           aria-label={intl.formatMessage({
             id: 'testEditor.title',
             defaultMessage: 'Title',
           })}
-          onBlur={(e) => onTitleChange(e.currentTarget.textContent || '')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === 'Escape') {
-              e.preventDefault();
-              (e.target as HTMLElement).blur();
-
-              if (e.key === 'Escape') {
-                // Move focus to next focusable element
-                const focusableElements = Array.from(
-                  document.querySelectorAll(
-                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-                  )
-                );
-                const currentIndex = focusableElements.indexOf(
-                  e.target as HTMLElement
-                );
-                const nextElement = focusableElements[
-                  currentIndex + 1
-                ] as HTMLElement;
-                nextElement?.focus();
-              }
-            }
-          }}
-          onPaste={(e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData('text/plain');
-            document.execCommand('insertText', false, text);
-          }}
-          dangerouslySetInnerHTML={{ __html: props.test.title }}
+          placeholder={intl.formatMessage({
+            id: 'testEditor.titlePlaceholder',
+            defaultMessage: 'Test title...',
+          })}
         />
         <span
           className="codicon codicon-edit test-title-edit-icon"
-          onClick={(e) => {
-            const h2 = e.currentTarget.previousElementSibling as HTMLElement;
-            h2?.focus();
-          }}
           aria-hidden="true"
-        ></span>
+        />
       </div>
       <div className="test-editor-content">
         <div className="test-section">

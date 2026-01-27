@@ -5,16 +5,23 @@
 import type { IntlShape } from 'react-intl';
 import type { Typ } from '../generated/catala_types';
 
-function extractTypeName(qualifiedName: string): string {
+/**
+ * Extract the simple name from a module-qualified name.
+ * E.g., "Catala_runtime.Person" → "Person"
+ *
+ * Note: This assumes dots only appear as module separators, not within
+ * identifiers. Catala identifiers are alphanumeric with underscores.
+ */
+export function extractSimpleName(qualifiedName: string): string {
   return qualifiedName.split('.').pop() ?? qualifiedName;
 }
 
 export function getTypeName(typ: Typ): string {
   switch (typ.kind) {
     case 'TStruct':
-      return extractTypeName(typ.value.struct_name);
+      return extractSimpleName(typ.value.struct_name);
     case 'TEnum':
-      return extractTypeName(typ.value.enum_name);
+      return extractSimpleName(typ.value.enum_name);
     case 'TArray':
       return `${getTypeName(typ.value)}[]`;
     case 'TInt':
@@ -70,9 +77,9 @@ export function getTypeDisplayName(typ: Typ, intl: IntlShape): string {
     case 'TTuple':
       return intl.formatMessage({ id: 'type.tuple' });
     case 'TStruct':
-      return extractTypeName(typ.value.struct_name);
+      return extractSimpleName(typ.value.struct_name);
     case 'TEnum':
-      return extractTypeName(typ.value.enum_name);
+      return extractSimpleName(typ.value.enum_name);
     case 'TArrow':
       throw new Error('Unexpected type: TArrow');
     case 'TUnit':

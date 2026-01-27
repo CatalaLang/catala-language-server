@@ -1,11 +1,11 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage } from 'react-intl';
-import type { TestIo, Diff, PathSegment } from './generated/catala_types';
-import ValueEditor from './editors/ValueEditors';
+import type { TestIo, Diff, PathSegment } from '../generated/catala_types';
+import ValueEditor from '../editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
-import './styles/assertions-editor.css';
-import { findMatchingDiff, isParentOfAnyDiff } from './diff/highlight';
-import { isAtomicRuntime } from './diff/diff';
+import '../styles/assertions-editor.css';
+import { findMatchingDiff, isParentOfAnyDiff } from '../diff/highlight';
+import { isAtomicRuntime } from '../diff/diff';
 
 // Diff policy note: this component only renders highlights. Path-stable accept actions should call onDiffResolved(path).
 // Array structural edits are path-unstable and handled in ArrayEditor via onInvalidateDiffs; arrays are asserted as a whole.

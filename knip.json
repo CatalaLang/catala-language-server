@@ -5,6 +5,10 @@
     "type": true
   },
   "tags": ["-lintignore"],
-  "entry": ["src/uiEntryPoint.ts", "src/extension.ts", "src/testCaseEditor.ts"],
+  "entry": [
+    "src/uiEntryPoint.ts",
+    "src/extension.ts",
+    "src/extension/testCaseEditorProvider.ts"
+  ],
   "ignore": ["src/generated/*.ts"]
 }

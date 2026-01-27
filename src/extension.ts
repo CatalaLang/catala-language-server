@@ -6,18 +6,18 @@ import type {
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import * as path from 'path';
-import { TestCaseEditorProvider } from './testCaseEditor';
-import { logger } from './logger';
+import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
+import { logger } from './extension/logger';
 import * as fs from 'fs';
 import cmd_exists from 'command-exists';
 import * as net from 'net';
 import { spawn } from 'child_process';
-import { clerkPath, getCwd, hasResourceUri } from './util_client';
-import type { RunArgs } from './util_client';
-import { initTests } from './testAndCoverage';
-import type { CatalaEntrypoint } from './lspRequests';
-import { listEntrypoints } from './lspRequests';
-import { ScopeInputController } from './scope_input_editor/ScopeInputController';
+import { clerkPath, getCwd, hasResourceUri } from './shared/util_client';
+import type { RunArgs } from './shared/util_client';
+import { initTests } from './extension/testAndCoverage';
+import type { CatalaEntrypoint } from './extension/lspRequests';
+import { listEntrypoints } from './extension/lspRequests';
+import { ScopeInputController } from './scope-editor/ScopeInputController';
 
 let client: LanguageClient;
 

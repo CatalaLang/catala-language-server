@@ -212,55 +212,53 @@
 }
 
 .test-title-wrapper {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--spacing8);
   margin-bottom: var(--spacing16);
+  max-width: 100%;
 }
 
-.test-title-editable {
+.test-title-input {
+  /* Let heading-h2 class provide font styling, just reset input defaults */
+  color: inherit;
   outline: none;
+  border: none;
+  background: transparent;
   padding: var(--spacing4) var(--spacing8);
   margin: 0 0 0 calc(-1 * var(--spacing8));
   border-radius: var(--spacing4);
   transition: background-color 0.15s ease-in-out;
-  display: inline-block;
   min-width: 200px;
   max-width: 100%;
+  /* Size to content - modern CSS, graceful fallback to min-width */
+  field-sizing: content;
 }
 
-.test-title-editable:hover,
-.test-title-editable:focus {
+.test-title-input:hover {
+  background-color: var(--vscode-list-hoverBackground);
   cursor: text;
 }
 
-.test-title-editable:hover {
-  background-color: var(--vscode-list-hoverBackground);
-}
-
-.test-title-editable:focus {
+.test-title-input:focus {
   background-color: var(--vscode-editor-selectionBackground);
 }
+
+.test-title-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+  font-style: italic;
+}
+
+/* Edit icon appears on hover to indicate editability */
 
 .test-title-edit-icon {
   opacity: 0;
   transition: opacity 0.15s ease-in-out;
   font-size: 16px;
   color: var(--vscode-foreground);
-  cursor: pointer;
 }
 
 .test-title-wrapper:hover .test-title-edit-icon,
-.test-title-editable:focus + .test-title-edit-icon {
+.test-title-input:focus + .test-title-edit-icon {
   opacity: 0.6;
-}
-
-.test-title-wrapper:hover .test-title-edit-icon:hover {
-  opacity: 1;
-}
-
-.test-title-editable:empty::before {
-  content: attr(aria-label);
-  color: var(--vscode-input-placeholderForeground);
-  font-style: italic;
 }

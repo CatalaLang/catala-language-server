@@ -4,10 +4,13 @@ import type {
   Test,
   TestList,
   TestOutputs,
-} from './generated/catala_types';
-import { atdToCatala } from './testCaseCompilerInterop';
-import { parseContents, getLanguageFromUri } from './testCaseEditor';
-import { logger } from './logger';
+} from '../generated/catala_types';
+import { atdToCatala } from '../test-case-editor/testCaseCompilerInterop';
+import {
+  parseContents,
+  getLanguageFromUri,
+} from '../extension/testCaseEditorProvider';
+import { logger } from '../extension/logger';
 import type { integer } from 'vscode-languageclient';
 
 /**

@@ -21,11 +21,6 @@ import {
   type SubArrayDescriptor,
 } from './tableArrayUtils';
 
-type RowMetadata = {
-  itemIndexWithinParent: number;
-  onDuplicateItem: (index: number, position: 'before' | 'after') => void;
-};
-
 type TableArrayHandlers = {
   updateParent: (newArray: RuntimeValue[]) => void;
   handleAdd: () => void;
@@ -89,8 +84,6 @@ type UseTableArrayHandlersProps = {
   onValueChange: (newValue: RuntimeValue) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
   currentPath: PathSegment[];
-  isSubTable: boolean;
-  rowMetadata?: RowMetadata[];
 };
 
 export function useTableArrayHandlers(
@@ -104,8 +97,6 @@ export function useTableArrayHandlers(
     onValueChange,
     onInvalidateDiffs,
     currentPath,
-    isSubTable,
-    rowMetadata,
   } = props;
 
   const updateParent = (newArray: RuntimeValue[]): void => {
@@ -150,15 +141,6 @@ export function useTableArrayHandlers(
     index: number,
     position: 'before' | 'after'
   ): number | null => {
-    // For sub-tables, delegate to the parent via metadata callback
-    if (isSubTable && rowMetadata) {
-      const metadata = rowMetadata[index];
-      if (metadata) {
-        metadata.onDuplicateItem(metadata.itemIndexWithinParent, position);
-        return null;
-      }
-    }
-
     const original = currentArray[index];
     if (!original) {
       throw new Error(`handleDuplicate: invalid index ${index}`);
@@ -263,29 +245,32 @@ export function useTableArrayHandlers(
     invalidateArrayDiffs();
   };
 
+  /** Extract the sub-array items from a parent row, throwing if the structure is invalid. */
+  const getSubArray = (
+    parentRowIndex: number,
+    arrayFieldPath: string[]
+  ): RuntimeValue[] => {
+    const row = currentArray[parentRowIndex];
+    if (row.value.kind !== 'Struct') {
+      throw new Error(
+        `Expected Struct at index ${parentRowIndex}, got ${row.value.kind}`
+      );
+    }
+    const [, structData] = row.value.value;
+    const arrayValue = getNestedValue(structData, arrayFieldPath);
+    if (arrayValue?.value.kind !== 'Array') {
+      throw new Error(`Expected Array at ${arrayFieldPath.join('.')}`);
+    }
+    return arrayValue.value.value;
+  };
+
   const handleSubArrayItemDelete = async (
     parentRowIndex: number,
     arrayFieldPath: string[],
     itemIndex: number
   ): Promise<void> => {
     if (!(await confirm('DeleteArrayElement'))) return;
-
-    const row = currentArray[parentRowIndex];
-    if (row.value.kind !== 'Struct') {
-      throw new Error(
-        `handleSubArrayItemDelete: expected Struct, got ${row.value.kind}`
-      );
-    }
-
-    const [, structData] = row.value.value;
-    const arrayValue = getNestedValue(structData, arrayFieldPath);
-    if (arrayValue?.value.kind !== 'Array') {
-      throw new Error(
-        `handleSubArrayItemDelete: expected Array at ${arrayFieldPath.join('.')}`
-      );
-    }
-
-    const currentSubArray = arrayValue.value.value;
+    const currentSubArray = getSubArray(parentRowIndex, arrayFieldPath);
     const newSubArray = currentSubArray.filter((_, i) => i !== itemIndex);
     handleParentSubArrayUpdate(parentRowIndex, arrayFieldPath, newSubArray);
   };
@@ -296,22 +281,7 @@ export function useTableArrayHandlers(
     fromIndex: number,
     toIndex: number
   ): void => {
-    const row = currentArray[parentRowIndex];
-    if (row.value.kind !== 'Struct') {
-      throw new Error(
-        `handleSubArrayItemMove: expected Struct, got ${row.value.kind}`
-      );
-    }
-
-    const [, structData] = row.value.value;
-    const arrayValue = getNestedValue(structData, arrayFieldPath);
-    if (arrayValue?.value.kind !== 'Array') {
-      throw new Error(
-        `handleSubArrayItemMove: expected Array at ${arrayFieldPath.join('.')}`
-      );
-    }
-
-    const currentSubArray = arrayValue.value.value;
+    const currentSubArray = getSubArray(parentRowIndex, arrayFieldPath);
     if (toIndex < 0 || toIndex >= currentSubArray.length) return;
 
     const newSubArray = [...currentSubArray];
@@ -326,22 +296,7 @@ export function useTableArrayHandlers(
     itemIndex: number,
     position: 'before' | 'after'
   ): void => {
-    const row = currentArray[parentRowIndex];
-    if (row.value.kind !== 'Struct') {
-      throw new Error(
-        `handleSubArrayItemDuplicate: expected Struct, got ${row.value.kind}`
-      );
-    }
-
-    const [, structData] = row.value.value;
-    const arrayValue = getNestedValue(structData, arrayFieldPath);
-    if (arrayValue?.value.kind !== 'Array') {
-      throw new Error(
-        `handleSubArrayItemDuplicate: expected Array at ${arrayFieldPath.join('.')}`
-      );
-    }
-
-    const currentSubArray = arrayValue.value.value;
+    const currentSubArray = getSubArray(parentRowIndex, arrayFieldPath);
     const original = currentSubArray[itemIndex];
     if (!original) {
       throw new Error(
@@ -365,22 +320,7 @@ export function useTableArrayHandlers(
     itemIndex: number,
     newLabel: string
   ): void => {
-    const row = currentArray[parentRowIndex];
-    if (row.value.kind !== 'Struct') {
-      throw new Error(
-        `handleSubArrayItemLabelChange: expected Struct, got ${row.value.kind}`
-      );
-    }
-
-    const [, structData] = row.value.value;
-    const arrayValue = getNestedValue(structData, arrayFieldPath);
-    if (arrayValue?.value.kind !== 'Array') {
-      throw new Error(
-        `handleSubArrayItemLabelChange: expected Array at ${arrayFieldPath.join('.')}`
-      );
-    }
-
-    const currentSubArray = arrayValue.value.value;
+    const currentSubArray = getSubArray(parentRowIndex, arrayFieldPath);
     const item = currentSubArray[itemIndex];
     if (!item) {
       throw new Error(

@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { IntlProvider } from 'react-intl';
 import enMessages from '../src/locales/en.json';
-import TestOutputsEditor from '../src/TestOutputsEditor';
+import TestOutputsEditor from '../src/test-case-editor/TestOutputsEditor';
 import type { Diff, PathSegment, Typ } from '../src/generated/test_case';
 import { tStruct, tRat, io, structValue } from './helpers';
 

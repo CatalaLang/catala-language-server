@@ -31,7 +31,7 @@ import {
   buildCellPath,
   type SubArrayItem,
 } from './tableArrayUtils';
-import { getTypeName } from './typeNameUtils';
+import { extractSimpleName, getTypeName } from './typeNameUtils';
 import { useTableArrayHandlers } from './useTableArrayHandlers';
 
 // Animation timing constants
@@ -162,8 +162,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     onValueChange,
     onInvalidateDiffs: props.onInvalidateDiffs,
     currentPath,
-    isSubTable,
-    rowMetadata,
   });
 
   // Store refs to row elements for sub-table navigation
@@ -255,11 +253,20 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     index: number,
     position: 'before' | 'after'
   ): void => {
-    const insertAt = handlers.handleDuplicate(index, position);
-    if (insertAt !== null) {
-      setTimeout(() => {
-        flashElement(document.querySelector(`[data-row-index="${insertAt}"]`));
-      }, ANIMATION.RENDER_DELAY_MS);
+    if (isSubTable && rowMetadata) {
+      const metadata = rowMetadata[index];
+      if (metadata) {
+        metadata.onDuplicateItem(metadata.itemIndexWithinParent, position);
+      }
+    } else {
+      const insertAt = handlers.handleDuplicate(index, position);
+      if (insertAt !== null) {
+        setTimeout(() => {
+          flashElement(
+            document.querySelector(`[data-row-index="${insertAt}"]`)
+          );
+        }, ANIMATION.RENDER_DELAY_MS);
+      }
     }
   };
 
@@ -279,7 +286,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
             <FormattedMessage
               id="arrayEditor.addElement"
               defaultMessage="Add {elementType}"
-              values={{ elementType: structType.struct_name.split('.').pop() }}
+              values={{
+                elementType: extractSimpleName(structType.struct_name),
+              }}
             />
           </button>
         )}
@@ -647,7 +656,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                                     ? arr.arrayType.value
                                     : arr.arrayType;
                                 const typeName = getTypeName(elementType);
-                                const fieldName = arr.label.split('.').pop();
+                                const fieldName = arr.fieldPath.at(-1);
                                 return (
                                   <div
                                     key={arr.label}
@@ -859,7 +868,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
           <FormattedMessage
             id="arrayEditor.addElement"
             defaultMessage="Add {elementType}"
-            values={{ elementType: structType.struct_name.split('.').pop() }}
+            values={{ elementType: extractSimpleName(structType.struct_name) }}
           />
         </button>
       )}

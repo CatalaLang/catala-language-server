@@ -11,16 +11,19 @@ import {
   type Test,
   type TestInputs,
   type TestRunResults,
-  type RuntimeValue,
   writeUpMessage,
   readDownMessage,
 } from '../generated/catala_types';
-import TestInputsEditor from '../TestInputsEditor';
+import TestInputsEditor from '../test-case-editor/TestInputsEditor';
 import { resolveConfirmResult } from '../messaging/confirm';
-import { setVsCodeApi } from '../webviewApi';
+import { setVsCodeApi } from '../shared/webviewApi';
 import type { WebviewApi } from 'vscode-webview';
-import { assertUnreachable } from '../util';
+import { assertUnreachable } from '../shared/util';
 import ScopeOutputs from './ScopeOutputs';
+import {
+  hasUnsetInTest,
+  scrollToFirstInvalidOrUnset,
+} from '../editors/unsetValidation';
 
 type UIState =
   | { state: 'initializing' }
@@ -221,47 +224,13 @@ function ScopeInputComponent(props: PropsInputComp): ReactElement {
   const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
 
-  function containsUnsetInRuntime(rv: RuntimeValue): boolean {
-    switch (rv.value.kind) {
-      case 'Unset':
-        return true;
-      case 'Array':
-        return rv.value.value.some(containsUnsetInRuntime);
-      case 'Struct': {
-        const map = rv.value.value[1];
-        return Array.from(map.values()).some(containsUnsetInRuntime);
-      }
-      case 'Enum': {
-        const payload = rv.value.value[1][1];
-        return payload?.value ? containsUnsetInRuntime(payload.value) : false;
-      }
-      default:
-        return false;
-    }
-  }
-
-  function hasUnsetInTestInputs(test: Test): boolean {
-    const inputsHas = Array.from(test.test_inputs.values()).some(
-      (io) => !io.value?.value || containsUnsetInRuntime(io.value.value)
-    );
-    return inputsHas;
-  }
-
   const scrollToFirstUnset = (): void => {
-    setTimeout(() => {
-      const container = unsetElementRef.current ?? document;
-      const el = container.querySelector(
-        '.invalid-badge, .unset-badge'
-      ) as HTMLElement | null;
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        (el as HTMLElement)?.focus?.();
-      }
-    }, 0);
+    scrollToFirstInvalidOrUnset(unsetElementRef.current ?? document);
   };
 
   function runAction(action: Action): void {
-    if (hasUnsetInTestInputs(props.test)) scrollToFirstUnset();
+    if (hasUnsetInTest(props.test, { checkOutputs: false }))
+      scrollToFirstUnset();
     else
       props.onTestRun({
         testScope: props.test.tested_scope.name,

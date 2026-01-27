@@ -1,5 +1,5 @@
 import { writeUpMessage, type ConfirmAction } from '../generated/catala_types';
-import { getVsCodeApi } from '../webviewApi';
+import { getVsCodeApi } from '../shared/webviewApi';
 
 type ConfirmActionKind = ConfirmAction['kind'];
 

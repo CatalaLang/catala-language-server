@@ -197,7 +197,7 @@ function fieldTypeIsFlattenable(typ: Typ): boolean {
  * ---
  * Future enhancement: Consider showing user feedback when falling back to tree view.
  * Could display a subtle indicator like "Displayed as tree (contains variable-structure fields)"
- * to help users understand why table view wasn't used. See docs/tabular-view-complex-types.md
+ * to help users understand why table view wasn't used.
  */
 export function structIsFlattenable(structDecl: StructDeclaration): boolean {
   for (const fieldType of structDecl.fields.values()) {
@@ -256,9 +256,18 @@ function deepCloneRuntimeValue(value: RuntimeValue): RuntimeValue {
     }
   };
 
+  // Regenerate UID if present, preserve other attrs
+  const clonedAttrs = value.attrs
+    ? value.attrs.map((attr) =>
+        attr.kind === 'Uid'
+          ? { kind: 'Uid' as const, value: String(crypto.randomUUID()) }
+          : attr
+      )
+    : [];
+
   return {
     value: cloneValue(value.value),
-    attrs: value.attrs ? [...value.attrs] : [],
+    attrs: clonedAttrs,
   };
 }
 
