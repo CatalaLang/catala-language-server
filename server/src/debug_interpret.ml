@@ -140,31 +140,67 @@ let rec runtime_to_val : type d.
     in
     StructField.Map.of_list l
     |> fun fields -> Lwt.return (EStruct { name; fields }, m)
-  | TEnum name ->
-    (* we only use non-constant constructors of arity 1, which allows us to
-       always use the tag directly (ordered as declared in the constr map), and
-       the field 0 *)
+  | TEnum name -> (
     let cons_map = EnumName.Map.find name ctx.ctx_enums in
-    let cons, ty =
-      List.nth
-        (EnumConstructor.Map.bindings cons_map)
-        (Obj.tag o - Obj.first_non_constant_constructor_tag)
-    in
-    let* e = runtime_to_val eval_expr ctx m ty (Obj.field o 0) in
-    Lwt.return (EInj { name; cons; e }, m)
-  | TOption ty -> (
-    match Obj.tag o - Obj.first_non_constant_constructor_tag with
-    | 0 ->
-      let* e =
-        runtime_to_val eval_expr ctx m (TLit TUnit, Pos.void) (Obj.field o 0)
-      in
+    let tag = Obj.tag o in
+    if tag = Obj.int_tag then
+      (* constant constructor case *)
+      let exception Found of EnumConstructor.t in
+      match
+        EnumConstructor.Map.fold
+          (fun cons ty skip ->
+            match ty with
+            | TLit TUnit, _ -> if skip = 0 then raise (Found cons) else skip - 1
+            | _ -> skip)
+          cons_map
+          (Obj.obj o : int)
+      with
+      | _ -> assert false
+      | exception Found cons ->
+        Lwt.return
+          ( EInj
+              {
+                name;
+                cons;
+                e = ELit LUnit, Expr.with_ty m (TLit TUnit, Pos.void);
+              },
+            m )
+    else
+      (* non-constant constructor *)
+      let exception Found of EnumConstructor.t * typ in
+      match
+        EnumConstructor.Map.fold
+          (fun cons ty skip ->
+            match ty with
+            | TLit TUnit, _ -> skip
+            | _ -> if skip = 0 then raise (Found (cons, ty)) else skip - 1)
+          cons_map
+          (Obj.tag o - Obj.first_non_constant_constructor_tag)
+      with
+      | _ -> assert false
+      | exception Found (cons, ty) ->
+        let payload =
+          Obj.field o 0
+          (* Arity is always 1 in the runtime *)
+        in
+        let* e = runtime_to_val eval_expr ctx m ty payload in
+        Lwt.return (EInj { name; cons; e }, m))
+  | TOption ty ->
+    if Obj.is_int o then
+      (* constant constructor => None case *)
       Lwt.return
-        (EInj { name = Expr.option_enum; cons = Expr.none_constr; e }, m)
-    | 1 ->
+        ( EInj
+            {
+              name = Expr.option_enum;
+              cons = Expr.none_constr;
+              e = ELit LUnit, Expr.with_ty m (TLit TUnit, Pos.void);
+            },
+          m )
+    else
+      (* Some case *)
       let* e = runtime_to_val eval_expr ctx m ty (Obj.field o 0) in
       Lwt.return
         (EInj { name = Expr.option_enum; cons = Expr.some_constr; e }, m)
-    | _ -> assert false)
   | TClosureEnv ->
     (* By construction, a closure environment can only be consumed from the same
        scope where it was built (compiled or not) ; for this reason, we can
@@ -240,37 +276,49 @@ and val_to_runtime : type d.
         (StructField.Map.bindings fields)
     in
     Lwt.return (Array.of_list ll |> Obj.repr)
-  | TEnum name1, EInj { name; cons; e } ->
+  | TEnum name1, EInj { name; cons; e } -> (
     assert (EnumName.equal name name1);
     let cons_map = EnumName.Map.find name ctx.ctx_enums in
-    let rec find_tag n = function
-      | [] -> assert false
-      | (c, ty) :: _ when EnumConstructor.equal c cons -> n, ty
-      | _ :: r -> find_tag (n + 1) r
-    in
-    let tag, ty =
-      find_tag Obj.first_non_constant_constructor_tag
-        (EnumConstructor.Map.bindings cons_map)
-    in
-    let* field = val_to_runtime eval_expr ctx ty e in
-    let o = Obj.with_tag tag (Obj.repr (Some ())) in
-    Obj.set_field o 0 field;
-    Lwt.return o
+    match EnumConstructor.Map.find cons cons_map with
+    | TLit TUnit, _ -> (
+      let exception
+        (* Constant constructor case *)
+        Found of int
+      in
+      match
+        EnumConstructor.Map.fold
+          (fun c ty n ->
+            if EnumConstructor.equal c cons then raise (Found n)
+            else match ty with TLit TUnit, _ -> n + 1 | _ -> n)
+          cons_map 0
+      with
+      | _ -> assert false
+      | exception Found constant_tag -> Lwt.return (Obj.repr constant_tag))
+    | ty -> (
+      let exception
+        (* Non-constant constructor *)
+        Found of int
+      in
+      match
+        EnumConstructor.Map.fold
+          (fun c ty n ->
+            if EnumConstructor.equal c cons then raise (Found n)
+            else match ty with TLit TUnit, _ -> n | _ -> n + 1)
+          cons_map Obj.first_non_constant_constructor_tag
+      with
+      | _ -> assert false
+      | exception Found tag ->
+        let* field = val_to_runtime eval_expr ctx ty e in
+        let o = Obj.with_tag tag (Obj.repr (Some ())) in
+        Obj.set_field o 0 field;
+        Lwt.return o))
   | TOption ty, EInj { name; cons; e } ->
     assert (EnumName.equal name Expr.option_enum);
-    let tag, ty =
-      (* None is before Some because the constructors have been defined in this
-         order in [expr.ml], and the ident maps preserve definition ordering *)
-      if EnumConstructor.equal cons Expr.none_constr then
-        Obj.first_non_constant_constructor_tag, (TLit TUnit, Pos.void)
-      else if EnumConstructor.equal cons Expr.some_constr then
-        Obj.first_non_constant_constructor_tag + 1, ty
-      else assert false
-    in
-    let* field = val_to_runtime eval_expr ctx ty e in
-    let o = Obj.with_tag tag (Obj.repr (Some ())) in
-    Obj.set_field o 0 field;
-    Lwt.return o
+    if EnumConstructor.equal cons Expr.none_constr then
+      Lwt.return (Obj.repr None)
+    else
+      let* e = val_to_runtime eval_expr ctx ty e in
+      Lwt.return (Obj.repr (Some e))
   | TArray ty, EArray es ->
     let* l = Lwt_list.map_s (val_to_runtime eval_expr ctx ty) es in
     Lwt.return (Array.of_list l |> Obj.repr)
