@@ -37,7 +37,8 @@ let get_typ (_, Typed { ty; _ }) = ty
 type paused_state = { e : dcalc_expr; env : (yes, typed) env }
 
 type interp_exn =
-  | Runtime of Catala_runtime.error * Catala_runtime.code_location list
+  | Runtime of
+      Catala_runtime.error * Catala_runtime.code_location list * string option
   | Internal of (Format.formatter -> unit)
 
 type value = Expr of dcalc_expr | Exn of { pos : Pos.t; exn : interp_exn }
@@ -145,7 +146,7 @@ let run_debugger
     | Error (Catala_utils.Message.CompilerError content) ->
       let pp ppf = Catala_utils.Message.Content.emit ~ppf content Error in
       let* () =
-        Format.kasprintf logger "Internal error on program execution: %t " pp
+        Format.kasprintf logger "Error during program execution:@\n%t" pp
       in
       let pos = get_step_pos !last_step in
       Lwt.return
@@ -156,19 +157,34 @@ let run_debugger
             env = !last_step.env;
           };
         ]
-    | Error (Catala_runtime.Error (a, b, _)) ->
+    | Error (Catala_utils.Message.CompilerErrors contents) ->
+      let pp ppf = Catala_utils.Message.Content.emit_n ~ppf contents Error in
+      let* () =
+        Format.kasprintf logger "Errors during program execution:@\n%t" pp
+      in
       let pos = get_step_pos !last_step in
       Lwt.return
         [
           {
-            value = Exn { pos; exn = Runtime (a, b) };
+            value = Exn { pos; exn = Internal pp };
+            breakpoint = false;
+            env = !last_step.env;
+          };
+        ]
+    | Error (Catala_runtime.Error (a, b, msg_opt)) ->
+      let pos = get_step_pos !last_step in
+      Lwt.return
+        [
+          {
+            value = Exn { pos; exn = Runtime (a, b, msg_opt) };
             breakpoint = false;
             env = !last_step.env;
           };
         ]
     | Error exn ->
       let* () =
-        Format.kasprintf logger "Unhandled error on program execution: %s "
+        Format.kasprintf logger
+          "Unhandled exception during program execution: %s"
           (Printexc.to_string exn)
       in
       Lwt.return_nil
@@ -288,7 +304,7 @@ let run_debugger ?inputs rpc ~file ~scope logger : debugger_state Lwt.t =
     Catala_utils.Global.enforce_options ~input_src:(FileName file)
       ~whole_program:true ~bin_dir:build_dir
       ~path_rewrite:(fun i -> (i :> string))
-      ()
+      ~stop_on_error:true ()
   in
   let* () = try_build_deps ~logger file in
   let program, scope, pmap = load_program options config_and_root file scope in

@@ -249,7 +249,7 @@ let handle_evaluate logger rpc :
     unit Lwt.t =
   let open Stopped_event in
   let open Payload in
-  let send_stop ?description reason =
+  let send_stop ?description ~text reason =
     Debug_rpc.send_event rpc
       (module Stopped_event)
       Stopped_event.Payload.
@@ -258,46 +258,50 @@ let handle_evaluate logger rpc :
           description;
           thread_id = Some 1;
           preserve_focus_hint = None;
-          text = None;
+          text = Some text;
           all_threads_stopped = Some true;
         }
   in
   function
   | `Start ->
     let* () = logger "Start of program reached" in
-    send_stop ~description:"*Start of the program reached*" Reason.Entry
+    send_stop ~text:"*Start of the program reached*" Reason.Entry
   | `Ok { DE.value = Expr expr; _ } ->
     let pos = DE.get_pos expr in
     Log.debug (fun m ->
         m "Step done on: %s - %a"
           (Pos.to_string_shorter pos)
           (Print.expr ()) expr);
-    send_stop ~description:"Step" Reason.Step
+    send_stop ~text:"Step" Reason.Step
   | `Exn { DE.value = Expr _; _ } -> assert false
-  | `Ok { DE.value = Exn { pos; exn = Runtime (error, pl) }; _ }
-  | `Exn { DE.value = Exn { pos; exn = Runtime (error, pl) }; _ } ->
-    let* () =
-      Format.ksprintf logger "Exception on %s" (Pos.to_string_shorter pos)
+  | `Ok { DE.value = Exn { pos; exn = Runtime (error, _pl, msg_opt) }; _ }
+  | `Exn { DE.value = Exn { pos; exn = Runtime (error, _pl, msg_opt) }; _ } ->
+    let error_message =
+      Format.asprintf "%s%t" (Catala_runtime.error_message error) (fun fmt ->
+          match msg_opt with
+          | None -> ()
+          | Some msg -> Format.fprintf fmt "@\n%s" msg)
     in
     let* () =
-      Format.kasprintf logger "@[<v 2>Message:@\n%s@]"
-        (Printexc.to_string (Catala_runtime.Error (error, pl, None)))
+      Format.ksprintf logger "Exception on %s.@\n%s"
+        (Pos.to_string_shorter pos)
+        error_message
     in
-    send_stop ~description:"Exception" Reason.Exception
+    send_stop ~description:"Runtime error" ~text:error_message Reason.Exception
   | `Ok { DE.value = Exn { pos; exn = Internal pp }; _ }
   | `Exn { DE.value = Exn { pos; exn = Internal pp }; _ } ->
+    let msg = Format.asprintf "%t" pp in
     let* () =
-      Format.ksprintf logger "Internal error on %s" (Pos.to_string_shorter pos)
+      Format.kasprintf logger "Error on %s: %t" (Pos.to_string_shorter pos) pp
     in
-    let* () = Format.kasprintf logger "@[<v 2>Message:@\n%t@]" pp in
-    send_stop ~description:"Exception" Reason.Exception
-  | `B _step -> send_stop ~description:"Breakpoint reached" Reason.Breakpoint
+    send_stop ~description:"Error" ~text:msg Reason.Exception
+  | `B _step -> send_stop ~text:"Breakpoint reached" Reason.Breakpoint
   | `End ->
-    let* () = logger "End of program reached - Pausing" in
+    let* () = logger "End of program reached" in
     (* Cannot send a terminate event otherwise the debugger would exit but with
        a pause, the step/continue buttons are still active which might lead to
        confusion... *)
-    send_stop ~description:"*End of the program reached*" Reason.Pause
+    send_stop ~text:"*End of the program reached*" Reason.Pause
 
 let doc_id_to_source (doc_id : Doc_id.t) : Source.t =
   let path = Some (doc_id :> string) in
@@ -316,9 +320,11 @@ let set_handlers rpc =
   let logger =
     let buf = Buffer.create 256 in
     fun output ->
+      let output = String.trim output in
       let len = String.length output in
-      let* () =
-        if len > 0 then begin
+      if len = 0 then Lwt.return_unit
+      else
+        let output =
           let timestamp = Utils.get_timestamp () in
           Buffer.add_string buf timestamp;
           Buffer.add_char buf ' ';
@@ -332,15 +338,17 @@ let set_handlers rpc =
           let () =
             if output.[len - 1] <> '\n' then Buffer.add_string buf "\n"
           in
+          let msg = Buffer.contents buf in
+          Buffer.clear buf;
+          msg
+        in
+        let* () =
           Debug_rpc.send_event rpc
             (module Output_event)
-            (Output_event.Payload.make ~output:(Buffer.contents buf) ())
-        end
-        else Lwt.return_unit
-      in
-      Log.debug (fun m -> m "(LOG) %s" (String.trim_end (Buffer.contents buf)));
-      Buffer.clear buf;
-      Lwt.return_unit
+            (Output_event.Payload.make ~category:(Some Console) ~output ())
+        in
+        Log.debug (fun m -> m "(LOG) %s" (String.trim_end output));
+        Lwt.return_unit
   in
   (* Mandatory requests *)
   Debug_rpc.set_command_handler rpc (module Custom_initialize) on_initialize;
@@ -368,10 +376,12 @@ let set_handlers rpc =
     (fun { args; stop_on_entry } ->
       let* () =
         match args with
-        | None -> Format.ksprintf logger "%s@." __LOC__
-        | Some args ->
-          let json = Custom_launch.payload_to_yojson args in
-          Format.kasprintf logger "%s@." (Yojson.Safe.pretty_to_string json)
+        | None | Some { inputs = None; _ } ->
+          Format.kasprintf logger "Running scope without inputs"
+        | Some { inputs = Some inputs; _ } ->
+          let json = Any.to_yojson inputs in
+          Format.kasprintf logger "@[<v 2>Running scope with inputs:@ %s@]"
+            (Yojson.Safe.pretty_to_string json)
       in
       protect logger
       @@ fun () ->
@@ -528,7 +538,10 @@ let set_handlers rpc =
     (fun _ ->
       use_state
       @@ fun s ->
-      let* () = logger "Step forward" in
+      let* () =
+        if s.index = s.final_index then Lwt.return_unit
+        else logger "Step forward"
+      in
       DE.step s |> handle_evaluate logger rpc);
   Debug_rpc.set_command_handler rpc
     (module Goto_command)
@@ -624,18 +637,22 @@ let set_handlers rpc =
         let description = Format.kasprintf Option.some "%t" pp in
         Lwt.return
           {
-            Exception_info_command.Result.exception_id = "Internal";
+            Exception_info_command.Result.exception_id = "Error";
             description;
             break_mode = Always;
             details = None;
           }
-      | { value = Exn { pos = _; exn = Runtime (error, spl) }; _ } ->
+      | { value = Exn { pos = _; exn = Runtime (error, spl, msg_opt) }; _ } ->
         let full_message =
           try
             Message.error
               ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) spl)
-              "During evaluation: %a." Format.pp_print_text
+              "During evaluation: %a.%t" Format.pp_print_text
               (Catala_runtime.error_message error)
+              (fun fmt ->
+                match msg_opt with
+                | None -> ()
+                | Some msg -> Format.fprintf fmt " Message: %s" msg)
           with Message.CompilerError content ->
             Format.asprintf "%t" (fun ppf ->
                 Message.Content.emit ~ppf content Error)
