@@ -15,26 +15,21 @@ build: [
   "@runtest" {with-test}
 ]
 depends: [
-  "ocaml"     {>= "4.14.1"}
-  "dune"      { >= "3.0" }
-  "catala"
+  "ocaml"          {>= "4.14.1"}
+  "dune"           {>= "3.0"}
+  "catala"         {>= "1.1.0" & < "1.2.0"}
   "logs"
   "uri"
-  "linol"     { = "0.10" }
-  "linol-lwt" { = "0.10" }
-  "dap"       { = "1.0.6" }
-  "qcheck"    { with-test & >= "0.21.3" }
-  "tezt"      { with-test }
-  "atdgen"    { build }
+  "linol"          {= "0.10"}
+  "linol-lwt"      {= "0.10"}
+  "dap"            {= "1.0.6"}
+  "qcheck"         {with-test & >= "0.21.3"}
+  "tezt"           {with-test}
+  "atdgen"         {build}
   "atdgen-runtime"
   "ptime"
-  # --- the following are "optional dependencies" ---
-  # they're listed here mostly for documentation ; one can export
-  # OPAMVAR_cataladevmode=1 before installation to automatically get them
-  "atdts"     {?cataladevmode & cataladevmode}
-]
-pin-depends: [
-  ["catala.dev" "git+https://github.com/CatalaLang/catala"]
+  "atdts"          {with-dev-setup & >= "2.16.0"}
+  "ocamlformat"    {with-dev-setup & = "0.28.1"}
 ]
 tags: [ "catala" "lsp" ]
 homepage: "https://github.com/CatalaLang/catala-language-server"
