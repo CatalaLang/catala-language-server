@@ -807,43 +807,6 @@ let rec evaluate_operator
   in
   Lwt.return (Mark.add m r)
 
-let rec partially_evaluate_expr_for_assertion_failure_message : type d.
-    (((d, _) interpr_kind, 'm) gexpr -> ((d, _) interpr_kind, 'm) gexpr Lwt.t) ->
-    decl_ctx ->
-    Global.backend_lang ->
-    ((d, yes) interpr_kind, 't) gexpr ->
-    ((d, yes) interpr_kind, 't) gexpr Lwt.t =
- fun evaluate_expr ctx lang e ->
-  (* Here we want to print an expression that explains why an assertion has
-     failed. Since assertions have type [bool] and are usually constructed with
-     comparisons and logical operators, we leave those unevaluated at the top of
-     the AST while evaluating everything below. This makes for a good error
-     message. *)
-  match Mark.remove e with
-  | EAppOp
-      {
-        args = [e1; e2];
-        tys;
-        op =
-          ( ( And | Or | Xor | Eq | Lt_int_int | Lt_rat_rat | Lt_mon_mon
-            | Lt_dat_dat | Lt_dur_dur | Lte_int_int | Lte_rat_rat | Lte_mon_mon
-            | Lte_dat_dat | Lte_dur_dur | Gt_int_int | Gt_rat_rat | Gt_mon_mon
-            | Gt_dat_dat | Gt_dur_dur | Gte_int_int | Gte_rat_rat | Gte_mon_mon
-            | Gte_dat_dat | Gte_dur_dur | Eq_int_int | Eq_rat_rat | Eq_mon_mon
-            | Eq_dur_dur | Eq_dat_dat ),
-            _ ) as op;
-      } ->
-    let* e1 =
-      partially_evaluate_expr_for_assertion_failure_message evaluate_expr ctx
-        lang e1
-    in
-    let* e2 =
-      partially_evaluate_expr_for_assertion_failure_message evaluate_expr ctx
-        lang e2
-    in
-    Lwt.return (EAppOp { op; tys; args = [e1; e2] }, Mark.get e)
-  | _ -> evaluate_expr e
-
 let on_expr_void _ _ = Lwt.return_unit
 
 let rec evaluate_expr_with_env : type d.
@@ -1119,41 +1082,48 @@ let rec evaluate_expr_with_env : type d.
     match Mark.remove e with
     | ELit (LBool true) -> Lwt.return (Mark.add m (ELit LUnit), env)
     | ELit (LBool false) ->
-      if Global.options.stop_on_error then
-        raise
-          Catala_runtime.(
-            Error (AssertionFailed, [Expr.pos_to_runtime pos], None))
-      else
-        let* partially_evaluated_assertion_failure_expr =
-          partially_evaluate_expr_for_assertion_failure_message
-            (fun e ->
-              let* e, _ = evaluate_expr_with_env ~on_expr env ctx lang e in
-              Lwt.return e)
-            ctx lang (Expr.skip_wrappers e')
-        in
-        (match Mark.remove partially_evaluated_assertion_failure_expr with
-        | ELit (LBool false) ->
-          if Global.options.no_fail_on_assert then
-            Message.warning ~pos "Assertion failed"
-          else
-            Message.delayed_error ~kind:AssertFailure () ~pos "Assertion failed"
-        | _ ->
-          if Global.options.no_fail_on_assert then
-            Message.warning ~pos "Assertion failed:@ %a"
-              (Print.UserFacing.expr lang)
-              partially_evaluated_assertion_failure_expr
-          else
-            Message.delayed_error ~kind:AssertFailure () ~pos
-              "Assertion failed:@ %a"
-              (Print.UserFacing.expr lang)
-              partially_evaluated_assertion_failure_expr);
-        Lwt.return (Mark.add m (ELit LUnit), env)
+      let msg ppf =
+        match
+          Pos.get_attr (Expr.mark_pos m) (function
+            | ErrorMessage m -> Some m
+            | _ -> None)
+        with
+        | Some note ->
+          Format.fprintf ppf "@[<hv 4>Assertion failed:@ @[<hov>%a@].@]"
+            Format.pp_print_text note
+        | None -> Format.fprintf ppf "Assertion failed."
+      in
+      let* partially_evaluated_assertion_failure_expr, _env =
+        partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
+          lang (Expr.skip_wrappers e')
+      in
+      (match Mark.remove partially_evaluated_assertion_failure_expr with
+      | ELit (LBool false) ->
+        if Global.options.no_fail_on_assert then Message.warning ~pos "%t" msg
+        else Message.delayed_error ~kind:AssertFailure () ~pos "%t" msg
+      | _ ->
+        if Global.options.no_fail_on_assert then
+          Message.warning ~pos
+            "@[<v>%t@,@[<hv 4>The condition resolved to:@ %a@]@]" msg
+            (Print.UserFacing.expr lang)
+            partially_evaluated_assertion_failure_expr
+        else
+          Message.delayed_error ~kind:AssertFailure () ~pos
+            "@[<v>%t@,@[<hv 4>The condition resolved to:@ %a@]@]" msg
+            (Print.UserFacing.expr lang)
+            partially_evaluated_assertion_failure_expr);
+      Lwt.return (Mark.add m (ELit LUnit), env)
     | _ ->
       Message.error ~pos:(Expr.pos e') "%a" Format.pp_print_text
         "Expected a boolean literal for the result of this assertion (should \
          not happen if the term was well-typed)")
   | EFatalError err ->
-    raise (Catala_runtime.Error (err, [Expr.pos_to_runtime pos], None))
+    let note =
+      Pos.get_attr (Expr.mark_pos m) (function
+        | ErrorMessage m -> Some m
+        | _ -> None)
+    in
+    raise (Catala_runtime.Error (err, [Expr.pos_to_runtime pos], note))
   | EErrorOnEmpty e' -> (
     let* r = evaluate_expr_with_env ~on_expr env ctx lang e' in
     match r with
@@ -1196,6 +1166,50 @@ let rec evaluate_expr_with_env : type d.
   | EBad -> assert false
   | _ -> .
 
+and partially_evaluate_expr_for_assertion_failure_message : type d.
+    on_expr:(((d, yes) interpr_kind, 'm) gexpr -> (d, 't) env -> unit Lwt.t) ->
+    (d, 't) env ->
+    decl_ctx ->
+    Global.backend_lang ->
+    ((d, yes) interpr_kind, 't) gexpr ->
+    (((d, yes) interpr_kind, 't) gexpr * (d, 't) env) Lwt.t =
+ fun ~on_expr env ctx lang e ->
+  (* Here we want to print an expression that explains why an assertion has
+     failed. Since assertions have type [bool] and are usually constructed with
+     comparisons and logical operators, we leave those unevaluated at the top of
+     the AST while evaluating everything below. This makes for a good error
+     message. *)
+  match Mark.remove e with
+  | EAppOp
+      {
+        args = [e1; e2];
+        tys;
+        op =
+          ( ( And | Or | Xor | Eq | Lt_int_int | Lt_rat_rat | Lt_mon_mon
+            | Lt_dat_dat | Lt_dur_dur | Lte_int_int | Lte_rat_rat | Lte_mon_mon
+            | Lte_dat_dat | Lte_dur_dur | Gt_int_int | Gt_rat_rat | Gt_mon_mon
+            | Gt_dat_dat | Gt_dur_dur | Gte_int_int | Gte_rat_rat | Gte_mon_mon
+            | Gte_dat_dat | Gte_dur_dur | Eq_int_int | Eq_rat_rat | Eq_mon_mon
+            | Eq_dur_dur | Eq_dat_dat ),
+            _ ) as op;
+      } ->
+    let* e1', _env1 =
+      partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
+        lang e1
+    in
+    let* e2', _env2 =
+      partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
+        lang e2
+    in
+    Lwt.return ((EAppOp { op; tys; args = [e1'; e2'] }, Mark.get e), env)
+  | EAppOp { args = [e1]; tys; op = (Not, _) as op } ->
+    let* e1', _env1 =
+      partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
+        lang e1
+    in
+    Lwt.return ((EAppOp { op; tys; args = [e1'] }, Mark.get e), env)
+  | _ -> evaluate_expr_with_env ~on_expr env ctx lang e
+
 let interpret_with_env
     ?inputs
     ?(on_expr = on_expr_void)
@@ -1236,11 +1250,6 @@ let interpret_with_env
   in
   match r with
   | ((EStruct _, _) as e), _env -> Lwt.return e
-  | exception Catala_runtime.Error (err, rpos, _) ->
-    Message.error
-      ~extra_pos:(List.map (fun rp -> "", Expr.runtime_to_pos rp) rpos)
-      "%a" Format.pp_print_text
-      (Catala_runtime.error_message err)
   | _ ->
     Message.error ~pos:(Expr.pos e) ~internal:true "%a" Format.pp_print_text
       "The interpretation of the program doesn't yield a struct corresponding \
