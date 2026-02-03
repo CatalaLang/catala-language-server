@@ -8,6 +8,21 @@
   min-width: 0; /* Allow flex shrinking so table-wrapper can scroll */
 }
 
+/* View toggle button (table <-> tree) */
+.table-view-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: calc(-1 * var(--spacing8));
+}
+
+.table-view-toggle .table-control-btn {
+  opacity: 0.6;
+}
+
+.table-view-toggle .table-control-btn:hover {
+  opacity: 1;
+}
+
 /* Table wrapper for horizontal scrolling */
 .table-wrapper {
   overflow-x: auto;
