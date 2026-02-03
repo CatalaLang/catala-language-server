@@ -361,6 +361,149 @@ describe('structIsFlattenable - detection logic', () => {
 });
 
 // ============================================================================
+// Integration Tests: TArray<non-struct> sub-table rendering
+// ============================================================================
+
+describe('TableArrayEditor - TArray<enum> sub-table rendering', () => {
+  /**
+   * Bug reproduction test:
+   * When a struct has a TArray<simple enum> field, the table view shows a count badge
+   * and "+" button, but no sub-table is rendered. Items added via "+" are invisible.
+   *
+   * Example from Prime_de_naissance_Calcul.catala_fr:
+   * - Personne_PDN has droits_au_séjour: liste de Code_titre_droit_sejour
+   * - Code_titre_droit_sejour is a simple enum with just P and D variants
+   */
+  it('renders sub-table for TArray<simple enum> with visible values', async () => {
+    // Code_titre_droit_sejour = P | D (simple enum, no payloads)
+    const droitSejourEnum: EnumDeclaration = {
+      enum_name: 'Code_titre_droit_sejour',
+      constructors: new Map<string, Option<Typ>>([
+        ['P', null],
+        ['D', null],
+      ]),
+    };
+
+    // Personne_PDN { id: int, droits_au_séjour: Code_titre_droit_sejour[] }
+    const personneDecl: StructDeclaration = {
+      struct_name: 'Personne_PDN',
+      fields: new Map<string, Typ>([
+        ['id', { kind: 'TInt' }],
+        [
+          'droits_au_séjour',
+          { kind: 'TArray', value: { kind: 'TEnum', value: droitSejourEnum } },
+        ],
+      ]),
+    };
+
+    const elementType: Typ = { kind: 'TStruct', value: personneDecl };
+
+    // Create a person with two droits_au_séjour items
+    const rows = [
+      structVal(
+        personneDecl,
+        new Map([
+          ['id', intVal(1)],
+          [
+            'droits_au_séjour',
+            arrayVal([
+              enumVal(droitSejourEnum, 'P'),
+              enumVal(droitSejourEnum, 'D'),
+            ]),
+          ],
+        ])
+      ),
+    ];
+
+    const valueDef: ValueDef = {
+      value: arrayVal(rows),
+    };
+
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <ArrayEditor
+          elementType={elementType}
+          valueDef={valueDef}
+          onValueChange={vi.fn()}
+          currentPath={[]}
+          diffs={[]}
+          editable={true}
+        />
+      </IntlProvider>
+    );
+
+    // The main table should exist and use table view
+    expect(document.querySelector('.table-view')).toBeInTheDocument();
+
+    // There should be count badges showing 2 items (in main table and/or sub-table header)
+    const countBadges = screen.getAllByText('2');
+    expect(countBadges.length).toBeGreaterThan(0);
+
+    // CRITICAL: The sub-table should be rendered with editors for the enum values.
+    // The sub-table header should exist
+    const subTableHeaders = document.querySelectorAll('.sub-table-header');
+    expect(subTableHeaders.length).toBeGreaterThan(0);
+
+    // There should be dropdown/select elements to edit the enum values
+    const selects = screen.getAllByRole('combobox');
+    expect(selects.length).toBeGreaterThanOrEqual(2); // At least 2 enum dropdowns for P and D
+  });
+
+  it('renders TArray<primitive> in sub-table', () => {
+    // Record { id: int, scores: int[] }
+    const recordDecl: StructDeclaration = {
+      struct_name: 'Record',
+      fields: new Map<string, Typ>([
+        ['id', { kind: 'TInt' }],
+        ['scores', { kind: 'TArray', value: { kind: 'TInt' } }],
+      ]),
+    };
+
+    const elementType: Typ = { kind: 'TStruct', value: recordDecl };
+
+    // Create a record with some scores
+    const rows = [
+      structVal(
+        recordDecl,
+        new Map([
+          ['id', intVal(1)],
+          ['scores', arrayVal([intVal(100), intVal(200), intVal(300)])],
+        ])
+      ),
+    ];
+
+    const valueDef: ValueDef = {
+      value: arrayVal(rows),
+    };
+
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <ArrayEditor
+          elementType={elementType}
+          valueDef={valueDef}
+          onValueChange={vi.fn()}
+          currentPath={[]}
+          diffs={[]}
+          editable={true}
+        />
+      </IntlProvider>
+    );
+
+    // The main table should use table view
+    expect(document.querySelector('.table-view')).toBeInTheDocument();
+
+    // Count badges should show 3 items (in main table and/or sub-table header)
+    const countBadges = screen.getAllByText('3');
+    expect(countBadges.length).toBeGreaterThan(0);
+
+    // CRITICAL: The sub-table should render the integer values as editable inputs
+    expect(screen.getByDisplayValue('100')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('200')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('300')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
 // Integration Tests: ArrayEditor fallback behavior
 // ============================================================================
 

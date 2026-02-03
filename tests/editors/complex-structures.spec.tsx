@@ -185,13 +185,20 @@ describe('Tier 1: Array within enum payload', () => {
     expect(screen.getByDisplayValue('2')).toBeInTheDocument();
   });
 
-  it('renders enum dropdowns', () => {
+  it('omits enum field with array payload from table view', () => {
+    // Status = Pending | Active(items: Item[]) has an array payload,
+    // so it's now correctly classified as 'unsupported' by getFieldRenderStrategy().
+    // In forced table mode, unsupported fields are omitted.
     const rows = [createRecord(1, 'Active', [50])];
 
     renderTableArrayEditor(recordStructDecl, rows);
 
-    const selects = screen.getAllByRole('combobox');
-    expect(selects.length).toBeGreaterThan(0);
+    // The id field should still render
+    expect(screen.getByDisplayValue('1')).toBeInTheDocument();
+
+    // The status enum is omitted (unsupported due to array payload)
+    // So there should be no comboboxes
+    expect(screen.queryAllByRole('combobox').length).toBe(0);
   });
 
   it('uses proper editors (no raw JSON)', () => {
@@ -347,7 +354,14 @@ describe('Tier 1: Array of enums with struct payloads', () => {
     expect(() => renderTableArrayEditor(logStructDecl, rows)).not.toThrow();
   });
 
-  it('renders array count badge for enum array', () => {
+  it('omits unsupported enum array field from table view', () => {
+    // TArray<Enum with struct payloads> is now correctly classified as 'unsupported'
+    // by getFieldRenderStrategy(). When rendering in forced table mode (via
+    // renderTableArrayEditor), unsupported fields are omitted.
+    //
+    // The correct UX is that this struct should fall back to card/tree view entirely
+    // (tested in table-view-eligibility.spec.tsx), but this test verifies graceful
+    // degradation when table view is forced.
     const rows = [
       createLog(2024, 6, 1, [
         enumVal(eventEnumDecl, 'Started', createInfo(1, 100)),
@@ -357,8 +371,12 @@ describe('Tier 1: Array of enums with struct payloads', () => {
 
     renderTableArrayEditor(logStructDecl, rows);
 
-    // Arrays of enums show count badges in main table (2 events)
-    expect(screen.getByText('2')).toBeInTheDocument();
+    // The timestamp field should still render
+    expect(screen.getByDisplayValue('2024-06-01')).toBeInTheDocument();
+
+    // The events array is omitted (unsupported), so no count badge
+    // This is correct - we don't show UI for data we can't render
+    expect(screen.queryByText('2')).not.toBeInTheDocument();
   });
 });
 

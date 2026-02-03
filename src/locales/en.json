@@ -59,5 +59,8 @@
   "tableView.duplicateAfter": "Duplicate below",
   "tableView.addNewItem": "Add new item",
   "tableEditor.labelPlaceholder": "Name...",
-  "tableEditor.goToParent": "Go to parent: {parentLabel}"
+  "tableEditor.goToParent": "Go to parent: {parentLabel}",
+  "tableView.switchToTreeView": "Switch to card view",
+  "arrayEditor.switchToTableView": "Switch to table view",
+  "tableView.value": "Value"
 }
