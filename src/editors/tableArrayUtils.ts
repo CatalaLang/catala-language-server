@@ -77,6 +77,17 @@ export interface TableSchema {
   ): RuntimeValue;
 }
 
+/** Problem with a specific field that prevents table rendering */
+export interface FieldProblem {
+  field: string;
+  reason: string;
+}
+
+/** Result of attempting to create a table schema */
+export type SchemaResult =
+  | { ok: true; schema: TableSchema }
+  | { ok: false; reasons: FieldProblem[] };
+
 /**
  * Create a TableSchema for struct elements.
  * Columns are derived from flattenStruct, values accessed via nested paths.
@@ -148,13 +159,23 @@ function createSimpleSchema(elementType: Typ): TableSchema {
 }
 
 /**
- * Create the appropriate TableSchema for an element type.
+ * Attempt to create a TableSchema for an element type.
+ *
+ * Returns `{ ok: true, schema }` if the type can be rendered as a table,
+ * or `{ ok: false, reasons }` with details about why not.
+ *
+ * This is the single source of truth for table view eligibility.
  */
-export function createTableSchema(elementType: Typ): TableSchema {
+export function tryCreateTableSchema(elementType: Typ): SchemaResult {
   if (elementType.kind === 'TStruct') {
-    return createStructSchema(elementType.value);
+    const problems = collectStructProblems(elementType.value);
+    if (problems.length > 0) {
+      return { ok: false, reasons: problems };
+    }
+    return { ok: true, schema: createStructSchema(elementType.value) };
   }
-  return createSimpleSchema(elementType);
+  // Simple types (primitives, enums) are always supported
+  return { ok: true, schema: createSimpleSchema(elementType) };
 }
 
 // ============================================================================
@@ -163,7 +184,7 @@ export function createTableSchema(elementType: Typ): TableSchema {
 
 /**
  * Describes how a struct field should be rendered in table view.
- * Used by both structIsFlattenable() and flattenStruct() to ensure consistency.
+ * Used by collectStructProblems() and flattenStruct() to ensure consistency.
  */
 export type FieldRenderStrategy =
   | { kind: 'cell' } // Render in a single table cell (atomics, simple enums)
@@ -322,17 +343,23 @@ function getFieldRenderStrategy(fieldType: Typ): FieldRenderStrategy {
 }
 
 /**
- * Checks if a struct can be flattened into a table view.
- * Returns false if any field has an 'unsupported' render strategy.
+ * Internal: Collect problems that would prevent a struct from being flattened.
+ * Used by getFieldRenderStrategy (recursive checks) and tryCreateTableSchema.
  */
-export function structIsFlattenable(structDecl: StructDeclaration): boolean {
-  for (const fieldType of structDecl.fields.values()) {
+function collectStructProblems(structDecl: StructDeclaration): FieldProblem[] {
+  const problems: FieldProblem[] = [];
+  for (const [fieldName, fieldType] of structDecl.fields.entries()) {
     const strategy = getFieldRenderStrategy(fieldType);
     if (strategy.kind === 'unsupported') {
-      return false;
+      problems.push({ field: fieldName, reason: strategy.reason });
     }
   }
-  return true;
+  return problems;
+}
+
+/** Shorthand for recursive checks within getFieldRenderStrategy. */
+export function structIsFlattenable(structDecl: StructDeclaration): boolean {
+  return collectStructProblems(structDecl).length === 0;
 }
 
 // ============================================================================
@@ -562,11 +589,11 @@ function flattenStruct(
         break;
 
       case 'unsupported':
-        // This should never happen if structIsFlattenable was checked first.
+        // This should never happen if tryCreateTableSchema was checked first.
         // If it does, it's a bug - the struct shouldn't be using table view.
         console.error(
           `flattenStruct: Unsupported field "${label}": ${strategy.reason}. ` +
-            `This indicates structIsFlattenable() was not checked or has a bug.`
+            `This indicates tryCreateTableSchema() was not checked or has a bug.`
         );
         break;
     }
