@@ -141,19 +141,13 @@ describe('ArrayEditor - presence actions and invalidation', () => {
       </IntlProvider>
     );
 
-    const addBtn = container.querySelector(
-      'button.button-action-dvp.body-b3'
-    ) as HTMLButtonElement;
+    const addBtn = screen.getByRole('button', { name: /Add/i });
     fireEvent.click(addBtn);
 
-    const moveNext = container.querySelector(
-      '.array-item .array-item-controls .array-move-next'
-    ) as HTMLButtonElement;
+    const moveNext = screen.getAllByTitle('Move element to next position')[0];
     fireEvent.click(moveNext);
 
-    const deleteBtn = container.querySelector(
-      '.array-item .array-item-controls .array-delete'
-    ) as HTMLButtonElement;
+    const deleteBtn = screen.getAllByTitle('Delete element')[0];
     fireEvent.click(deleteBtn);
 
     expect(onInvalidateDiffs).toHaveBeenCalled();

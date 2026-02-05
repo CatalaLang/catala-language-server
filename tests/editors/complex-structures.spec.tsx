@@ -25,6 +25,7 @@ import type {
   Option,
 } from '../../src/generated/test_case';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
+import { tryCreateTableSchema } from '../../src/editors/tableArrayUtils';
 import enMessages from '../../src/locales/en.json';
 
 // ============================================================================
@@ -79,6 +80,13 @@ function renderTableArrayEditor(
   editable = true
 ): ReturnType<typeof render> {
   const elementType: Typ = { kind: 'TStruct', value: structType };
+  const schemaResult = tryCreateTableSchema(elementType);
+  if (!schemaResult.ok) {
+    throw new Error(
+      `Test setup error: struct "${structType.struct_name}" is not flattenable. ` +
+        `Reasons: ${schemaResult.reasons.map((r) => `${r.field}: ${r.reason}`).join('; ')}`
+    );
+  }
 
   const valueDef: ValueDef = {
     value: arrayVal(rows),
@@ -88,7 +96,7 @@ function renderTableArrayEditor(
     <IntlProvider locale="en" messages={enMessages}>
       <TableArrayEditor
         elementType={elementType}
-        structType={structType}
+        schema={schemaResult.schema}
         valueDef={valueDef}
         onValueChange={vi.fn()}
         currentPath={[]}
@@ -163,51 +171,29 @@ describe('Tier 1: Array within enum payload', () => {
     );
   };
 
-  it('renders without throwing', () => {
-    const rows = [
-      createRecord(1, 'Pending'),
-      createRecord(2, 'Active', [100, 200, 300]),
-      createRecord(3, 'Active', [999]),
-    ];
-
-    expect(() => renderTableArrayEditor(recordStructDecl, rows)).not.toThrow();
-  });
-
-  it('renders IDs in main table', () => {
-    const rows = [
-      createRecord(1, 'Pending'),
-      createRecord(2, 'Active', [100, 200]),
-    ];
-
-    renderTableArrayEditor(recordStructDecl, rows);
-
-    expect(screen.getByDisplayValue('1')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('2')).toBeInTheDocument();
-  });
-
-  it('omits enum field with array payload from table view', () => {
+  it('is correctly rejected by tryCreateTableSchema', () => {
     // Status = Pending | Active(items: Item[]) has an array payload,
-    // so it's now correctly classified as 'unsupported' by getFieldRenderStrategy().
-    // In forced table mode, unsupported fields are omitted.
-    const rows = [createRecord(1, 'Active', [50])];
+    // so it's correctly classified as 'unsupported' by tryCreateTableSchema().
+    // This struct should fall back to card/tree view.
+    const elementType: Typ = { kind: 'TStruct', value: recordStructDecl };
+    const result = tryCreateTableSchema(elementType);
 
-    renderTableArrayEditor(recordStructDecl, rows);
-
-    // The id field should still render
-    expect(screen.getByDisplayValue('1')).toBeInTheDocument();
-
-    // The status enum is omitted (unsupported due to array payload)
-    // So there should be no comboboxes
-    expect(screen.queryAllByRole('combobox').length).toBe(0);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reasons).toHaveLength(1);
+      expect(result.reasons[0].field).toBe('status');
+      expect(result.reasons[0].reason).toContain('contains arrays in payloads');
+    }
   });
 
-  it('uses proper editors (no raw JSON)', () => {
+  it('throws when renderTableArrayEditor is called with unsupported type', () => {
+    // This verifies that directly calling TableArrayEditor with unsupported
+    // types is an error. In production, ArrayEditor validates types first.
     const rows = [createRecord(1, 'Active', [42])];
 
-    renderTableArrayEditor(recordStructDecl, rows);
-
-    expect(screen.queryByText(/\{"kind":/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/"value":/)).not.toBeInTheDocument();
+    expect(() => renderTableArrayEditor(recordStructDecl, rows)).toThrow(
+      /not flattenable/
+    );
   });
 });
 
@@ -342,26 +328,25 @@ describe('Tier 1: Array of enums with struct payloads', () => {
       ])
     );
 
-  it('renders without throwing', () => {
-    const rows = [
-      createLog(2024, 1, 15, [
-        enumVal(eventEnumDecl, 'Started', createInfo(100, 5000)),
-        enumVal(eventEnumDecl, 'Stopped'),
-        enumVal(eventEnumDecl, 'Error', createInfo(500, 0)),
-      ]),
-    ];
+  it('is correctly rejected by tryCreateTableSchema', () => {
+    // TArray<Enum with struct payloads> is correctly classified as 'unsupported'
+    // by tryCreateTableSchema(). This struct should fall back to card/tree view.
+    // (The actual fallback is tested in table-view-eligibility.spec.tsx)
+    const elementType: Typ = { kind: 'TStruct', value: logStructDecl };
+    const result = tryCreateTableSchema(elementType);
 
-    expect(() => renderTableArrayEditor(logStructDecl, rows)).not.toThrow();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reasons).toHaveLength(1);
+      expect(result.reasons[0].field).toBe('events');
+      expect(result.reasons[0].reason).toContain('complex payloads');
+    }
   });
 
-  it('omits unsupported enum array field from table view', () => {
-    // TArray<Enum with struct payloads> is now correctly classified as 'unsupported'
-    // by getFieldRenderStrategy(). When rendering in forced table mode (via
-    // renderTableArrayEditor), unsupported fields are omitted.
-    //
-    // The correct UX is that this struct should fall back to card/tree view entirely
-    // (tested in table-view-eligibility.spec.tsx), but this test verifies graceful
-    // degradation when table view is forced.
+  it('throws when renderTableArrayEditor is called with unsupported type', () => {
+    // This verifies that directly calling TableArrayEditor with unsupported
+    // types is an error. In production, ArrayEditor validates types first
+    // and falls back to card view for unsupported types.
     const rows = [
       createLog(2024, 6, 1, [
         enumVal(eventEnumDecl, 'Started', createInfo(1, 100)),
@@ -369,14 +354,9 @@ describe('Tier 1: Array of enums with struct payloads', () => {
       ]),
     ];
 
-    renderTableArrayEditor(logStructDecl, rows);
-
-    // The timestamp field should still render
-    expect(screen.getByDisplayValue('2024-06-01')).toBeInTheDocument();
-
-    // The events array is omitted (unsupported), so no count badge
-    // This is correct - we don't show UI for data we can't render
-    expect(screen.queryByText('2')).not.toBeInTheDocument();
+    expect(() => renderTableArrayEditor(logStructDecl, rows)).toThrow(
+      /not flattenable/
+    );
   });
 });
 

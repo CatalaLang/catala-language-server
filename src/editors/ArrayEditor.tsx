@@ -25,7 +25,7 @@ import {
 import { confirm } from '../messaging/confirm';
 import { TableArrayEditor } from './TableArrayEditor';
 import { getTypeDisplayName } from './typeNameUtils';
-import { structIsFlattenable } from './tableArrayUtils';
+import { tryCreateTableSchema } from './tableArrayUtils';
 
 /**
  * Diffs are consumed only by ArrayEditor to compute "phantom" indices
@@ -165,11 +165,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   // otherwise we use a flowing 'card' layout.
   const isVertical = hasNestedArrays(elementType);
 
-  // Use table view for arrays of structs that can be flattened.
-  // A struct is flattenable if its fields can be rendered as columns or sub-tables.
-  // Structs with arrays hidden inside enums/options/tuples are not flattenable.
-  const canUseTableView =
-    elementType.kind === 'TStruct' && structIsFlattenable(elementType.value);
+  const schemaResult = tryCreateTableSchema(elementType);
 
   // Allow user to toggle between table and tree view
   const [forceTreeView, setForceTreeView] = useState(false);
@@ -178,10 +174,11 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  if (canUseTableView && !forceTreeView) {
+  if (schemaResult.ok && !forceTreeView) {
     return (
       <TableArrayEditor
         elementType={elementType}
+        schema={schemaResult.schema}
         valueDef={valueDef}
         onValueChange={onValueChange}
         editorHook={editorHook}
@@ -244,7 +241,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   return (
     <div className="array-editor">
       {/* Toggle to switch back to table view when available */}
-      {canUseTableView && forceTreeView && (
+      {schemaResult?.ok && forceTreeView && (
         <div className="table-view-toggle">
           <button
             className="table-control-btn"

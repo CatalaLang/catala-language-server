@@ -805,12 +805,12 @@ describe('ArrayEditor - table view eligibility', () => {
         ),
       ];
 
-      renderArrayEditor(elementType, rows);
+      const { container } = renderArrayEditor(elementType, rows);
 
-      // Should NOT use table view
-      expect(document.querySelector('.table-view')).not.toBeInTheDocument();
-      // Should use array-editor (card/tree view)
-      expect(document.querySelector('.array-editor')).toBeInTheDocument();
+      // Top-level should use card/tree view, not table view
+      const topLevel = container.firstElementChild!;
+      expect(topLevel.classList.contains('array-editor')).toBe(true);
+      expect(topLevel.classList.contains('table-view')).toBe(false);
       // Events should be visible and editable (enum dropdowns)
       const selects = screen.getAllByRole('combobox');
       expect(selects.length).toBeGreaterThan(0);
