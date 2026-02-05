@@ -1,13 +1,10 @@
 /**
- * Torture tests for complex/nested data structures in TableArrayEditor.
+ * Tests for complex/nested data structures in TableArrayEditor.
  *
- * These tests verify "graceful degradation": all data should render via proper
- * editors (not inline JSON), even if the layout isn't optimal for deeply nested structures.
- *
- * Test philosophy:
- * - Verify presence, not presentation (all leaf values appear somewhere)
- * - Catch regressions, not aesthetics (layout changes shouldn't break tests)
- * - Ensure editors are used (no raw JSON display)
+ * These tests verify:
+ * - Supported types render correctly (all leaf values via proper editors, no JSON)
+ * - Unsupported types are correctly rejected by tryCreateTableSchema
+ * - Deeply nested but supported structures work in table view
  *
  * Note: Catala's runtime doesn't have a String type - we use Integer/Date/Money for leaf values.
  */
