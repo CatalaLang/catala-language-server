@@ -27,7 +27,7 @@ import {
   getNestedValue,
   computeSubArrays,
   buildCellPath,
-  createTableSchema,
+  tryCreateTableSchema,
   type SubArrayItem,
   type TableSchema,
 } from './tableArrayUtils';
@@ -86,6 +86,8 @@ type RowMetadata = {
 
 type TableArrayEditorProps = {
   elementType: Typ;
+  /** Pre-computed schema from tryCreateTableSchema. If not provided, computed internally. */
+  schema?: TableSchema;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
@@ -193,11 +195,19 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     flashElements(directChildRows, ANIMATION.NAV_DELAY_MS);
   };
 
-  // Create schema based on element type - works for both structs and simple types
-  const schema: TableSchema = useMemo(
-    () => createTableSchema(elementType),
-    [elementType]
-  );
+  // Use provided schema or compute it (for sub-tables).
+  // Sub-tables always succeed because parent types were already validated.
+  const schema: TableSchema = useMemo(() => {
+    if (props.schema) return props.schema;
+    const result = tryCreateTableSchema(elementType);
+    if (!result.ok) {
+      // This should never happen for sub-tables - parent validation ensures it
+      throw new Error(
+        `TableArrayEditor: unexpected unsupported type. Reasons: ${result.reasons.map((r) => r.reason).join(', ')}`
+      );
+    }
+    return result.schema;
+  }, [props.schema, elementType]);
 
   const subArrays = useMemo(
     () =>
