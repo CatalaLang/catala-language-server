@@ -768,7 +768,7 @@ let get_lang_strings = function
       content = "content";
       scope = "scope";
     }
-  | _ -> raise (unsupported "unsupported language")
+  | _ -> unsupported "unsupported language"
 
 type duration_units = { day : string; month : string; year : string }
 
@@ -800,7 +800,7 @@ let get_value_strings = function
       content_str = "content";
       duration_units = { day = "day"; month = "month"; year = "year" };
     }
-  | _ -> raise (unsupported "unsupported language")
+  | _ -> unsupported "unsupported language"
 
 (* Implicit stdlib alias handling in the writer. We filter out "Using ..." lines
    for well-known stdlib aliases. TODO: when the compiler surfaces active
@@ -1453,37 +1453,6 @@ let list_scopes include_dirs options =
     |> List.map snd
   in
   print_scopes filtered_scopes
-
-let rec convert_to_json_input ({ value; _ } : J.runtime_value) : Yojson.Safe.t =
-  let open O in
-  let convert_runtime_raw = function
-    | Bool b -> `Bool b
-    | Money i -> `String (string_of_float (float i /. 100.))
-    | Integer i -> `String (string_of_int i)
-    | Decimal f -> `String (string_of_float f)
-    | Date { year; month; day } ->
-      `String (Format.sprintf "%04d-%02d-%02d" year month day)
-    | Duration { years; months; days } ->
-      `Assoc ["years", `Int years; "months", `Int months; "days", `Int days]
-    | Enum (_decl, ("Absent", None)) -> `Null
-    | Enum (_decl, ("Present", Some x)) -> convert_to_json_input x
-    | Enum (_decl, (constr, None)) -> `String constr
-    | Enum (_decl, (constr, Some v)) -> `Assoc [constr, convert_to_json_input v]
-    | Struct (_decl, fl) ->
-      `Assoc
-        (List.filter_map
-           (function
-             | ( _,
-                 ({ value = Enum (_decl, ("Absent", None)); _ } :
-                   O.runtime_value) ) ->
-               None
-             | fname, v -> Some (fname, convert_to_json_input v))
-           fl)
-    | Array l -> `List (Array.to_list l |> List.map convert_to_json_input)
-    | Unset -> failwith "Cannot convert 'Unset' atd values to JSON"
-    | Empty -> failwith "Cannot convert 'Empty' atd values to JSON"
-  in
-  convert_runtime_raw value
 
 let serialize_inputs (scope_input : Yojson.Safe.t option) =
   let scope_input =
