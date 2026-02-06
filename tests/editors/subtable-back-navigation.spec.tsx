@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
+import { tryCreateTableSchema } from '../../src/editors/tableArrayUtils';
 import enMessages from '../../src/locales/en.json';
 import type {
   RuntimeValue,
@@ -211,11 +212,14 @@ describe('TableArrayEditor - Sub-table back navigation', () => {
       },
     };
 
+    const schemaResult = tryCreateTableSchema(companyType);
+    if (!schemaResult.ok) throw new Error('Expected schema to be ok');
+
     render(
       <IntlProvider locale="en" messages={enMessages}>
         <TableArrayEditor
           elementType={companyType}
-          structType={companyStruct}
+          schema={schemaResult.schema}
           valueDef={valueDef}
           onValueChange={() => {}}
           currentPath={[]}

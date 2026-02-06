@@ -59,5 +59,8 @@
   "tableView.duplicateAfter": "Dupliquer en-dessous",
   "tableView.addNewItem": "Ajouter un élément",
   "tableEditor.labelPlaceholder": "Nom...",
-  "tableEditor.goToParent": "Aller au parent : {parentLabel}"
+  "tableEditor.goToParent": "Aller au parent : {parentLabel}",
+  "tableView.switchToTreeView": "Passer en vue carte",
+  "arrayEditor.switchToTableView": "Passer en vue tableau",
+  "tableView.value": "Valeur"
 }

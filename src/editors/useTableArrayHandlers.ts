@@ -80,7 +80,6 @@ type UseTableArrayHandlersProps = {
   currentArray: RuntimeValue[];
   runtimeValue: RuntimeValue | undefined;
   elementType: Typ;
-  structType: StructDeclaration;
   onValueChange: (newValue: RuntimeValue) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
   currentPath: PathSegment[];
@@ -93,11 +92,14 @@ export function useTableArrayHandlers(
     currentArray,
     runtimeValue,
     elementType,
-    structType,
     onValueChange,
     onInvalidateDiffs,
     currentPath,
   } = props;
+
+  // Derive structType from elementType - no duplication
+  const structType =
+    elementType.kind === 'TStruct' ? elementType.value : undefined;
 
   const updateParent = (newArray: RuntimeValue[]): void => {
     const newValueRaw: RuntimeValueRaw = { kind: 'Array', value: newArray };
@@ -175,20 +177,28 @@ export function useTableArrayHandlers(
   };
 
   // Handles both existing struct rows and unset/invalid rows (constructs struct if needed)
+  // For simple elements (empty fieldPath), directly replaces the row value
   const handleCellUpdate = (
     rowIndex: number,
     fieldPath: string[],
     newValue: RuntimeValue
   ): void => {
-    const row = currentArray[rowIndex];
-    const newRow = updateOrConstructStruct(
-      row,
-      structType,
-      fieldPath,
-      newValue
-    );
     const newArray = [...currentArray];
-    newArray[rowIndex] = newRow;
+
+    if (fieldPath.length === 0) {
+      // Simple element - direct replacement
+      newArray[rowIndex] = newValue;
+    } else if (structType) {
+      // Struct element - update nested field
+      const row = currentArray[rowIndex];
+      newArray[rowIndex] = updateOrConstructStruct(
+        row,
+        structType,
+        fieldPath,
+        newValue
+      );
+    }
+
     updateParent(newArray);
   };
 
@@ -219,6 +229,11 @@ export function useTableArrayHandlers(
       };
     } else if (row.value.kind === 'Unset') {
       // Unset row - construct a full struct with defaults, then set the sub-array
+      if (!structType) {
+        throw new Error(
+          'handleParentSubArrayUpdate: structType required for Unset rows'
+        );
+      }
       const newItemMap = new Map<string, RuntimeValue>();
       for (const [fieldName, fieldType] of structType.fields.entries()) {
         newItemMap.set(fieldName, getDefaultValue(fieldType));
@@ -406,6 +421,9 @@ export function useTableArrayHandlers(
         { kind: 'Array', value: newSubArray },
         arrayValue
       );
+      if (!structType) {
+        throw new Error('handleSubTableChange: structType required');
+      }
       const newStructData = setNestedValue(
         structData,
         fieldPath,

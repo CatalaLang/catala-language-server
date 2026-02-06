@@ -25,7 +25,7 @@ import {
 import { confirm } from '../messaging/confirm';
 import { TableArrayEditor } from './TableArrayEditor';
 import { getTypeDisplayName } from './typeNameUtils';
-import { structIsFlattenable } from './tableArrayUtils';
+import { tryCreateTableSchema } from './tableArrayUtils';
 
 /**
  * Diffs are consumed only by ArrayEditor to compute "phantom" indices
@@ -165,17 +165,20 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   // otherwise we use a flowing 'card' layout.
   const isVertical = hasNestedArrays(elementType);
 
-  // Use table view for arrays of structs that can be flattened.
-  // A struct is flattenable if its fields can be rendered as columns or sub-tables.
-  // Structs with arrays hidden inside enums/options/tuples are not flattenable.
-  const shouldUseTableView =
-    elementType.kind === 'TStruct' && structIsFlattenable(elementType.value);
+  const schemaResult = tryCreateTableSchema(elementType);
 
-  if (shouldUseTableView) {
+  // Allow user to toggle between table and tree view
+  const [forceTreeView, setForceTreeView] = useState(false);
+
+  // State for drag and drop (must be before early return to satisfy hooks rules)
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  if (schemaResult.ok && !forceTreeView) {
     return (
       <TableArrayEditor
         elementType={elementType}
-        structType={elementType.value}
+        schema={schemaResult.schema}
         valueDef={valueDef}
         onValueChange={onValueChange}
         editorHook={editorHook}
@@ -184,13 +187,10 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
         editable={editable}
         onDiffResolved={props.onDiffResolved}
         onInvalidateDiffs={props.onInvalidateDiffs}
+        onSwitchToTreeView={() => setForceTreeView(true)}
       />
     );
   }
-
-  // State for drag and drop
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Handle drag start
   const handleDragStart = (e: React.DragEvent, index: number): void => {
@@ -240,6 +240,21 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   return (
     <div className="array-editor">
+      {/* Toggle to switch back to table view when available */}
+      {schemaResult?.ok && forceTreeView && (
+        <div className="table-view-toggle">
+          <button
+            className="table-control-btn"
+            onClick={() => setForceTreeView(false)}
+            title={intl.formatMessage({
+              id: 'arrayEditor.switchToTableView',
+              defaultMessage: 'Switch to table view',
+            })}
+          >
+            <span className="codicon codicon-table" />
+          </button>
+        </div>
+      )}
       <div
         className={`array-items ${isVertical ? 'array-items-nested' : 'array-items-non-nested'}`}
       >

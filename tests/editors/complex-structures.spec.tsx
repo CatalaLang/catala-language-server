@@ -1,13 +1,10 @@
 /**
- * Torture tests for complex/nested data structures in TableArrayEditor.
+ * Tests for complex/nested data structures in TableArrayEditor.
  *
- * These tests verify "graceful degradation": all data should render via proper
- * editors (not inline JSON), even if the layout isn't optimal for deeply nested structures.
- *
- * Test philosophy:
- * - Verify presence, not presentation (all leaf values appear somewhere)
- * - Catch regressions, not aesthetics (layout changes shouldn't break tests)
- * - Ensure editors are used (no raw JSON display)
+ * These tests verify:
+ * - Supported types render correctly (all leaf values via proper editors, no JSON)
+ * - Unsupported types are correctly rejected by tryCreateTableSchema
+ * - Deeply nested but supported structures work in table view
  *
  * Note: Catala's runtime doesn't have a String type - we use Integer/Date/Money for leaf values.
  */
@@ -25,6 +22,7 @@ import type {
   Option,
 } from '../../src/generated/test_case';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
+import { tryCreateTableSchema } from '../../src/editors/tableArrayUtils';
 import enMessages from '../../src/locales/en.json';
 
 // ============================================================================
@@ -79,6 +77,13 @@ function renderTableArrayEditor(
   editable = true
 ): ReturnType<typeof render> {
   const elementType: Typ = { kind: 'TStruct', value: structType };
+  const schemaResult = tryCreateTableSchema(elementType);
+  if (!schemaResult.ok) {
+    throw new Error(
+      `Test setup error: struct "${structType.struct_name}" is not flattenable. ` +
+        `Reasons: ${schemaResult.reasons.map((r) => `${r.field}: ${r.reason}`).join('; ')}`
+    );
+  }
 
   const valueDef: ValueDef = {
     value: arrayVal(rows),
@@ -88,7 +93,7 @@ function renderTableArrayEditor(
     <IntlProvider locale="en" messages={enMessages}>
       <TableArrayEditor
         elementType={elementType}
-        structType={structType}
+        schema={schemaResult.schema}
         valueDef={valueDef}
         onValueChange={vi.fn()}
         currentPath={[]}
@@ -163,44 +168,29 @@ describe('Tier 1: Array within enum payload', () => {
     );
   };
 
-  it('renders without throwing', () => {
-    const rows = [
-      createRecord(1, 'Pending'),
-      createRecord(2, 'Active', [100, 200, 300]),
-      createRecord(3, 'Active', [999]),
-    ];
+  it('is correctly rejected by tryCreateTableSchema', () => {
+    // Status = Pending | Active(items: Item[]) has an array payload,
+    // so it's correctly classified as 'unsupported' by tryCreateTableSchema().
+    // This struct should fall back to card/tree view.
+    const elementType: Typ = { kind: 'TStruct', value: recordStructDecl };
+    const result = tryCreateTableSchema(elementType);
 
-    expect(() => renderTableArrayEditor(recordStructDecl, rows)).not.toThrow();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reasons).toHaveLength(1);
+      expect(result.reasons[0].field).toBe('status');
+      expect(result.reasons[0].reason).toContain('contains arrays in payloads');
+    }
   });
 
-  it('renders IDs in main table', () => {
-    const rows = [
-      createRecord(1, 'Pending'),
-      createRecord(2, 'Active', [100, 200]),
-    ];
-
-    renderTableArrayEditor(recordStructDecl, rows);
-
-    expect(screen.getByDisplayValue('1')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('2')).toBeInTheDocument();
-  });
-
-  it('renders enum dropdowns', () => {
-    const rows = [createRecord(1, 'Active', [50])];
-
-    renderTableArrayEditor(recordStructDecl, rows);
-
-    const selects = screen.getAllByRole('combobox');
-    expect(selects.length).toBeGreaterThan(0);
-  });
-
-  it('uses proper editors (no raw JSON)', () => {
+  it('throws when renderTableArrayEditor is called with unsupported type', () => {
+    // This verifies that directly calling TableArrayEditor with unsupported
+    // types is an error. In production, ArrayEditor validates types first.
     const rows = [createRecord(1, 'Active', [42])];
 
-    renderTableArrayEditor(recordStructDecl, rows);
-
-    expect(screen.queryByText(/\{"kind":/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/"value":/)).not.toBeInTheDocument();
+    expect(() => renderTableArrayEditor(recordStructDecl, rows)).toThrow(
+      /not flattenable/
+    );
   });
 });
 
@@ -335,19 +325,25 @@ describe('Tier 1: Array of enums with struct payloads', () => {
       ])
     );
 
-  it('renders without throwing', () => {
-    const rows = [
-      createLog(2024, 1, 15, [
-        enumVal(eventEnumDecl, 'Started', createInfo(100, 5000)),
-        enumVal(eventEnumDecl, 'Stopped'),
-        enumVal(eventEnumDecl, 'Error', createInfo(500, 0)),
-      ]),
-    ];
+  it('is correctly rejected by tryCreateTableSchema', () => {
+    // TArray<Enum with struct payloads> is correctly classified as 'unsupported'
+    // by tryCreateTableSchema(). This struct should fall back to card/tree view.
+    // (The actual fallback is tested in table-view-eligibility.spec.tsx)
+    const elementType: Typ = { kind: 'TStruct', value: logStructDecl };
+    const result = tryCreateTableSchema(elementType);
 
-    expect(() => renderTableArrayEditor(logStructDecl, rows)).not.toThrow();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reasons).toHaveLength(1);
+      expect(result.reasons[0].field).toBe('events');
+      expect(result.reasons[0].reason).toContain('complex payloads');
+    }
   });
 
-  it('renders array count badge for enum array', () => {
+  it('throws when renderTableArrayEditor is called with unsupported type', () => {
+    // This verifies that directly calling TableArrayEditor with unsupported
+    // types is an error. In production, ArrayEditor validates types first
+    // and falls back to card view for unsupported types.
     const rows = [
       createLog(2024, 6, 1, [
         enumVal(eventEnumDecl, 'Started', createInfo(1, 100)),
@@ -355,10 +351,9 @@ describe('Tier 1: Array of enums with struct payloads', () => {
       ]),
     ];
 
-    renderTableArrayEditor(logStructDecl, rows);
-
-    // Arrays of enums show count badges in main table (2 events)
-    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(() => renderTableArrayEditor(logStructDecl, rows)).toThrow(
+      /not flattenable/
+    );
   });
 });
 

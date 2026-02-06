@@ -11,6 +11,7 @@ import type {
   ValueDef,
 } from '../../src/generated/catala_types';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
+import { tryCreateTableSchema } from '../../src/editors/tableArrayUtils';
 
 // Mock confirm to auto-approve destructive actions
 vi.mock('../../src/messaging/confirm', () => ({
@@ -57,6 +58,10 @@ describe('TableArrayEditor - Phantom diff support', () => {
       ['age', { kind: 'TInt' }],
     ]),
   };
+  const personType = { kind: 'TStruct' as const, value: personStruct };
+  const schemaResult = tryCreateTableSchema(personType);
+  if (!schemaResult.ok) throw new Error('Expected schema to be ok');
+  const personSchema = schemaResult.schema;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,7 +88,7 @@ describe('TableArrayEditor - Phantom diff support', () => {
       <IntlProvider locale="en" messages={enMessages}>
         <TableArrayEditor
           elementType={{ kind: 'TStruct', value: personStruct }}
-          structType={personStruct}
+          schema={personSchema}
           valueDef={arrayValueDef([])}
           onValueChange={() => {}}
           currentPath={currentPath}
@@ -131,7 +136,7 @@ describe('TableArrayEditor - Phantom diff support', () => {
       <IntlProvider locale="en" messages={enMessages}>
         <TableArrayEditor
           elementType={{ kind: 'TStruct', value: personStruct }}
-          structType={personStruct}
+          schema={personSchema}
           valueDef={arrayValueDef([person1])}
           onValueChange={() => {}}
           currentPath={currentPath}
@@ -176,7 +181,7 @@ describe('TableArrayEditor - Phantom diff support', () => {
       <IntlProvider locale="en" messages={enMessages}>
         <TableArrayEditor
           elementType={{ kind: 'TStruct', value: personStruct }}
-          structType={personStruct}
+          schema={personSchema}
           valueDef={arrayValueDef([])}
           onValueChange={() => {}}
           currentPath={currentPath}
@@ -224,7 +229,7 @@ describe('TableArrayEditor - Phantom diff support', () => {
       <IntlProvider locale="en" messages={enMessages}>
         <TableArrayEditor
           elementType={{ kind: 'TStruct', value: personStruct }}
-          structType={personStruct}
+          schema={personSchema}
           valueDef={arrayValueDef([person1])}
           onValueChange={() => {}}
           currentPath={currentPath}
@@ -275,7 +280,7 @@ describe('TableArrayEditor - Phantom diff support', () => {
       <IntlProvider locale="en" messages={enMessages}>
         <TableArrayEditor
           elementType={{ kind: 'TStruct', value: personStruct }}
-          structType={personStruct}
+          schema={personSchema}
           valueDef={arrayValueDef([])}
           onValueChange={() => {}}
           currentPath={currentPath}
@@ -334,7 +339,7 @@ describe('TableArrayEditor - Phantom diff support', () => {
       <IntlProvider locale="en" messages={enMessages}>
         <TableArrayEditor
           elementType={{ kind: 'TStruct', value: personStruct }}
-          structType={personStruct}
+          schema={personSchema}
           valueDef={arrayValueDef([person1])}
           onValueChange={() => {}}
           currentPath={currentPath}

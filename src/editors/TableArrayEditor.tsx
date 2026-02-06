@@ -7,7 +7,6 @@ import type {
   ValueDef,
   PathSegment,
   Diff,
-  StructDeclaration,
   TestIo,
 } from '../generated/catala_types';
 import ValueEditor from './ValueEditors';
@@ -25,11 +24,11 @@ import {
 import {
   getArrayItemLabel,
   isStructRow,
-  flattenStruct,
   getNestedValue,
   computeSubArrays,
   buildCellPath,
-  type SubArrayItem,
+  tryCreateTableSchema,
+  type TableSchema,
 } from './tableArrayUtils';
 import { extractSimpleName, getTypeName } from './typeNameUtils';
 import { useTableArrayHandlers } from './useTableArrayHandlers';
@@ -86,7 +85,7 @@ type RowMetadata = {
 
 type TableArrayEditorProps = {
   elementType: Typ;
-  structType: StructDeclaration;
+  schema: TableSchema;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
@@ -98,6 +97,8 @@ type TableArrayEditorProps = {
   // Sub-table mode props
   isSubTable?: boolean;
   rowMetadata?: RowMetadata[]; // For flattened sub-tables where each row has different parent
+  // View toggle
+  onSwitchToTreeView?: () => void; // Callback to switch to tree/card view
 };
 
 // Render a table cell using ValueEditor
@@ -139,7 +140,7 @@ function renderTableCell(
 
 export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
   const {
-    structType,
+    elementType,
     valueDef,
     onValueChange,
     currentPath,
@@ -149,6 +150,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
   } = props;
   const intl = useIntl();
 
+  const structType =
+    elementType.kind === 'TStruct' ? elementType.value : undefined;
+
   const runtimeValue = valueDef?.value;
   const currentArray =
     runtimeValue?.value.kind === 'Array' ? runtimeValue.value.value : [];
@@ -157,8 +161,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
   const handlers = useTableArrayHandlers({
     currentArray,
     runtimeValue,
-    elementType: props.elementType,
-    structType,
+    elementType,
     onValueChange,
     onInvalidateDiffs: props.onInvalidateDiffs,
     currentPath,
@@ -189,14 +192,17 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     flashElements(directChildRows, ANIMATION.NAV_DELAY_MS);
   };
 
-  const { atomicColumns, arrayFields } = useMemo(
-    () => flattenStruct(structType),
-    [structType]
-  );
+  const { schema } = props;
 
   const subArrays = useMemo(
-    () => computeSubArrays(currentArray, arrayFields, props.diffs, currentPath),
-    [currentArray, arrayFields, props.diffs, currentPath]
+    () =>
+      computeSubArrays(
+        currentArray,
+        schema.subArrays,
+        props.diffs,
+        currentPath
+      ),
+    [currentArray, schema.subArrays, props.diffs, currentPath]
   );
 
   // Compute phantom row indices for actual-only diffs (only for main table, not sub-tables)
@@ -287,7 +293,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
               id="arrayEditor.addElement"
               defaultMessage="Add {elementType}"
               values={{
-                elementType: extractSimpleName(structType.struct_name),
+                elementType: structType
+                  ? extractSimpleName(structType.struct_name)
+                  : getTypeName(elementType),
               }}
             />
           </button>
@@ -298,18 +306,44 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
 
   return (
     <div className="table-array-editor">
+      {/* View toggle button - only for main table, not sub-tables */}
+      {!isSubTable && props.onSwitchToTreeView && (
+        <div className="table-view-toggle">
+          <button
+            className="table-control-btn"
+            onClick={props.onSwitchToTreeView}
+            title={intl.formatMessage({
+              id: 'tableView.switchToTreeView',
+              defaultMessage: 'Switch to card view',
+            })}
+          >
+            <span className="codicon codicon-list-tree" />
+          </button>
+        </div>
+      )}
       {/* Main Table */}
       <div className="table-wrapper">
         <table className="table-view">
           <thead>
             <tr>
               <th className="table-header-controls-combined">#</th>
-              {atomicColumns.map((col) => (
-                <th key={col.label} className="table-header" title={col.label}>
-                  {col.label.split('.').pop()}
+              {schema.columns.map((col, colIdx) => (
+                <th
+                  key={col.label || colIdx}
+                  className="table-header"
+                  title={col.label || undefined}
+                >
+                  {col.label ? (
+                    col.label.split('.').pop()
+                  ) : (
+                    <FormattedMessage
+                      id="tableView.value"
+                      defaultMessage="Value"
+                    />
+                  )}
                 </th>
               ))}
-              {arrayFields.map((arr) => (
+              {schema.subArrays.map((arr) => (
                 <th
                   key={arr.label}
                   className="table-header-sub-array"
@@ -623,7 +657,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       {editable &&
                         !isPhantomRow &&
                         !isExpectedOnlyRow &&
-                        arrayFields.length > 0 && (
+                        schema.subArrays.length > 0 && (
                           <>
                             <button
                               className="add-subarray-pill"
@@ -650,12 +684,12 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                               }}
                               anchorElement={dropdownAnchor}
                             >
-                              {arrayFields.map((arr) => {
-                                const elementType =
+                              {schema.subArrays.map((arr) => {
+                                const arrElemType =
                                   arr.arrayType.kind === 'TArray'
                                     ? arr.arrayType.value
                                     : arr.arrayType;
-                                const typeName = getTypeName(elementType);
+                                const typeName = getTypeName(arrElemType);
                                 const fieldName = arr.fieldPath.at(-1);
                                 return (
                                   <div
@@ -666,7 +700,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                                         rowIndex,
                                         arr.fieldPath,
                                         arr.label,
-                                        elementType
+                                        arrElemType
                                       );
                                     }}
                                   >
@@ -685,18 +719,18 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                   </td>
 
                   {/* Atomic columns */}
-                  {atomicColumns.map((col) => {
+                  {schema.columns.map((col, colIdx) => {
                     const cellPath = buildCellPath(
                       currentPath,
                       rowIndex,
                       col.fieldPath
                     );
 
-                    // For valid Structs: extract real field values
+                    // Use schema to get cell value
                     // For Unset/Invalid/etc.: show parent state for all cells
                     const value =
-                      isStruct && structData
-                        ? getNestedValue(structData, col.fieldPath)
+                      isStruct || col.fieldPath.length === 0
+                        ? schema.getCellValue(displayRow, col)
                         : {
                             value: displayRow.value,
                             attrs: displayRow.attrs || [],
@@ -711,7 +745,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
 
                     return (
                       <td
-                        key={col.label}
+                        key={col.label || colIdx}
                         className="table-cell"
                         // Disable default VS Code context menu on data cells - it's non-functional
                         // and confusing. Context menu is only available on row headers.
@@ -733,7 +767,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                   })}
 
                   {/* Sub-array count badges and add buttons */}
-                  {arrayFields.map((arr) => {
+                  {schema.subArrays.map((arr) => {
                     const arrayValue = structData
                       ? getNestedValue(structData, arr.fieldPath)
                       : undefined;
@@ -743,7 +777,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                         : 0;
 
                     const subTableId = `sub-table-${arr.label}`;
-                    const elementType =
+                    const arrElemType =
                       arr.arrayType.kind === 'TArray'
                         ? arr.arrayType.value
                         : arr.arrayType;
@@ -780,7 +814,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                                   rowIndex,
                                   arr.fieldPath,
                                   arr.label,
-                                  elementType
+                                  arrElemType
                                 );
                               }}
                               title={intl.formatMessage({
@@ -868,7 +902,11 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
           <FormattedMessage
             id="arrayEditor.addElement"
             defaultMessage="Add {elementType}"
-            values={{ elementType: extractSimpleName(structType.struct_name) }}
+            values={{
+              elementType: structType
+                ? extractSimpleName(structType.struct_name)
+                : getTypeName(elementType),
+            }}
           />
         </button>
       )}
@@ -876,169 +914,160 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
       {/* Sub-array tables - grouped by field, all parent rows combined */}
       {subArrays.map((subArray, idx) => {
         if (subArray.arrayType.kind !== 'TArray') return null;
-        const elementType = subArray.arrayType.value;
+        const subElementType = subArray.arrayType.value;
+        const subSchemaResult = tryCreateTableSchema(subElementType);
+        if (!subSchemaResult.ok) return null;
+        const subTableId = `sub-table-${subArray.label}`;
 
-        // Check if array elements are structs
-        if (elementType.kind === 'TStruct') {
-          const subTableId = `sub-table-${subArray.label}`;
-          const itemStructDecl = elementType.value;
-
-          // Group items by parent row for add buttons
-          const itemsByParent = new Map<number, SubArrayItem[]>();
-          subArray.items.forEach((item) => {
-            const existing = itemsByParent.get(item.parentRowIndex) ?? [];
-            existing.push(item);
-            itemsByParent.set(item.parentRowIndex, existing);
-          });
-
-          return (
-            <div key={idx} id={subTableId} className="sub-table-section">
-              <div className="sub-table-header">
-                {subArray.label}
-                <span className="count-badge">{subArray.items.length}</span>
-              </div>
-              <div className="sub-table-content">
-                <TableArrayEditor
-                  elementType={elementType}
-                  structType={itemStructDecl}
-                  valueDef={{
-                    value: {
-                      value: {
-                        kind: 'Array',
-                        value: subArray.items.map((item) => item.value),
-                      },
-                      attrs: [],
-                    },
-                  }}
-                  onValueChange={(newValue) =>
-                    handlers.handleSubTableChange(
-                      subArray,
-                      itemStructDecl,
-                      newValue
-                    )
-                  }
-                  currentPath={[
-                    ...currentPath,
-                    ...subArray.fieldPath.map((f) => ({
-                      kind: 'StructField' as const,
-                      value: f,
-                    })),
-                  ]}
-                  diffs={props.diffs}
-                  onDiffResolved={props.onDiffResolved}
-                  onInvalidateDiffs={props.onInvalidateDiffs}
-                  editable={editable}
-                  isSubTable={true}
-                  rowMetadata={((): RowMetadata[] => {
-                    // Compute sibling counts per parent
-                    const siblingCounts = new Map<number, number>();
-                    for (const item of subArray.items) {
-                      siblingCounts.set(
-                        item.parentRowIndex,
-                        (siblingCounts.get(item.parentRowIndex) ?? 0) + 1
-                      );
-                    }
-                    return subArray.items.map((item) => ({
-                      parentRowIndex: item.parentRowIndex,
-                      parentLabel: getArrayItemLabel(
-                        currentArray[item.parentRowIndex]?.attrs
-                      ),
-                      itemIndexWithinParent: item.itemIndex,
-                      siblingCount: siblingCounts.get(item.parentRowIndex) ?? 0,
-                      isPhantom: item.isPhantom,
-                      onNavigateToParent: (): void => {
-                        // Use the ref to the parent row element directly.
-                        // This ensures we navigate to the correct parent at each
-                        // nesting level, not the top-level main table row.
-                        const parentRow = rowRefs.current.get(
-                          item.parentRowIndex
-                        );
-                        if (parentRow) {
-                          parentRow.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'center',
-                          });
-                          flashElement(parentRow, ANIMATION.SCROLL_SETTLE_MS);
-                        }
-                      },
-                      onMoveItem: (
-                        fromIndex: number,
-                        toIndex: number
-                      ): void => {
-                        handlers.handleSubArrayItemMove(
-                          item.parentRowIndex,
-                          subArray.fieldPath,
-                          fromIndex,
-                          toIndex
-                        );
-                      },
-                      onDeleteItem: async (index: number): Promise<void> => {
-                        // For phantom items, resolve the diff instead of deleting
-                        if (item.isPhantom) {
-                          const subArrayPath = [
-                            ...currentPath,
-                            {
-                              kind: 'ListIndex' as const,
-                              value: item.parentRowIndex,
-                            },
-                            ...subArray.fieldPath.map(
-                              (f): PathSegment => ({
-                                kind: 'StructField',
-                                value: f,
-                              })
-                            ),
-                            { kind: 'ListIndex' as const, value: index },
-                          ];
-                          props.onDiffResolved?.(subArrayPath);
-                        } else {
-                          await handlers.handleSubArrayItemDelete(
-                            item.parentRowIndex,
-                            subArray.fieldPath,
-                            index
-                          );
-                        }
-                      },
-                      onDuplicateItem: (
-                        index: number,
-                        position: 'before' | 'after'
-                      ): void => {
-                        handlers.handleSubArrayItemDuplicate(
-                          item.parentRowIndex,
-                          subArray.fieldPath,
-                          index,
-                          position
-                        );
-                      },
-                      onAddItem: (): void => {
-                        handlers.handleAddSubArrayItem(
-                          item.parentRowIndex,
-                          subArray.fieldPath,
-                          elementType
-                        );
-                      },
-                      onLabelChange: (
-                        index: number,
-                        newLabel: string
-                      ): void => {
-                        handlers.handleSubArrayItemLabelChange(
-                          item.parentRowIndex,
-                          subArray.fieldPath,
-                          index,
-                          newLabel
-                        );
-                      },
-                    }));
-                  })()}
-                  editorHook={props.editorHook}
-                />
-              </div>
-            </div>
+        // Compute sibling counts per parent (shared by both struct and non-struct)
+        const siblingCounts = new Map<number, number>();
+        for (const item of subArray.items) {
+          siblingCounts.set(
+            item.parentRowIndex,
+            (siblingCounts.get(item.parentRowIndex) ?? 0) + 1
           );
-        } else {
-          // Non-struct sub-arrays (primitives, enums) are rendered inline in parent cells,
-          // not as separate sub-tables. This is intentional.
-          return null;
         }
+
+        // Build row metadata - identical for struct and non-struct sub-arrays
+        const rowMetadata: RowMetadata[] = subArray.items.map((item) => ({
+          parentRowIndex: item.parentRowIndex,
+          parentLabel: getArrayItemLabel(
+            currentArray[item.parentRowIndex]?.attrs
+          ),
+          itemIndexWithinParent: item.itemIndex,
+          siblingCount: siblingCounts.get(item.parentRowIndex) ?? 0,
+          isPhantom: item.isPhantom,
+          onNavigateToParent: (): void => {
+            const parentRow = rowRefs.current.get(item.parentRowIndex);
+            if (parentRow) {
+              parentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              flashElement(parentRow, ANIMATION.SCROLL_SETTLE_MS);
+            }
+          },
+          onMoveItem: (fromIndex: number, toIndex: number): void => {
+            handlers.handleSubArrayItemMove(
+              item.parentRowIndex,
+              subArray.fieldPath,
+              fromIndex,
+              toIndex
+            );
+          },
+          onDeleteItem: async (index: number): Promise<void> => {
+            if (item.isPhantom) {
+              const subArrayPath = [
+                ...currentPath,
+                { kind: 'ListIndex' as const, value: item.parentRowIndex },
+                ...subArray.fieldPath.map(
+                  (f): PathSegment => ({ kind: 'StructField', value: f })
+                ),
+                { kind: 'ListIndex' as const, value: index },
+              ];
+              props.onDiffResolved?.(subArrayPath);
+            } else {
+              await handlers.handleSubArrayItemDelete(
+                item.parentRowIndex,
+                subArray.fieldPath,
+                index
+              );
+            }
+          },
+          onDuplicateItem: (
+            index: number,
+            position: 'before' | 'after'
+          ): void => {
+            handlers.handleSubArrayItemDuplicate(
+              item.parentRowIndex,
+              subArray.fieldPath,
+              index,
+              position
+            );
+          },
+          onAddItem: (): void => {
+            handlers.handleAddSubArrayItem(
+              item.parentRowIndex,
+              subArray.fieldPath,
+              subElementType
+            );
+          },
+          onLabelChange: (index: number, newLabel: string): void => {
+            handlers.handleSubArrayItemLabelChange(
+              item.parentRowIndex,
+              subArray.fieldPath,
+              index,
+              newLabel
+            );
+          },
+        }));
+
+        // onValueChange handler differs: struct sub-arrays use handleSubTableChange,
+        // non-struct use direct distribution to parent rows
+        const handleSubValueChange = (newValue: RuntimeValue): void => {
+          if (newValue.value.kind !== 'Array') return;
+          const newValues = newValue.value.value;
+
+          if (subElementType.kind === 'TStruct') {
+            handlers.handleSubTableChange(
+              subArray,
+              subElementType.value,
+              newValue
+            );
+          } else {
+            // Distribute updated values back to parent rows
+            const updatesByParent = new Map<number, RuntimeValue[]>();
+            subArray.items.forEach((item, flatIdx) => {
+              const parentUpdates =
+                updatesByParent.get(item.parentRowIndex) ?? [];
+              parentUpdates[item.itemIndex] = newValues[flatIdx];
+              updatesByParent.set(item.parentRowIndex, parentUpdates);
+            });
+            updatesByParent.forEach((updates, parentRowIndex) => {
+              handlers.handleParentSubArrayUpdate(
+                parentRowIndex,
+                subArray.fieldPath,
+                updates
+              );
+            });
+          }
+        };
+
+        return (
+          <div key={idx} id={subTableId} className="sub-table-section">
+            <div className="sub-table-header">
+              {subArray.label}
+              <span className="count-badge">{subArray.items.length}</span>
+            </div>
+            <div className="sub-table-content">
+              <TableArrayEditor
+                elementType={subElementType}
+                schema={subSchemaResult.schema}
+                valueDef={{
+                  value: {
+                    value: {
+                      kind: 'Array',
+                      value: subArray.items.map((item) => item.value),
+                    },
+                    attrs: [],
+                  },
+                }}
+                onValueChange={handleSubValueChange}
+                currentPath={[
+                  ...currentPath,
+                  ...subArray.fieldPath.map((f) => ({
+                    kind: 'StructField' as const,
+                    value: f,
+                  })),
+                ]}
+                diffs={props.diffs}
+                onDiffResolved={props.onDiffResolved}
+                onInvalidateDiffs={props.onInvalidateDiffs}
+                editable={editable}
+                isSubTable={true}
+                rowMetadata={rowMetadata}
+                editorHook={props.editorHook}
+              />
+            </div>
+          </div>
+        );
       })}
     </div>
   );

@@ -28,7 +28,7 @@ import {
 /**
  * Flattened column descriptor with full path through nested structs
  */
-export interface FlatColumn {
+interface FlatColumn {
   label: string; // Display label (e.g., "person.date_of_birth")
   fieldPath: string[]; // Path through nested structs (e.g., ["person", "date_of_birth"])
   fieldType: Typ; // The atomic type
@@ -37,7 +37,7 @@ export interface FlatColumn {
 /**
  * Sub-array item with parent row tracking
  */
-export interface SubArrayItem {
+interface SubArrayItem {
   parentRowIndex: number; // Index of the parent row in the main table
   itemIndex: number; // Index within the parent's array
   value: RuntimeValue; // The array item value
@@ -55,8 +55,142 @@ export interface SubArrayDescriptor {
 }
 
 // ============================================================================
+// Table Schema Interface
+// ============================================================================
+
+/**
+ * Abstraction for how to view array elements as table rows.
+ * Allows TableArrayEditor to handle both structs and primitives/enums uniformly.
+ */
+export interface TableSchema {
+  /** Column definitions for the table header */
+  columns: FlatColumn[];
+  /** Sub-arrays that should be rendered as separate sub-tables */
+  subArrays: { label: string; fieldPath: string[]; arrayType: Typ }[];
+  /** Extract cell value from a row */
+  getCellValue(row: RuntimeValue, column: FlatColumn): RuntimeValue | undefined;
+  /** Update cell value in a row, returning the updated row */
+  updateCellValue(
+    row: RuntimeValue,
+    column: FlatColumn,
+    newValue: RuntimeValue
+  ): RuntimeValue;
+}
+
+/** Problem with a specific field that prevents table rendering */
+interface FieldProblem {
+  field: string;
+  reason: string;
+}
+
+/** Result of attempting to create a table schema */
+type SchemaResult =
+  | { ok: true; schema: TableSchema }
+  | { ok: false; reasons: FieldProblem[] };
+
+/**
+ * Create a TableSchema for struct elements.
+ * Columns are derived from flattenStruct, values accessed via nested paths.
+ */
+function createStructSchema(structDecl: StructDeclaration): TableSchema {
+  const { atomicColumns, arrayFields } = flattenStruct(structDecl);
+
+  return {
+    columns: atomicColumns,
+    subArrays: arrayFields,
+
+    getCellValue(
+      row: RuntimeValue,
+      column: FlatColumn
+    ): RuntimeValue | undefined {
+      if (row.value.kind !== 'Struct') return undefined;
+      const structData = row.value.value[1];
+      return getNestedValue(structData, column.fieldPath);
+    },
+
+    updateCellValue(
+      row: RuntimeValue,
+      column: FlatColumn,
+      newValue: RuntimeValue
+    ): RuntimeValue {
+      if (row.value.kind !== 'Struct') return row;
+      const [decl, structData] = row.value.value;
+      const updatedData = setNestedValue(
+        structData,
+        column.fieldPath,
+        newValue,
+        decl
+      );
+      return {
+        value: { kind: 'Struct', value: [decl, updatedData] },
+        attrs: row.attrs,
+      };
+    },
+  };
+}
+
+/**
+ * Create a TableSchema for simple elements (primitives, simple enums).
+ * Single "Value" column, row is the value itself.
+ */
+function createSimpleSchema(elementType: Typ): TableSchema {
+  const column: FlatColumn = {
+    label: '', // Empty label for simple values
+    fieldPath: [],
+    fieldType: elementType,
+  };
+
+  return {
+    columns: [column],
+    subArrays: [],
+
+    getCellValue(row: RuntimeValue, _column: FlatColumn): RuntimeValue {
+      return row; // Row IS the value
+    },
+
+    updateCellValue(
+      _row: RuntimeValue,
+      _column: FlatColumn,
+      newValue: RuntimeValue
+    ): RuntimeValue {
+      return newValue; // No wrapping needed
+    },
+  };
+}
+
+/**
+ * Attempt to create a TableSchema for an element type.
+ *
+ * Returns `{ ok: true, schema }` if the type can be rendered as a table,
+ * or `{ ok: false, reasons }` with details about why not.
+ *
+ * This is the single source of truth for table view eligibility.
+ */
+export function tryCreateTableSchema(elementType: Typ): SchemaResult {
+  if (elementType.kind === 'TStruct') {
+    const problems = collectStructProblems(elementType.value);
+    if (problems.length > 0) {
+      return { ok: false, reasons: problems };
+    }
+    return { ok: true, schema: createStructSchema(elementType.value) };
+  }
+  // Simple types (primitives, enums) are always supported
+  return { ok: true, schema: createSimpleSchema(elementType) };
+}
+
+// ============================================================================
 // Table View Eligibility Detection
 // ============================================================================
+
+/**
+ * Describes how a struct field should be rendered in table view.
+ * Used by collectStructProblems() and flattenStruct() to ensure consistency.
+ */
+type FieldRenderStrategy =
+  | { kind: 'cell' } // Render in a single table cell (atomics, simple enums)
+  | { kind: 'flatten'; struct: StructDeclaration } // Flatten nested struct into columns
+  | { kind: 'subTable'; elementType: Typ } // Render as sub-table (any array)
+  | { kind: 'unsupported'; reason: string }; // Cannot render in table view
 
 /**
  * Recursively checks if a type is or contains an array at any depth.
@@ -116,96 +250,116 @@ function enumHasNestedPayload(enumDecl: EnumDeclaration): boolean {
 }
 
 /**
- * Checks if an array element type can be rendered in a sub-table.
+ * Determines the render strategy for an array element type.
  *
- * Sub-table rendering (TableArrayEditor) only handles TArray<TStruct>.
- * TArray<TEnum> with nested payloads won't render properly.
- *
- * @param elementType - The element type of the array
- * @returns true if the array element supports sub-table rendering
+ * Arrays are rendered as sub-tables. The element type determines
+ * whether that's supported:
+ * - TStruct: full sub-table with columns
+ * - Simple enum/primitive: simple sub-table with one value column
+ * - Complex enum (with nested payloads): unsupported
  */
-function arrayElementIsFlattenable(elementType: Typ): boolean {
-  if (elementType.kind === 'TEnum') {
-    // TArray<TEnum> with nested payloads is not flattenable
-    // because sub-table rendering returns null for non-struct arrays.
-    // Simple enums (no payload or primitive payload) are fine.
-    return !enumHasNestedPayload(elementType.value);
-  }
-  // TArray<TStruct> is fine (proper sub-table support)
-  // TArray<primitive> is rare and also not fully supported, but we allow it
-  return true;
-}
-
-/**
- * Checks if a struct field type can be rendered in a table cell or sub-table.
- *
- * - TArray<TStruct>: flattenable (handled as sub-table)
- * - TArray<TEnum> with nested payloads: not flattenable
- * - TStruct: recursively check nested fields
- * - TEnum: flattenable unless payload contains arrays
- * - TOption: flattenable unless inner type contains arrays
- * - TTuple: flattenable unless any element contains arrays
- * - Primitives: flattenable
- */
-function fieldTypeIsFlattenable(typ: Typ): boolean {
-  switch (typ.kind) {
-    case 'TArray':
-      // Arrays at struct field level normally become sub-tables.
-      // BUT: TArray<TEnum> with nested payloads is not flattenable because
-      // sub-table rendering only handles TArray<TStruct>, not TArray<TEnum>.
-      // See TableArrayEditor.tsx lines 821-970.
-      return arrayElementIsFlattenable(typ.value);
-    case 'TStruct':
-      // Recursively check nested struct fields
-      return structIsFlattenable(typ.value);
-    case 'TEnum':
-      // Flattenable unless payload contains arrays
-      return !enumPayloadContainsArray(typ.value);
-    case 'TOption':
-      // Flattenable unless option wraps an array
-      return !typeContainsArray(typ.value);
-    case 'TTuple':
-      // Flattenable unless any tuple element contains an array
-      return !typ.value.some(typeContainsArray);
-    default:
-      // Primitives are always flattenable
-      return true;
-  }
-}
-
-/**
- * Checks if a struct can be flattened into a table view.
- *
- * A struct is flattenable if all its fields can be rendered either:
- * - As table columns (primitives, simple enums)
- * - As sub-tables (arrays of structs)
- *
- * Not flattenable: arrays hidden inside enum payloads, option types, or tuples.
- * These would need to render inline in cells, which doesn't work well for arrays.
- *
- * @param structDecl - The struct declaration to analyze
- * @returns true if the struct can be rendered as a table
- *
- * @example
- * // Flattenable - arrays become sub-tables:
- * struct Order { id: int, items: Item[] }
- *
- * // Not flattenable - array hidden in enum payload:
- * struct Order { id: int, payment: PaymentMethod }
- * // where PaymentMethod = Cash | Installments(Payment[])
- *
- * ---
- * Future enhancement: Consider showing user feedback when falling back to tree view.
- * Could display a subtle indicator like "Displayed as tree (contains variable-structure fields)"
- * to help users understand why table view wasn't used.
- */
-export function structIsFlattenable(structDecl: StructDeclaration): boolean {
-  for (const fieldType of structDecl.fields.values()) {
-    if (!fieldTypeIsFlattenable(fieldType)) {
-      return false;
+function getArrayElementStrategy(elementType: Typ): FieldRenderStrategy {
+  if (elementType.kind === 'TStruct') {
+    // Check if the nested struct is itself flattenable
+    if (structIsFlattenable(elementType.value)) {
+      return { kind: 'subTable', elementType };
+    } else {
+      return {
+        kind: 'unsupported',
+        reason: `Array element struct "${elementType.value.struct_name}" is not flattenable`,
+      };
     }
   }
-  return true;
+
+  if (elementType.kind === 'TEnum') {
+    // Enums with nested payloads (struct, array, etc.) can't be rendered
+    // in a simple sub-table cell
+    if (enumHasNestedPayload(elementType.value)) {
+      return {
+        kind: 'unsupported',
+        reason: `Array of enum "${elementType.value.enum_name}" has complex payloads`,
+      };
+    }
+    // Simple enums (no payload or primitive payload) → simple sub-table
+    return { kind: 'subTable', elementType };
+  }
+
+  // Primitives → simple sub-table with one column
+  return { kind: 'subTable', elementType };
+}
+
+/**
+ * Determines how a field type should be rendered in table view.
+ */
+function getFieldRenderStrategy(fieldType: Typ): FieldRenderStrategy {
+  switch (fieldType.kind) {
+    case 'TArray':
+      return getArrayElementStrategy(fieldType.value);
+
+    case 'TStruct':
+      // Nested struct → flatten into columns (if the nested struct is flattenable)
+      if (structIsFlattenable(fieldType.value)) {
+        return { kind: 'flatten', struct: fieldType.value };
+      }
+      return {
+        kind: 'unsupported',
+        reason: `Nested struct "${fieldType.value.struct_name}" is not flattenable`,
+      };
+
+    case 'TEnum':
+      // Enums with array payloads are problematic (arrays hidden inside enums)
+      if (enumPayloadContainsArray(fieldType.value)) {
+        return {
+          kind: 'unsupported',
+          reason: `Enum "${fieldType.value.enum_name}" contains arrays in payloads`,
+        };
+      }
+      return { kind: 'cell' };
+
+    case 'TOption':
+      // Options wrapping arrays are unsupported
+      if (typeContainsArray(fieldType.value)) {
+        return {
+          kind: 'unsupported',
+          reason: 'Option type contains array',
+        };
+      }
+      return { kind: 'cell' };
+
+    case 'TTuple':
+      // Tuples containing arrays are unsupported
+      if (fieldType.value.some(typeContainsArray)) {
+        return {
+          kind: 'unsupported',
+          reason: 'Tuple contains array',
+        };
+      }
+      return { kind: 'cell' };
+
+    default:
+      // Primitives (TBool, TInt, TRat, TMoney, TDate, TDuration, TUnit, TArrow)
+      return { kind: 'cell' };
+  }
+}
+
+/**
+ * Internal: Collect problems that would prevent a struct from being flattened.
+ * Used by getFieldRenderStrategy (recursive checks) and tryCreateTableSchema.
+ */
+function collectStructProblems(structDecl: StructDeclaration): FieldProblem[] {
+  const problems: FieldProblem[] = [];
+  for (const [fieldName, fieldType] of structDecl.fields.entries()) {
+    const strategy = getFieldRenderStrategy(fieldType);
+    if (strategy.kind === 'unsupported') {
+      problems.push({ field: fieldName, reason: strategy.reason });
+    }
+  }
+  return problems;
+}
+
+/** Shorthand for recursive checks within getFieldRenderStrategy. */
+export function structIsFlattenable(structDecl: StructDeclaration): boolean {
+  return collectStructProblems(structDecl).length === 0;
 }
 
 // ============================================================================
@@ -396,7 +550,7 @@ export function isStructRow(
  * //   { label: "customer.email", fieldPath: ["customer", "email"], ... }
  * // ]
  */
-export function flattenStruct(
+function flattenStruct(
   structDecl: StructDeclaration,
   pathPrefix: string[] = []
 ): {
@@ -411,20 +565,34 @@ export function flattenStruct(
     const fieldPath = [...pathPrefix, fieldName];
     const label = fieldPath.join('.');
 
-    if (fieldType.kind === 'TArray') {
-      // Extract array for sub-table
-      arrayFields.push({ label, fieldPath, arrayType: fieldType });
-    } else if (fieldType.kind === 'TStruct') {
-      // Recurse into nested struct
-      const nested = flattenStruct(fieldType.value, fieldPath);
-      atomicColumns.push(...nested.atomicColumns);
-      arrayFields.push(...nested.arrayFields);
-    } else if (fieldType.kind === 'TEnum') {
-      // Enums are atomic for now (show in main table)
-      atomicColumns.push({ label, fieldPath, fieldType });
-    } else {
-      // Atomic type (Int, Bool, Date, Money, etc.)
-      atomicColumns.push({ label, fieldPath, fieldType });
+    const strategy = getFieldRenderStrategy(fieldType);
+
+    switch (strategy.kind) {
+      case 'cell':
+        // Render in a single table cell
+        atomicColumns.push({ label, fieldPath, fieldType });
+        break;
+
+      case 'flatten': {
+        // Recurse into nested struct
+        const nested = flattenStruct(strategy.struct, fieldPath);
+        atomicColumns.push(...nested.atomicColumns);
+        arrayFields.push(...nested.arrayFields);
+        break;
+      }
+
+      case 'subTable':
+        // Extract array for sub-table rendering
+        if (fieldType.kind === 'TArray') {
+          arrayFields.push({ label, fieldPath, arrayType: fieldType });
+        }
+        break;
+
+      case 'unsupported':
+        throw new Error(
+          `flattenStruct: Unsupported field "${label}": ${strategy.reason}. ` +
+            `This indicates tryCreateTableSchema() was not checked or has a bug.`
+        );
     }
   }
 
