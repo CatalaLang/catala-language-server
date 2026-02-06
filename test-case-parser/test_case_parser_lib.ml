@@ -768,7 +768,7 @@ let get_lang_strings = function
       content = "content";
       scope = "scope";
     }
-  | _ -> raise (unsupported "unsupported language")
+  | _ -> unsupported "unsupported language"
 
 type duration_units = { day : string; month : string; year : string }
 
@@ -800,7 +800,7 @@ let get_value_strings = function
       content_str = "content";
       duration_units = { day = "day"; month = "month"; year = "year" };
     }
-  | _ -> raise (unsupported "unsupported language")
+  | _ -> unsupported "unsupported language"
 
 (* Implicit stdlib alias handling in the writer. We filter out "Using ..." lines
    for well-known stdlib aliases. TODO: when the compiler surfaces active
