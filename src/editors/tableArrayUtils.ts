@@ -28,7 +28,7 @@ import {
 /**
  * Flattened column descriptor with full path through nested structs
  */
-export interface FlatColumn {
+interface FlatColumn {
   label: string; // Display label (e.g., "person.date_of_birth")
   fieldPath: string[]; // Path through nested structs (e.g., ["person", "date_of_birth"])
   fieldType: Typ; // The atomic type
@@ -37,7 +37,7 @@ export interface FlatColumn {
 /**
  * Sub-array item with parent row tracking
  */
-export interface SubArrayItem {
+interface SubArrayItem {
   parentRowIndex: number; // Index of the parent row in the main table
   itemIndex: number; // Index within the parent's array
   value: RuntimeValue; // The array item value
@@ -78,13 +78,13 @@ export interface TableSchema {
 }
 
 /** Problem with a specific field that prevents table rendering */
-export interface FieldProblem {
+interface FieldProblem {
   field: string;
   reason: string;
 }
 
 /** Result of attempting to create a table schema */
-export type SchemaResult =
+type SchemaResult =
   | { ok: true; schema: TableSchema }
   | { ok: false; reasons: FieldProblem[] };
 
@@ -186,7 +186,7 @@ export function tryCreateTableSchema(elementType: Typ): SchemaResult {
  * Describes how a struct field should be rendered in table view.
  * Used by collectStructProblems() and flattenStruct() to ensure consistency.
  */
-export type FieldRenderStrategy =
+type FieldRenderStrategy =
   | { kind: 'cell' } // Render in a single table cell (atomics, simple enums)
   | { kind: 'flatten'; struct: StructDeclaration } // Flatten nested struct into columns
   | { kind: 'subTable'; elementType: Typ } // Render as sub-table (any array)
@@ -589,13 +589,10 @@ function flattenStruct(
         break;
 
       case 'unsupported':
-        // This should never happen if tryCreateTableSchema was checked first.
-        // If it does, it's a bug - the struct shouldn't be using table view.
-        console.error(
+        throw new Error(
           `flattenStruct: Unsupported field "${label}": ${strategy.reason}. ` +
             `This indicates tryCreateTableSchema() was not checked or has a bug.`
         );
-        break;
     }
   }
 

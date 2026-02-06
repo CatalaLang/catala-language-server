@@ -85,8 +85,7 @@ type RowMetadata = {
 
 type TableArrayEditorProps = {
   elementType: Typ;
-  /** Pre-computed schema from tryCreateTableSchema. If not provided, computed internally. */
-  schema?: TableSchema;
+  schema: TableSchema;
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
@@ -151,7 +150,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
   } = props;
   const intl = useIntl();
 
-  // Derive structType from elementType - no duplication
   const structType =
     elementType.kind === 'TStruct' ? elementType.value : undefined;
 
@@ -194,19 +192,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     flashElements(directChildRows, ANIMATION.NAV_DELAY_MS);
   };
 
-  // Use provided schema or compute it (for sub-tables).
-  // Sub-tables always succeed because parent types were already validated.
-  const schema: TableSchema = useMemo(() => {
-    if (props.schema) return props.schema;
-    const result = tryCreateTableSchema(elementType);
-    if (!result.ok) {
-      // This should never happen for sub-tables - parent validation ensures it
-      throw new Error(
-        `TableArrayEditor: unexpected unsupported type. Reasons: ${result.reasons.map((r) => r.reason).join(', ')}`
-      );
-    }
-    return result.schema;
-  }, [props.schema, elementType]);
+  const { schema } = props;
 
   const subArrays = useMemo(
     () =>
@@ -929,6 +915,8 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
       {subArrays.map((subArray, idx) => {
         if (subArray.arrayType.kind !== 'TArray') return null;
         const subElementType = subArray.arrayType.value;
+        const subSchemaResult = tryCreateTableSchema(subElementType);
+        if (!subSchemaResult.ok) return null;
         const subTableId = `sub-table-${subArray.label}`;
 
         // Compute sibling counts per parent (shared by both struct and non-struct)
@@ -1051,6 +1039,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
             <div className="sub-table-content">
               <TableArrayEditor
                 elementType={subElementType}
+                schema={subSchemaResult.schema}
                 valueDef={{
                   value: {
                     value: {
