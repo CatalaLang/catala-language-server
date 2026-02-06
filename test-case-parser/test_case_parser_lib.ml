@@ -19,25 +19,13 @@ module O = Catala_types_t
 module J = Catala_types_j
 
 let to_relative (p : File.t) =
-  let cwd = File.path_to_list (Sys.getcwd ()) in
-  let pl = File.path_to_list p in
-  let rec loop = function
-    | [], [] -> ["."]
-    | h :: t, (h' :: t' as r) -> if h = h' then loop (t, t') else r
-    | [], r -> r
-    | _, [] -> ["."]
-  in
-  File.clean_path (loop (cwd, pl) |> String.concat Filename.dir_sep)
+  File.make_relative_to ~dir:(Sys.getcwd ()) p
 
 let lookup_clerk_toml from_dir =
   let open Catala_utils in
   try
     begin
-      let from_dir =
-        if Filename.is_relative from_dir then
-          (File.(Sys.getcwd () / from_dir) :> string)
-        else from_dir
-      in
+      let from_dir = File.make_absolute from_dir in
       match
         File.(
           find_in_parents ~cwd:from_dir (fun dir -> exists (dir / "clerk.toml")))
@@ -51,48 +39,32 @@ let lookup_clerk_toml from_dir =
     end
   with _ -> None
 
-let lookup_config current_dir =
-  (* Otherwise, lookup for the toml *)
-  let dir =
-    if Filename.is_relative current_dir then
-      if current_dir = "." then Sys.getcwd ()
-      else File.(Sys.getcwd () / current_dir)
-    else current_dir
-  in
-  lookup_clerk_toml dir
-
 let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
   (* Otherwise, lookup for the toml *)
-  let f dir =
-    let dir =
-      if Filename.is_relative dir then
-        if dir = "." then Sys.getcwd () else File.(Sys.getcwd () / dir)
-      else to_relative dir
-    in
-    lookup_clerk_toml dir
-    |> function
-    | None -> ".", []
-    | Some (config, rel) ->
-      let path_to_build = to_relative File.(dir / rel) in
-      let include_dirs =
-        if prefix_build then
-          List.map
-            (fun p -> File.(path_to_build / "_build" / p))
-            config.global.include_dirs
-        else List.map (File.( / ) path_to_build) config.global.include_dirs
-      in
-      Message.debug "@[<h>Found %s dirs:@ %a@]"
-        (if prefix_build then "build" else "include")
-        Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
-        include_dirs;
-      path_to_build, List.map Global.raw_file include_dirs
+  let dir =
+    match options.Global.input_src with
+    | FileName file | Contents (_, file) -> Filename.dirname file
+    | Stdin _ ->
+      match buffer_path with
+      | None -> Sys.getcwd ()
+      | Some buffer_path -> Filename.dirname buffer_path
   in
-  match options.Global.input_src with
-  | FileName file | Contents (_, file) -> f (Filename.dirname file)
-  | Stdin _ -> (
-    match buffer_path with
-    | None -> f (Sys.getcwd ())
-    | Some buffer_path -> f (Filename.dirname buffer_path))
+  match lookup_clerk_toml dir with
+  | None -> ".", []
+  | Some (config, rel) ->
+    let path_to_build = to_relative File.(dir / rel) in
+    let include_dirs =
+      if prefix_build then
+        List.map
+          (fun p -> File.(path_to_build / "_build" / p))
+          config.global.include_dirs
+      else List.map (File.( / ) path_to_build) config.global.include_dirs
+    in
+    Message.debug "@[<h>Found %s dirs:@ %a@]"
+      (if prefix_build then "build" else "include")
+      Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
+      include_dirs;
+    path_to_build, List.map Global.raw_file include_dirs
 
 let build_dir_rel ?buffer_path options =
   (* Otherwise, lookup for the toml *)

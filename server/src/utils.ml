@@ -157,50 +157,25 @@ let lookup_catala_enable_project_scan ~(notify_back : Jsonrpc2.notify_back) :
   in
   r
 
-let join_paths ?(abs = true) dir path =
-  let open File in
-  let dir = path_to_list dir in
-  let path = path_to_list path in
-  let rec loop acc = function
-    | [], [] -> acc
-    | r, [] | [], r -> List.rev_append r acc
-    | h :: t, (h' :: t' as r) ->
-      if h <> h' then loop (h :: acc) (t, r) else loop (h :: acc) (t, t')
-  in
-  loop [] (dir, path)
-  |> List.rev
-  |> List.fold_left ( / ) (if abs then "/" else "")
-
 let lookup_clerk_toml (path : string) =
   let from_dir =
     if Sys.is_directory path then path else Filename.dirname path
   in
   let open Catala_utils in
-  let find_in_parents cwd predicate =
-    let home = try Sys.getenv "HOME" with Not_found -> "" in
-    let rec lookup dir =
-      if predicate dir then Some dir
-      else if dir = home then None
-      else
-        let parent = Filename.dirname dir in
-        if parent = dir then None else lookup parent
-    in
-    match lookup cwd with Some rel -> Some rel | None -> None
-  in
   try
     begin match
-      find_in_parents from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
+      File.find_in_parents ~cwd:from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
     with
     | None ->
       Log.debug (fun m -> m "no 'clerk.toml' config file found");
       None
-    | Some dir -> (
+    | Some (dir, _) -> (
       Log.debug (fun m ->
           m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
       try
         let config = Clerk_config.read File.(dir / "clerk.toml") in
         let include_dirs =
-          List.map (fun p -> join_paths dir p) config.global.include_dirs
+          List.map (File.( / ) dir) config.global.include_dirs
         in
         let config =
           { config with global = { config.global with include_dirs } }
