@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
+import { tryCreateTableSchema } from '../../src/editors/tableArrayUtils';
 import enMessages from '../../src/locales/en.json';
 import type {
   RuntimeValue,
@@ -82,11 +83,14 @@ describe('TableArrayEditor - Sub-table move button disabled state', () => {
       },
     };
 
+    const schemaResult = tryCreateTableSchema(personType);
+    if (!schemaResult.ok) throw new Error('Expected schema to be ok');
+
     render(
       <IntlProvider locale="en" messages={enMessages}>
         <TableArrayEditor
           elementType={personType}
-          structType={personStruct}
+          schema={schemaResult.schema}
           valueDef={valueDef}
           onValueChange={() => {}}
           currentPath={[]}

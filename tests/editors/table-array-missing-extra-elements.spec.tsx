@@ -21,6 +21,7 @@ import type {
   ValueDef,
 } from '../../src/generated/catala_types';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
+import { tryCreateTableSchema } from '../../src/editors/tableArrayUtils';
 
 // Mock confirm to auto-approve destructive actions
 vi.mock('../../src/messaging/confirm', () => ({
@@ -73,12 +74,15 @@ function renderTableEditor(props: {
   onValueChange?: (newValue: RuntimeValue) => void;
   onDiffResolved?: (path: PathSegment[]) => void;
 }) {
+  const elementType = { kind: 'TStruct' as const, value: props.structType };
+  const schemaResult = tryCreateTableSchema(elementType);
+  if (!schemaResult.ok) throw new Error('Expected schema to be ok');
   const currentPath: PathSegment[] = [];
   return render(
     <IntlProvider locale="en" messages={enMessages}>
       <TableArrayEditor
-        elementType={{ kind: 'TStruct', value: props.structType }}
-        structType={props.structType}
+        elementType={elementType}
+        schema={schemaResult.schema}
         valueDef={props.valueDef}
         onValueChange={props.onValueChange ?? (() => {})}
         currentPath={currentPath}
