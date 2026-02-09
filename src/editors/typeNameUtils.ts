@@ -4,6 +4,7 @@
 
 import type { IntlShape } from 'react-intl';
 import type { Typ } from '../generated/catala_types';
+import { assertUnreachable } from '../shared/util';
 
 /**
  * Extract the simple name from a module-qualified name.
@@ -44,11 +45,8 @@ export function getTypeName(typ: Typ): string {
       return `${getTypeName(typ.value)}?`;
     case 'TArrow':
       return 'Function';
-    default: {
-      const _exhaustive: never = typ;
-      void _exhaustive;
-      return 'Unknown';
-    }
+    default:
+      return assertUnreachable(typ);
   }
 }
 
@@ -84,10 +82,7 @@ export function getTypeDisplayName(typ: Typ, intl: IntlShape): string {
       throw new Error('Unexpected type: TArrow');
     case 'TUnit':
       throw new Error('Unexpected type: TUnit');
-    default: {
-      const _exhaustive: never = typ;
-      void _exhaustive;
-      throw new Error('Unknown type');
-    }
+    default:
+      return assertUnreachable(typ);
   }
 }
