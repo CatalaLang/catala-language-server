@@ -210,11 +210,6 @@
           }
         ],
         "priority": "option"
-      },
-      {
-        "viewType": "catala.scopeInputEditor",
-        "displayName": "Scope Input Editor",
-        "selector": []
       }
     ],
     "languages": [
