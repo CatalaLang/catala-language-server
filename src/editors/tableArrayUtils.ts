@@ -69,12 +69,6 @@ export interface TableSchema {
   subArrays: { label: string; fieldPath: string[]; arrayType: Typ }[];
   /** Extract cell value from a row */
   getCellValue(row: RuntimeValue, column: FlatColumn): RuntimeValue | undefined;
-  /** Update cell value in a row, returning the updated row */
-  updateCellValue(
-    row: RuntimeValue,
-    column: FlatColumn,
-    newValue: RuntimeValue
-  ): RuntimeValue;
 }
 
 /** Problem with a specific field that prevents table rendering */
@@ -107,25 +101,6 @@ function createStructSchema(structDecl: StructDeclaration): TableSchema {
       const structData = row.value.value[1];
       return getNestedValue(structData, column.fieldPath);
     },
-
-    updateCellValue(
-      row: RuntimeValue,
-      column: FlatColumn,
-      newValue: RuntimeValue
-    ): RuntimeValue {
-      if (row.value.kind !== 'Struct') return row;
-      const [decl, structData] = row.value.value;
-      const updatedData = setNestedValue(
-        structData,
-        column.fieldPath,
-        newValue,
-        decl
-      );
-      return {
-        value: { kind: 'Struct', value: [decl, updatedData] },
-        attrs: row.attrs,
-      };
-    },
   };
 }
 
@@ -146,14 +121,6 @@ function createSimpleSchema(elementType: Typ): TableSchema {
 
     getCellValue(row: RuntimeValue, _column: FlatColumn): RuntimeValue {
       return row; // Row IS the value
-    },
-
-    updateCellValue(
-      _row: RuntimeValue,
-      _column: FlatColumn,
-      newValue: RuntimeValue
-    ): RuntimeValue {
-      return newValue; // No wrapping needed
     },
   };
 }
@@ -189,7 +156,7 @@ export function tryCreateTableSchema(elementType: Typ): SchemaResult {
 type FieldRenderStrategy =
   | { kind: 'cell' } // Render in a single table cell (atomics, simple enums)
   | { kind: 'flatten'; struct: StructDeclaration } // Flatten nested struct into columns
-  | { kind: 'subTable'; elementType: Typ } // Render as sub-table (any array)
+  | { kind: 'subTable' } // Render as sub-table (any array)
   | { kind: 'unsupported'; reason: string }; // Cannot render in table view
 
 /**
@@ -262,7 +229,7 @@ function getArrayElementStrategy(elementType: Typ): FieldRenderStrategy {
   if (elementType.kind === 'TStruct') {
     // Check if the nested struct is itself flattenable
     if (structIsFlattenable(elementType.value)) {
-      return { kind: 'subTable', elementType };
+      return { kind: 'subTable' };
     } else {
       return {
         kind: 'unsupported',
@@ -281,11 +248,11 @@ function getArrayElementStrategy(elementType: Typ): FieldRenderStrategy {
       };
     }
     // Simple enums (no payload or primitive payload) → simple sub-table
-    return { kind: 'subTable', elementType };
+    return { kind: 'subTable' };
   }
 
   // Primitives → simple sub-table with one column
-  return { kind: 'subTable', elementType };
+  return { kind: 'subTable' };
 }
 
 /**

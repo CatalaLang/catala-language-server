@@ -197,6 +197,10 @@ export function useTableArrayHandlers(
         fieldPath,
         newValue
       );
+    } else {
+      throw new Error(
+        `handleCellUpdate: non-empty fieldPath [${fieldPath.join('.')}] on non-struct element`
+      );
     }
 
     updateParent(newArray);
