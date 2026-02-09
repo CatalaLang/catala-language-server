@@ -185,7 +185,7 @@ export default function TestEditor(props: Props): ReactElement {
                 <FormattedMessage id="testEditor.resetExpectedButton" />
               </button>
               <button
-                className={`button-action-dvp ${props.runState?.status ?? ''}`}
+                className={`button-action-dvp body-b3 ${props.runState?.status ?? ''}`}
                 title={intl.formatMessage({ id: 'testEditor.runTest' })}
                 onClick={runWithUnsetCheck}
                 disabled={props.runState?.status === 'running'}
@@ -193,7 +193,7 @@ export default function TestEditor(props: Props): ReactElement {
                 <span
                   className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
                 ></span>{' '}
-                Lancer le test
+                {intl.formatMessage({ id: 'testEditor.runTest' })}
               </button>
             </div>
             <div className="test-result">
