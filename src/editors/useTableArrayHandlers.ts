@@ -7,7 +7,6 @@ import type {
   RuntimeValue,
   RuntimeValueRaw,
   Typ,
-  StructDeclaration,
   PathSegment,
 } from '../generated/catala_types';
 import { createRuntimeValue, getDefaultValue } from './ValueEditors';
@@ -66,7 +65,6 @@ type TableArrayHandlers = {
   ) => void;
   handleSubTableChange: (
     subArray: SubArrayDescriptor,
-    itemStructDecl: StructDeclaration,
     newValue: RuntimeValue
   ) => void;
   handleAddSubArrayItem: (
@@ -359,7 +357,6 @@ export function useTableArrayHandlers(
 
   const handleSubTableChange = (
     subArray: SubArrayDescriptor,
-    itemStructDecl: StructDeclaration,
     newValue: RuntimeValue
   ): void => {
     if (newValue.value.kind !== 'Array') {
@@ -368,6 +365,14 @@ export function useTableArrayHandlers(
       );
     }
     const newItems = newValue.value.value;
+
+    // Derive struct declaration from the sub-array's element type, if applicable
+    const subElementType =
+      subArray.arrayType.kind === 'TArray'
+        ? subArray.arrayType.value
+        : undefined;
+    const itemStructDecl =
+      subElementType?.kind === 'TStruct' ? subElementType.value : undefined;
 
     // Group items by parent row
     const updatesByParent = new Map<
@@ -412,13 +417,18 @@ export function useTableArrayHandlers(
       const newSubArray = [...currentSubArray];
 
       updates.forEach((newVal, itemIdx) => {
-        const item = currentSubArray[itemIdx];
-        newSubArray[itemIdx] = updateOrConstructStruct(
-          item,
-          itemStructDecl,
-          [],
-          newVal
-        );
+        if (itemStructDecl) {
+          // Struct sub-items: merge into existing struct
+          newSubArray[itemIdx] = updateOrConstructStruct(
+            currentSubArray[itemIdx],
+            itemStructDecl,
+            [],
+            newVal
+          );
+        } else {
+          // Primitive/enum sub-items: direct replacement
+          newSubArray[itemIdx] = newVal;
+        }
       });
 
       const newArrayValue: RuntimeValue = createRuntimeValue(
