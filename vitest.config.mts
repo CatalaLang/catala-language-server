@@ -7,5 +7,10 @@ export default defineConfig({
     globals: true,
     include: ['tests/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['src/test/**', 'node_modules/**', 'dist/**'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/editors/**'],
+      reporter: ['text', 'html'],
+    },
   },
 });
