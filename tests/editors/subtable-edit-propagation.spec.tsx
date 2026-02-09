@@ -2,9 +2,11 @@
  * Tests that editing values in sub-tables correctly propagates changes
  * back to all affected parent rows.
  *
- * BUG: The non-struct sub-array path calls handleParentSubArrayUpdate once per
- * parent row, each working against a stale copy of currentArray. When items span
- * multiple parents, only the last parent's update survives.
+ * Regression test: the non-struct sub-array path previously called
+ * handleParentSubArrayUpdate once per parent row, each working against a stale
+ * copy of currentArray. When items spanned multiple parents, only the last
+ * parent's update survived. Fixed by unifying both paths through
+ * handleSubTableChange which batches all parent updates into a single call.
  */
 
 import { describe, it, expect, vi } from 'vitest';

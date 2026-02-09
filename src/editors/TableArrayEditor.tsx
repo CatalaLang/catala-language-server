@@ -726,8 +726,11 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       col.fieldPath
                     );
 
-                    // Use schema to get cell value
-                    // For Unset/Invalid/etc.: show parent state for all cells
+                    // Use schema.getCellValue to extract the cell value.
+                    // This always applies for simple schemas (fieldPath is [])
+                    // and for struct rows. For non-struct rows in a struct schema
+                    // (Unset/Invalid), we show the raw row state in every cell
+                    // so the user sees the Unset/Invalid widget and can act on it.
                     const value =
                       isStruct || col.fieldPath.length === 0
                         ? schema.getCellValue(displayRow, col)
