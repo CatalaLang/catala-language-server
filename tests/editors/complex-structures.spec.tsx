@@ -20,58 +20,21 @@ import type {
   StructDeclaration,
   EnumDeclaration,
   RuntimeValue,
-  RuntimeValueRaw,
   ValueDef,
   Option,
 } from '../../src/generated/test_case';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
 import enMessages from '../../src/locales/en.json';
-
-// ============================================================================
-// Test Helpers
-// ============================================================================
-
-function rv(raw: RuntimeValueRaw): RuntimeValue {
-  return { value: raw, attrs: [] };
-}
-
-function intVal(n: number): RuntimeValue {
-  return rv({ kind: 'Integer', value: n });
-}
-
-function moneyVal(cents: number): RuntimeValue {
-  return rv({ kind: 'Money', value: cents });
-}
-
-function dateVal(year: number, month: number, day: number): RuntimeValue {
-  return rv({ kind: 'Date', value: { year, month, day } });
-}
-
-function boolVal(b: boolean): RuntimeValue {
-  return rv({ kind: 'Bool', value: b });
-}
-
-function arrayVal(items: RuntimeValue[]): RuntimeValue {
-  return rv({ kind: 'Array', value: items });
-}
-
-function structVal(
-  decl: StructDeclaration,
-  fields: Map<string, RuntimeValue>
-): RuntimeValue {
-  return rv({ kind: 'Struct', value: [decl, fields] });
-}
-
-function enumVal(
-  decl: EnumDeclaration,
-  label: string,
-  payload?: RuntimeValue
-): RuntimeValue {
-  return rv({
-    kind: 'Enum',
-    value: [decl, [label, payload ? { value: payload } : null]],
-  });
-}
+import {
+  rv,
+  intVal,
+  moneyVal,
+  dateVal,
+  boolVal,
+  arrayVal,
+  structVal,
+  enumVal,
+} from '../helpers';
 
 function renderTableArrayEditor(
   structType: StructDeclaration,

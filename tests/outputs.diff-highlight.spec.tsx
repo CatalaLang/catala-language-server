@@ -4,7 +4,7 @@ import { IntlProvider } from 'react-intl';
 import enMessages from '../src/locales/en.json';
 import TestOutputsEditor from '../src/test-case-editor/TestOutputsEditor';
 import type { Diff, PathSegment, Typ } from '../src/generated/test_case';
-import { tStruct, tRat, io, structValue } from './helpers';
+import { tStruct, tRat, io, structVal } from './helpers';
 
 function seg(kind: PathSegment['kind'], value: any): PathSegment {
   return { kind, value } as any;
@@ -17,7 +17,7 @@ describe('TestOutputsEditor diff highlighting (struct field)', () => {
     const outputName = 'rotation_cultures_critère_pluriannuel';
 
     const structDecl = (typ as Extract<Typ, { kind: 'TStruct' }>).value;
-    const expectedOuterRv = structValue(
+    const expectedOuterRv = structVal(
       structDecl,
       new Map([
         [

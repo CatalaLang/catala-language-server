@@ -21,14 +21,14 @@ import type {
 import { ArrayEditor } from '../../src/editors/ArrayEditor';
 import { structIsFlattenable } from '../../src/editors/tableArrayUtils';
 import enMessages from '../../src/locales/en.json';
+import { rvWithUid } from '../helpers';
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
 
-function rv(raw: RuntimeValueRaw): RuntimeValue {
-  return { value: raw, attrs: [{ kind: 'Uid', value: crypto.randomUUID() }] };
-}
+// This file needs UIDs on all values for React key resolution in rendered components.
+const rv = rvWithUid;
 
 function intVal(n: number): RuntimeValue {
   return rv({ kind: 'Integer', value: n });

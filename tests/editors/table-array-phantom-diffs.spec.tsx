@@ -11,27 +11,22 @@ import type {
   ValueDef,
 } from '../../src/generated/catala_types';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
+import { rv, intVal, arrayVal } from '../helpers';
 
 // Mock confirm to auto-approve destructive actions
 vi.mock('../../src/messaging/confirm', () => ({
   confirm: async () => true,
 }));
 
-function rv(value: RuntimeValueRaw): RuntimeValue {
-  return { value, attrs: [] };
-}
-
 function rvWithUid(value: RuntimeValueRaw, uid: string): RuntimeValue {
   return { value, attrs: [{ kind: 'Uid', value: uid }] };
 }
 
 function arrayValueDef(items: RuntimeValue[]): ValueDef {
-  return { value: rv({ kind: 'Array', value: items }) };
+  return { value: arrayVal(items) };
 }
 
-function intRV(n: number): RuntimeValue {
-  return rv({ kind: 'Integer', value: n });
-}
+const intRV = intVal;
 
 function emptyRV(): RuntimeValue {
   return rv({ kind: 'Empty' });

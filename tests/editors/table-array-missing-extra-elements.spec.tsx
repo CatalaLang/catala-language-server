@@ -21,16 +21,12 @@ import type {
   ValueDef,
 } from '../../src/generated/catala_types';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
+import { rv, intVal, arrayVal } from '../helpers';
 
 // Mock confirm to auto-approve destructive actions
 vi.mock('../../src/messaging/confirm', () => ({
   confirm: async () => true,
 }));
-
-// Helper to create a RuntimeValue
-function rv(value: RuntimeValueRaw): RuntimeValue {
-  return { value, attrs: [] };
-}
 
 // Helper to create a RuntimeValue with a UID attribute
 function rvWithUid(value: RuntimeValueRaw, uid: string): RuntimeValue {
@@ -39,13 +35,10 @@ function rvWithUid(value: RuntimeValueRaw, uid: string): RuntimeValue {
 
 // Helper to create an array ValueDef
 function arrayValueDef(items: RuntimeValue[]): ValueDef {
-  return { value: rv({ kind: 'Array', value: items }) };
+  return { value: arrayVal(items) };
 }
 
-// Helper to create an integer RuntimeValue
-function intRV(n: number): RuntimeValue {
-  return rv({ kind: 'Integer', value: n });
-}
+const intRV = intVal;
 
 // Helper to create an Empty RuntimeValue (used for missing values in diffs)
 function emptyRV(): RuntimeValue {

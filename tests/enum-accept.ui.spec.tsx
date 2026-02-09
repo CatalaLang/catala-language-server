@@ -12,10 +12,7 @@ import type {
   TestIo,
   Typ,
 } from '../src/generated/test_case';
-
-function rv(value: RuntimeValue['value']): RuntimeValue {
-  return { value, attrs: [] };
-}
+import { rv } from './helpers';
 
 describe('AssertionValueEditor - Enum accept button', () => {
   it('shows accept for complex actual payload and calls onDiffResolved', () => {

@@ -6,26 +6,21 @@ import type {
   Diff,
   PathSegment,
   RuntimeValue,
-  RuntimeValueRaw,
   Typ,
   ValueDef,
 } from '../src/generated/test_case';
 import { ArrayEditor } from '../src/editors/ArrayEditor';
+import { rv, intVal, arrayVal } from './helpers';
 
 // Mock confirm to auto-approve destructive actions
 vi.mock('../src/messaging/confirm', () => ({
   confirm: async () => true,
 }));
 
-function rv(value: RuntimeValueRaw): RuntimeValue {
-  return { value, attrs: [] };
-}
 function arrayValueDef(items: RuntimeValue[]): ValueDef {
-  return { value: rv({ kind: 'Array', value: items }) };
+  return { value: arrayVal(items) };
 }
-function intRV(n: number): RuntimeValue {
-  return rv({ kind: 'Integer', value: n });
-}
+const intRV = intVal;
 function emptyRV(): RuntimeValue {
   return rv({ kind: 'Empty' } as any);
 }

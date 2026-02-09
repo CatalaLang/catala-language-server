@@ -4,7 +4,7 @@ import { IntlProvider } from 'react-intl';
 import enMessages from '../src/locales/en.json';
 import TestOutputsEditor from '../src/test-case-editor/TestOutputsEditor';
 import type { Diff, PathSegment, Typ } from '../src/generated/test_case';
-import { tStruct, tEnum, tRat, io, structValue, enumValue } from './helpers';
+import { tStruct, tEnum, tRat, io, structVal, enumVal } from './helpers';
 
 function seg(kind: PathSegment['kind'], value: any): PathSegment {
   return { kind, value } as any;
@@ -24,16 +24,16 @@ describe('Enum payload highlight without EnumPayload segment in diff path', () =
     const outputName = 'simple_output';
 
     const payloadDecl = (payloadTyp as Extract<Typ, { kind: 'TStruct' }>).value;
-    const payloadRv = structValue(
+    const payloadRv = structVal(
       payloadDecl,
       new Map([
         ['ratio', { value: { kind: 'Decimal', value: 0.26 }, attrs: [] }],
       ])
     );
     const enumDecl = (enumTyp as Extract<Typ, { kind: 'TEnum' }>).value;
-    const enumRv = enumValue(enumDecl, 'VariantA', payloadRv);
+    const enumRv = enumVal(enumDecl, 'VariantA', payloadRv);
     const outerDecl = (outerTyp as Extract<Typ, { kind: 'TStruct' }>).value;
-    const expectedOuterRv = structValue(
+    const expectedOuterRv = structVal(
       outerDecl,
       new Map([['enum_field', enumRv]])
     );
