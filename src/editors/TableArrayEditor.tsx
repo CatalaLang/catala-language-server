@@ -329,7 +329,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
               <th className="table-header-controls-combined">#</th>
               {schema.columns.map((col, colIdx) => (
                 <th
-                  key={col.label || colIdx}
+                  key={colIdx}
                   className="table-header"
                   title={col.label || undefined}
                 >
@@ -748,7 +748,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
 
                     return (
                       <td
-                        key={col.label || colIdx}
+                        key={colIdx}
                         className="table-cell"
                         // Disable default VS Code context menu on data cells - it's non-functional
                         // and confusing. Context menu is only available on row headers.
