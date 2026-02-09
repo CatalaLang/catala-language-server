@@ -999,35 +999,8 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
           },
         }));
 
-        // onValueChange handler differs: struct sub-arrays use handleSubTableChange,
-        // non-struct use direct distribution to parent rows
         const handleSubValueChange = (newValue: RuntimeValue): void => {
-          if (newValue.value.kind !== 'Array') return;
-          const newValues = newValue.value.value;
-
-          if (subElementType.kind === 'TStruct') {
-            handlers.handleSubTableChange(
-              subArray,
-              subElementType.value,
-              newValue
-            );
-          } else {
-            // Distribute updated values back to parent rows
-            const updatesByParent = new Map<number, RuntimeValue[]>();
-            subArray.items.forEach((item, flatIdx) => {
-              const parentUpdates =
-                updatesByParent.get(item.parentRowIndex) ?? [];
-              parentUpdates[item.itemIndex] = newValues[flatIdx];
-              updatesByParent.set(item.parentRowIndex, parentUpdates);
-            });
-            updatesByParent.forEach((updates, parentRowIndex) => {
-              handlers.handleParentSubArrayUpdate(
-                parentRowIndex,
-                subArray.fieldPath,
-                updates
-              );
-            });
-          }
+          handlers.handleSubTableChange(subArray, newValue);
         };
 
         return (
