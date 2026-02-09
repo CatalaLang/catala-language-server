@@ -241,7 +241,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
   return (
     <div className="array-editor">
       {/* Toggle to switch back to table view when available */}
-      {schemaResult?.ok && forceTreeView && (
+      {schemaResult.ok && forceTreeView && (
         <div className="table-view-toggle">
           <button
             className="table-control-btn"
