@@ -1,0 +1,12 @@
+{
+  "threshold": 10,
+  "reporters": ["consoleFull"],
+  "ignore": [
+    "**/_build/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "src/generated/**"
+  ],
+  "minTokens": 75,
+  "path": ["src/", "tests/"]
+}
