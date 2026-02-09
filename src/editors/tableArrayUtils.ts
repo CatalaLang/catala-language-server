@@ -15,6 +15,7 @@ import type {
   AttrDef,
 } from '../generated/catala_types';
 import { getDefaultValue } from './ValueEditors';
+import { assertUnreachable } from '../shared/util';
 import {
   computeActualOnlyIndices,
   findChildIndexDiff,
@@ -175,9 +176,18 @@ function typeContainsArray(typ: Typ): boolean {
       return typeContainsArray(typ.value);
     case 'TTuple':
       return typ.value.some(typeContainsArray);
-    default:
-      // Primitives (TBool, TInt, TRat, TMoney, TDate, TDuration, TUnit, TArrow)
+    case 'TBool':
+    case 'TInt':
+    case 'TRat':
+    case 'TMoney':
+    case 'TDate':
+    case 'TDuration':
+    case 'TUnit':
+    case 'TArrow':
       return false;
+    default: {
+      return assertUnreachable(typ);
+    }
   }
 }
 
@@ -226,33 +236,47 @@ function enumHasNestedPayload(enumDecl: EnumDeclaration): boolean {
  * - Complex enum (with nested payloads): unsupported
  */
 function getArrayElementStrategy(elementType: Typ): FieldRenderStrategy {
-  if (elementType.kind === 'TStruct') {
-    // Check if the nested struct is itself flattenable
-    if (structIsFlattenable(elementType.value)) {
-      return { kind: 'subTable' };
-    } else {
+  switch (elementType.kind) {
+    case 'TStruct':
+      // Check if the nested struct is itself flattenable
+      if (structIsFlattenable(elementType.value)) {
+        return { kind: 'subTable' };
+      }
       return {
         kind: 'unsupported',
         reason: `Array element struct "${elementType.value.struct_name}" is not flattenable`,
       };
+
+    case 'TEnum':
+      // Enums with nested payloads (struct, array, etc.) can't be rendered
+      // in a simple sub-table cell
+      if (enumHasNestedPayload(elementType.value)) {
+        return {
+          kind: 'unsupported',
+          reason: `Array of enum "${elementType.value.enum_name}" has complex payloads`,
+        };
+      }
+      // Simple enums (no payload or primitive payload) → simple sub-table
+      return { kind: 'subTable' };
+
+    case 'TArray':
+    case 'TOption':
+    case 'TTuple':
+    case 'TBool':
+    case 'TInt':
+    case 'TRat':
+    case 'TMoney':
+    case 'TDate':
+    case 'TDuration':
+    case 'TUnit':
+    case 'TArrow':
+      // Primitives and simple types → simple sub-table with one column
+      return { kind: 'subTable' };
+
+    default: {
+      return assertUnreachable(elementType);
     }
   }
-
-  if (elementType.kind === 'TEnum') {
-    // Enums with nested payloads (struct, array, etc.) can't be rendered
-    // in a simple sub-table cell
-    if (enumHasNestedPayload(elementType.value)) {
-      return {
-        kind: 'unsupported',
-        reason: `Array of enum "${elementType.value.enum_name}" has complex payloads`,
-      };
-    }
-    // Simple enums (no payload or primitive payload) → simple sub-table
-    return { kind: 'subTable' };
-  }
-
-  // Primitives → simple sub-table with one column
-  return { kind: 'subTable' };
 }
 
 /**
@@ -303,9 +327,19 @@ function getFieldRenderStrategy(fieldType: Typ): FieldRenderStrategy {
       }
       return { kind: 'cell' };
 
-    default:
-      // Primitives (TBool, TInt, TRat, TMoney, TDate, TDuration, TUnit, TArrow)
+    case 'TBool':
+    case 'TInt':
+    case 'TRat':
+    case 'TMoney':
+    case 'TDate':
+    case 'TDuration':
+    case 'TUnit':
+    case 'TArrow':
       return { kind: 'cell' };
+
+    default: {
+      return assertUnreachable(fieldType);
+    }
   }
 }
 
