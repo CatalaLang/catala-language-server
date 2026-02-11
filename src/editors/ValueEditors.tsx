@@ -17,6 +17,7 @@ import type {
 } from '../generated/catala_types';
 import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../shared/util';
+import { Combobox } from './Combobox';
 import { CompositeEditor } from './CompositeEditor';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
@@ -956,7 +957,6 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
   const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const currentCtor = currentEnumData ? currentEnumData[1][0] : null;
-  const selectValue: string = currentCtor ?? '__unset__';
   const currentPayload = currentEnumData ? currentEnumData[1][1] : null;
   const currentCtorType =
     currentCtor !== null
@@ -986,16 +986,17 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
   // Note: do not early-return here; we render the expected editor and, when applicable,
   // an "actual preview" block alongside it further below.
-  const handleCtorChange = (
-    event: React.ChangeEvent<HTMLSelectElement>
-  ): void => {
+  const ctorOptions = Array.from(enumDeclaration.constructors.keys()).map(
+    (name) => ({ value: name, label: name })
+  );
+
+  const handleCtorChange = (selected: string | null): void => {
     if (editable === false) return;
-    const v = event.target.value;
-    if (v === '__unset__') {
+    if (selected === null) {
       onValueChange(makeUnset(runtimeValue));
       return;
     }
-    const newCtor = v;
+    const newCtor = selected;
     const newCtorType = enumDeclaration.constructors.get(newCtor);
 
     let newPayload: Option<RuntimeValue> = null;
@@ -1030,24 +1031,14 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   const expectedEditor = (
     <div className="value-editor enum-editor">
       {isUnset && <UnsetBadge />}
-      <select
+      <Combobox
+        options={ctorOptions}
+        value={currentCtor}
         onChange={handleCtorChange}
-        value={selectValue}
         disabled={editable === false}
-      >
-        <option value="__unset__">
-          {/* We keep that blank as it is more distinguishable
-              from a user-defined Catala enum label than an
-              explicit 'Unset' value; we show a badge in addition. */}
-        </option>
-        {Array.from(enumDeclaration.constructors.keys()).map((ctorName) => (
-          <option key={ctorName} value={ctorName}>
-            {ctorName}
-          </option>
-        ))}
-      </select>
+      />
       {/* Render payload editor only if the current constructor expects one */}
-      {selectValue !== '__unset__' && currentCtorType?.value && (
+      {currentCtor !== null && currentCtorType?.value && (
         <div className="enum-payload-editor">
           <ValueEditor
             testIO={{
