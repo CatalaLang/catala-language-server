@@ -62,7 +62,7 @@ let protect_project_not_found_opt f =
 
 let should_ignore (uri : Doc_id.t) =
   let file = (uri :> File.t) in
-  let p = File.path_to_list file in
+  let _, p = File.path_to_list file in
   let b =
     List.exists (fun s -> String.length s > 0 && (s.[0] = '.' || s.[0] = '_')) p
   in
