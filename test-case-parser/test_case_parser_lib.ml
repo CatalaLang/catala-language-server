@@ -232,6 +232,32 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
             (fun (field, v) ->
               StructField.to_string field, get_value decl_ctx v)
             (StructField.Map.bindings fields) )
+    | EInj { name; e; _ } when EnumName.equal Expr.option_enum name -> (
+      match Typing.expr decl_ctx e |> Expr.unbox with
+      | ELit LUnit, _ty ->
+        let none_field = EnumConstructor.to_string Expr.none_constr, None in
+        let decl =
+          {
+            O.enum_name = EnumName.to_string Expr.option_enum;
+            constructors = [none_field];
+          }
+        in
+        O.Enum (decl, none_field)
+      | _, Typed { ty; _ } ->
+        let some_field =
+          EnumConstructor.to_string Expr.some_constr, Some (get_typ decl_ctx ty)
+        in
+        let some_value =
+          ( EnumConstructor.to_string Expr.some_constr,
+            Some (get_value decl_ctx e) )
+        in
+        let decl =
+          {
+            O.enum_name = EnumName.to_string Expr.option_enum;
+            constructors = [some_field];
+          }
+        in
+        O.Enum (decl, some_value))
     | EInj { name; e = ELit LUnit, _; cons } ->
       O.Enum (get_enum decl_ctx name, (EnumConstructor.to_string cons, None))
     | EInj { name; e; cons } ->
@@ -389,7 +415,9 @@ let read_program includes path_to_build options =
   let stdlib =
     Some (Global.raw_file File.(path_to_build / "_build" / "libcatala"))
   in
-  Driver.Passes.desugared options ~stdlib ~includes
+  let prg, ctx = Driver.Passes.desugared options ~stdlib ~includes in
+  let prg = Desugared.Disambiguate.program prg in
+  prg, ctx
 
 let rec generate_default_value (typ : O.typ) : O.runtime_value =
   let value =
