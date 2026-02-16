@@ -32,6 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          opam pin catala --dev-repo -n
           opam install . --deps-only --with-test
           npm ci
 
