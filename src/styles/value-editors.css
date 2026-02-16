@@ -132,54 +132,46 @@
   width: 100%;
 }
 
-/* Ensure editors can host positioned badges */
-.value-editor,
-.struct-editor,
-.array-editor {
-  position: relative;
+/* Unset state: subtle amber underline + placeholder */
+.value-editor.unset > input,
+.value-editor.unset > select {
+  border-bottom: 2px solid var(--vscode-editorWarning-foreground, #8a6d3b);
 }
 
-/* Unset badge: slightly brighter and less transparent */
-.unset-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  border-radius: 10px;
-  padding: 2px 6px;
-  font-size: 10px;
-  text-transform: uppercase;
-  font-weight: 600;
-  z-index: 1;
-
-  /* Use VS Code warning tokens with sensible fallbacks */
+.value-editor.unset > input::placeholder {
   color: var(--vscode-editorWarning-foreground, #8a6d3b);
-  border: 1px solid var(--vscode-editorWarning-foreground, #8a6d3b);
-  background-color: var(
-    --vscode-editorWarning-background,
-    rgba(255, 208, 0, 0.28)
-  );
-
-  /* small shadow to make it pop a bit */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  opacity: 0.7;
 }
 
-/* Invalid badge: error-styled variant */
-.invalid-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  border-radius: 10px;
-  padding: 2px 6px;
-  font-size: 10px;
-  text-transform: uppercase;
-  font-weight: 600;
-  z-index: 1;
+/* Invalid state: subtle red underline + placeholder */
+.value-editor.invalid > input,
+.value-editor.invalid > select {
+  border-bottom: 2px solid var(--vscode-editorError-foreground, #a1260d);
+}
 
+.value-editor.invalid > input::placeholder {
   color: var(--vscode-editorError-foreground, #a1260d);
-  border: 1px solid var(--vscode-editorError-foreground, #a1260d);
-  background-color: var(
-    --vscode-editorError-background,
-    rgba(255, 86, 48, 0.22)
-  );
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  opacity: 0.7;
+}
+
+/* Validation hint text — hidden by default, revealed on focus */
+.validation-hint {
+  display: none;
+  font-size: 11px;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+.validation-hint.unset {
+  color: var(--vscode-editorWarning-foreground, #8a6d3b);
+}
+
+.validation-hint.invalid {
+  color: var(--vscode-editorError-foreground, #a1260d);
+}
+
+/* Show hint when the editor has focus */
+.value-editor.unset:focus-within > .validation-hint,
+.value-editor.invalid:focus-within > .validation-hint {
+  display: block;
 }

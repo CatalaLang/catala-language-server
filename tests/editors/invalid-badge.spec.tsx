@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
 import { renderEditor, expectValueKind } from './test-helpers.tsx';
 
-describe('Editors - Invalid badge display', () => {
+describe('Editors - Invalid indicator display', () => {
   beforeEach(() => vi.clearAllMocks());
 
   describe.each([
@@ -10,8 +10,8 @@ describe('Editors - Invalid badge display', () => {
     { type: 'TMoney' as const, name: 'MoneyEditor', field: 'textbox' },
     { type: 'TDuration' as const, name: 'DurationEditor', field: 'Years:' },
   ])('$name', ({ type, field }) => {
-    it("shows 'Invalid' badge for lone minus ('-') and preserves input", () => {
-      const { onValueChange } = renderEditor({ kind: type });
+    it("shows invalid underline for lone minus ('-') and preserves input", () => {
+      const { container, onValueChange } = renderEditor({ kind: type });
 
       const input =
         field === 'textbox'
@@ -20,8 +20,10 @@ describe('Editors - Invalid badge display', () => {
 
       fireEvent.change(input, { target: { value: '-' } });
 
-      // Expect an "Invalid" badge to be visible
-      expect(screen.getByText(/Invalid/i)).toBeTruthy();
+      // Expect the wrapper to have the .invalid class
+      expect(
+        container.querySelector('.value-editor.invalid')
+      ).toBeInTheDocument();
 
       // Should push a placeholder value (Unset) while invalid
       expectValueKind(onValueChange, 'Unset');
