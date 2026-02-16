@@ -19,7 +19,7 @@ jobs:
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: 5.0.x
+          ocaml-compiler: 5.2.x
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
