@@ -232,6 +232,7 @@ export default function ValueEditor(props: Props): ReactElement {
       break;
     case 'TArrow':
     case 'TUnit':
+    case 'TUnset':
       editor = <i>Unsupported type</i>;
       break;
     default:

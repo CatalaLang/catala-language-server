@@ -424,6 +424,7 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
       in
       Enum (option_decl, ("Absent", None))
     | TArray _ -> O.Array [||]
+    | TUnset -> O.Unset
     | TUnit -> raise (Unsupported "unit type")
     | TArrow _ -> raise (Unsupported "arrow type")
   in
@@ -453,7 +454,7 @@ let patch_paths
   and patch_typ : O.typ -> O.typ =
    fun t ->
     match t with
-    | TBool | TInt | TRat | TMoney | TDate | TDuration | TUnit -> t
+    | TBool | TInt | TRat | TMoney | TDate | TDuration | TUnit | TUnset -> t
     | TTuple l -> TTuple (List.map patch_typ l)
     | TStruct sdecl -> TStruct (patch_struct_decl sdecl)
     | TEnum edecl -> TEnum (patch_enum_decl edecl)

@@ -14,6 +14,7 @@ type typ = [
   | TOption of typ
   | TArray of typ
   | TArrow of (typ list * typ)
+  | TUnset
 ] <ocaml repr="classic">
 
 type enum_declaration = {

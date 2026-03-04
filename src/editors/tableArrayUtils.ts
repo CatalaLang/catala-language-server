@@ -184,6 +184,7 @@ function typeContainsArray(typ: Typ): boolean {
     case 'TDuration':
     case 'TUnit':
     case 'TArrow':
+    case 'TUnset':
       return false;
     default: {
       return assertUnreachable(typ);
@@ -270,6 +271,7 @@ function getArrayElementStrategy(elementType: Typ): FieldRenderStrategy {
     case 'TDuration':
     case 'TUnit':
     case 'TArrow':
+    case 'TUnset':
       // Primitives and simple types → simple sub-table with one column
       return { kind: 'subTable' };
 
@@ -335,6 +337,7 @@ function getFieldRenderStrategy(fieldType: Typ): FieldRenderStrategy {
     case 'TDuration':
     case 'TUnit':
     case 'TArrow':
+    case 'TUnset':
       return { kind: 'cell' };
 
     default: {
