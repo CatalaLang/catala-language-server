@@ -185,13 +185,13 @@ let get_typ_literal = function
   | TDuration -> O.TDuration
   | TPos -> assert false
 
-let rec get_typ decl_ctx = function
+let rec get_typ lang decl_ctx = function
   | TLit tlit, _ -> get_typ_literal tlit
-  | TTuple tl, _ -> O.TTuple (List.map (get_typ decl_ctx) tl)
-  | TStruct name, _ -> O.TStruct (get_struct decl_ctx name)
-  | TEnum name, _ -> O.TEnum (get_enum decl_ctx name)
-  | TOption ty, _ -> O.TOption (get_typ decl_ctx ty)
-  | TArray ty, _ -> O.TArray (get_typ decl_ctx ty)
+  | TTuple tl, _ -> O.TTuple (List.map (get_typ lang decl_ctx) tl)
+  | TStruct name, _ -> O.TStruct (get_struct lang decl_ctx name)
+  | TEnum name, _ -> O.TEnum (get_enum lang decl_ctx name)
+  | TOption ty, _ -> O.TOption (get_typ lang decl_ctx ty)
+  | TArray ty, _ -> O.TArray (get_typ lang decl_ctx ty)
   | TArrow _, _ -> raise (Unsupported "function type")
   | TDefault _, _ -> raise (Unsupported "default type")
   | TForAll _, _ -> raise (Unsupported "wildcard type")
@@ -200,47 +200,58 @@ let rec get_typ decl_ctx = function
   | TError, _ -> raise (Unsupported "error type")
   | TAbstract _, _ -> raise (Unsupported "abstract type")
 
-and get_struct decl_ctx struct_name =
+and get_struct lang decl_ctx struct_name =
   let fields_map = StructName.Map.find struct_name decl_ctx.ctx_structs in
   let module_name =
     if StructName.path struct_name = [] then None
-    else Some (Uid.Path.to_string (StructName.path struct_name))
+    else
+      let module_name =
+        List.rev (StructName.path struct_name)
+        |> List.hd
+        |> ModuleName.to_string
+      in
+      let alias_opt = lookup_aliased_name lang module_name in
+      Option.(some (value alias_opt ~default:module_name))
   in
   let fields =
     List.map
-      (fun (field, typ) -> StructField.to_string field, get_typ decl_ctx typ)
+      (fun (field, typ) ->
+        StructField.to_string field, get_typ lang decl_ctx typ)
       (StructField.Map.bindings fields_map)
   in
   let struct_name =
     match module_name with
-    | None -> StructName.to_string struct_name
-    | Some _s -> Format.asprintf "%a" StructName.format_shortpath struct_name
+    | None -> StructName.base struct_name
+    | Some s -> Format.asprintf "%s.%s" s (StructName.base struct_name)
   in
   { O.struct_name; fields }
 
-and get_enum (decl_ctx : decl_ctx) enum_name =
+and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
-  let module_name =
-    if EnumName.path enum_name = [] then None
-    else
-      let module_name = List.rev (EnumName.path enum_name) |> List.hd in
-      Some (Uid.Path.to_string [module_name])
-  in
-  let constructors =
-    List.map
-      (fun (constr, typ) ->
-        ( EnumConstructor.to_string constr,
-          match typ with
-          | TLit TUnit, _ -> None
-          | _ -> Some (get_typ decl_ctx typ) ))
-      (EnumConstructor.Map.bindings constr_map)
-  in
-  let enum_name =
-    match module_name with
-    | None -> EnumName.to_string enum_name
-    | Some _s -> Format.asprintf "%a" EnumName.format_shortpath enum_name
-  in
-  { O.enum_name; constructors }
+    let module_name =
+      if EnumName.path enum_name = [] then None
+      else
+        let module_name =
+          List.rev (EnumName.path enum_name) |> List.hd |> ModuleName.to_string
+        in
+        let alias_opt = lookup_aliased_name lang module_name in
+        Option.(some (value alias_opt ~default:module_name))
+    in
+    let constructors =
+      List.map
+        (fun (constr, typ) ->
+          ( EnumConstructor.to_string constr,
+            match typ with
+            | TLit TUnit, _ -> None
+            | _ -> Some (get_typ lang decl_ctx typ) ))
+        (EnumConstructor.Map.bindings constr_map)
+    in
+    let enum_name =
+      match module_name with
+      | None -> EnumName.base enum_name
+      | Some s -> Format.asprintf "%s.%s" s (EnumName.base enum_name)
+    in
+    { O.enum_name; constructors }
 
 type Pos.attr += TestUi
 type Pos.attr += Uid of string
@@ -248,8 +259,9 @@ type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
 type Pos.attr += ArrayItemLabel of string
 
-let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
- fun decl_ctx e ->
+let rec get_value : type a.
+    Global.backend_lang -> decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
+ fun lang decl_ctx e ->
   let pos = Expr.pos e in
   let attrs =
     Pos.get_attrs pos (function
@@ -275,19 +287,21 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
           args = [e1; e2];
           tys = [(TLit TDuration, _); (TLit TDuration, _)];
         } -> (
-      match (get_value decl_ctx e1).value, (get_value decl_ctx e2).value with
+      match
+        (get_value lang decl_ctx e1).value, (get_value lang decl_ctx e2).value
+      with
       | ( O.Duration { years = y1; months = m1; days = d1 },
           O.Duration { years = y2; months = m2; days = d2 } ) ->
         O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
       | _ -> Message.error ~pos "Invalid duration literal.")
     | EArray args ->
-      O.Array (Array.of_list (List.map (get_value decl_ctx) args))
+      O.Array (Array.of_list (List.map (get_value lang decl_ctx) args))
     | EStruct { name; fields } ->
       O.Struct
-        ( get_struct decl_ctx name,
+        ( get_struct lang decl_ctx name,
           List.map
             (fun (field, v) ->
-              StructField.to_string field, get_value decl_ctx v)
+              StructField.to_string field, get_value lang decl_ctx v)
             (StructField.Map.bindings fields) )
     | EInj { name; e; _ } when EnumName.equal Expr.option_enum name -> (
       match Typing.expr decl_ctx e |> Expr.unbox with
@@ -306,7 +320,7 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
         in
         let some_value =
           ( EnumConstructor.to_string Expr.some_constr,
-            Some (get_value decl_ctx e) )
+            Some (get_value lang decl_ctx e) )
         in
         let decl =
           {
@@ -316,11 +330,12 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
         in
         O.Enum (decl, some_value))
     | EInj { name; e = ELit LUnit, _; cons } ->
-      O.Enum (get_enum decl_ctx name, (EnumConstructor.to_string cons, None))
+      O.Enum
+        (get_enum lang decl_ctx name, (EnumConstructor.to_string cons, None))
     | EInj { name; e; cons } ->
       O.Enum
-        ( get_enum decl_ctx name,
-          (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
+        ( get_enum lang decl_ctx name,
+          (EnumConstructor.to_string cons, Some (get_value lang decl_ctx e)) )
     | EFatalError Impossible -> O.Unset
     | EEmpty -> O.Empty
     | _ ->
@@ -338,7 +353,7 @@ let get_source_position pos =
     law_headings = Pos.get_law_info pos;
   }
 
-let scope_inputs decl_ctx scope =
+let scope_inputs lang decl_ctx scope =
   I.ScopeDef.Map.fold
     (fun ((v, _pos), kind) sdef acc ->
       match kind with
@@ -347,9 +362,11 @@ let scope_inputs decl_ctx scope =
         match fst sdef.I.scope_def_io.I.io_input with
         | Catala_runtime.NoInput -> acc
         | Catala_runtime.OnlyInput ->
-          (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc
+          (ScopeVar.to_string v, get_typ lang decl_ctx sdef.I.scope_def_typ)
+          :: acc
         | Catala_runtime.Reentrant ->
-          (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc))
+          (ScopeVar.to_string v, get_typ lang decl_ctx sdef.I.scope_def_typ)
+          :: acc))
     scope.I.scope_defs []
   |> List.rev
 
@@ -395,14 +412,15 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
 
 let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
     =
+  let lang = prg.program_lang in
   let decl_ctx = prg.program_ctx in
   let module_name = ModuleName.to_string tested_module in
   let info = ScopeName.Map.find sc.scope_uid decl_ctx.ctx_scopes in
   {
     O.name = ScopeName.base sc.scope_uid;
     module_name;
-    inputs = scope_inputs decl_ctx sc;
-    outputs = (get_struct decl_ctx info.out_struct_name).fields;
+    inputs = scope_inputs lang decl_ctx sc;
+    outputs = (get_struct lang decl_ctx info.out_struct_name).fields;
     module_deps = retrieve_scope_module_deps prg sc;
   }
 
@@ -476,7 +494,7 @@ let read_program includes path_to_build options =
   let prg = Desugared.Disambiguate.program prg in
   prg, ctx
 
-let rec generate_default_value (typ : O.typ) : O.runtime_value =
+let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
   let value =
     match typ with
     | TBool -> O.Bool false
@@ -485,10 +503,14 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
     | TMoney -> O.Money 0
     | TDate -> O.Date { year = 2000; month = 1; day = 1 }
     | TDuration -> O.Duration { years = 0; months = 0; days = 0 }
-    | TTuple l -> O.Array (List.map generate_default_value l |> Array.of_list)
+    | TTuple l ->
+      O.Array (List.map (generate_default_value lang) l |> Array.of_list)
     | TStruct decl ->
       O.Struct
-        (decl, List.map (fun (s, t) -> s, generate_default_value t) decl.fields)
+        ( decl,
+          List.map
+            (fun (s, t) -> s, (generate_default_value lang) t)
+            decl.fields )
     | TEnum decl ->
       let elt =
         let cn, ty =
@@ -497,7 +519,7 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
             decl.constructors
           |> function Some s -> s | None -> List.hd decl.constructors
         in
-        cn, Option.map generate_default_value ty
+        cn, Option.map (generate_default_value lang) ty
       in
       O.Enum (decl, elt)
     | TOption typ ->
@@ -630,7 +652,11 @@ let generate_test
               {
                 io with
                 value =
-                  Some { value = generate_default_value io.typ; pos = None };
+                  Some
+                    {
+                      value = generate_default_value prg.program_lang io.typ;
+                      pos = None;
+                    };
               } ))
         test.test_inputs
     in
@@ -725,7 +751,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
           | [] -> Some (unset_default_value test_in.O.typ)
           | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
-            let value = get_value prg.program_ctx e in
+            let value = get_value prg.program_lang prg.program_ctx e in
             Some { O.value; pos = Some (get_source_position (Expr.pos e)) }
           | rules ->
             let extra_pos =
@@ -781,7 +807,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
             let scope_var = StructField.Map.find field scope_field_map in
             ScopeVar.Map.add scope_var
               {
-                O.value = get_value prg.program_ctx value;
+                O.value = get_value prg.program_lang prg.program_ctx value;
                 pos = Some (get_source_position pos);
               }
               acc
@@ -819,42 +845,6 @@ let read_test include_dirs (options : Global.options) buffer_path =
   let prg = read_program include_dirs path_to_build options in
   let tests = import_catala_tests prg in
   write_stdout J.write_test_list tests
-
-type lang_strings = {
-  declaration_scope : string;
-  output_scope : string;
-  using_module : string;
-  definition : string;
-  assertion : string;
-  equals : string;
-  content : string;
-  scope : string;
-}
-
-let get_lang_strings = function
-  | Catala_utils.Global.Fr ->
-    {
-      declaration_scope = "déclaration champ d'application";
-      output_scope = "résultat";
-      using_module = "Usage de";
-      definition = "définition";
-      assertion = "assertion";
-      equals = "égal à";
-      content = "contenu";
-      scope = "champ d'application";
-    }
-  | En ->
-    {
-      declaration_scope = "declaration scope";
-      output_scope = "output";
-      using_module = "Using";
-      definition = "definition";
-      assertion = "assertion";
-      equals = "equals";
-      content = "content";
-      scope = "scope";
-    }
-  | _ -> unsupported "unsupported language"
 
 type duration_units = { day : string; month : string; year : string }
 
@@ -968,14 +958,14 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
   | Some (O.TStruct _sdecl), O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (typ, (fld, v)) ->
-           fprintf ppf "-- %s: %a@," fld
+           fprintf ppf "-- %s: %a" fld
              (print_catala_value ~typ:(Some typ) ~lang)
              v))
       (List.combine (List.map snd _sdecl.fields) fields)
   | _, O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
-           fprintf ppf "-- %s: %a@," fld (print_catala_value ~typ:None ~lang) v))
+           fprintf ppf "-- %s: %a" fld (print_catala_value ~typ:None ~lang) v))
       fields
   | Some (O.TArray t), O.Array vl ->
     fprintf ppf "@[<hov 1>[%a]@]"
@@ -1433,9 +1423,14 @@ let run_with_inputs
         ( StructField.to_string field,
           {
             O.value =
-              Some { value = get_value dcalc_prg.decl_ctx value_expr; pos };
+              Some
+                {
+                  value = get_value dcalc_prg.lang dcalc_prg.decl_ctx value_expr;
+                  pos;
+                };
             typ =
-              get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
+              get_typ dcalc_prg.lang dcalc_prg.decl_ctx
+                (StructField.Map.find field out_struct);
           } ))
       actual_results
   in
@@ -1478,9 +1473,14 @@ let run_test include_dirs options testing_scope =
         ( StructField.to_string field,
           {
             O.value =
-              Some { value = get_value dcalc_prg.decl_ctx value_expr; pos };
+              Some
+                {
+                  value = get_value dcalc_prg.lang dcalc_prg.decl_ctx value_expr;
+                  pos;
+                };
             typ =
-              get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
+              get_typ dcalc_prg.lang dcalc_prg.decl_ctx
+                (StructField.Map.find field out_struct);
           } ))
       actual_results
   in
@@ -1488,7 +1488,7 @@ let run_test include_dirs options testing_scope =
   let expected_results = retrieve_assertions_values dcalc_prg in
   let diffs =
     compute_diff expected_results actual_results
-    |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
+    |> List.map (proj_diff (get_value dcalc_prg.lang dcalc_prg.decl_ctx))
   in
   let assert_failures = not (failed_asserts = []) in
   let test_run = { O.test; O.assert_failures; O.diffs } in
@@ -1517,7 +1517,7 @@ let list_scopes include_dirs options =
       (fun _sn -> function
         | { I.scope_visibility = Private; _ } -> None
         | sc -> (
-          if scope_inputs prg.program_ctx sc = [] then
+          if scope_inputs prg.program_lang prg.program_ctx sc = [] then
             (* We do not consider no-input scopes *)
             None
           else
