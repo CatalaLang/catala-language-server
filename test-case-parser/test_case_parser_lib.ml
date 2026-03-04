@@ -175,6 +175,12 @@ let get_lang_strings =
   | En -> en_strings
   | _ -> unsupported "unsupported language"
 
+let mk_optional_enum_decl lang typ =
+  {
+    O.enum_name = EnumName.to_string Expr.option_enum;
+    constructors = ["Absent", None; (get_lang_strings lang).present, Some typ];
+  }
+
 let get_typ_literal = function
   | TBool -> O.TBool
   | TUnit -> raise (Unsupported "unit type")
@@ -228,6 +234,18 @@ and get_struct lang decl_ctx struct_name =
 
 and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
+  if EnumName.equal enum_name Expr.option_enum then
+    let typ =
+      let x =
+        EnumConstructor.Map.bindings constr_map
+        |> List.find_map (function
+          | _, (TLit TUnit, _) -> None
+          | _, typ -> Some (get_typ lang decl_ctx typ))
+      in
+      x |> Option.get
+    in
+    mk_optional_enum_decl lang typ
+  else
     let module_name =
       if EnumName.path enum_name = [] then None
       else
@@ -316,7 +334,13 @@ let rec get_value : type a.
         O.Enum (decl, none_field)
       | _, Typed { ty; _ } ->
         let some_field =
-          EnumConstructor.to_string Expr.some_constr, Some (get_typ decl_ctx ty)
+          let ty =
+            match ty with
+            | TForAll _, _ ->
+              (* e.g., while reading 'Present content impossible' *) O.TUnset
+            | ty -> get_typ lang decl_ctx ty
+          in
+          EnumConstructor.to_string Expr.some_constr, Some ty
         in
         let some_value =
           ( EnumConstructor.to_string Expr.some_constr,
@@ -522,14 +546,7 @@ let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
         cn, Option.map (generate_default_value lang) ty
       in
       O.Enum (decl, elt)
-    | TOption typ ->
-      let option_decl =
-        {
-          O.enum_name = "Optional";
-          constructors = ["Absent", None; "Present", Some typ];
-        }
-      in
-      Enum (option_decl, ("Absent", None))
+    | TOption typ -> Enum (mk_optional_enum_decl lang typ, ("Absent", None))
     | TArray _ -> O.Array [||]
     | TUnset -> O.Unset
     | TUnit -> raise (Unsupported "unit type")
@@ -944,6 +961,12 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
                 (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day)
             else None);
          ])
+  | _, O.Enum ({ enum_name = "Optional"; constructors }, (constr, v)) ->
+    if v = None then fprintf ppf "Absent"
+    else
+      fprintf ppf "%s %s %a" strings.present strings.content_str
+        (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
+        (Option.get v)
   | Some (TEnum { enum_name; constructors }), O.Enum (_en, (constr, Some v)) ->
     fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
       (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
