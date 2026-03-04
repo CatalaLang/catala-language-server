@@ -18,8 +18,7 @@ module I = Desugared.Ast
 module O = Catala_types_t
 module J = Catala_types_j
 
-let to_relative (p : File.t) =
-  File.make_relative_to ~dir:(Sys.getcwd ()) p
+let to_relative (p : File.t) = File.make_relative_to ~dir:(Sys.getcwd ()) p
 
 let lookup_clerk_toml from_dir =
   let open Catala_utils in
@@ -44,10 +43,10 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
   let dir =
     match options.Global.input_src with
     | FileName file | Contents (_, file) -> Filename.dirname file
-    | Stdin _ ->
+    | Stdin _ -> (
       match buffer_path with
       | None -> Sys.getcwd ()
-      | Some buffer_path -> Filename.dirname buffer_path
+      | Some buffer_path -> Filename.dirname buffer_path)
   in
   match lookup_clerk_toml dir with
   | None -> ".", []
@@ -89,6 +88,92 @@ let build_dir_rel ?buffer_path options =
 exception Unsupported of string
 
 let unsupported fmt = Format.ksprintf (fun msg -> raise (Unsupported msg)) fmt
+
+let implicit_stdlib_alias, lookup_aliased_name =
+  let en_names =
+    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+  in
+  let en_aliases = List.map (fun s -> s ^ "_en") en_names in
+  let fr_aliases = List.map (fun s -> s ^ "_fr") en_names in
+  let fr_names =
+    ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
+  in
+  let implicit_stdlib_alias = function
+    | Catala_utils.Global.En -> en_names @ en_aliases
+    | Fr -> fr_names @ fr_aliases
+    | _ -> []
+  in
+  let en_alias_map = String.Map.of_list (List.combine en_aliases en_names) in
+  let fr_alias_map = String.Map.of_list (List.combine fr_aliases fr_names) in
+  let lookup_aliased_name lang s =
+    match lang with
+    | Catala_utils.Global.En -> String.Map.find_opt s en_alias_map
+    | Catala_utils.Global.Fr -> String.Map.find_opt s fr_alias_map
+    | _ -> None
+  in
+  implicit_stdlib_alias, lookup_aliased_name
+
+(* Implicit stdlib alias handling in the writer. We filter out "Using ..." lines
+   for well-known stdlib aliases. TODO: when the compiler surfaces active
+   imports/aliases for the target module, use that information instead and drop
+   this local list. *)
+let implicit_stdlib_aliases =
+  let en_names =
+    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+    |> List.concat_map (fun s -> [s; s ^ "_en"])
+  in
+  let fr_names =
+    ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
+    @ List.map (fun s -> s ^ "_fr") en_names
+  in
+  function Catala_utils.Global.Fr -> fr_names | En -> en_names | _ -> []
+
+let is_implicit_stdlib_alias lang alias =
+  List.exists (fun a -> String.equal a alias) (implicit_stdlib_aliases lang)
+
+type lang_strings = {
+  declaration_scope : string;
+  output_scope : string;
+  using_module : string;
+  definition : string;
+  assertion : string;
+  equals : string;
+  content : string;
+  scope : string;
+  present : string;
+}
+
+let get_lang_strings =
+  let fr_strings =
+    {
+      declaration_scope = "déclaration champ d'application";
+      output_scope = "résultat";
+      using_module = "Usage de";
+      definition = "définition";
+      assertion = "assertion";
+      equals = "égal à";
+      content = "contenu";
+      scope = "champ d'application";
+      present = "Présent";
+    }
+  in
+  let en_strings =
+    {
+      declaration_scope = "declaration scope";
+      output_scope = "output";
+      using_module = "Using";
+      definition = "definition";
+      assertion = "assertion";
+      equals = "equals";
+      content = "content";
+      scope = "scope";
+      present = "Present";
+    }
+  in
+  function
+  | Catala_utils.Global.Fr -> fr_strings
+  | En -> en_strings
+  | _ -> unsupported "unsupported language"
 
 let get_typ_literal = function
   | TBool -> O.TBool
@@ -780,10 +865,11 @@ type value_strings = {
   decimal_sep : char;
   content_str : string;
   duration_units : duration_units;
+  present : string;
 }
 
-let get_value_strings = function
-  | Catala_utils.Global.Fr ->
+let get_value_strings =
+  let fr_strings =
     {
       true_str = "vrai";
       false_str = "faux";
@@ -791,8 +877,10 @@ let get_value_strings = function
       decimal_sep = ',';
       content_str = "contenu";
       duration_units = { day = "jour"; month = "mois"; year = "an" };
+      present = "Présent";
     }
-  | En ->
+  in
+  let en_strings =
     {
       true_str = "true";
       false_str = "false";
@@ -800,27 +888,13 @@ let get_value_strings = function
       decimal_sep = '.';
       content_str = "content";
       duration_units = { day = "day"; month = "month"; year = "year" };
+      present = "Present";
     }
-  | _ -> unsupported "unsupported language"
-
-(* Implicit stdlib alias handling in the writer. We filter out "Using ..." lines
-   for well-known stdlib aliases. TODO: when the compiler surfaces active
-   imports/aliases for the target module, use that information instead and drop
-   this local list. *)
-let implicit_stdlib_aliases =
-  let en_names =
-    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
-  in
-  let fr_names =
-    ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
   in
   function
-  | Catala_utils.Global.Fr -> fr_names @ List.map (fun s -> s ^ "_fr") en_names
-  | En -> List.concat_map (fun s -> [s; s ^ "_en"]) en_names
-  | _ -> []
-
-let is_implicit_stdlib_alias lang alias =
-  List.exists (fun a -> String.equal a alias) (implicit_stdlib_aliases lang)
+  | Catala_utils.Global.Fr -> fr_strings
+  | En -> en_strings
+  | _ -> unsupported "unsupported language"
 
 let print_attrs ppf (attrs : O.attr_def list) =
   let open Format in
