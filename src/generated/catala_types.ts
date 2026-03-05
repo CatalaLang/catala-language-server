@@ -28,6 +28,7 @@ export type Typ =
 | { kind: 'TOption'; value: Typ }
 | { kind: 'TArray'; value: Typ }
 | { kind: 'TArrow'; value: [Typ[], Typ] }
+| { kind: 'TUnset' }
 
 export type EnumDeclaration = {
   enum_name: string;
@@ -293,6 +294,8 @@ export function writeTyp(x: Typ, context: any = x): any {
       return ['TArray', writeTyp(x.value, x)]
     case 'TArrow':
       return ['TArrow', ((x, context) => [_atd_write_array(writeTyp)(x[0], x), writeTyp(x[1], x)])(x.value, x)]
+    case 'TUnset':
+      return 'TUnset'
   }
 }
 
@@ -313,6 +316,8 @@ export function readTyp(x: any, context: any = x): Typ {
         return { kind: 'TDuration' }
       case 'TUnit':
         return { kind: 'TUnit' }
+      case 'TUnset':
+        return { kind: 'TUnset' }
       default:
         _atd_bad_json('Typ', x, context)
         throw new Error('impossible')

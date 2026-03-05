@@ -18,8 +18,7 @@ module I = Desugared.Ast
 module O = Catala_types_t
 module J = Catala_types_j
 
-let to_relative (p : File.t) =
-  File.make_relative_to ~dir:(Sys.getcwd ()) p
+let to_relative (p : File.t) = File.make_relative_to ~dir:(Sys.getcwd ()) p
 
 let lookup_clerk_toml from_dir =
   let open Catala_utils in
@@ -44,10 +43,10 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
   let dir =
     match options.Global.input_src with
     | FileName file | Contents (_, file) -> Filename.dirname file
-    | Stdin _ ->
+    | Stdin _ -> (
       match buffer_path with
       | None -> Sys.getcwd ()
-      | Some buffer_path -> Filename.dirname buffer_path
+      | Some buffer_path -> Filename.dirname buffer_path)
   in
   match lookup_clerk_toml dir with
   | None -> ".", []
@@ -90,6 +89,103 @@ exception Unsupported of string
 
 let unsupported fmt = Format.ksprintf (fun msg -> raise (Unsupported msg)) fmt
 
+let implicit_stdlib_aliases, lookup_aliased_name =
+  let en_names =
+    [
+      "Date";
+      "Duration";
+      "MonthYear";
+      "Period";
+      "Money";
+      "Integer";
+      "Decimal";
+      "List";
+    ]
+  in
+  let en_aliases = List.map (fun s -> s ^ "_en") en_names in
+  let fr_aliases = List.map (fun s -> s ^ "_fr") en_names in
+  let fr_names =
+    [
+      "Date";
+      "Durée";
+      "MoisAnnée";
+      "Période";
+      "Argent";
+      "Entier";
+      "Décimal";
+      "Liste";
+    ]
+  in
+  let en_implicit_aliases = en_names @ en_aliases in
+  let fr_implicit_aliases = fr_names @ fr_aliases in
+  let implicit_stdlib_aliases = function
+    | Catala_utils.Global.En -> en_implicit_aliases
+    | Fr -> fr_implicit_aliases
+    | _ -> []
+  in
+  let en_alias_map = String.Map.of_list (List.combine en_aliases en_names) in
+  let fr_alias_map = String.Map.of_list (List.combine fr_aliases fr_names) in
+  let lookup_aliased_name lang s =
+    match lang with
+    | Catala_utils.Global.En -> String.Map.find_opt s en_alias_map
+    | Catala_utils.Global.Fr -> String.Map.find_opt s fr_alias_map
+    | _ -> None
+  in
+  implicit_stdlib_aliases, lookup_aliased_name
+
+let is_implicit_stdlib_alias lang alias =
+  List.exists (fun a -> String.equal a alias) (implicit_stdlib_aliases lang)
+
+type lang_strings = {
+  declaration_scope : string;
+  output_scope : string;
+  using_module : string;
+  definition : string;
+  assertion : string;
+  equals : string;
+  content : string;
+  scope : string;
+  present : string;
+}
+
+let get_lang_strings =
+  let fr_strings =
+    {
+      declaration_scope = "déclaration champ d'application";
+      output_scope = "résultat";
+      using_module = "Usage de";
+      definition = "définition";
+      assertion = "assertion";
+      equals = "égal à";
+      content = "contenu";
+      scope = "champ d'application";
+      present = "Présent";
+    }
+  in
+  let en_strings =
+    {
+      declaration_scope = "declaration scope";
+      output_scope = "output";
+      using_module = "Using";
+      definition = "definition";
+      assertion = "assertion";
+      equals = "equals";
+      content = "content";
+      scope = "scope";
+      present = "Present";
+    }
+  in
+  function
+  | Catala_utils.Global.Fr -> fr_strings
+  | En -> en_strings
+  | _ -> unsupported "unsupported language"
+
+let mk_optional_enum_decl lang typ =
+  {
+    O.enum_name = EnumName.to_string Expr.option_enum;
+    constructors = ["Absent", None; (get_lang_strings lang).present, Some typ];
+  }
+
 let get_typ_literal = function
   | TBool -> O.TBool
   | TUnit -> raise (Unsupported "unit type")
@@ -100,13 +196,13 @@ let get_typ_literal = function
   | TDuration -> O.TDuration
   | TPos -> assert false
 
-let rec get_typ decl_ctx = function
+let rec get_typ lang decl_ctx = function
   | TLit tlit, _ -> get_typ_literal tlit
-  | TTuple tl, _ -> O.TTuple (List.map (get_typ decl_ctx) tl)
-  | TStruct name, _ -> O.TStruct (get_struct decl_ctx name)
-  | TEnum name, _ -> O.TEnum (get_enum decl_ctx name)
-  | TOption ty, _ -> O.TOption (get_typ decl_ctx ty)
-  | TArray ty, _ -> O.TArray (get_typ decl_ctx ty)
+  | TTuple tl, _ -> O.TTuple (List.map (get_typ lang decl_ctx) tl)
+  | TStruct name, _ -> O.TStruct (get_struct lang decl_ctx name)
+  | TEnum name, _ -> O.TEnum (get_enum lang decl_ctx name)
+  | TOption ty, _ -> O.TOption (get_typ lang decl_ctx ty)
+  | TArray ty, _ -> O.TArray (get_typ lang decl_ctx ty)
   | TArrow _, _ -> raise (Unsupported "function type")
   | TDefault _, _ -> raise (Unsupported "default type")
   | TForAll _, _ -> raise (Unsupported "wildcard type")
@@ -115,47 +211,70 @@ let rec get_typ decl_ctx = function
   | TError, _ -> raise (Unsupported "error type")
   | TAbstract _, _ -> raise (Unsupported "abstract type")
 
-and get_struct decl_ctx struct_name =
+and get_struct lang decl_ctx struct_name =
   let fields_map = StructName.Map.find struct_name decl_ctx.ctx_structs in
   let module_name =
     if StructName.path struct_name = [] then None
-    else Some (Uid.Path.to_string (StructName.path struct_name))
+    else
+      let module_name =
+        List.rev (StructName.path struct_name)
+        |> List.hd
+        |> ModuleName.to_string
+      in
+      let alias_opt = lookup_aliased_name lang module_name in
+      Option.(some (value alias_opt ~default:module_name))
   in
   let fields =
     List.map
-      (fun (field, typ) -> StructField.to_string field, get_typ decl_ctx typ)
+      (fun (field, typ) ->
+        StructField.to_string field, get_typ lang decl_ctx typ)
       (StructField.Map.bindings fields_map)
   in
   let struct_name =
     match module_name with
-    | None -> StructName.to_string struct_name
-    | Some _s -> Format.asprintf "%a" StructName.format_shortpath struct_name
+    | None -> StructName.base struct_name
+    | Some s -> Format.asprintf "%s.%s" s (StructName.base struct_name)
   in
   { O.struct_name; fields }
 
-and get_enum (decl_ctx : decl_ctx) enum_name =
+and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
-  let module_name =
-    if EnumName.path enum_name = [] then None
-    else
-      let module_name = List.rev (EnumName.path enum_name) |> List.hd in
-      Some (Uid.Path.to_string [module_name])
-  in
-  let constructors =
-    List.map
-      (fun (constr, typ) ->
-        ( EnumConstructor.to_string constr,
-          match typ with
-          | TLit TUnit, _ -> None
-          | _ -> Some (get_typ decl_ctx typ) ))
-      (EnumConstructor.Map.bindings constr_map)
-  in
-  let enum_name =
-    match module_name with
-    | None -> EnumName.to_string enum_name
-    | Some _s -> Format.asprintf "%a" EnumName.format_shortpath enum_name
-  in
-  { O.enum_name; constructors }
+  if EnumName.equal enum_name Expr.option_enum then
+    let typ =
+      let x =
+        EnumConstructor.Map.bindings constr_map
+        |> List.find_map (function
+          | _, (TLit TUnit, _) -> None
+          | _, typ -> Some (get_typ lang decl_ctx typ))
+      in
+      x |> Option.get
+    in
+    mk_optional_enum_decl lang typ
+  else
+    let module_name =
+      if EnumName.path enum_name = [] then None
+      else
+        let module_name =
+          List.rev (EnumName.path enum_name) |> List.hd |> ModuleName.to_string
+        in
+        let alias_opt = lookup_aliased_name lang module_name in
+        Option.(some (value alias_opt ~default:module_name))
+    in
+    let constructors =
+      List.map
+        (fun (constr, typ) ->
+          ( EnumConstructor.to_string constr,
+            match typ with
+            | TLit TUnit, _ -> None
+            | _ -> Some (get_typ lang decl_ctx typ) ))
+        (EnumConstructor.Map.bindings constr_map)
+    in
+    let enum_name =
+      match module_name with
+      | None -> EnumName.base enum_name
+      | Some s -> Format.asprintf "%s.%s" s (EnumName.base enum_name)
+    in
+    { O.enum_name; constructors }
 
 type Pos.attr += TestUi
 type Pos.attr += Uid of string
@@ -163,8 +282,9 @@ type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
 type Pos.attr += ArrayItemLabel of string
 
-let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
- fun decl_ctx e ->
+let rec get_value : type a.
+    Global.backend_lang -> decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
+ fun lang decl_ctx e ->
   let pos = Expr.pos e in
   let attrs =
     Pos.get_attrs pos (function
@@ -190,19 +310,21 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
           args = [e1; e2];
           tys = [(TLit TDuration, _); (TLit TDuration, _)];
         } -> (
-      match (get_value decl_ctx e1).value, (get_value decl_ctx e2).value with
+      match
+        (get_value lang decl_ctx e1).value, (get_value lang decl_ctx e2).value
+      with
       | ( O.Duration { years = y1; months = m1; days = d1 },
           O.Duration { years = y2; months = m2; days = d2 } ) ->
         O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
       | _ -> Message.error ~pos "Invalid duration literal.")
     | EArray args ->
-      O.Array (Array.of_list (List.map (get_value decl_ctx) args))
+      O.Array (Array.of_list (List.map (get_value lang decl_ctx) args))
     | EStruct { name; fields } ->
       O.Struct
-        ( get_struct decl_ctx name,
+        ( get_struct lang decl_ctx name,
           List.map
             (fun (field, v) ->
-              StructField.to_string field, get_value decl_ctx v)
+              StructField.to_string field, get_value lang decl_ctx v)
             (StructField.Map.bindings fields) )
     | EInj { name; e; _ } when EnumName.equal Expr.option_enum name -> (
       match Typing.expr decl_ctx e |> Expr.unbox with
@@ -217,11 +339,17 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
         O.Enum (decl, none_field)
       | _, Typed { ty; _ } ->
         let some_field =
-          EnumConstructor.to_string Expr.some_constr, Some (get_typ decl_ctx ty)
+          let ty =
+            match ty with
+            | TForAll _, _ ->
+              (* e.g., while reading 'Present content impossible' *) O.TUnset
+            | ty -> get_typ lang decl_ctx ty
+          in
+          EnumConstructor.to_string Expr.some_constr, Some ty
         in
         let some_value =
           ( EnumConstructor.to_string Expr.some_constr,
-            Some (get_value decl_ctx e) )
+            Some (get_value lang decl_ctx e) )
         in
         let decl =
           {
@@ -231,11 +359,12 @@ let rec get_value : type a. decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
         in
         O.Enum (decl, some_value))
     | EInj { name; e = ELit LUnit, _; cons } ->
-      O.Enum (get_enum decl_ctx name, (EnumConstructor.to_string cons, None))
+      O.Enum
+        (get_enum lang decl_ctx name, (EnumConstructor.to_string cons, None))
     | EInj { name; e; cons } ->
       O.Enum
-        ( get_enum decl_ctx name,
-          (EnumConstructor.to_string cons, Some (get_value decl_ctx e)) )
+        ( get_enum lang decl_ctx name,
+          (EnumConstructor.to_string cons, Some (get_value lang decl_ctx e)) )
     | EFatalError Impossible -> O.Unset
     | EEmpty -> O.Empty
     | _ ->
@@ -253,7 +382,7 @@ let get_source_position pos =
     law_headings = Pos.get_law_info pos;
   }
 
-let scope_inputs decl_ctx scope =
+let scope_inputs lang decl_ctx scope =
   I.ScopeDef.Map.fold
     (fun ((v, _pos), kind) sdef acc ->
       match kind with
@@ -262,9 +391,11 @@ let scope_inputs decl_ctx scope =
         match fst sdef.I.scope_def_io.I.io_input with
         | Catala_runtime.NoInput -> acc
         | Catala_runtime.OnlyInput ->
-          (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc
+          (ScopeVar.to_string v, get_typ lang decl_ctx sdef.I.scope_def_typ)
+          :: acc
         | Catala_runtime.Reentrant ->
-          (ScopeVar.to_string v, get_typ decl_ctx sdef.I.scope_def_typ) :: acc))
+          (ScopeVar.to_string v, get_typ lang decl_ctx sdef.I.scope_def_typ)
+          :: acc))
     scope.I.scope_defs []
   |> List.rev
 
@@ -310,14 +441,15 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
 
 let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
     =
+  let lang = prg.program_lang in
   let decl_ctx = prg.program_ctx in
   let module_name = ModuleName.to_string tested_module in
   let info = ScopeName.Map.find sc.scope_uid decl_ctx.ctx_scopes in
   {
     O.name = ScopeName.base sc.scope_uid;
     module_name;
-    inputs = scope_inputs decl_ctx sc;
-    outputs = (get_struct decl_ctx info.out_struct_name).fields;
+    inputs = scope_inputs lang decl_ctx sc;
+    outputs = (get_struct lang decl_ctx info.out_struct_name).fields;
     module_deps = retrieve_scope_module_deps prg sc;
   }
 
@@ -391,7 +523,7 @@ let read_program includes path_to_build options =
   let prg = Desugared.Disambiguate.program prg in
   prg, ctx
 
-let rec generate_default_value (typ : O.typ) : O.runtime_value =
+let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
   let value =
     match typ with
     | TBool -> O.Bool false
@@ -400,10 +532,14 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
     | TMoney -> O.Money 0
     | TDate -> O.Date { year = 2000; month = 1; day = 1 }
     | TDuration -> O.Duration { years = 0; months = 0; days = 0 }
-    | TTuple l -> O.Array (List.map generate_default_value l |> Array.of_list)
+    | TTuple l ->
+      O.Array (List.map (generate_default_value lang) l |> Array.of_list)
     | TStruct decl ->
       O.Struct
-        (decl, List.map (fun (s, t) -> s, generate_default_value t) decl.fields)
+        ( decl,
+          List.map
+            (fun (s, t) -> s, (generate_default_value lang) t)
+            decl.fields )
     | TEnum decl ->
       let elt =
         let cn, ty =
@@ -412,18 +548,12 @@ let rec generate_default_value (typ : O.typ) : O.runtime_value =
             decl.constructors
           |> function Some s -> s | None -> List.hd decl.constructors
         in
-        cn, Option.map generate_default_value ty
+        cn, Option.map (generate_default_value lang) ty
       in
       O.Enum (decl, elt)
-    | TOption typ ->
-      let option_decl =
-        {
-          O.enum_name = "Optional";
-          constructors = ["Absent", None; "Present", Some typ];
-        }
-      in
-      Enum (option_decl, ("Absent", None))
+    | TOption typ -> Enum (mk_optional_enum_decl lang typ, ("Absent", None))
     | TArray _ -> O.Array [||]
+    | TUnset -> O.Unset
     | TUnit -> raise (Unsupported "unit type")
     | TArrow _ -> raise (Unsupported "arrow type")
   in
@@ -453,7 +583,7 @@ let patch_paths
   and patch_typ : O.typ -> O.typ =
    fun t ->
     match t with
-    | TBool | TInt | TRat | TMoney | TDate | TDuration | TUnit -> t
+    | TBool | TInt | TRat | TMoney | TDate | TDuration | TUnit | TUnset -> t
     | TTuple l -> TTuple (List.map patch_typ l)
     | TStruct sdecl -> TStruct (patch_struct_decl sdecl)
     | TEnum edecl -> TEnum (patch_enum_decl edecl)
@@ -544,7 +674,11 @@ let generate_test
               {
                 io with
                 value =
-                  Some { value = generate_default_value io.typ; pos = None };
+                  Some
+                    {
+                      value = generate_default_value prg.program_lang io.typ;
+                      pos = None;
+                    };
               } ))
         test.test_inputs
     in
@@ -639,7 +773,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
           | [] -> Some (unset_default_value test_in.O.typ)
           | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
-            let value = get_value prg.program_ctx e in
+            let value = get_value prg.program_lang prg.program_ctx e in
             Some { O.value; pos = Some (get_source_position (Expr.pos e)) }
           | rules ->
             let extra_pos =
@@ -695,7 +829,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
             let scope_var = StructField.Map.find field scope_field_map in
             ScopeVar.Map.add scope_var
               {
-                O.value = get_value prg.program_ctx value;
+                O.value = get_value prg.program_lang prg.program_ctx value;
                 pos = Some (get_source_position pos);
               }
               acc
@@ -734,42 +868,6 @@ let read_test include_dirs (options : Global.options) buffer_path =
   let tests = import_catala_tests prg in
   write_stdout J.write_test_list tests
 
-type lang_strings = {
-  declaration_scope : string;
-  output_scope : string;
-  using_module : string;
-  definition : string;
-  assertion : string;
-  equals : string;
-  content : string;
-  scope : string;
-}
-
-let get_lang_strings = function
-  | Catala_utils.Global.Fr ->
-    {
-      declaration_scope = "déclaration champ d'application";
-      output_scope = "résultat";
-      using_module = "Usage de";
-      definition = "définition";
-      assertion = "assertion";
-      equals = "égal à";
-      content = "contenu";
-      scope = "champ d'application";
-    }
-  | En ->
-    {
-      declaration_scope = "declaration scope";
-      output_scope = "output";
-      using_module = "Using";
-      definition = "definition";
-      assertion = "assertion";
-      equals = "equals";
-      content = "content";
-      scope = "scope";
-    }
-  | _ -> unsupported "unsupported language"
-
 type duration_units = { day : string; month : string; year : string }
 
 type value_strings = {
@@ -779,10 +877,11 @@ type value_strings = {
   decimal_sep : char;
   content_str : string;
   duration_units : duration_units;
+  present : string;
 }
 
-let get_value_strings = function
-  | Catala_utils.Global.Fr ->
+let get_value_strings =
+  let fr_strings =
     {
       true_str = "vrai";
       false_str = "faux";
@@ -790,8 +889,10 @@ let get_value_strings = function
       decimal_sep = ',';
       content_str = "contenu";
       duration_units = { day = "jour"; month = "mois"; year = "an" };
+      present = "Présent";
     }
-  | En ->
+  in
+  let en_strings =
     {
       true_str = "true";
       false_str = "false";
@@ -799,27 +900,13 @@ let get_value_strings = function
       decimal_sep = '.';
       content_str = "content";
       duration_units = { day = "day"; month = "month"; year = "year" };
+      present = "Present";
     }
-  | _ -> unsupported "unsupported language"
-
-(* Implicit stdlib alias handling in the writer. We filter out "Using ..." lines
-   for well-known stdlib aliases. TODO: when the compiler surfaces active
-   imports/aliases for the target module, use that information instead and drop
-   this local list. *)
-let implicit_stdlib_aliases =
-  let en_names =
-    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
-  in
-  let fr_names =
-    ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
   in
   function
-  | Catala_utils.Global.Fr -> fr_names @ List.map (fun s -> s ^ "_fr") en_names
-  | En -> List.concat_map (fun s -> [s; s ^ "_en"]) en_names
-  | _ -> []
-
-let is_implicit_stdlib_alias lang alias =
-  List.exists (fun a -> String.equal a alias) (implicit_stdlib_aliases lang)
+  | Catala_utils.Global.Fr -> fr_strings
+  | En -> en_strings
+  | _ -> unsupported "unsupported language"
 
 let print_attrs ppf (attrs : O.attr_def list) =
   let open Format in
@@ -879,6 +966,12 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
                 (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day)
             else None);
          ])
+  | _, O.Enum ({ enum_name = "Optional"; constructors }, (constr, v)) ->
+    if v = None then fprintf ppf "Absent"
+    else
+      fprintf ppf "%s %s %a" strings.present strings.content_str
+        (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
+        (Option.get v)
   | Some (TEnum { enum_name; constructors }), O.Enum (_en, (constr, Some v)) ->
     fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
       (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
@@ -893,14 +986,14 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
   | Some (O.TStruct _sdecl), O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (typ, (fld, v)) ->
-           fprintf ppf "-- %s: %a@," fld
+           fprintf ppf "-- %s: %a" fld
              (print_catala_value ~typ:(Some typ) ~lang)
              v))
       (List.combine (List.map snd _sdecl.fields) fields)
   | _, O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
-           fprintf ppf "-- %s: %a@," fld (print_catala_value ~typ:None ~lang) v))
+           fprintf ppf "-- %s: %a" fld (print_catala_value ~typ:None ~lang) v))
       fields
   | Some (O.TArray t), O.Array vl ->
     fprintf ppf "@[<hov 1>[%a]@]"
@@ -1358,9 +1451,14 @@ let run_with_inputs
         ( StructField.to_string field,
           {
             O.value =
-              Some { value = get_value dcalc_prg.decl_ctx value_expr; pos };
+              Some
+                {
+                  value = get_value dcalc_prg.lang dcalc_prg.decl_ctx value_expr;
+                  pos;
+                };
             typ =
-              get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
+              get_typ dcalc_prg.lang dcalc_prg.decl_ctx
+                (StructField.Map.find field out_struct);
           } ))
       actual_results
   in
@@ -1403,9 +1501,14 @@ let run_test include_dirs options testing_scope =
         ( StructField.to_string field,
           {
             O.value =
-              Some { value = get_value dcalc_prg.decl_ctx value_expr; pos };
+              Some
+                {
+                  value = get_value dcalc_prg.lang dcalc_prg.decl_ctx value_expr;
+                  pos;
+                };
             typ =
-              get_typ dcalc_prg.decl_ctx (StructField.Map.find field out_struct);
+              get_typ dcalc_prg.lang dcalc_prg.decl_ctx
+                (StructField.Map.find field out_struct);
           } ))
       actual_results
   in
@@ -1413,7 +1516,7 @@ let run_test include_dirs options testing_scope =
   let expected_results = retrieve_assertions_values dcalc_prg in
   let diffs =
     compute_diff expected_results actual_results
-    |> List.map (proj_diff (get_value dcalc_prg.decl_ctx))
+    |> List.map (proj_diff (get_value dcalc_prg.lang dcalc_prg.decl_ctx))
   in
   let assert_failures = not (failed_asserts = []) in
   let test_run = { O.test; O.assert_failures; O.diffs } in
@@ -1442,7 +1545,7 @@ let list_scopes include_dirs options =
       (fun _sn -> function
         | { I.scope_visibility = Private; _ } -> None
         | sc -> (
-          if scope_inputs prg.program_ctx sc = [] then
+          if scope_inputs prg.program_lang prg.program_ctx sc = [] then
             (* We do not consider no-input scopes *)
             None
           else

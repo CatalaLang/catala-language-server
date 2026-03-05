@@ -45,6 +45,8 @@ export function getTypeName(typ: Typ): string {
       return `${getTypeName(typ.value)}?`;
     case 'TArrow':
       return 'Function';
+    case 'TUnset':
+      return 'Unset';
     default:
       return assertUnreachable(typ);
   }
@@ -82,6 +84,8 @@ export function getTypeDisplayName(typ: Typ, intl: IntlShape): string {
       throw new Error('Unexpected type: TArrow');
     case 'TUnit':
       throw new Error('Unexpected type: TUnit');
+    case 'TUnset':
+      return intl.formatMessage({ id: 'type.unset' });
     default:
       return assertUnreachable(typ);
   }
