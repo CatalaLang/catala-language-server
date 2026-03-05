@@ -89,7 +89,7 @@ exception Unsupported of string
 
 let unsupported fmt = Format.ksprintf (fun msg -> raise (Unsupported msg)) fmt
 
-let implicit_stdlib_alias, lookup_aliased_name =
+let implicit_stdlib_aliases, lookup_aliased_name =
   let en_names =
     ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
   in
@@ -98,9 +98,11 @@ let implicit_stdlib_alias, lookup_aliased_name =
   let fr_names =
     ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
   in
-  let implicit_stdlib_alias = function
-    | Catala_utils.Global.En -> en_names @ en_aliases
-    | Fr -> fr_names @ fr_aliases
+  let en_implicit_aliases = en_names @ en_aliases in
+  let fr_implicit_aliases = fr_names @ fr_aliases in
+  let implicit_stdlib_aliases = function
+    | Catala_utils.Global.En -> en_implicit_aliases
+    | Fr -> fr_implicit_aliases
     | _ -> []
   in
   let en_alias_map = String.Map.of_list (List.combine en_aliases en_names) in
@@ -111,22 +113,7 @@ let implicit_stdlib_alias, lookup_aliased_name =
     | Catala_utils.Global.Fr -> String.Map.find_opt s fr_alias_map
     | _ -> None
   in
-  implicit_stdlib_alias, lookup_aliased_name
-
-(* Implicit stdlib alias handling in the writer. We filter out "Using ..." lines
-   for well-known stdlib aliases. TODO: when the compiler surfaces active
-   imports/aliases for the target module, use that information instead and drop
-   this local list. *)
-let implicit_stdlib_aliases =
-  let en_names =
-    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
-    |> List.concat_map (fun s -> [s; s ^ "_en"])
-  in
-  let fr_names =
-    ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
-    @ List.map (fun s -> s ^ "_fr") en_names
-  in
-  function Catala_utils.Global.Fr -> fr_names | En -> en_names | _ -> []
+  implicit_stdlib_aliases, lookup_aliased_name
 
 let is_implicit_stdlib_alias lang alias =
   List.exists (fun a -> String.equal a alias) (implicit_stdlib_aliases lang)
