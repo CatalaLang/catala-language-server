@@ -91,12 +91,30 @@ let unsupported fmt = Format.ksprintf (fun msg -> raise (Unsupported msg)) fmt
 
 let implicit_stdlib_aliases, lookup_aliased_name =
   let en_names =
-    ["Date"; "MonthYear"; "Period"; "Money"; "Integer"; "Decimal"; "List"]
+    [
+      "Date";
+      "Duration";
+      "MonthYear";
+      "Period";
+      "Money";
+      "Integer";
+      "Decimal";
+      "List";
+    ]
   in
   let en_aliases = List.map (fun s -> s ^ "_en") en_names in
   let fr_aliases = List.map (fun s -> s ^ "_fr") en_names in
   let fr_names =
-    ["Date"; "MoisAnnée"; "Période"; "Argent"; "Entier"; "Décimal"; "Liste"]
+    [
+      "Date";
+      "Durée";
+      "MoisAnnée";
+      "Période";
+      "Argent";
+      "Entier";
+      "Décimal";
+      "Liste";
+    ]
   in
   let en_implicit_aliases = en_names @ en_aliases in
   let fr_implicit_aliases = fr_names @ fr_aliases in
