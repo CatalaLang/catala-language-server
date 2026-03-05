@@ -66,7 +66,7 @@ export default function TestEditor(props: Props): ReactElement {
   }
 
   const expectedSectionRef = useRef<HTMLDivElement>(null);
-  // Scope for searching the first '.invalid-badge' or '.unset-badge' before running; used to scroll into view
+  // Scope for searching the first '.value-editor.invalid' or '.value-editor.unset' before running; used to scroll into view
   const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
 

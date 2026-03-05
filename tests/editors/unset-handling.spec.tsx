@@ -8,9 +8,13 @@ describe('ValueEditors - Unset handling', () => {
     { type: 'TRat' as const, name: 'RatEditor' },
     { type: 'TMoney' as const, name: 'MoneyEditor' },
   ])('$name', ({ type }) => {
-    it('shows Unset badge initially', () => {
-      renderEditor({ kind: type });
-      expect(screen.getByText(/Unset/i)).toBeInTheDocument();
+    it('shows unset underline and placeholder initially', () => {
+      const { container } = renderEditor({ kind: type });
+      expect(
+        container.querySelector('.value-editor.unset')
+      ).toBeInTheDocument();
+      const input = screen.getByRole('textbox') as HTMLInputElement;
+      expect(input.placeholder).toMatch(/unset/i);
     });
 
     it('emits Unset when input is cleared', () => {
@@ -28,25 +32,30 @@ describe('ValueEditors - Unset handling', () => {
     });
   });
 
-  it('DateEditor shows Unset initially', () => {
-    renderEditor({ kind: 'TDate' });
-    expect(screen.getByText(/Unset/i)).toBeInTheDocument();
+  it('DateEditor shows unset underline initially', () => {
+    const { container } = renderEditor({ kind: 'TDate' });
+    expect(container.querySelector('.value-editor.unset')).toBeInTheDocument();
   });
 
-  it('DurationEditor shows Unset initially', () => {
-    renderEditor({ kind: 'TDuration' });
-    expect(screen.getByText(/Unset/i)).toBeInTheDocument();
+  it('DurationEditor shows unset underline initially', () => {
+    const { container } = renderEditor({ kind: 'TDuration' });
+    expect(container.querySelector('.value-editor.unset')).toBeInTheDocument();
   });
 
-  it('BoolEditor shows Unset initially (empty option is selected)', () => {
-    renderEditor({ kind: 'TBool' });
-    expect(screen.getByText(/Unset/i)).toBeInTheDocument();
+  it('BoolEditor shows unset underline initially (empty option is selected)', () => {
+    const { container } = renderEditor({ kind: 'TBool' });
+    expect(container.querySelector('.value-editor.unset')).toBeInTheDocument();
     const select = screen.getByRole('combobox') as HTMLSelectElement;
     expect(select.value).toBe('unset');
   });
 
-  it('ArrayEditor shows no badge initially (empty array is valid)', () => {
-    renderEditor({ kind: 'TArray', value: { kind: 'TInt' } });
-    expect(screen.queryByText(/Unset/i)).not.toBeInTheDocument();
+  it('ArrayEditor shows no unset indicator initially (empty array is valid)', () => {
+    const { container } = renderEditor({
+      kind: 'TArray',
+      value: { kind: 'TInt' },
+    });
+    expect(
+      container.querySelector('.value-editor.unset')
+    ).not.toBeInTheDocument();
   });
 });

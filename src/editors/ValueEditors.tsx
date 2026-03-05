@@ -48,20 +48,38 @@ export function getDefaultValue(
     : makeUnset(originalRuntimeValue);
 }
 
-function UnsetBadge(): ReactElement {
-  return (
-    <span className="unset-badge">
-      <FormattedMessage id="editor.unset" defaultMessage="Unset" />
-    </span>
-  );
-}
-
-function InvalidBadge(): ReactElement {
-  return (
-    <span className="invalid-badge">
-      <FormattedMessage id="editor.invalid" defaultMessage="Invalid" />
-    </span>
-  );
+/**
+ * Returns CSS validation class, a hint element (shown on validation highlight),
+ * and a placeholder string for text inputs.
+ */
+function useValidationHint(
+  isUnset: boolean,
+  isInvalid: boolean
+): { className: string; hint: ReactElement | null; placeholder: string } {
+  const intl = useIntl();
+  if (isInvalid) {
+    const text = intl.formatMessage({
+      id: 'editor.invalid',
+      defaultMessage: 'Invalid',
+    });
+    return {
+      className: 'invalid',
+      placeholder: text,
+      hint: <span className="validation-hint invalid">{text}</span>,
+    };
+  }
+  if (isUnset) {
+    const text = intl.formatMessage({
+      id: 'editor.unset',
+      defaultMessage: 'Unset',
+    });
+    return {
+      className: 'unset',
+      placeholder: text,
+      hint: <span className="validation-hint unset">{text}</span>,
+    };
+  }
+  return { className: '', hint: null, placeholder: '' };
 }
 
 type Props = {
@@ -266,6 +284,7 @@ function IntEditor(props: IntEditorProps): ReactElement {
     initialValue?.toString() ?? ''
   );
   const [isInvalid, setIsInvalid] = useState(false);
+  const vProps = useValidationHint(isUnset, isInvalid);
 
   // Update display value if prop changes externally
   useEffect(() => {
@@ -310,17 +329,18 @@ function IntEditor(props: IntEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor int-editor-wrapper">
-      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
+    <div className={`value-editor int-editor-wrapper ${vProps.className}`}>
       <input
         type="text"
         pattern={INT_PATTERN.source}
         value={displayValue}
+        placeholder={vProps.placeholder}
         onChange={handleChange}
         onBlur={handleBlur}
         className={`int-editor ${displayValue && !isValidInt(displayValue) ? 'invalid' : ''}`}
         disabled={props.editable === false}
       />
+      {vProps.hint}
     </div>
   );
 }
@@ -349,6 +369,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
 
   const [internalValue, setInternalValue] = useState(formatDate(initialValue));
   const [isInvalid, setIsInvalid] = useState(false);
+  const vProps = useValidationHint(isUnset, isInvalid);
 
   // Update display value if prop changes externally
   useEffect(() => {
@@ -403,8 +424,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor date-editor-wrapper">
-      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
+    <div className={`value-editor date-editor-wrapper ${vProps.className}`}>
       <input
         type="date"
         value={internalValue}
@@ -413,6 +433,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
         disabled={props.editable === false}
         max="9999-12-31" /* catala date literals are coded on 4 digits */
       />
+      {vProps.hint}
     </div>
   );
 }
@@ -441,6 +462,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
     initialValue?.toString() ?? ''
   );
   const [isInvalid, setIsInvalid] = useState(false);
+  const vProps = useValidationHint(isUnset, isInvalid);
 
   // Update display value if prop changes externally
   useEffect(() => {
@@ -494,17 +516,18 @@ function RatEditor(props: RatEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor rat-editor-wrapper">
-      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
+    <div className={`value-editor rat-editor-wrapper ${vProps.className}`}>
       <input
         type="text"
         pattern={RAT_PATTERN.source}
         value={displayValue}
+        placeholder={vProps.placeholder}
         onChange={handleChange}
         onBlur={handleBlur}
         className={`rat-editor ${displayValue && !isValidRat(displayValue) ? 'invalid' : ''}`}
         disabled={props.editable === false}
       />
+      {vProps.hint}
     </div>
   );
 }
@@ -518,6 +541,7 @@ type BoolEditorProps = {
 function BoolEditor(props: BoolEditorProps): ReactElement {
   const runtimeValue = props.valueDef?.value;
   const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
+  const vProps = useValidationHint(isUnset, false);
   const selectValue: 'unset' | 'true' | 'false' =
     runtimeValue?.value.kind === 'Bool'
       ? runtimeValue.value.value
@@ -536,8 +560,7 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor bool-editor-wrapper">
-      {isUnset && <UnsetBadge />}
+    <div className={`value-editor bool-editor-wrapper ${vProps.className}`}>
       <select
         value={selectValue}
         onChange={handleChange}
@@ -555,6 +578,7 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
           <FormattedMessage id="true" />
         </option>
       </select>
+      {vProps.hint}
     </div>
   );
 }
@@ -584,6 +608,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
     initialValue?.days !== undefined ? String(initialValue.days) : ''
   );
   const [isInvalid, setIsInvalid] = useState(false);
+  const vProps = useValidationHint(isUnset, isInvalid);
 
   // Update state if prop changes externally
   useEffect(() => {
@@ -672,8 +697,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor duration-editor">
-      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
+    <div className={`value-editor duration-editor ${vProps.className}`}>
       <div className="duration-fields">
         <label>
           <FormattedMessage id="durationEditor.years" defaultMessage="Years:" />
@@ -730,6 +754,7 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
           />
         </label>
       </div>
+      {vProps.hint}
     </div>
   );
 }
@@ -747,7 +772,6 @@ type MoneyEditorProps = {
 };
 
 function MoneyEditor(props: MoneyEditorProps): ReactElement {
-  const intl = useIntl();
   const runtimeValue = props.valueDef?.value;
   const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const initialValue = // in cents
@@ -770,6 +794,8 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     centsToDisplayValue(initialValue)
   );
   const [isInvalid, setIsInvalid] = useState(false);
+  const intl = useIntl();
+  const vProps = useValidationHint(isUnset, isInvalid);
 
   // Update display value if prop changes externally
   useEffect(() => {
@@ -817,17 +843,20 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
     : 'currency-usd';
 
   return (
-    <div className={`value-editor money-editor ${currencyClass}`}>
-      {isInvalid ? <InvalidBadge /> : isUnset && <UnsetBadge />}
+    <div
+      className={`value-editor money-editor ${currencyClass} ${vProps.className}`}
+    >
       <input
         type="text"
         pattern={MONEY_PATTERN.source}
         value={displayValue}
+        placeholder={vProps.placeholder}
         onChange={handleChange}
         onBlur={handleBlur}
         className={displayValue && !isValidMoney(displayValue) ? 'invalid' : ''}
         disabled={props.editable === false}
       />
+      {vProps.hint}
     </div>
   );
 }
@@ -956,6 +985,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
     runtimeValue?.value.kind === 'Enum' ? runtimeValue.value.value : undefined;
 
   const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
+  const vProps = useValidationHint(isUnset, false);
   const currentCtor = currentEnumData ? currentEnumData[1][0] : null;
   const selectValue: string = currentCtor ?? '__unset__';
   const currentPayload = currentEnumData ? currentEnumData[1][1] : null;
@@ -1029,8 +1059,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
   // Build the expected editor (existing UI)
   const expectedEditor = (
-    <div className="value-editor enum-editor">
-      {isUnset && <UnsetBadge />}
+    <div className={`value-editor enum-editor ${vProps.className}`}>
       <select
         onChange={handleCtorChange}
         value={selectValue}
@@ -1039,7 +1068,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
         <option value="__unset__">
           {/* We keep that blank as it is more distinguishable
               from a user-defined Catala enum label than an
-              explicit 'Unset' value; we show a badge in addition. */}
+              explicit 'Unset' value; we show a hint in addition. */}
         </option>
         {Array.from(enumDeclaration.constructors.keys()).map((ctorName) => (
           <option key={ctorName} value={ctorName}>
@@ -1047,6 +1076,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
           </option>
         ))}
       </select>
+      {vProps.hint}
       {/* Render payload editor only if the current constructor expects one */}
       {selectValue !== '__unset__' && currentCtorType?.value && (
         <div className="enum-payload-editor">
