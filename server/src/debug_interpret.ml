@@ -371,102 +371,15 @@ and val_to_runtime : type d.
       "Could not convert value of type %a@ to@ runtime:@ %a" Print.typ ty
       Expr.format v
 
-let rec value_to_runtime_embedded = function
-  | ELit LUnit -> Catala_runtime.Unit
-  | ELit (LBool b) -> Catala_runtime.Bool b
-  | ELit (LMoney m) -> Catala_runtime.Money m
-  | ELit (LInt i) -> Catala_runtime.Integer i
-  | ELit (LRat r) -> Catala_runtime.Decimal r
-  | ELit (LDate d) -> Catala_runtime.Date d
-  | ELit (LDuration dt) -> Catala_runtime.Duration dt
-  | EInj { name; cons; e } ->
-    Catala_runtime.Enum
-      ( EnumName.to_string name,
-        ( EnumConstructor.to_string cons,
-          value_to_runtime_embedded (Mark.remove e) ) )
-  | EStruct { name; fields } ->
-    Catala_runtime.Struct
-      ( StructName.to_string name,
-        List.map
-          (fun (f, e) ->
-            StructField.to_string f, value_to_runtime_embedded (Mark.remove e))
-          (StructField.Map.bindings fields) )
-  | EArray el ->
-    Catala_runtime.Array
-      (Array.of_list
-         (List.map (fun e -> value_to_runtime_embedded (Mark.remove e)) el))
-  | ETuple el ->
-    Catala_runtime.Tuple
-      (Array.of_list
-         (List.map (fun e -> value_to_runtime_embedded (Mark.remove e)) el))
-  | _ -> Catala_runtime.Unembeddable
+let handle_eq ctx pos e1 e2 =
+  Catala_runtime.Value.equal (Expr.pos_to_runtime pos) (Expr.embed_value ctx e1)
+    (Expr.embed_value ctx e2)
+  |> Lwt.return
 
-(* Todo: this should be handled early when resolving overloads. Here we have
-   proper structural equality, but the OCaml backend for example uses the
-   builtin equality function instead of this. *)
-let handle_eq
-    pos
-    (evaluate_operator :
-      _ operator Mark.pos ->
-      'a mark ->
-      Global.backend_lang ->
-      ((< .. > as 'b), 'c) Shared_ast__Definitions.gexpr list ->
-      (('b, 'b, 'c) base_gexpr, 'a mark) Mark.ed Lwt.t)
-    m
-    lang
-    e1
-    e2 =
-  let eq_eval = evaluate_operator (Op.Eq, pos) m lang in
-  let open Catala_runtime.Oper in
-  match e1, e2 with
-  | ELit LUnit, ELit LUnit -> Lwt.return_true
-  | ELit (LBool b1), ELit (LBool b2) -> Lwt.return (o_eq_boo_boo b1 b2)
-  | ELit (LInt x1), ELit (LInt x2) -> Lwt.return (o_eq_int_int x1 x2)
-  | ELit (LRat x1), ELit (LRat x2) -> Lwt.return (o_eq_rat_rat x1 x2)
-  | ELit (LMoney x1), ELit (LMoney x2) -> Lwt.return (o_eq_mon_mon x1 x2)
-  | ELit (LDuration x1), ELit (LDuration x2) ->
-    Lwt.return (o_eq_dur_dur (Expr.pos_to_runtime (Expr.mark_pos m)) x1 x2)
-  | ELit (LDate x1), ELit (LDate x2) -> Lwt.return (o_eq_dat_dat x1 x2)
-  | EArray es1, EArray es2 | ETuple es1, ETuple es2 -> (
-    try
-      Lwt_list.for_all_s
-        (fun (e1, e2) ->
-          let* r = eq_eval [e1; e2] in
-          match Mark.remove r with
-          | ELit (LBool b) -> Lwt.return b
-          | _ -> assert false
-          (* should not happen *))
-        (List.combine es1 es2)
-    with Invalid_argument _ -> Lwt.return_false)
-  | EStruct { fields = es1; name = s1 }, EStruct { fields = es2; name = s2 } ->
-    if not (StructName.equal s1 s2) then Lwt.return_false
-    else
-      let bls =
-        List.combine
-          (StructField.Map.bindings es1)
-          (StructField.Map.bindings es2)
-      in
-      Lwt_list.for_all_p
-        (fun ((k1, e1), (k2, e2)) ->
-          if not (StructField.equal k1 k2) then Lwt.return_false
-          else
-            let* r = eq_eval [e1; e2] in
-            match Mark.remove r with
-            | ELit (LBool b) -> Lwt.return b
-            | _ -> assert false (* should not happen *))
-        bls
-  | ( EInj { e = e1; cons = i1; name = en1 },
-      EInj { e = e2; cons = i2; name = en2 } ) -> (
-    try
-      if not (EnumName.equal en1 en2 && EnumConstructor.equal i1 i2) then
-        Lwt.return_false
-      else
-        let* r = eq_eval [e1; e2] in
-        match Mark.remove r with
-        | ELit (LBool b) -> Lwt.return b
-        | _ -> assert false (* should not happen *)
-    with Invalid_argument _ -> Lwt.return_false)
-  | _, _ -> Lwt.return_false (* comparing anything else return false *)
+let handle_compare ctx pos e1 e2 =
+  Catala_runtime.Value.compare (Expr.pos_to_runtime pos)
+    (Expr.embed_value ctx e1) (Expr.embed_value ctx e2)
+  |> Lwt.return
 
 let eval_application evaluate_expr f args =
   match f with
@@ -499,7 +412,8 @@ let eval_application evaluate_expr f args =
       "Trying to apply non-function passed as operator argument"
 
 (* Call-by-value: the arguments are expected to be already evaluated here *)
-let rec evaluate_operator
+let evaluate_operator
+    ctx
     (evaluate_expr :
       (_ interpr_kind, 'm) gexpr -> (_ interpr_kind, 'm) gexpr Lwt.t)
     ((op, opos) : < overloaded : no ; .. > operator Mark.pos)
@@ -539,7 +453,7 @@ let rec evaluate_operator
     match op, args with
     | Length, [(EArray es, _)] ->
       Lwt.return (ELit (LInt (Catala_runtime.integer_of_int (List.length es))))
-    | Log (entry, infos), [(e, _)] when Global.options.trace <> None -> (
+    | Log (entry, infos), [(e, m)] when Global.options.trace <> None -> (
       let rtinfos = List.map Uid.MarkedString.to_string infos in
       match entry with
       | BeginCall -> Lwt.return (Catala_runtime.log_begin_call rtinfos e)
@@ -553,12 +467,13 @@ let rec evaluate_operator
         Lwt.return e
       | VarDef def ->
         Lwt.return
-          (Catala_runtime.log_variable_definition rtinfos
-             {
-               Catala_runtime.io_input = def.log_io_input;
-               io_output = def.log_io_output;
-             }
-             value_to_runtime_embedded e))
+          (Mark.remove
+             (Catala_runtime.log_variable_definition rtinfos
+                {
+                  Catala_runtime.io_input = def.log_io_input;
+                  io_output = def.log_io_output;
+                }
+                (Expr.embed_value ctx) (e, m))))
     | Log _, [(e', _)] -> Lwt.return e'
     | (FromClosureEnv | ToClosureEnv), [e'] ->
       (* [FromClosureEnv] and [ToClosureEnv] are just there to bypass the need
@@ -566,9 +481,21 @@ let rec evaluate_operator
          are effectively no-ops. *)
       Lwt.return (Mark.remove e')
     | (ToClosureEnv | FromClosureEnv), _ -> err ()
-    | Eq, [(e1, _); (e2, _)] ->
-      let* b = handle_eq opos (evaluate_operator evaluate_expr) m lang e1 e2 in
+    | Eq, [e1; e2] ->
+      let* b = handle_eq ctx opos e1 e2 in
       Lwt.return (ELit (LBool b))
+    | Lt, [e1; e2] ->
+      let* b = handle_compare ctx opos e1 e2 in
+      Lwt.return (ELit (LBool (b < 0)))
+    | Lte, [e1; e2] ->
+      let* b = handle_compare ctx opos e1 e2 in
+      Lwt.return (ELit (LBool (b <= 0)))
+    | Gt, [e1; e2] ->
+      let* b = handle_compare ctx opos e1 e2 in
+      Lwt.return (ELit (LBool (b > 0)))
+    | Gte, [e1; e2] ->
+      let* b = handle_compare ctx opos e1 e2 in
+      Lwt.return (ELit (LBool (b >= 0)))
     | Map, [f; (EArray es, _)] ->
       let* l =
         Lwt_list.map_s (fun e' -> eval_application evaluate_expr f [e']) es
@@ -702,58 +629,6 @@ let rec evaluate_operator
       Lwt.return (ELit (LMoney (o_div_mon_rat (div_pos ()) x y)))
     | Div_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
       Lwt.return (ELit (LRat (o_div_dur_dur (div_pos ()) x y)))
-    | Lt_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_int_int x y)))
-    | Lt_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_rat_rat x y)))
-    | Lt_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_mon_mon x y)))
-    | Lt_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_dat_dat x y)))
-    | Lt_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_dur_dur (rpos ()) x y)))
-    | Lte_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_int_int x y)))
-    | Lte_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_rat_rat x y)))
-    | Lte_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_mon_mon x y)))
-    | Lte_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_dat_dat x y)))
-    | Lte_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_dur_dur (rpos ()) x y)))
-    | Gt_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_int_int x y)))
-    | Gt_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_rat_rat x y)))
-    | Gt_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_mon_mon x y)))
-    | Gt_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_dat_dat x y)))
-    | Gt_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_dur_dur (rpos ()) x y)))
-    | Gte_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_int_int x y)))
-    | Gte_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_rat_rat x y)))
-    | Gte_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_mon_mon x y)))
-    | Gte_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_dat_dat x y)))
-    | Gte_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_dur_dur (rpos ()) x y)))
-    | Eq_boo_boo, [(ELit (LBool x), _); (ELit (LBool y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_boo_boo x y)))
-    | Eq_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_int_int x y)))
-    | Eq_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_rat_rat x y)))
-    | Eq_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_mon_mon x y)))
-    | Eq_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_dat_dat x y)))
-    | Eq_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_dur_dur (rpos ()) x y)))
     | HandleExceptions, [(EArray exps, _)] -> (
       (* Shallow conversion to runtime option, so that we can call
          [handle_exceptions] *)
@@ -795,13 +670,8 @@ let rec evaluate_operator
         | Add_dur_dur | Sub_int_int | Sub_rat_rat | Sub_mon_mon | Sub_dat_dat
         | Sub_dat_dur _ | Sub_dur_dur | Mult_int_int | Mult_rat_rat
         | Mult_mon_int | Mult_mon_rat | Mult_dur_int | Div_int_int | Div_rat_rat
-        | Div_mon_mon | Div_mon_int | Div_mon_rat | Div_dur_dur | Lt_int_int
-        | Lt_rat_rat | Lt_mon_mon | Lt_dat_dat | Lt_dur_dur | Lte_int_int
-        | Lte_rat_rat | Lte_mon_mon | Lte_dat_dat | Lte_dur_dur | Gt_int_int
-        | Gt_rat_rat | Gt_mon_mon | Gt_dat_dat | Gt_dur_dur | Gte_int_int
-        | Gte_rat_rat | Gte_mon_mon | Gte_dat_dat | Gte_dur_dur | Eq_boo_boo
-        | Eq_int_int | Eq_rat_rat | Eq_mon_mon | Eq_dat_dat | Eq_dur_dur
-        | HandleExceptions ),
+        | Div_mon_mon | Div_mon_int | Div_mon_rat | Div_dur_dur | Lt | Lte | Gt
+        | Gte | HandleExceptions ),
         _ ) ->
       err ()
   in
@@ -955,7 +825,7 @@ let rec evaluate_expr_with_env : type d.
       Lwt.return (List.map fst l)
     in
     let* e =
-      evaluate_operator
+      evaluate_operator ctx
         (fun e ->
           let* e, _ = evaluate_expr_with_env ~on_expr env ctx lang e in
           Lwt.return e)
@@ -1184,14 +1054,7 @@ and partially_evaluate_expr_for_assertion_failure_message : type d.
       {
         args = [e1; e2];
         tys;
-        op =
-          ( ( And | Or | Xor | Eq | Lt_int_int | Lt_rat_rat | Lt_mon_mon
-            | Lt_dat_dat | Lt_dur_dur | Lte_int_int | Lte_rat_rat | Lte_mon_mon
-            | Lte_dat_dat | Lte_dur_dur | Gt_int_int | Gt_rat_rat | Gt_mon_mon
-            | Gt_dat_dat | Gt_dur_dur | Gte_int_int | Gte_rat_rat | Gte_mon_mon
-            | Gte_dat_dat | Gte_dur_dur | Eq_int_int | Eq_rat_rat | Eq_mon_mon
-            | Eq_dur_dur | Eq_dat_dat ),
-            _ ) as op;
+        op = ((And | Or | Xor | Eq | Lt | Lte | Gt | Gte), _) as op;
       } ->
     let* e1', _env1 =
       partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
