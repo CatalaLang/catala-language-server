@@ -52,12 +52,19 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
   | None -> ".", []
   | Some (config, rel) ->
     let path_to_build = to_relative File.(dir / rel) in
+    let all_include_dirs =
+      match options.Global.input_src with
+      | Stdin _ ->
+        (* We add the test file directory as catala is unable to retrieve its
+           dir *)
+        List.sort_uniq String.compare
+          (to_relative dir :: config.global.include_dirs)
+      | _ -> config.global.include_dirs
+    in
     let include_dirs =
       if prefix_build then
-        List.map
-          (fun p -> File.(path_to_build / "_build" / p))
-          config.global.include_dirs
-      else List.map (File.( / ) path_to_build) config.global.include_dirs
+        List.map (fun p -> File.(path_to_build / "_build" / p)) all_include_dirs
+      else List.map (File.( / ) path_to_build) all_include_dirs
     in
     Message.debug "@[<h>Found %s dirs:@ %a@]"
       (if prefix_build then "build" else "include")
@@ -1302,29 +1309,35 @@ let retrieve_program include_dirs options scope_name =
   in
   desugared_prg, naming_ctx, testing_scope_name, dcalc_prg
 
-let rec convert_atd_to_runtime_value :
-    O.runtime_value -> Catala_runtime.runtime_value =
+let rec convert_atd_to_runtime_value : O.runtime_value -> Catala_runtime.Value.t
+    =
  fun v ->
   let open Catala_runtime in
+  let open Value in
   match v.value with
-  | O.Bool b -> Bool b
-  | Money m -> Money (Z.of_int m)
-  | Integer i -> Integer (Z.of_int i)
-  | Decimal d -> Decimal (Q.of_float d)
-  | Date { year; month; day } -> Date (Dates_calc.make_date ~year ~month ~day)
+  | O.Bool b -> V (Bool, b)
+  | Money m -> V (Money, Z.of_int m)
+  | Integer i -> V (Integer, Z.of_int i)
+  | Decimal d -> V (Decimal, Q.of_float d)
+  | Date { year; month; day } -> V (Date, Dates_calc.make_date ~year ~month ~day)
   | Duration { years; months; days } ->
-    Duration (Dates_calc.make_period ~years ~months ~days)
+    V (Duration, Dates_calc.make_period ~years ~months ~days)
   | Enum (decl, (cstr_s, v_opt)) ->
-    let v =
-      Option.map convert_atd_to_runtime_value v_opt
-      |> Option.value ~default:Unit
+    let v = Option.map convert_atd_to_runtime_value v_opt in
+    let index =
+      List.mapi (fun i (name, _) -> name, i) decl.constructors
+      |> List.assoc cstr_s
     in
-    Enum (decl.enum_name, (cstr_s, v))
+    V
+      ( Enum { name = decl.enum_name; constr = (fun _ -> index, cstr_s, v) },
+        (decl.enum_name, (cstr_s, v)) )
   | Struct (decl, fvl) ->
-    Struct
-      ( decl.struct_name,
-        List.map (fun (s, v) -> s, convert_atd_to_runtime_value v) fvl )
-  | Array l -> Array (Array.map convert_atd_to_runtime_value l)
+    let l = List.map (fun (s, v) -> s, convert_atd_to_runtime_value v) fvl in
+    let ty = Struct { name = decl.struct_name; fields = (fun _ -> l) } in
+    V (ty, (decl.struct_name, l))
+  | Array l ->
+    let l = Array.map convert_atd_to_runtime_value l in
+    V (Array Fun.id, l)
   | Unset -> failwith "Cannot convert 'Unset' atd value to Catala runtime value"
   | Empty -> failwith "Cannot convert 'Empty' atd value to Catala runtime value"
 
