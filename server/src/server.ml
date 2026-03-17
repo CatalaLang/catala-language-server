@@ -94,7 +94,8 @@ let retrieve_existing_document_now doc_id server_state =
   protect_project_not_found_opt
   @@ fun () ->
   St.use_now server_state
-  @@ fun { open_documents; diagnostics; _ } ->
+  @@ fun ({ open_documents; diagnostics; _ } as server_state) ->
+  Log.debug (fun m -> m "%a" Projects.format_projects server_state.projects);
   match Doc_id.Map.find_opt doc_id open_documents with
   | None -> Lwt.return_none
   | Some doc -> Lwt.return_some (doc, diagnostics)
@@ -779,29 +780,19 @@ class catala_lsp_server =
           Lwt.return result
 
     method! on_req_completion ~notify_back:_ ~id:_ ~uri ~pos ~ctx:_
-        ~workDoneToken:_ ~partialResultToken:_ _doc_state =
+        ~workDoneToken:_ ~partialResultToken:_ doc_state =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? { St.document_id; _ }, diagnostics =
+        let*? document, diagnostics =
           retrieve_existing_document_now doc_id server_state
         in
-        let suggestions_opt =
-          DQ.lookup_suggestions_by_pos document_id diagnostics pos
-        in
-        match suggestions_opt with
-        | None -> Lwt.return_none
-        | Some (range, suggestions) ->
+        let*? completions =
           Lwt.return
-          @@ Some
-               (`List
-                  (List.map
-                     (fun sugg ->
-                       let textEdit =
-                         `TextEdit (TextEdit.create ~range ~newText:sugg)
-                       in
-                       CompletionItem.create ~label:sugg ~textEdit ())
-                     suggestions))
+            (DQ.lookup_completions document ~doc_content:doc_state.content pos
+               diagnostics)
+        in
+        Lwt.return_some (`List completions)
 
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ _doc_state =
@@ -896,6 +887,7 @@ class catala_lsp_server =
         | `SymbolInformation of SymbolInformation.t list ]
         option
         t =
+      Log.info (fun m -> m "DOCUMENT SYMBOL REQUEST");
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else

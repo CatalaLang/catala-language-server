@@ -21,6 +21,7 @@ open Server_types
 
 let ( let*? ) = Option.bind
 let ( let*?! ) (x, default) f = match x with None -> default | Some x -> f x
+let ( let*! ) x f = match x with None -> f () | Some x -> Some x
 let never_ending = fst (Lwt.wait ())
 
 let pp_opt pp fmt =
@@ -33,6 +34,7 @@ let pp_list pp fmt =
     (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt " ;@ ") pp)
 
 let pp_string_list fmt = pp_list Format.pp_print_string fmt
+let option_of_list = function [] -> None | l -> Some l
 
 let is_included (p : Pos.t) p' =
   (* true if p is included in p' *)
@@ -164,7 +166,8 @@ let lookup_clerk_toml (path : string) =
   let open Catala_utils in
   try
     begin match
-      File.find_in_parents ~cwd:from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
+      File.find_in_parents ~cwd:from_dir (fun dir ->
+          File.(exists (dir / "clerk.toml")))
     with
     | None ->
       Log.debug (fun m -> m "no 'clerk.toml' config file found");

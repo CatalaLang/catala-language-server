@@ -39,9 +39,23 @@ let lookup_suggestions doc_id diagnostics range =
     | None | Some [] -> None
     | Some suggs -> Some (range, suggs))
 
-let lookup_suggestions_by_pos doc_id diagnostics pos =
-  let range = { Linol_lwt.Range.start = pos; end_ = pos } in
+let lookup_suggestions_by_pos doc_id diagnostics range =
+  let open Linol_lwt in
   lookup_suggestions doc_id diagnostics range
+  |> function
+  | None -> None
+  | Some (range, completions) ->
+    Some
+      (List.map
+         (fun sugg ->
+           let textEdit = `TextEdit (TextEdit.create ~range ~newText:sugg) in
+           CompletionItem.create ~kind:Keyword ~label:sugg ~textEdit ())
+         completions)
+
+let lookup_completions (doc : document_state) ~doc_content pos diagnostics =
+  Doc_completion.lookup_completions
+    (doc : document_state)
+    ~doc_content pos diagnostics
 
 (* This is use for debugging: call this function in all_diagnostics to underline
    all processed symbols in LSP. Useful to determine which expression wasn't
