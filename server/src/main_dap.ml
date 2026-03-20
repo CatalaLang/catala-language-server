@@ -527,6 +527,16 @@ let set_handlers rpc =
       let* () = logger "Stepping back" in
       use_state @@ fun s -> DE.step_back s |> handle_evaluate logger rpc);
   Debug_rpc.set_command_handler rpc
+    (module Step_in_command)
+    (fun _ ->
+      let* () = logger "Stepping into unsupported: defaults to step" in
+      use_state @@ fun s -> DE.step s |> handle_evaluate logger rpc);
+  Debug_rpc.set_command_handler rpc
+    (module Step_out_command)
+    (fun _ ->
+      let* () = logger "Stepping out unsupported: defaults to step" in
+      use_state @@ fun s -> DE.step s |> handle_evaluate logger rpc);
+  Debug_rpc.set_command_handler rpc
     (module Reverse_continue_command)
     (fun _ ->
       let* () = logger "Reverse continue" in
