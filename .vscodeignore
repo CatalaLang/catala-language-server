@@ -5,15 +5,24 @@
 .eslintignore
 .eslintrc.js
 .envrc
+CONVENTIONS.md
+dune
+eslint.config.mjs
+knip.json
 tsconfig.json
 webpack.config.js
 node_modules/
+vitest.config.mts
 .gitignore
 .prettierignore
 .vscode-test.mjs
 src/*[!.css]
 syntaxes/*.iro
 
+catala-atd/
+lint_scripts/
+tests/
+ui-harness/
 server/
 _build/
 .github/
@@ -25,5 +34,5 @@ purgecss-check.js
 clerk.toml
 .aider*
 .aider.tags.cache.v*/
+.claude/
 .devcontainer/
-tests/
