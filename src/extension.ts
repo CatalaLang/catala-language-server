@@ -5,14 +5,17 @@ import type {
   ServerOptions,
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
-import * as path from 'path';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
 import { logger } from './extension/logger';
-import * as fs from 'fs';
-import cmd_exists from 'command-exists';
 import * as net from 'net';
 import { spawn } from 'child_process';
-import { clerkPath, getCwd, hasResourceUri } from './shared/util_client';
+import {
+  clerkPath,
+  getConfig,
+  getCwd,
+  hasResourceUri,
+  resolveBinaryPath,
+} from './shared/util_client';
 import type { RunArgs } from './shared/util_client';
 import { initTests } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
@@ -164,39 +167,21 @@ export async function activate(
 ): Promise<void> {
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
-      const local_path = path.join(
-        '_build',
-        'default',
-        'server',
-        'src',
-        'main_dap.exe'
-      );
-      let dap_command;
-      if (fs.existsSync(local_path)) {
-        dap_command = context.asAbsolutePath(local_path);
-      } else if (cmd_exists.sync('catala-dap')) {
-        dap_command = 'catala-dap';
-      } else if (cmd_exists.sync('catala-dap.exe')) {
-        dap_command = 'catala-dap.exe';
-      } else {
-        vscode.window.showErrorMessage(
-          'Catala debugger not found on the system. Please refer to the installation procedure https://github.com/CatalaLang/catala-language-server/?tab=readme-ov-file#installation'
-        );
-        return undefined;
-      }
-      const server = net.createServer((socket) => {
-        const adapter = spawn(dap_command, []);
-        adapter.stdout.pipe(socket);
-        socket.pipe(adapter.stdin);
-        const output = vscode.window.createOutputChannel('Debugger Output');
-        adapter.stderr.on('data', (data: Buffer) => {
-          output.append(data.toString());
+      const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
+      if (dap_path) {
+        const server = net.createServer((socket) => {
+          const adapter = spawn(dap_path, []);
+          adapter.stdout.pipe(socket);
+          socket.pipe(adapter.stdin);
+          const output = vscode.window.createOutputChannel('Debugger Output');
+          adapter.stderr.on('data', (data: Buffer) => {
+            output.append(data.toString());
+          });
         });
-      });
-
-      server.listen(0);
-      const port = (server.address() as net.AddressInfo).port;
-      return new vscode.DebugAdapterServer(port);
+        server.listen(0);
+        const port = (server.address() as net.AddressInfo).port;
+        return new vscode.DebugAdapterServer(port);
+      }
     },
   });
 
@@ -227,57 +212,14 @@ export async function activate(
     )
   );
 
-  const lsp_server_config_path = vscode.workspace
-    .getConfiguration('catala')
-    .get<string>('lspServerPath');
-  const is_binary_path_configured =
-    lsp_server_config_path != undefined && lsp_server_config_path != '';
-
-  const local_path = context.asAbsolutePath(
-    path.join('_build', 'default', 'server', 'src', 'main_lsp.exe')
+  const lsp_path = resolveBinaryPath(
+    'catala-lsp',
+    context,
+    'main_lsp.exe',
+    getConfig('lspServerPath')
   );
-  const lsp_binary_prefix = 'catala-lsp';
-  let lsp_binary = lsp_binary_prefix;
-
-  const is_local_binary_present = fs.existsSync(local_path);
-
-  const configured_binary_exists =
-    is_binary_path_configured && fs.existsSync(lsp_server_config_path!);
-  const is_configured_binary_present = configured_binary_exists;
-  if (is_binary_path_configured && !configured_binary_exists) {
-    vscode.window.showErrorMessage(
-      "Configured LSP path (catala.lspServerPath): '" +
-        lsp_server_config_path +
-        "' not found. Using default values..."
-    );
-  }
-
-  let is_binary_in_path = false;
-  if (cmd_exists.sync(lsp_binary_prefix)) {
-    is_binary_in_path = true;
-  } else {
-    lsp_binary = lsp_binary_prefix + '.exe';
-    is_binary_in_path = cmd_exists.sync(lsp_binary);
-  }
-
-  if (
-    !is_binary_in_path &&
-    !is_local_binary_present &&
-    !is_configured_binary_present
-  ) {
-    const err_msg =
-      'Catala LSP not found on the system: please refer to the installation procedure https://github.com/CatalaLang/catala-language-server/?tab=readme-ov-file#installation';
-    vscode.window.showErrorMessage(err_msg);
-  } else {
-    let cmd;
-    if (is_configured_binary_present) {
-      cmd = lsp_server_config_path!;
-    } else if (is_local_binary_present) {
-      cmd = local_path;
-    } else {
-      cmd = lsp_binary;
-    }
-    const run: Executable = { command: cmd };
+  if (lsp_path) {
+    const run: Executable = { command: lsp_path };
     const serverOptions: ServerOptions = { run, debug: run };
     const clientOptions: LanguageClientOptions = {
       markdown: { isTrusted: true, supportHtml: true },

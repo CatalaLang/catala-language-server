@@ -295,11 +295,14 @@ let try_build_deps ~logger file =
 
 let run_debugger ?inputs rpc ~file ~scope logger : debugger_state Lwt.t =
   let* () = logger "Initializing Catala debugger.." in
-  let build_dir, config_and_root =
+  let build_dir, ((_, root) as config_and_root) =
     match Utils.lookup_clerk_toml file with
     | None -> "_build", (Clerk_config.default_config, ".")
     | Some (config, root) -> File.(root / "_build"), (config, root)
   in
+  (* In WSL, the cwd is in some case inconsistent. We force it to be in at
+     project's root. *)
+  let () = Sys.chdir root in
   let options =
     Catala_utils.Global.enforce_options ~input_src:(FileName file)
       ~whole_program:true ~bin_dir:build_dir

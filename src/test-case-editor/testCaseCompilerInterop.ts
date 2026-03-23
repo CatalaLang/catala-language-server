@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
   ScopeDefList,
@@ -18,32 +17,11 @@ import {
 import { logger } from '../extension/logger';
 import { Uri, window, workspace } from 'vscode';
 import path from 'path';
-import fs from 'fs';
+import { clerkPath, catalaPath } from '../shared/util_client';
 
 function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
 }
-
-function pathFromConfig(confId: string, defaultCmd: string): string {
-  const confPath = vscode.workspace
-    .getConfiguration('catala')
-    .get<string>(confId);
-  if (confPath === undefined || confPath === null || confPath.trim() === '')
-    return defaultCmd;
-  if (!fs.existsSync(confPath)) {
-    vscode.window.showWarningMessage(
-      `Could not find executable for ${confId} at ${confPath}, falling back to default`
-    );
-    return defaultCmd;
-  }
-  return confPath;
-}
-
-const catalaPath: string = pathFromConfig('catalaPath', 'catala');
-logger.log(`catala command: ${catalaPath}`);
-
-const clerkPath: string = pathFromConfig('clerkPath', 'clerk');
-logger.log(`clerk command: ${clerkPath}`);
 
 export function parseTestFile(
   content: string,
