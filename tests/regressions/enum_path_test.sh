@@ -10,7 +10,9 @@
 # (i.e., don't contain redundant module prefixes).
 
 set -e
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/fixtures"
+
+clerk start
 
 # Generate test case and check for incorrect long paths
 output=$(catala testcase generate my_scope.catala_en --scope S 2>&1)
