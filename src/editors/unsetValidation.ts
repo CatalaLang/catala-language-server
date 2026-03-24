@@ -27,8 +27,8 @@ function containsUnset(rv: RuntimeValue): boolean {
 }
 
 /**
- * Scrolls to and focuses the first .invalid-badge or .unset-badge element
- * within a container.
+ * Scrolls to and focuses the first `.value-editor.invalid` or
+ * `.value-editor.unset` element within a container.
  *
  * @param container - The container to search within (defaults to document)
  * @param delay - Optional delay in ms before scrolling (defaults to 0)
@@ -39,11 +39,12 @@ export function scrollToFirstInvalidOrUnset(
 ): void {
   setTimeout(() => {
     const el = container.querySelector(
-      '.invalid-badge, .unset-badge'
+      '.value-editor.invalid, .value-editor.unset'
     ) as HTMLElement | null;
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el?.focus?.();
+      const focusable = el.querySelector('input, select') as HTMLElement | null;
+      focusable?.focus?.();
     }
   }, delay);
 }
