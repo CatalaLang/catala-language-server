@@ -556,13 +556,7 @@
   background-color: var(--level-2-background-dark);
 }
 
-/* Badge z-index within table cells */
-.table-cell .unset-badge,
-.table-cell .invalid-badge {
-  z-index: 1;
-}
-
-/* Ensure badges don't overflow table cells */
+/* Ensure validation underlines are visible in table cells */
 .table-cell {
   overflow: visible;
 }
