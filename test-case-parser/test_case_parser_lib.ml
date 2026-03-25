@@ -404,10 +404,17 @@ let retrieve_scope_module_deps (prg : I.program) (scope : I.scope) =
   let filtered_input_typs : typ list =
     I.ScopeDef.Map.fold
       (fun (_, kind) (sdef : I.scope_def) acc ->
-        (* Do not consider: internals & subscopes, *)
-        match kind, Mark.remove sdef.scope_def_io.io_input with
-        | _, NoInput | I.ScopeDef.SubScopeInput _, _ -> acc
-        | _, (OnlyInput | Reentrant) -> sdef.I.scope_def_typ :: acc)
+        (* Do not consider subscopes *)
+        match kind with
+        | I.ScopeDef.SubScopeInput _ -> acc
+        | I.ScopeDef.Var _ ->
+          let is_input =
+            match Mark.remove sdef.scope_def_io.io_input with
+            | NoInput -> false
+            | OnlyInput | Reentrant -> true
+          in
+          let is_output = Mark.remove sdef.scope_def_io.io_output in
+          if is_input || is_output then sdef.I.scope_def_typ :: acc else acc)
       scope.I.scope_defs []
     |> List.rev
   in
