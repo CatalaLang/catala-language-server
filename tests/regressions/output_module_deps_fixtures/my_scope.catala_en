@@ -1,0 +1,18 @@
+> Module My_scope
+
+> Using Input_types
+> Using Output_types
+
+```catala-metadata
+declaration scope S:
+  input i content Input_types.EIn
+  output o content Output_types.EOut
+```
+
+```catala
+scope S:
+  definition o equals
+    match i with pattern
+    -- Input_types.EIn.Yes: Output_types.EOut.Ok
+    -- Input_types.EIn.No: Output_types.EOut.Nope
+```
