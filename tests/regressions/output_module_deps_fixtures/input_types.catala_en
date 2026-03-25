@@ -1,0 +1,7 @@
+> Module Input_types
+
+```catala-metadata
+declaration enumeration EIn:
+  -- Yes
+  -- No
+```

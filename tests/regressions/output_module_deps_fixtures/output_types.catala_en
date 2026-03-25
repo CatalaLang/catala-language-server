@@ -1,0 +1,7 @@
+> Module Output_types
+
+```catala-metadata
+declaration enumeration EOut:
+  -- Ok
+  -- Nope
+```
