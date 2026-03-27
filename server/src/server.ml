@@ -411,6 +411,7 @@ class catala_lsp_server =
     method private config_declaration = Some (`Bool true)
     method private config_references = Some (`Bool true)
     method private config_type_definition = Some (`Bool true)
+    method private config_rename = Some (`Bool true)
 
     method! config_sync_opts =
       (* configure how sync happens *)
@@ -441,6 +442,7 @@ class catala_lsp_server =
           ?hoverProvider:self#config_hover
           ?inlayHintProvider:self#config_inlay_hints
           ?documentSymbolProvider:self#config_symbol
+          ?renameProvider:self#config_rename
           ~textDocumentSync:(`TextDocumentSyncOptions sync_opts)
           ~workspaceSymbolProvider:self#config_workspace_symbol
           ?typeDefinitionProvider:self#config_type_definition ()
@@ -705,6 +707,9 @@ class catala_lsp_server =
             ~pos:params.position ()
         | TextDocumentFormatting params ->
           self#on_req_document_formatting ~notify_back params
+        | TextDocumentRename params ->
+          self#on_req_document_rename ~notify_back params
+        | WorkspaceSymbol _params -> Lwt.return_none
         | UnknownRequest { meth = "catala.listEntrypoints"; params } ->
           self#list_entrypoints
             (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
@@ -939,4 +944,40 @@ class catala_lsp_server =
           | Some r ->
             Log.info (fun m -> m "document formatting done");
             Lwt.return_some r)
+
+    method private on_req_document_rename ~notify_back:_
+        {
+          newName : string;
+          position : Types.Position.t;
+          textDocument : TextDocumentIdentifier.t;
+          _;
+        } : WorkspaceEdit.t Lwt.t =
+      let empty_response = WorkspaceEdit.create () in
+      let doc_id = Doc_id.of_lsp_uri textDocument.uri in
+      if should_ignore doc_id then Lwt.return empty_response
+      else
+        let* r =
+          protect_project_not_found_opt
+          @@ fun () ->
+          let*? doc, _ = retrieve_existing_document doc_id server_state in
+          let*? all_occurences =
+            Lwt.return (DQ.lookup_occurences doc position)
+          in
+          let changes : (Uri0.t * TextEdit.t list) list =
+            let open Server_types in
+            Doc_id.Map.map
+              (fun rs ->
+                Range.Set.elements rs
+                |> List.map (fun range ->
+                    TextEdit.create ~newText:newName ~range))
+              all_occurences
+            |> Doc_id.Map.bindings
+            |> List.map (fun (doc_id, ranges) ->
+                Doc_id.to_lsp_uri doc_id, ranges)
+          in
+          Lwt.return_some (WorkspaceEdit.create ~changes ())
+        in
+        match r with
+        | None -> Lwt.return empty_response
+        | Some r -> Lwt.return r
   end

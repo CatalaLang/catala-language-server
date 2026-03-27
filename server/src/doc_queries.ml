@@ -158,6 +158,32 @@ let lookup_type_declaration f p =
     Some (of_position @@ Mark.get (ScopeName.get_info scope_decl_name))
   | Expr _ | Type _ -> None
 
+let lookup_occurences f p : Range.Set.t Doc_id.Map.t option =
+  let p = Utils.(lsp_range p p |> pos_of_range (f.document_id :> File.t)) in
+  let*? { jump_table = (lazy jt); _ } = f.last_valid_result in
+  let occurences = Jump_table.lookup jt p in
+  let m =
+    List.fold_left
+      (fun m { Jump_table.declaration; definitions; usages; types } ->
+        let all_ranges =
+          Option.to_list declaration
+          @ (Option.to_list definitions |> List.flatten)
+          @ (Option.to_list usages |> List.flatten)
+          @ (Option.to_list types |> List.flatten)
+          |> List.map (fun p -> Doc_id.of_catala_pos p, Utils.range_of_pos p)
+        in
+        List.fold_left
+          (fun m (doc_id, r) ->
+            Doc_id.Map.update doc_id
+              (function
+                | None -> Some (Range.Set.singleton r)
+                | Some s -> Some (Range.Set.add r s))
+              m)
+          m all_ranges)
+      Doc_id.Map.empty occurences
+  in
+  if Doc_id.Map.is_empty m then None else Some m
+
 let lookup_document_symbols file =
   let*?! { jump_table = (lazy jt); _ } = file.last_valid_result, [] in
   Jump_table.PMap.fold_on_file file.document_id

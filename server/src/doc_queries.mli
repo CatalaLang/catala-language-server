@@ -47,6 +47,9 @@ val lookup_usages :
   Linol_lwt.Position.t ->
   (string * Range.t) list option
 
+val lookup_occurences :
+  document_state -> Linol_lwt.Position.t -> Range.Set.t Doc_id.Map.t option
+
 val get_hover_type :
   ?markdown:bool ->
   document_state ->
