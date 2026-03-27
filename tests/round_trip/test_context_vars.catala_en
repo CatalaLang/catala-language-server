@@ -1,0 +1,18 @@
+> Using Context_vars
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = "Context variable round-trip: y is overridden, z uses its default (y*2=198)."]
+#[testcase.test_title = "Context vars test"]
+declaration scope C_test:
+  output c scope Context_vars.C
+
+```
+
+```catala
+scope C_test:
+  definition c.x equals 5
+  definition c.y equals 99
+  assertion (c.z = 198)
+```

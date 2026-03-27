@@ -1,0 +1,18 @@
+> Using Context
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "C"]
+declaration scope C_test:
+  output c scope Context.C
+  
+```
+
+```catala
+scope C_test:
+  definition c.x equals 2
+  definition c.z equals 43
+  assertion (c.z = 43)
+```

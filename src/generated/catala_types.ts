@@ -40,10 +40,15 @@ export type StructDeclaration = {
   fields: Map<string, Typ>;
 }
 
+export type ScopeInput = {
+  typ: Typ;
+  is_context: boolean;
+}
+
 export type ScopeDef = {
   name: string;
   module_name: string;
-  inputs: Map<string, Typ>;
+  inputs: Map<string, ScopeInput>;
   outputs: Map<string, Typ>;
   module_deps: string[];
 }
@@ -373,11 +378,25 @@ export function readStructDeclaration(x: any, context: any = x): StructDeclarati
   };
 }
 
+export function writeScopeInput(x: ScopeInput, context: any = x): any {
+  return {
+    'typ': _atd_write_required_field('ScopeInput', 'typ', writeTyp, x.typ, x),
+    'is_context': _atd_write_required_field('ScopeInput', 'is_context', _atd_write_bool, x.is_context, x),
+  };
+}
+
+export function readScopeInput(x: any, context: any = x): ScopeInput {
+  return {
+    typ: _atd_read_required_field('ScopeInput', 'typ', readTyp, x['typ'], x),
+    is_context: _atd_read_required_field('ScopeInput', 'is_context', _atd_read_bool, x['is_context'], x),
+  };
+}
+
 export function writeScopeDef(x: ScopeDef, context: any = x): any {
   return {
     'name': _atd_write_required_field('ScopeDef', 'name', _atd_write_string, x.name, x),
     'module_name': _atd_write_required_field('ScopeDef', 'module_name', _atd_write_string, x.module_name, x),
-    'inputs': _atd_write_required_field('ScopeDef', 'inputs', _atd_write_assoc_map_to_object(writeTyp), x.inputs, x),
+    'inputs': _atd_write_required_field('ScopeDef', 'inputs', _atd_write_assoc_map_to_object(writeScopeInput), x.inputs, x),
     'outputs': _atd_write_required_field('ScopeDef', 'outputs', _atd_write_assoc_map_to_object(writeTyp), x.outputs, x),
     'module_deps': _atd_write_required_field('ScopeDef', 'module_deps', _atd_write_array(_atd_write_string), x.module_deps, x),
   };
@@ -387,7 +406,7 @@ export function readScopeDef(x: any, context: any = x): ScopeDef {
   return {
     name: _atd_read_required_field('ScopeDef', 'name', _atd_read_string, x['name'], x),
     module_name: _atd_read_required_field('ScopeDef', 'module_name', _atd_read_string, x['module_name'], x),
-    inputs: _atd_read_required_field('ScopeDef', 'inputs', _atd_read_assoc_object_into_map(readTyp), x['inputs'], x),
+    inputs: _atd_read_required_field('ScopeDef', 'inputs', _atd_read_assoc_object_into_map(readScopeInput), x['inputs'], x),
     outputs: _atd_read_required_field('ScopeDef', 'outputs', _atd_read_assoc_object_into_map(readTyp), x['outputs'], x),
     module_deps: _atd_read_required_field('ScopeDef', 'module_deps', _atd_read_array(_atd_read_string), x['module_deps'], x),
   };

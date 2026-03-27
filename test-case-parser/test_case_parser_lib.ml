@@ -406,10 +406,14 @@ let scope_inputs lang decl_ctx scope =
         match fst sdef.I.scope_def_io.I.io_input with
         | Catala_runtime.NoInput -> acc
         | Catala_runtime.OnlyInput ->
-          (ScopeVar.to_string v, get_typ lang decl_ctx sdef.I.scope_def_typ)
+          ( ScopeVar.to_string v,
+            O.{ typ = get_typ lang decl_ctx sdef.I.scope_def_typ;
+                is_context = false } )
           :: acc
         | Catala_runtime.Reentrant ->
-          (ScopeVar.to_string v, get_typ lang decl_ctx sdef.I.scope_def_typ)
+          ( ScopeVar.to_string v,
+            O.{ typ = get_typ lang decl_ctx sdef.I.scope_def_typ;
+                is_context = true } )
           :: acc))
     scope.I.scope_defs []
   |> List.rev
@@ -510,7 +514,8 @@ let get_scope_test
   in
   let test_inputs =
     List.map
-      (fun (v, typ) -> v, { O.typ; value = Some (unset_default_value typ) })
+      (fun (v, (si : O.scope_input)) ->
+        v, { O.typ = si.typ; value = Some (unset_default_value si.typ) })
       tested_scope.inputs
   in
   let test_outputs =
@@ -646,7 +651,11 @@ let patch_paths
   let tested_scope =
     {
       tested_scope with
-      inputs = List.map (fun (x, t) -> x, patch_typ t) tested_scope.inputs;
+      inputs =
+        List.map
+          (fun (x, (si : O.scope_input)) ->
+            x, { si with typ = patch_typ si.typ })
+          tested_scope.inputs;
       outputs = List.map (fun (x, t) -> x, patch_typ t) tested_scope.outputs;
     }
   in
@@ -690,7 +699,7 @@ let generate_test
   if with_default_values then
     let test_inputs =
       List.map
-        (fun (s, io) ->
+        (fun (s, (io : O.test_io)) ->
           ( s,
             O.
               {
@@ -775,7 +784,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
   in
   let test_inputs =
     List.map
-      (fun (var_str, test_in) ->
+      (fun (var_str, (test_in : O.test_io)) ->
         let var_within_origin_scope =
           Ident.Map.find var_str tested_id_var_map
         in
@@ -1063,14 +1072,29 @@ let write_catala_test ppf t lang =
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;
   fprintf ppf "@]@,```@,";
+  let inputs_by_name =
+    List.to_seq t.tested_scope.inputs |> Hashtbl.of_seq
+  in
   fprintf ppf "@,```catala@,";
   fprintf ppf "@[<v 2>%s %s:" strings.scope t.testing_scope;
   List.iter
     (fun (tvar, t_in) ->
-      fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition sscope_var
-        tvar strings.equals
-        (print_catala_value_opt ~lang)
-        t_in)
+      let is_context =
+        match Hashtbl.find_opt inputs_by_name tvar with
+        | Some (si : O.scope_input) -> si.is_context
+        | None -> false
+      in
+      let is_unset =
+        match t_in.O.value with
+        | Some { value = { value = O.Unset; _ }; _ } | None -> true
+        | _ -> false
+      in
+      if is_context && is_unset then ()
+      else
+        fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition
+          sscope_var tvar strings.equals
+          (print_catala_value_opt ~lang)
+          t_in)
     t.test_inputs;
   List.iter
     (fun (tvar, t_out) ->
