@@ -399,7 +399,7 @@ class catala_lsp_server =
       InitializeParams.create ~capabilities:(ClientCapabilities.create ()) ()
 
     (* Extra-configurations *)
-    method! config_code_action_provider = `Bool true
+    method! config_code_action_provider = `Bool false
     method! config_completion = Some (CompletionOptions.create ())
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
@@ -729,55 +729,6 @@ class catala_lsp_server =
 
     method on_notif_doc_did_close ~notify_back d =
       self#on_doc_did_close ~notify_back (Doc_id.of_lsp_uri d.uri)
-
-    method! on_req_code_action ~notify_back:_ ~id:_
-        {
-          textDocument;
-          range;
-          context = _;
-          partialResultToken = _;
-          workDoneToken = _;
-        } : CodeActionResult.t Lwt.t =
-      let doc_id = Doc_id.of_lsp_uri textDocument.uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let* r = retrieve_existing_document_when_ready doc_id server_state in
-        match r with
-        | None -> Lwt.return_none
-        | Some ({ St.document_id; _ }, diagnostics) ->
-          let suggestions_opt =
-            DQ.lookup_suggestions document_id diagnostics range
-          in
-          let actions_opt : CodeAction.t list option =
-            Option.map
-              (fun (range, suggestions) ->
-                let changes : (DocumentUri.t * TextEdit.t list) list option =
-                  Option.some
-                  @@ List.map
-                       (fun suggestion ->
-                         ( textDocument.uri,
-                           [TextEdit.create ~range ~newText:suggestion] ))
-                       suggestions
-                in
-                [
-                  CodeAction.create ~title:"suggestions"
-                    ~kind:CodeActionKind.QuickFix ~isPreferred:true
-                    ~edit:
-                      {
-                        changes;
-                        documentChanges = None;
-                        changeAnnotations = None;
-                      }
-                    ();
-                ])
-              suggestions_opt
-          in
-          let result =
-            Option.map
-              (fun l -> List.map (fun action -> `CodeAction action) l)
-              actions_opt
-          in
-          Lwt.return result
 
     method! on_req_completion ~notify_back:_ ~id:_ ~uri ~pos ~ctx:_
         ~workDoneToken:_ ~partialResultToken:_ doc_state =

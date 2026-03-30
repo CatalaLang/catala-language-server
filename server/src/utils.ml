@@ -34,6 +34,14 @@ let pp_list pp fmt =
     (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt " ;@ ") pp)
 
 let pp_string_list fmt = pp_list Format.pp_print_string fmt
+
+let pp_range fmt { Linol_lwt.Range.start; end_ } =
+  let open Format in
+  let pp_pos fmt { Linol_lwt.Position.line; character } =
+    fprintf fmt "l:%d, c:%d" line character
+  in
+  fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
+
 let option_of_list = function [] -> None | l -> Some l
 
 let is_included (p : Pos.t) p' =

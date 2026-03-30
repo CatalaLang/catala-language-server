@@ -4,11 +4,6 @@ open Server_types
 open Server_state
 open Catala_utils
 
-val pp_range : Format.formatter -> Range.t -> unit
-
-val lookup_suggestions :
-  Doc_id.t -> diagnostics -> Range.t -> (Range.t * string list) option
-
 val lookup_completions :
   document_state ->
   doc_content:string ->

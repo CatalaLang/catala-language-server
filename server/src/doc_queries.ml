@@ -21,37 +21,6 @@ open Catala_utils
 open Utils
 open Shared_ast
 
-let pp_range fmt { Linol_lwt.Range.start; end_ } =
-  let open Format in
-  let pp_pos fmt { Linol_lwt.Position.line; character } =
-    fprintf fmt "l:%d, c:%d" line character
-  in
-  fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
-
-let lookup_suggestions doc_id diagnostics range =
-  let*? rmap = Doc_id.Map.find_opt doc_id diagnostics in
-  Range.Map.find_opt range rmap
-  |> function
-  | None -> None
-  | Some { range; lsp_error; _ } -> (
-    let*? lsp_error = lsp_error in
-    match lsp_error.suggestion with
-    | None | Some [] -> None
-    | Some suggs -> Some (range, suggs))
-
-let lookup_suggestions_by_pos doc_id diagnostics range =
-  let open Linol_lwt in
-  lookup_suggestions doc_id diagnostics range
-  |> function
-  | None -> None
-  | Some (range, completions) ->
-    Some
-      (List.map
-         (fun sugg ->
-           let textEdit = `TextEdit (TextEdit.create ~range ~newText:sugg) in
-           CompletionItem.create ~kind:Keyword ~label:sugg ~textEdit ())
-         completions)
-
 let lookup_completions (doc : document_state) ~doc_content pos diagnostics =
   Doc_completion.lookup_completions
     (doc : document_state)
