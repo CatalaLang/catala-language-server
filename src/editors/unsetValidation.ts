@@ -2,7 +2,7 @@
  * Utilities for detecting and navigating to Unset/Invalid values in RuntimeValue trees.
  */
 
-import type { RuntimeValue, Test } from '../generated/catala_types';
+import type { RuntimeValue, ScopeDef, Test } from '../generated/catala_types';
 
 /**
  * Recursively checks if a RuntimeValue contains any Unset values.
@@ -51,17 +51,24 @@ export function scrollToFirstInvalidOrUnset(
 
 /**
  * Checks if a Test has any Unset values in inputs and/or outputs.
+ * Context variables (is_context=true) are excluded from the inputs check
+ * since an Unset context var means "use computed default", not "missing value".
  */
 export function hasUnsetInTest(
   test: Test,
-  options: { checkInputs?: boolean; checkOutputs?: boolean } = {}
+  options: {
+    checkInputs?: boolean;
+    checkOutputs?: boolean;
+    testedScope?: ScopeDef;
+  } = {}
 ): boolean {
-  const { checkInputs = true, checkOutputs = true } = options;
+  const { checkInputs = true, checkOutputs = true, testedScope } = options;
 
   const inputsHas = checkInputs
-    ? Array.from(test.test_inputs.values()).some(
-        (io) => io.value && containsUnset(io.value.value)
-      )
+    ? Array.from(test.test_inputs.entries()).some(([name, io]) => {
+        if (testedScope?.inputs.get(name)?.is_context) return false;
+        return io.value && containsUnset(io.value.value);
+      })
     : false;
 
   const outputsHas = checkOutputs

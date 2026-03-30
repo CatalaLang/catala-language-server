@@ -262,3 +262,64 @@
 .test-title-input:focus + .test-title-edit-icon {
   opacity: 0.6;
 }
+
+/* Context variable label wrapper */
+.context-var-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Context variable badge */
+.context-var-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 50%;
+  background-color: #b8722a;
+  color: #fff;
+  font-size: 0.75em;
+  font-weight: 700;
+  flex-shrink: 0;
+  cursor: help;
+  user-select: none;
+}
+
+/* Placeholder shown when a context var is using its computed default */
+.context-var-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.context-var-default-text {
+  font-style: italic;
+  opacity: 0.5;
+  font-size: 0.9em;
+}
+
+/* Wrapper for an active context var override (editor + reset button) */
+.context-var-editor {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.context-var-reset-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-foreground);
+  opacity: 0.5;
+  font-size: 1.1em;
+  padding: 2px 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.context-var-reset-btn:hover {
+  opacity: 1;
+}

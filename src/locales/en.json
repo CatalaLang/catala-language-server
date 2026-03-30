@@ -63,5 +63,9 @@
   "tableView.switchToTreeView": "Switch to card view",
   "arrayEditor.switchToTableView": "Switch to table view",
   "tableView.value": "Value",
-  "combobox.noMatches": "No matches"
+  "combobox.noMatches": "No matches",
+  "testEditor.contextVarTitle": "Context variable: uses its computed default when not overridden",
+  "testEditor.usingComputedDefault": "Using computed default",
+  "testEditor.override": "Override",
+  "testEditor.resetToDefault": "Reset to computed default"
 }

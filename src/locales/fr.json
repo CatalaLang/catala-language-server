@@ -63,5 +63,9 @@
   "tableView.switchToTreeView": "Passer en vue carte",
   "arrayEditor.switchToTableView": "Passer en vue tableau",
   "tableView.value": "Valeur",
-  "combobox.noMatches": "Aucun résultat"
+  "combobox.noMatches": "Aucun résultat",
+  "testEditor.contextVarTitle": "Variable de contexte : utilise sa valeur par défaut calculée si elle n'est pas redéfinie",
+  "testEditor.usingComputedDefault": "Valeur par défaut calculée",
+  "testEditor.override": "Remplacer",
+  "testEditor.resetToDefault": "Réinitialiser à la valeur par défaut"
 }
