@@ -114,10 +114,10 @@ let get_hover_type ?(markdown = false) f p =
     try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
   in
   if markdown then
-    let md = Type_printing.typ_to_markdown ~prg f.locale kind in
+    let md = Type_printing.typ_to_markdown prg f.locale kind in
     Some (Linol_lwt.Hover.create ~range ~contents:(`MarkupContent md) ())
   else
-    let md = Type_printing.typ_to_raw_string ~prg f.locale kind in
+    let md = Type_printing.typ_to_raw_string prg f.locale kind in
     Some (Linol_lwt.Hover.create ~range ~contents:(`MarkedString md) ())
 
 let lookup_type_declaration f p =

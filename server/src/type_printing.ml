@@ -19,7 +19,10 @@ open Catala_utils
 open Shared_ast
 open Format
 
-let for_all = function
+let locale_s locale =
+  match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+
+let _for_all = function
   | Global.En -> "anything of type"
   | Fr -> "n'importe quel de type"
   | Pl -> assert false
@@ -38,8 +41,8 @@ let enum = function Global.En -> "enum" | Fr -> "énum" | Pl -> assert false
 let struct_s = function Global.Pl -> assert false | _ -> "structure"
 
 let struct_header = function
-  | Global.En -> "declaration " ^ struct_s En
-  | Fr -> "déclaration " ^ struct_s Fr
+  | Global.En -> struct_s En
+  | Fr -> struct_s Fr
   | Pl -> assert false
 
 let struct_data = function
@@ -52,14 +55,19 @@ let content = function
   | Fr -> "contenu"
   | Pl -> assert false
 
+let depends_on = function
+  | Global.En -> "depends on"
+  | Fr -> "dépend de"
+  | Pl -> assert false
+
 let enum_s = function
   | Global.En -> "enumeration"
   | Fr -> "énumération"
   | Pl -> assert false
 
 let enum_header = function
-  | Global.En -> "declaration " ^ enum_s En
-  | Fr -> "déclaration " ^ enum_s Fr
+  | Global.En -> enum_s En
+  | Fr -> enum_s Fr
   | Pl -> assert false
 
 let scope_s = function
@@ -82,6 +90,11 @@ let alias_s = function
   | Fr -> "en tant que"
   | Pl -> assert false
 
+let option_s = function
+  | Global.En -> "optional of"
+  | Fr -> "optionnel de"
+  | Pl -> assert false
+
 let pp_lit locale fmt l =
   fprintf fmt "%s"
   @@ (if locale = Global.En then fst else snd)
@@ -96,29 +109,32 @@ let pp_lit locale fmt l =
        | TPos -> "position", "position")
 
 let pp_typ locale fmt (ty : typ) =
+  let untuplify = function [(TTuple tys, _)] -> tys | x -> x in
   let rec pp_typ fmt ty =
     match Mark.remove ty with
     | TLit l -> pp_lit locale fmt l
-    | TVar v -> pp_print_string fmt (Bindlib.name_of v)
+    | TVar v -> fprintf fmt "<%s>" (Bindlib.name_of v)
     | TForAll b ->
       let _, typ = Bindlib.unmbind b in
-      fprintf fmt "@[<hov 2>%s %a@]" (for_all locale) pp_typ typ
-    | TArrow ([t1], t2) -> fprintf fmt "@[<hov>%a@ →@ %a@]" pp_typ t1 pp_typ t2
+      (* We do not display the for-all information: it's too verbose *)
+      pp_typ fmt typ
     | TArrow (t1, t2) ->
-      fprintf fmt "@[<hov>(%a)@ →@ %a@]"
-        (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp_typ)
-        t1 pp_typ t2
+      fprintf fmt "@[<hov>%a@ →@ %a@]"
+        (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "@ →@ ") pp_typ)
+        (untuplify t1) pp_typ t2
     | TTuple tys ->
       fprintf fmt "@[<hov 2>(%a)@]"
         (pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt ",@ ") pp_typ)
         tys
     | TStruct s ->
+      let s = Utils.rename_alias_in_path locale StructName.map_info s in
       fprintf fmt "@[<hov 2>%a <struct>@]" StructName.format_shortpath s
     | TEnum e ->
+      let e = Utils.rename_alias_in_path locale EnumName.map_info e in
       fprintf fmt "@[<hov 2>%a <%s>@]" EnumName.format_shortpath e (enum locale)
-    | TOption o -> fprintf fmt "@[<hov 2>%a@ <option>@]" pp_typ o
+    | TOption o -> fprintf fmt "@[<hov 2>%s@ %a@]" (option_s locale) pp_typ o
     | TArray a -> fprintf fmt "@[<hov 2>%s@ %a@]" (list_of locale) pp_typ a
-    | TDefault d -> fprintf fmt "@[<hov 2>%a@ <%s>@]" pp_typ d (default locale)
+    | TDefault d -> pp_typ fmt d
     | TAbstract t ->
       fprintf fmt "@[<hov 2>%a <abstract>@]" AbstractType.format_shortpath t
     | TClosureEnv -> fprintf fmt "<closure_env>"
@@ -127,27 +143,32 @@ let pp_typ locale fmt (ty : typ) =
   pp_typ fmt ty
 
 let pp_typ_no_box locale fmt (ty : typ) =
+  let untuplify = function [(TTuple tys, _)] -> tys | x -> x in
   let rec pp_typ fmt ty =
     match Mark.remove ty with
     | TLit l -> pp_lit locale fmt l
-    | TVar v -> pp_print_string fmt (Bindlib.name_of v)
+    | TVar v -> fprintf fmt "<%s>" (Bindlib.name_of v)
     | TForAll b ->
       let _, typ = Bindlib.unmbind b in
-      fprintf fmt "%s %a" (for_all locale) pp_typ typ
-    | TArrow ([t1], t2) -> fprintf fmt "%a@ →@ %a" pp_typ t1 pp_typ t2
+      (* We do not display the for-all information: it's too verbose *)
+      pp_typ fmt typ
     | TArrow (t1, t2) ->
-      fprintf fmt "(%a)@ →@ %a"
-        (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp_typ)
-        t1 pp_typ t2
+      fprintf fmt "%a@ → %a"
+        (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "@ →@ ") pp_typ)
+        (untuplify t1) pp_typ t2
     | TTuple tys ->
       fprintf fmt "(%a)"
         (pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt ",@ ") pp_typ)
         tys
-    | TStruct s -> fprintf fmt "%a <struct>" StructName.format_shortpath s
-    | TEnum e -> fprintf fmt "%a <%s>" EnumName.format_shortpath e (enum locale)
-    | TOption o -> fprintf fmt "%a@ <option>" pp_typ o
+    | TStruct s ->
+      let s = Utils.rename_alias_in_path locale StructName.map_info s in
+      fprintf fmt "%a <struct>" StructName.format_shortpath s
+    | TEnum e ->
+      let e = Utils.rename_alias_in_path locale EnumName.map_info e in
+      fprintf fmt "%a <%s>" EnumName.format_shortpath e (enum locale)
+    | TOption o -> fprintf fmt "%s@ %a" (option_s locale) pp_typ o
     | TArray a -> fprintf fmt "%s@ %a" (list_of locale) pp_typ a
-    | TDefault d -> fprintf fmt "%a@ <%s>" pp_typ d (default locale)
+    | TDefault d -> fprintf fmt "%a" pp_typ d
     | TAbstract t -> fprintf fmt "%a <abstract>" AbstractType.format_shortpath t
     | TClosureEnv -> fprintf fmt "<closure_env>"
     | TError -> fprintf fmt "<error>"
@@ -160,7 +181,7 @@ let expr_type ~markdown locale typ =
   in
   let typ_s =
     if markdown then
-      asprintf "```catala_type_%s@\n%a@\n```" locale_s (pp_typ locale) typ
+      asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_typ locale) typ
     else asprintf "%a" (pp_typ locale) typ
   in
   typ_s
@@ -306,20 +327,25 @@ let sig_type
     locale
     scope_name
     (scope_vars : Scopelang.Ast.scope_var_ty ScopeVar.Map.t) =
-  let locale_s =
-    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
-  in
   let typ_s =
     if markdown then
-      asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_scope locale)
-        (scope_name, scope_vars)
+      asprintf "```catala_code_%s@\n%a@\n```" (locale_s locale)
+        (pp_scope locale) (scope_name, scope_vars)
     else asprintf "%a" (pp_scope locale) (scope_name, scope_vars)
   in
   typ_s
 
-let pp_module locale fmt (mcontent : Surface.Ast.module_content) =
+let pp_topdef locale fmt (name, topdef_typ) =
+  fprintf fmt "%s %s : %a" (topdef_s locale) name (pp_typ locale) topdef_typ
+
+let pp_module
+    locale
+    (prg : Shared_ast.typed Scopelang.Ast.program)
+    fmt
+    (mcontent : Surface.Ast.module_content) =
   let open Format in
   let open Surface.Ast in
+  let ctx = prg.program_ctx in
   (* From Surface.Ast :
 
      > Invariant: an interface shall only contain [*Decl] elements, or [Topdef]
@@ -332,8 +358,17 @@ let pp_module locale fmt (mcontent : Surface.Ast.module_content) =
       fprintf fmt "%s %s" (struct_s locale) (Mark.remove sdecl.struct_decl_name)
     | EnumDecl edecl ->
       fprintf fmt "%s %s" (enum_s locale) (Mark.remove edecl.enum_decl_name)
-    | Topdef top_def ->
-      fprintf fmt "%s %s" (topdef_s locale) (Mark.remove top_def.topdef_name)
+    | Topdef top_def -> (
+      match
+        TopdefName.Map.bindings ctx.ctx_topdefs
+        |> List.find_opt (fun (topdef_name, _) ->
+            String.equal
+              (TopdefName.base topdef_name)
+              (Mark.remove top_def.topdef_name))
+      with
+      | None -> () (* ?? *)
+      | Some (_, (topdef_typ, _)) ->
+        pp_topdef locale fmt (Mark.remove top_def.topdef_name, topdef_typ))
     | AbstractTypeDecl t ->
       fprintf fmt "%s %s" (external_type_s locale) (Mark.remove t)
     | ScopeUse _ -> ()
@@ -362,39 +397,40 @@ let pp_module locale fmt (mcontent : Surface.Ast.module_content) =
 
 let module_type
     ~markdown
+    prg
     locale
     ?alias
     (module_content : Surface.Ast.module_content) =
-  let locale_s =
-    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
-  in
   let buf = Buffer.create 128 in
   let ppf = Format.formatter_of_buffer buf in
+  let module_name =
+    let name = fst module_content.module_modname.module_name in
+    try Utils.lookup_alias_name locale name
+    with String.Map.Not_found _ | Not_found -> name
+  in
   let () =
-    fprintf ppf "**Module %s%a**@\n"
-      (fst module_content.module_modname.module_name)
+    fprintf ppf "**Module %s%a**@\n" module_name
       (Utils.pp_opt (fun fmt alias ->
            Format.fprintf fmt " (%s %s)" (alias_s locale) alias))
       alias;
-    if markdown then fprintf ppf "```catala_code_%s@\n" locale_s;
-    fprintf ppf "%a@\n" (pp_module locale) module_content;
+    if markdown then fprintf ppf "```catala_code_%s@\n" (locale_s locale);
+    fprintf ppf "%a@\n" (pp_module locale prg) module_content;
     if markdown then fprintf ppf "```"
   in
   Buffer.contents buf
 
-let typ_to_content ~markdown ?prg locale (kind : Jump_table.type_lookup) =
-  match prg, kind with
-  | Some prg, (Type typ | Expr typ) -> data_type ~markdown prg locale typ
-  | None, (Type typ | Expr typ) -> expr_type ~markdown locale typ
-  | _, Scope (sn, scope_var_map) -> sig_type ~markdown locale sn scope_var_map
-  | _, Module (itf, alias) -> module_type ~markdown locale ?alias itf
+let typ_to_content ~markdown prg locale (kind : Jump_table.type_lookup) =
+  match kind with
+  | Type typ | Expr typ -> data_type ~markdown prg locale typ
+  | Scope (sn, scope_var_map) -> sig_type ~markdown locale sn scope_var_map
+  | Module (itf, alias) -> module_type ~markdown prg locale ?alias itf
 
-let typ_to_markdown ?prg locale (kind : Jump_table.type_lookup) :
-    MarkupContent.t =
-  let value = typ_to_content ~markdown:true ?prg locale kind in
+let typ_to_markdown prg locale (kind : Jump_table.type_lookup) : MarkupContent.t
+    =
+  let value = typ_to_content ~markdown:true prg locale kind in
   MarkupContent.create ~kind:Markdown ~value
 
-let typ_to_raw_string ?prg locale (kind : Jump_table.type_lookup) :
+let typ_to_raw_string prg locale (kind : Jump_table.type_lookup) :
     MarkedString.t =
-  let value = typ_to_content ~markdown:false ?prg locale kind in
+  let value = typ_to_content ~markdown:false prg locale kind in
   { MarkedString.value; language = None }
