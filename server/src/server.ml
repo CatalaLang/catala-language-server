@@ -198,6 +198,15 @@ let unlocked_process_document document open_documents :
   let processing_result, diags =
     Document_processing.process ~resolve_file_content document
   in
+  (* (\* Uncomment to display all symbols as warnings *\) *)
+  (* let diags = *)
+  (*   let extra_diags = *)
+  (*     Doc_queries.all_symbols_as_warning document.document_id processing_result *)
+  (*   in *)
+  (*   Doc_id.Map.union *)
+  (*     (fun _ l r -> Some (Range.Map.union (fun _ _ r -> Some r) l r)) *)
+  (*     diags extra_diags *)
+  (* in *)
   let is_valid, document =
     match processing_result with
     | None -> false, document

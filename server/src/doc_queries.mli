@@ -14,7 +14,7 @@ val lookup_completions :
 val all_symbols_as_warning :
   Doc_id.doc_id ->
   processing_result option ->
-  (Doc_id.doc_id * Diagnostic.t list) list
+  diagnostic Range.Map.t Doc_id.Map.t
 
 val of_position : Pos.t -> string * Range.t
 

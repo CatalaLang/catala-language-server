@@ -30,47 +30,68 @@ let lookup_completions (doc : document_state) ~doc_content pos diagnostics =
    all processed symbols in LSP. Useful to determine which expression wasn't
    properly handled. *)
 let all_symbols_as_warning (doc_id : Doc_id.t) processing_result =
-  match processing_result with
-  | None -> []
-  | Some { jump_table = (lazy { variables; lookup_table }); _ } ->
-    (* Displays the full position map in logs *)
-    (* Log.info (fun m -> m "%a@." Jump_table.PMap.pp variables); *)
-    (* Generates warning diagnostic for each symbol *)
-    [
-      ( doc_id,
-        Jump_table.LTable.bindings lookup_table
-        |> List.map snd
-        |> List.concat_map
-             (fun { Jump_table.declaration; definitions; usages; types } ->
-               let build r =
-                 Diagnostic.diag_r Warning (range_of_pos r) (`String "abc")
-               in
-               let declaration = Option.map (fun x -> [x]) declaration in
-               [declaration; definitions; usages; types]
-               |> List.filter_map (function
-                 | None -> None
-                 | Some r -> (
-                   List.filter
-                     (fun r -> Catala_utils.Pos.get_file r = (doc_id :> File.t))
-                     r
-                   |> function [] -> None | r -> Some r))
-               |> List.concat
-               |> List.map build) );
-    ]
-    @ [
+  let diags : (Doc_id.doc_id * Diagnostic.t list) list =
+    match processing_result with
+    | None -> []
+    | Some { jump_table = (lazy { variables; lookup_table }); _ } ->
+      (* Displays the full position map in logs *)
+      (* Log.info (fun m -> m "%a@." Jump_table.PMap.pp variables); *)
+      (* Generates warning diagnostic for each symbol *)
+      [
         ( doc_id,
-          Jump_table.PMap.fold_on_file doc_id
-            (fun r v acc ->
-              let msg =
-                Format.asprintf "%a : @[<h>%a@]"
-                  Format.(
-                    pp_print_list ~pp_sep:pp_print_space Jump_table.pp_var)
-                  (Jump_table.PMap.DS.elements v)
-                  Catala_utils.Pos.format_loc_text r
-              in
-              Diagnostic.diag_r Warning (range_of_pos r) (`String msg) :: acc)
-            variables [] );
+          Jump_table.LTable.bindings lookup_table
+          |> List.map snd
+          |> List.concat_map
+               (fun { Jump_table.declaration; definitions; usages; types } ->
+                 let build r =
+                   Diagnostic.diag_r Warning (range_of_pos r) (`String "abc")
+                 in
+                 let declaration = Option.map (fun x -> [x]) declaration in
+                 [declaration; definitions; usages; types]
+                 |> List.filter_map (function
+                   | None -> None
+                   | Some r -> (
+                     List.filter
+                       (fun r ->
+                         Catala_utils.Pos.get_file r = (doc_id :> File.t))
+                       r
+                     |> function [] -> None | r -> Some r))
+                 |> List.concat
+                 |> List.map build) );
       ]
+      @ [
+          ( doc_id,
+            Jump_table.PMap.fold_on_file doc_id
+              (fun r v acc ->
+                let msg =
+                  Format.asprintf "%a : @[<h>%a@]"
+                    Format.(
+                      pp_print_list ~pp_sep:pp_print_space Jump_table.pp_var)
+                    (Jump_table.PMap.DS.elements v)
+                    Catala_utils.Pos.format_loc_text r
+                in
+                Diagnostic.diag_r Warning (range_of_pos r) (`String msg) :: acc)
+              variables [] );
+        ]
+  in
+  let m : diagnostic Range.Map.t Doc_id.Map.t =
+    List.fold_left
+      (fun m (doc_id, diags) ->
+        let diags =
+          List.map
+            (fun (diag : Diagnostic.t) ->
+              ( diag.range,
+                ({ range = diag.range; lsp_error = None; diag } : diagnostic) ))
+            diags
+        in
+        Doc_id.Map.update doc_id
+          (function
+            | None -> Some (Range.Map.of_list diags)
+            | Some s -> Some (Range.Map.add_seq (List.to_seq diags) s))
+          m)
+      Doc_id.Map.empty diags
+  in
+  m
 
 let of_position pos = Catala_utils.Pos.get_file pos, Utils.range_of_pos pos
 
