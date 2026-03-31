@@ -33,14 +33,6 @@ export default function TestInputsEditor(props: Props): ReactElement {
       const showPlaceholder = isContext && !overriding.has(inputName);
 
       function onTestInputChange(newValue: TestIo): void {
-        // When a context var override is cleared back to Unset, revert to placeholder
-        if (isContext && newValue.value?.value.value.kind === 'Unset') {
-          setOverriding((prev) => {
-            const next = new Set(prev);
-            next.delete(inputName);
-            return next;
-          });
-        }
         props.onTestInputsChange(
           new Map([...props.test_inputs, [inputName, newValue]])
         );
