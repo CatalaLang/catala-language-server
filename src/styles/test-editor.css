@@ -304,7 +304,7 @@
 /* Wrapper for an active context var override (editor + reset button) */
 .context-var-editor {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 4px;
 }
 
@@ -314,9 +314,7 @@
   cursor: pointer;
   color: var(--vscode-foreground);
   opacity: 0.5;
-  font-size: 1.1em;
   padding: 2px 4px;
-  line-height: 1;
   flex-shrink: 0;
 }
 

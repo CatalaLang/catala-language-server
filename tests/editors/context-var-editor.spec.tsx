@@ -70,8 +70,10 @@ describe('TestInputsEditor - context variables', () => {
     fireEvent.click(screen.getByRole('button', { name: /override/i }));
     expect(screen.queryByText(/using computed default/i)).toBeNull();
 
-    // click × → back to placeholder
-    fireEvent.click(screen.getByRole('button', { name: '×' }));
+    // click reset (trash) → back to placeholder
+    fireEvent.click(
+      screen.getByRole('button', { name: /reset to computed default/i })
+    );
     expect(screen.getByText(/using computed default/i)).toBeInTheDocument();
   });
 

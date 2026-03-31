@@ -101,7 +101,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
                 defaultMessage: 'Reset to computed default',
               })}
             >
-              ×
+              <span className="codicon codicon-trash"></span>
             </button>
           )}
         </div>
