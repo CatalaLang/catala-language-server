@@ -1,0 +1,100 @@
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { IntlProvider } from 'react-intl';
+import enMessages from '../../src/locales/en.json';
+import TestInputsEditor from '../../src/test-case-editor/TestInputsEditor';
+import type { ScopeDef, TestInputs } from '../../src/generated/catala_types';
+
+const testedScope: ScopeDef = {
+  name: 'C',
+  module_name: 'Context',
+  inputs: new Map([
+    ['x', { typ: { kind: 'TInt' }, is_context: false }],
+    ['y', { typ: { kind: 'TInt' }, is_context: true }],
+  ]),
+  outputs: new Map(),
+  module_deps: [],
+};
+
+function makeInputs(yKind: 'Unset' | number): TestInputs {
+  return new Map([
+    [
+      'x',
+      {
+        typ: { kind: 'TInt' },
+        value: {
+          value: { value: { kind: 'Int', value: 5 } },
+          pos: undefined,
+        },
+      },
+    ],
+    [
+      'y',
+      {
+        typ: { kind: 'TInt' },
+        value:
+          yKind === 'Unset'
+            ? { value: { value: { kind: 'Unset' } }, pos: undefined }
+            : {
+                value: { value: { kind: 'Int', value: yKind } },
+                pos: undefined,
+              },
+      },
+    ],
+  ]);
+}
+
+function renderInputsEditor(inputs: TestInputs, onchange = vi.fn()) {
+  return render(
+    <IntlProvider locale="en" messages={enMessages}>
+      <TestInputsEditor
+        test_inputs={inputs}
+        tested_scope={testedScope}
+        onTestInputsChange={onchange}
+      />
+    </IntlProvider>
+  );
+}
+
+describe('TestInputsEditor - context variables', () => {
+  it('shows placeholder for unset context var, Override button switches to editor, × resets', () => {
+    const onChange = vi.fn();
+    const { container } = renderInputsEditor(makeInputs('Unset'), onChange);
+
+    // y is context + unset → placeholder mode
+    expect(screen.getByText(/using computed default/i)).toBeInTheDocument();
+    expect(container.querySelector('.context-var-editor')).toBeNull();
+
+    // click Override → editor appears
+    fireEvent.click(screen.getByRole('button', { name: /override/i }));
+    expect(screen.queryByText(/using computed default/i)).toBeNull();
+
+    // click × → back to placeholder
+    fireEvent.click(screen.getByRole('button', { name: '×' }));
+    expect(screen.getByText(/using computed default/i)).toBeInTheDocument();
+  });
+
+  it('typing an invalid value in an overridden context var keeps the editor visible', () => {
+    // y starts with a valid override (99) → override mode
+    const { container } = renderInputsEditor(makeInputs(99));
+
+    // sanity: no placeholder visible
+    expect(screen.queryByText(/using computed default/i)).toBeNull();
+
+    // type an invalid intermediate value
+    const input = container.querySelector(
+      '.context-var-editor input'
+    ) as HTMLInputElement;
+    expect(input).not.toBeNull();
+    fireEvent.change(input, { target: { value: '-' } });
+
+    // the editor must still be showing (not reverted to placeholder)
+    expect(screen.queryByText(/using computed default/i)).toBeNull();
+    expect(container.querySelector('.context-var-editor')).toBeInTheDocument();
+    // and the invalid indicator should be present
+    expect(
+      container.querySelector('.value-editor.invalid')
+    ).toBeInTheDocument();
+  });
+});
