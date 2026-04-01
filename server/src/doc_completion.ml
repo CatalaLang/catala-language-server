@@ -149,7 +149,12 @@ module Kind = struct
     | Constructor of { constr : EnumConstructor.t; enum_name : EnumName.t }
     | Scope of { name : ScopeName.t; decl : typed Scopelang.Ast.scope_decl }
     | Topdef of { name : TopdefName.t; ty : Shared_ast.typ }
-    | ScopeVar of { name : ScopeVar.t; ty : Scopelang.Ast.scope_var_ty }
+    | ScopeVar of {
+        name : ScopeVar.t;
+        scope : ScopeName.t;
+        states : string list option;
+        ty : Scopelang.Ast.scope_var_ty;
+      }
     | StructField of { name : StructField.t; ty : Shared_ast.typ }
     | Keyword of { lexeme : string; token : Tokens.token }
 
@@ -223,12 +228,25 @@ module Kind = struct
                (Type_printing.pp_typ locale)
                ty),
           extract_doc TopdefName.get_info name )
-      | ScopeVar { name; ty } ->
+      | ScopeVar { name; scope = _; states = None; ty } ->
         ( Some
-            (asprintf "```catala_code_%s@\n%a@\n```"
+            (asprintf "```catala_code_%s@\n%a@]@\n```"
                (Type_printing.locale_s locale)
-               (Type_printing.pp_scope_var locale)
+               (Type_printing.pp_scope_var ~skip_internals:false locale)
                (name, ty)),
+          extract_doc ScopeVar.get_info name )
+      | ScopeVar { name; scope = _; states = Some states; ty } ->
+        ( Some
+            (asprintf "```catala_code_%s@\n@[<v 2>%a@ %a@]@\n```"
+               (Type_printing.locale_s locale)
+               (Type_printing.pp_scope_var ~skip_internals:false locale)
+               (name, ty)
+               Format.(
+                 pp_print_list ~pp_sep:pp_print_space (fun fmt state ->
+                     fprintf fmt "%s %s"
+                       (Type_printing.svar_state_s locale)
+                       state))
+               states),
           extract_doc ScopeVar.get_info name )
       | StructField { name; ty } ->
         ( Some
@@ -260,7 +278,10 @@ module Kind = struct
         EnumConstructor.to_string constr, "Constructor", Constructor
       | Scope { name; _ } -> ScopeName.base name, "Scope", Function
       | Topdef { name; _ } -> TopdefName.base name, "Function", Function
-      | ScopeVar { name; _ } -> ScopeVar.to_string name, "Variable", Variable
+      | ScopeVar { name; scope; _ } ->
+        ( ScopeVar.to_string name,
+          Format.sprintf "Scope Variable (%s)" (ScopeName.base scope),
+          Variable )
       | StructField { name; _ } -> StructField.to_string name, "Field", Field
       | Keyword { lexeme; _ } -> lexeme, "Keyword", Keyword
     in
@@ -289,8 +310,14 @@ module Kind = struct
         | Scope { name = l; _ }, Scope { name = r; _ } -> ScopeName.compare l r
         | Topdef { name = l; _ }, Topdef { name = r; _ } ->
           TopdefName.compare l r
-        | ScopeVar { name = l; _ }, ScopeVar { name = r; _ } ->
-          ScopeVar.compare l r
+        | ( ScopeVar { name = l; scope = sl; _ },
+            ScopeVar { name = r; scope = sr; _ } ) ->
+          let cmp = ScopeName.compare sl sr in
+          if cmp <> 0 then cmp
+          else
+            String.compare
+              (ScopeVar.get_info l |> Mark.remove)
+              (ScopeVar.get_info r |> Mark.remove)
         | l, r -> compare l r
     end)
   end
@@ -486,13 +513,45 @@ let lookup_topdefs ?prefix ?modname (prg : typed Scopelang.Ast.program) m =
   |> update_all ?prefix m
 
 let lookup_scopevars ?prefix (prg : typed Scopelang.Ast.program) m =
-  ScopeName.Map.to_seq prg.program_scopes
-  |> Seq.map (fun (_, sdecl) ->
-      ScopeVar.Map.to_seq (Mark.remove sdecl).Scopelang.Ast.scope_sig
-      |> Seq.map (fun (name, (ty : Scopelang.Ast.scope_var_ty)) ->
-          Kind.ScopeVar { name; ty }))
-  |> Seq.concat
-  |> Kind.Set.of_seq
+  let all_scopes_vars : Kind.t list Seq.t =
+    ScopeName.Map.to_seq prg.program_scopes
+    |> Seq.map (fun (scope, sdecl) ->
+        let all_scope_vars =
+          ScopeVar.Map.to_seq (Mark.remove sdecl).Scopelang.Ast.scope_sig
+          |> Seq.filter_map (fun (name, (ty : Scopelang.Ast.scope_var_ty)) ->
+              let var_s, _pos = ScopeVar.get_info name in
+              match String.split_on_char '#' var_s with
+              | [_] ->
+                Some (var_s, Kind.ScopeVar { name; scope; states = None; ty })
+              | [ident; state] ->
+                let name = ScopeVar.map_info (fun _ -> ident, Pos.void) name in
+                Some
+                  ( ident,
+                    Kind.ScopeVar { name; scope; states = Some [state]; ty } )
+              | _ -> None (* shouldn't happen *))
+        in
+        Seq.fold_left
+          (fun m (name, k) ->
+            let merge k k' =
+              match k, k' with
+              | (Kind.ScopeVar _ as x), Kind.ScopeVar { states = None; _ }
+              | Kind.ScopeVar { states = None; _ }, (Kind.ScopeVar _ as x) ->
+                Some x
+              | ( Kind.ScopeVar ({ states = Some l; _ } as x),
+                  Kind.ScopeVar { states = Some r; _ } ) ->
+                Some (Kind.ScopeVar { x with states = Some (l @ r) })
+              | _ -> None
+            in
+            String.Map.update name
+              (function None -> Some k | Some k' -> merge k k')
+              m)
+          String.Map.empty all_scope_vars
+        |> String.Map.values)
+  in
+  all_scopes_vars
+  |> List.of_seq
+  |> List.concat
+  |> Kind.Set.of_list
   |> update_all ?prefix m
 
 let find_qualifiers prg uident =
@@ -624,26 +683,24 @@ let lookup_completions (doc : document_state) ~doc_content pos =
   let open Tokens in
   let r =
     match rev_tokens with
+    | (_, (UIDENT _s as tok), _) :: (_, OF, _) :: (_, OUTPUT, _) :: _ ->
+      lookup_scopes prg ~prefix:(partial_prefix tok) CompletionMap.empty
+    | (_, OF, _) :: (_, OUTPUT, _) :: _ -> lookup_scopes prg CompletionMap.empty
     | (_, ((UIDENT _ | LIDENT _) as tok), _) (* <= curr token *)
       :: (_, DOT, _)
       :: (_, UIDENT qualif, _)
       :: _ ->
-      let completion_map = uident_dot_prefix qualif ~prefix_tok:tok prg in
-      to_completions completion_map
-    | (_, DOT, _) :: (_, UIDENT qualif, _) :: _ ->
-      let completions_map = uident_dot_prefix qualif prg in
-      to_completions completions_map
-    | (_, DOT, _) :: (_, LIDENT qualif, _) :: _ ->
-      lident_dot_prefix qualif prg |> to_completions
+      uident_dot_prefix qualif ~prefix_tok:tok prg
+    | (_, DOT, _) :: (_, UIDENT qualif, _) :: _ -> uident_dot_prefix qualif prg
+    | (_, DOT, _) :: (_, LIDENT qualif, _) :: _ -> lident_dot_prefix qualif prg
     | (_, (LIDENT _ as prefix_tok), _)
       :: (_, DOT, _)
       :: (_, LIDENT qualif, _)
       :: _ ->
-      lident_dot_prefix ~prefix_tok qualif prg |> to_completions
-    | (_, (UIDENT _s as tok), _) :: _ -> single_uident tok prg |> to_completions
-    | (_, (LIDENT _s as tok), _) :: _ when on_token ->
-      single_lident tok prg |> to_completions
-    | _ -> None
+      lident_dot_prefix ~prefix_tok qualif prg
+    | (_, (UIDENT _s as tok), _) :: _ -> single_uident tok prg
+    | (_, (LIDENT _s as tok), _) :: _ when on_token -> single_lident tok prg
+    | _ -> CompletionMap.empty
   in
   (* Log.debug (fun m -> *)
   (*     m "@[<v 2>Full completion candidates:@ %a@]" *)
@@ -652,7 +709,7 @@ let lookup_completions (doc : document_state) ~doc_content pos =
   (*            pp_print_list (fun fmt { CompletionItem.label; _ } -> *)
   (*                Format.pp_print_string fmt label))) *)
   (*       r); *)
-  r
+  to_completions r
 
 let lookup_completions
     (doc : document_state)

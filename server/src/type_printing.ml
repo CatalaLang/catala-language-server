@@ -298,14 +298,28 @@ let svar_io_s locale (var_io : Desugared.Ast.io) =
   | None, Some s | Some s, None -> Some s
   | None, None -> None (* internal *)
 
+let svar_internal_s = function
+  | Global.En -> "output"
+  | Fr -> "résultat"
+  | Pl -> assert false
+
+let svar_state_s = function
+  | Global.En -> "state"
+  | Fr -> "état"
+  | Pl -> assert false
+
 let pp_scope_var
+    ?(skip_internals = true)
     locale
     fmt
     ((scope_var : ScopeVar.t), (scope_ty : Scopelang.Ast.scope_var_ty)) =
   let open Format in
   let var_name = ScopeVar.to_string scope_var in
   match svar_io_s locale scope_ty.svar_io with
-  | None -> (* internal *) ()
+  | None when skip_internals -> (* internal *) ()
+  | None ->
+    fprintf fmt "@[<hov 2>%s %s %s %a@]" (svar_internal_s locale) var_name
+      (content locale) (pp_typ_no_box locale) scope_ty.svar_out_ty
   | Some io_s ->
     fprintf fmt "@[<hov 2>%s %s %s %a@]" io_s var_name (content locale)
       (pp_typ_no_box locale) scope_ty.svar_out_ty
@@ -314,13 +328,14 @@ let is_svar_internal (scope_ty : Scopelang.Ast.scope_var_ty) =
   (not (Mark.remove scope_ty.svar_io.io_output))
   && Mark.remove scope_ty.svar_io.io_input = Catala_runtime.NoInput
 
-let pp_scope locale fmt (scope_name, scope_vars) =
+let pp_scope ?(skip_internals = true) locale fmt (scope_name, scope_vars) =
   let open Format in
   let short_scope_name = ScopeName.get_info scope_name |> fst in
   fprintf fmt "@[<v 2>%s %s:@ %a@]" (scope_s locale) short_scope_name
-    (pp_print_list ~pp_sep:pp_print_space (pp_scope_var locale))
+    (pp_print_list ~pp_sep:pp_print_space (pp_scope_var ~skip_internals locale))
     (ScopeVar.Map.bindings scope_vars
-    |> List.filter (fun (_, v) -> not (is_svar_internal v)))
+    |> List.filter (fun (_, v) ->
+        (not skip_internals) || not (is_svar_internal v)))
 
 let sig_type
     ~markdown
