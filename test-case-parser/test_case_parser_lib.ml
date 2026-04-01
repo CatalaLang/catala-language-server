@@ -59,11 +59,19 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
           config.global.include_dirs
       else List.map (File.( / ) path_to_build) config.global.include_dirs
     in
+    let all_include_dirs =
+      match options.Global.input_src with
+      | Stdin _ ->
+        (* We add the test file directory as catala is unable to retrieve its
+           dir *)
+        List.sort_uniq String.compare (to_relative dir :: include_dirs)
+      | _ -> include_dirs
+    in
     Message.debug "@[<h>Found %s dirs:@ %a@]"
       (if prefix_build then "build" else "include")
       Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
-      include_dirs;
-    path_to_build, List.map Global.raw_file include_dirs
+      all_include_dirs;
+    path_to_build, List.map Global.raw_file all_include_dirs
 
 let build_dir_rel ?buffer_path options =
   (* Otherwise, lookup for the toml *)
