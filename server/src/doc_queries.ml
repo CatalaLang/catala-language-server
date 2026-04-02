@@ -32,8 +32,9 @@ let lookup_completions (doc : document_state) ~doc_content pos diagnostics =
 let all_symbols_as_warning (doc_id : Doc_id.t) processing_result =
   let diags : (Doc_id.doc_id * Diagnostic.t list) list =
     match processing_result with
-    | None -> []
-    | Some { jump_table = (lazy { variables; lookup_table }); _ } ->
+    | Skipped | Faulty _ -> []
+    | Partial (_, { jump_table = (lazy { variables; lookup_table }); _ })
+    | Valid { jump_table = (lazy { variables; lookup_table }); _ } ->
       (* Displays the full position map in logs *)
       (* Log.info (fun m -> m "%a@." Jump_table.PMap.pp variables); *)
       (* Generates warning diagnostic for each symbol *)

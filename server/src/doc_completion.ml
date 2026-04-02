@@ -750,7 +750,20 @@ let lookup_completions (doc : document_state) ~doc_content pos =
       let rc = rp.Lexing.pos_cnum - rp.Lexing.pos_bol + 1 in
       pos.Position.character + 1 <= rc
   in
-  let*? last_valid_result = doc.last_valid_result in
+  let*? last_valid_result =
+    match doc.last_valid_result, doc.last_result with
+    | Some x, _ -> Some x
+    | None, Some (Partial (_, r)) ->
+      Log.debug (fun m ->
+          m "Using partial result for completion of document %a" Doc_id.format
+            doc.document_id);
+      Some r
+    | _ ->
+      Log.debug (fun m ->
+          m "No exploitable result for completion of document %a" Doc_id.format
+            doc.document_id);
+      None
+  in
   let prg = last_valid_result.prg in
   let to_completions = to_completions prg.program_lang in
   let open Tokens in

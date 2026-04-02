@@ -94,8 +94,7 @@ let retrieve_existing_document_now doc_id server_state =
   protect_project_not_found_opt
   @@ fun () ->
   St.use_now server_state
-  @@ fun ({ open_documents; diagnostics; _ } as server_state) ->
-  Log.debug (fun m -> m "%a" Projects.format_projects server_state.projects);
+  @@ fun { open_documents; diagnostics; _ } ->
   match Doc_id.Map.find_opt doc_id open_documents with
   | None -> Lwt.return_none
   | Some doc -> Lwt.return_some (doc, diagnostics)
@@ -195,23 +194,37 @@ let unlocked_process_document document open_documents :
     | Some { St.buffer_state = Modified { contents }; _ } ->
       Global.Contents (contents, (doc_id :> string))
   in
-  let processing_result, diags =
+  let validation_result =
     Document_processing.process ~resolve_file_content document
+  in
+  let document = { document with last_result = Some validation_result } in
+  let is_valid, document, diags =
+    match validation_result with
+    | Skipped -> false, document, Doc_id.Map.empty
+    | Faulty diags -> false, document, diags
+    | Partial (diags, result) -> begin
+      if document.last_valid_result = None then
+        (* If the document was never valid, a partial result is better than
+           nothing... *)
+        false, { document with last_valid_result = Some result }, diags
+      else false, document, diags
+    end
+    | Valid result ->
+      ( true,
+        { document with last_valid_result = Some result },
+        (* We need to put an empty singleton in diags, otherwise the underlying
+           mechanism doesn't update the previous error... *)
+        Doc_id.Map.singleton document.document_id Range.Map.empty )
   in
   (* (\* Uncomment to display all symbols as warnings *\) *)
   (* let diags = *)
   (*   let extra_diags = *)
-  (*     Doc_queries.all_symbols_as_warning document.document_id processing_result *)
+  (*     Doc_queries.all_symbols_as_warning document.document_id validation_result *)
   (*   in *)
   (*   Doc_id.Map.union *)
   (*     (fun _ l r -> Some (Range.Map.union (fun _ _ r -> Some r) l r)) *)
   (*     diags extra_diags *)
   (* in *)
-  let is_valid, document =
-    match processing_result with
-    | None -> false, document
-    | valid_result -> true, { document with last_valid_result = valid_result }
-  in
   is_valid, document, diags
 
 let make_error_handler () =
@@ -563,7 +576,7 @@ class catala_lsp_server =
                       St.make_document St.Saved doc_id project project_file
                     | Some document -> document
                   in
-                  let _processed_file, document, document_diagnostics =
+                  let _is_valid, document, document_diagnostics =
                     unlocked_process_document document open_documents
                   in
                   let new_diagnostics =
@@ -662,7 +675,7 @@ class catala_lsp_server =
                   |> function
                   | Some { last_valid_result = Some { prg; _ }; _ } ->
                     Lwt.return_some prg
-                  | _ ->
+                  | _ -> (
                     let*? project_file =
                       Lwt.return
                         (Doc_id.Map.find_opt doc_id project.project_files)
@@ -673,15 +686,12 @@ class catala_lsp_server =
                     let document =
                       St.make_document St.Saved doc_id project project_file
                     in
-                    let r_opt =
-                      try
-                        fst
-                          (Document_processing.process ~resolve_file_content
-                             document)
-                      with _exn -> None
+                    let validation_result =
+                      Document_processing.process ~resolve_file_content document
                     in
-                    Lwt.return
-                      (Option.map (fun { Server_state.prg; _ } -> prg) r_opt)
+                    match validation_result with
+                    | Skipped | Faulty _ | Partial _ -> Lwt.return_none
+                    | Valid r -> Lwt.return_some r.prg)
                 in
                 list_entrypoints ~get_prog project params)
               all_projects

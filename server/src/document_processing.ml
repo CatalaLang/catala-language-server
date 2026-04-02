@@ -53,6 +53,165 @@ let module_usage_error ({ mod_use_name; _ } : Surface.Ast.module_use) =
     suggestion = None;
   }
 
+let protect ~on_error f =
+  try Ok (f ())
+  with e -> (
+    let e = match e with Fun.Finally_raised e -> e | e -> e in
+    match e with
+    | Catala_utils.Message.CompilerError er -> Error [er]
+    | Catala_utils.Message.CompilerErrors er_and_bt_l ->
+      Error (List.map fst er_and_bt_l)
+    | Failed_to_load_interface mod_use ->
+      let lsp_err = module_usage_error mod_use in
+      on_error lsp_err;
+      Error []
+    | e ->
+      on_error
+        {
+          Message.kind = Generic;
+          message =
+            (fun fmt ->
+              Format.fprintf fmt
+                "Generic exception while processing document: %s"
+                (Printexc.to_string e));
+          pos = None;
+          suggestion = None;
+        };
+      Error
+        [
+          Format.ksprintf Message.Content.of_string "Generic exception: %s"
+            (Printexc.to_string e);
+        ])
+
+let process_pending_errors ~on_error () =
+  protect ~on_error Message.report_delayed_errors_if_any
+  |> Result.map_error (fun _ -> ())
+
+let lsp_errors_to_diag doc_id errors =
+  List.fold_left
+    (fun doc_map (err : Catala_utils.Message.lsp_error) ->
+      let uri, range =
+        match err.pos, err.kind with
+        | None, _ -> doc_id, dummy_range
+        | Some pos, Lexing ->
+          Doc_id.of_catala_pos pos, unclosed_range_of_pos pos
+        | Some pos, _ -> Doc_id.of_catala_pos pos, range_of_pos pos
+      in
+      let diag =
+        { range; lsp_error = Some err; diag = to_diagnostic range err }
+      in
+      Doc_id.Map.update uri
+        (function
+          | None -> Some (Range.Map.singleton range diag)
+          | Some x -> Some (Range.Map.add range diag x))
+        doc_map)
+    (Doc_id.Map.singleton doc_id Range.Map.empty)
+    errors
+
+let surface_to_scopelang
+    ~on_error
+    ~get_errors
+    ?resolve_included_file
+    (doc_id : Doc_id.t)
+    options
+    project
+    k : Server_state.processing_result =
+  let open Projects in
+  let handle = function
+    | Ok r -> r
+    | Error _errs ->
+      Server_state.Faulty (lsp_errors_to_diag doc_id (get_errors ()))
+  in
+  handle
+  @@ protect ~on_error
+  @@ fun () ->
+  (* Resets the lexing context to a fresh one *)
+  Surface.Lexer_common.context := Law;
+  let surface =
+    Surface.Parser_driver.parse_top_level_file ?resolve_included_file
+      options.Global.input_src
+  in
+  match surface.Surface.Ast.program_module with
+  | Some { module_external = true; _ } ->
+    (* If the module is external, we skip it as the translation from desugared
+       would trigger an error *)
+    Log.debug (fun m -> m "skipping external module interface");
+    Server_state.Skipped
+  | _ -> (
+    let root_dir, clerk_config =
+      match project.project_kind with
+      | Clerk { clerk_root_dir; clerk_config } -> clerk_root_dir, clerk_config
+      | No_clerk -> project.project_dir, Clerk_config.default_config
+    in
+    let includes = List.map Global.raw_file clerk_config.global.include_dirs in
+    let mod_uses, modules =
+      let check stdlib k =
+        if File.exists stdlib then
+          Driver.load_modules options
+            ~stdlib:(Some (Global.raw_file stdlib))
+            includes surface
+        else k ()
+      in
+      let build_stdlib_path =
+        File.(root_dir / clerk_config.global.build_dir / "libcatala")
+      in
+      check build_stdlib_path
+      @@ fun () ->
+      Log.debug (fun m -> m "Stdlib not found - calling `clerk start`");
+      let _ = File.process_out "clerk" ["start"] in
+      check build_stdlib_path
+      @@ fun () ->
+      try
+        Driver.load_modules options
+          ~stdlib:(Some (Global.raw_file build_stdlib_path))
+          includes surface
+      with e ->
+        on_error
+          {
+            Message.kind = Generic;
+            message =
+              (fun fmt ->
+                Format.fprintf fmt
+                  "Did not find the Catala stdlib path, please build your \
+                   project");
+            pos = Some (Pos.from_info (doc_id :> string) 1 1 1 1);
+            suggestion = None;
+          };
+        raise e
+    in
+    let ctx =
+      Desugared.Name_resolution.form_context (surface, mod_uses) modules
+    in
+    let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
+      Uid.Module.Map.map (fun elt -> fst elt) modules
+    in
+    let ctx, modules_contents = ctx, modules_content in
+    let prg =
+      Desugared.From_surface.translate_program ctx modules_contents surface
+    in
+    let prg = Desugared.Disambiguate.program prg in
+    let () = Desugared.Linting.lint_program prg in
+    let exceptions_graphs =
+      Scopelang.From_desugared.build_exceptions_graph prg
+    in
+    let prg =
+      Scopelang.From_desugared.translate_program prg exceptions_graphs
+      |> Scopelang.Ast.type_program
+    in
+    let jump_table =
+      lazy
+        (Jump_table.populate options.input_src ctx modules_contents surface prg)
+    in
+    let used_modules : ModuleName.t File.Map.t =
+      Ident.Map.bindings mod_uses |> File.Map.of_list
+    in
+    match process_pending_errors ~on_error () with
+    | Error () ->
+      Partial
+        ( lsp_errors_to_diag doc_id (get_errors ()),
+          { Server_state.surface; prg; used_modules; jump_table } )
+    | Ok () -> k { Server_state.surface; prg; used_modules; jump_table })
+
 let process
     ~(resolve_file_content : string -> string Global.input_src)
     {
@@ -61,7 +220,7 @@ let process
       project;
       project_file;
       _;
-    } : Server_state.processing_result option * diagnostics =
+    } : Server_state.processing_result =
   let file = (doc_id :> File.t) in
   let input_src =
     match buffer_state with
@@ -92,172 +251,55 @@ let process
       ~input_src ()
   in
   let l = ref [] in
+  let get_errors () = !l in
   let on_error e =
     match e with
     | { Message.kind = Generic; pos = None; _ } -> ()
     | _ -> l := e :: !l
   in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
-  let errors, result =
-    try
-      (* Resets the lexing context to a fresh one *)
-      Surface.Lexer_common.context := Law;
-      let prg =
-        Surface.Parser_driver.parse_top_level_file ?resolve_included_file
-          input_src
-      in
-      let (prg as surface) = prg in
-      match surface.Surface.Ast.program_module with
-      | Some { module_external = true; _ } ->
-        (* If the module is external, we skip it as the translation from
-           desugared would trigger an error *)
-        Log.debug (fun m -> m "skipping external module interface");
-        [], None
-      | _ ->
-        let root_dir, clerk_config =
-          match project.project_kind with
-          | Clerk { clerk_root_dir; clerk_config } ->
-            clerk_root_dir, clerk_config
-          | No_clerk -> project.project_dir, Clerk_config.default_config
-        in
-        let includes =
-          List.map Global.raw_file clerk_config.global.include_dirs
-        in
-        let mod_uses, modules =
-          let check stdlib k =
-            if File.exists stdlib then
-              Driver.load_modules options
-                ~stdlib:(Some (Global.raw_file stdlib))
-                includes prg
-            else k ()
-          in
-          let build_stdlib_path =
-            File.(root_dir / clerk_config.global.build_dir / "libcatala")
-          in
-          check build_stdlib_path
-          @@ fun () ->
-          Log.debug (fun m -> m "Stdlib not found - calling `clerk start`");
-          let _ = File.process_out "clerk" ["start"] in
-          check build_stdlib_path
-          @@ fun () ->
-          try
-            Driver.load_modules options
-              ~stdlib:(Some (Global.raw_file build_stdlib_path))
-              includes prg
-          with e ->
-            on_error
-              {
-                Message.kind = Generic;
-                message =
-                  (fun fmt ->
-                    Format.fprintf fmt
-                      "Did not find the Catala stdlib path, please build your \
-                       project");
-                pos = Some (Pos.from_info (doc_id :> string) 1 1 1 1);
-                suggestion = None;
-              };
-            raise e
-        in
-        let ctx =
-          Desugared.Name_resolution.form_context (prg, mod_uses) modules
-        in
-        let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
-          Uid.Module.Map.map (fun elt -> fst elt) modules
-        in
-        let ctx, modules_contents = ctx, modules_content in
-        let prg =
-          Desugared.From_surface.translate_program ctx modules_contents prg
-        in
-        Message.report_delayed_errors_if_any ();
-        let prg = Desugared.Disambiguate.program prg in
-        Message.report_delayed_errors_if_any ();
-        let () = Desugared.Linting.lint_program prg in
-        let exceptions_graphs =
-          Scopelang.From_desugared.build_exceptions_graph prg
-        in
-        let prg =
-          Scopelang.From_desugared.translate_program prg exceptions_graphs
-          |> Scopelang.Ast.type_program
-        in
-        let () =
-          let _type_ordering =
-            Scopelang.Dependency.check_type_cycles
-              prg.program_ctx.ctx_abstract_types prg.program_ctx.ctx_structs
-              prg.program_ctx.ctx_enums
-          in
-          let prg = Dcalc.From_scopelang.translate_program prg in
-          ignore @@ Typing.program ~internal_check:true prg
-        in
-        let jump_table =
-          lazy (Jump_table.populate input_src ctx modules_contents surface prg)
-        in
-        let used_modules : ModuleName.t File.Map.t =
-          Ident.Map.bindings mod_uses |> File.Map.of_list
-        in
-        let result = { Server_state.prg; used_modules; jump_table } in
-        Message.report_delayed_errors_if_any ();
-        Log.info (fun m -> m "successful validation of %a" Doc_id.format doc_id);
-        !l, Some result
-    with e ->
-      let errors =
-        let e = match e with Fun.Finally_raised e -> e | e -> e in
-        match e with
-        | Catala_utils.Message.CompilerError er -> [er]
-        | Catala_utils.Message.CompilerErrors er_and_bt_l ->
-          List.map fst er_and_bt_l
-        | Failed_to_load_interface mod_use ->
-          let lsp_err = module_usage_error mod_use in
-          on_error lsp_err;
-          []
-        | e ->
-          on_error
-            {
-              Message.kind = Generic;
-              message =
-                (fun fmt ->
-                  Format.fprintf fmt
-                    "generic exception while processing document: %s"
-                    (Printexc.to_string e));
-              pos = None;
-              suggestion = None;
-            };
-          [
-            Format.ksprintf Message.Content.of_string "generic exception: %s"
-              (Printexc.to_string e);
-          ]
-      in
-      let err_len = List.length errors in
-      Log.debug (fun m ->
-          m "%d error(s) while processing document and %d diagnostics to send"
-            err_len (List.length !l));
-      List.iteri
-        (fun i er ->
-          let pp_err ppf = Message.Content.emit ~ppf er Error in
-          if err_len > 1 then
-            Log.debug (fun m -> m "error (%d/%d): %t" (succ i) err_len pp_err)
-          else Log.debug (fun m -> m "error: %t" pp_err))
-        errors;
-      List.rev !l, None
+  (* From surface to scopelang *)
+  surface_to_scopelang ~on_error ~get_errors ?resolve_included_file doc_id
+    options project
+  @@ fun ({ prg; _ } as valid_result) ->
+  let handle = function
+    | Ok () -> Server_state.Valid valid_result
+    | Error _errs ->
+      Server_state.Partial
+        (lsp_errors_to_diag doc_id (get_errors ()), valid_result)
   in
-  let diagnostics =
-    List.fold_left
-      (fun doc_map (err : Catala_utils.Message.lsp_error) ->
-        let uri, range =
-          match err.pos, err.kind with
-          | None, _ -> doc_id, dummy_range
-          | Some pos, Lexing ->
-            Doc_id.of_catala_pos pos, unclosed_range_of_pos pos
-          | Some pos, _ -> Doc_id.of_catala_pos pos, range_of_pos pos
-        in
-        let diag =
-          { range; lsp_error = Some err; diag = to_diagnostic range err }
-        in
-        Doc_id.Map.update uri
-          (function
-            | None -> Some (Range.Map.singleton range diag)
-            | Some x -> Some (Range.Map.add range diag x))
-          doc_map)
-      (Doc_id.Map.singleton doc_id Range.Map.empty)
-      errors
+  (* Linting *)
+  handle
+  @@ protect ~on_error
+  @@ fun () ->
+  let _type_ordering =
+    Scopelang.Dependency.check_type_cycles prg.program_ctx.ctx_abstract_types
+      prg.program_ctx.ctx_structs prg.program_ctx.ctx_enums
   in
-  result, diagnostics
+  let prg = Dcalc.From_scopelang.translate_program prg in
+  ignore @@ Typing.program ~internal_check:true prg;
+  Message.report_delayed_errors_if_any ()
+
+let process ~resolve_file_content document =
+  let r = process ~resolve_file_content document in
+  let nb_diags diags =
+    Doc_id.Map.fold
+      (fun _d rm i -> Server_types.Range.Map.cardinal rm + i)
+      diags 0
+  in
+  (match r with
+  | Skipped ->
+    Log.info (fun m ->
+        m "Skipped validation of %a" Doc_id.format document.document_id)
+  | Faulty diags ->
+    Log.info (fun m ->
+        m "Faulty validation of %a (%d errors)" Doc_id.format
+          document.document_id (nb_diags diags))
+  | Partial (diags, _) ->
+    Log.info (fun m ->
+        m "Partial validation of %a (%d non-fatal errors)" Doc_id.format
+          document.document_id (nb_diags diags))
+  | Valid _ ->
+    Log.info (fun m ->
+        m "Successful validation of %a" Doc_id.format document.document_id));
+  r
