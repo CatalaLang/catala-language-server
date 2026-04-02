@@ -48,8 +48,8 @@ let _lookup_suggestions_by_pos doc_id diagnostics range =
          completions)
 
 let[@ocaml.warning "-32"] pp_token =
- fun fmt (lex, _, pos) ->
-  Format.fprintf fmt "%s:%s" lex Pos.(from_lpos pos |> to_string_shorter)
+ fun fmt (lex, (_tok : Tokens.token), pos) ->
+  Format.fprintf fmt "'%s':%s" lex Pos.(from_lpos pos |> to_string_shorter)
 
 let lex_line (doc : document_state) ~content (pos : Position.t) =
   let lexbuf = Sedlexing.Utf8.from_string content in
@@ -73,12 +73,10 @@ let lex_line (doc : document_state) ~content (pos : Position.t) =
           (* skip *)
           loop acc
         else if l.Lexing.pos_lnum = real_lpos then
-          if !Lexer_common.context <> Code then loop acc
-          else
-            let elt = Sedlexing.Utf8.lexeme lexbuf, token, lpos in
-            match acc with
-            | None -> loop (Some [elt])
-            | Some acc -> loop (Some (elt :: acc))
+          let elt = Sedlexing.Utf8.lexeme lexbuf, token, lpos in
+          match acc with
+          | None -> loop (Some [elt])
+          | Some acc -> loop (Some (elt :: acc))
         else loop acc
       in
       let r = loop None in
@@ -99,7 +97,11 @@ let lex_line (doc : document_state) ~content (pos : Position.t) =
                   m "lexing exception: %t" (fun ppf ->
                       Message.Content.emit ~ppf c Error))
                 l)
-        | e ->
+        | Surface.Lexer_common.Lexing_error (p, e) ->
+          Log.warn (fun m ->
+              m "uncaught lexing exception at %s: %s" (Pos.to_string_shorter p)
+                e)
+        | _ ->
           Log.warn (fun m ->
               m "uncaught lexing exception: %s" (Printexc.to_string e)));
         None
@@ -130,7 +132,17 @@ let retrieve_tokens (doc : document_state) ~content (pos : Position.t) =
       else loop (tok :: rev_preds) tl
     | [] -> (* shouldn't happen *) rev_preds, []
   in
-  Some (loop [] line)
+  let rev_tokens, next_tokens = loop [] line in
+  let rev_tokens =
+    (* Filter spurious tokens *)
+    match rev_tokens with
+    | (_, Tokens.END_DIRECTIVE, _) :: rev_tokens -> rev_tokens
+    | r -> r
+  in
+  (* Log.debug (fun m -> *)
+  (*     (m "@[<h>Line rev tokens: %a@]" Format.(pp_print_list pp_token)) *)
+  (*       rev_tokens); *)
+  Some (rev_tokens, next_tokens)
 
 type completion = {
   label : string;
@@ -143,6 +155,7 @@ type completion = {
 module Kind = struct
   type t =
     | Module of ModuleName.t
+    | ModuleUsage of Ident.t
     | StdlibModule of { name : ModuleName.t; alias : string }
     | Struct of { name : StructName.t; fields : typ StructField.Map.t }
     | Enum of { name : EnumName.t; constrs : typ EnumConstructor.Map.t }
@@ -160,6 +173,7 @@ module Kind = struct
 
   let to_string = function
     | Module m -> ModuleName.to_string m
+    | ModuleUsage m -> m
     | StdlibModule { name = _m; alias } -> alias
     | Struct { name; _ } -> StructName.base name
     | Enum { name; _ } -> EnumName.base name
@@ -173,6 +187,7 @@ module Kind = struct
   let[@ocaml.warning "-32"] format ppf k =
     match k with
     | Module _ -> Format.fprintf ppf "Module(%s)" (to_string k)
+    | ModuleUsage _ -> Format.fprintf ppf "ModuleUsage(%s)" (to_string k)
     | StdlibModule _ -> Format.fprintf ppf "StdlibModule(%s)" (to_string k)
     | Struct _ -> Format.fprintf ppf "Struct(%s)" (to_string k)
     | Enum _ -> Format.fprintf ppf "Enum(%s)" (to_string k)
@@ -203,6 +218,7 @@ module Kind = struct
     let signature, doc =
       match k with
       | Module _ -> None, None (* TODO: print module content *)
+      | ModuleUsage _ -> None, None (* TODO: print module content *)
       | StdlibModule _ -> None, None (* TODO: print module content *)
       | Struct { name; fields } ->
         ( Some (Type_printing.struct_code ~markdown:true locale (name, fields)),
@@ -271,6 +287,7 @@ module Kind = struct
     let label, detail, kind =
       match k with
       | Module m -> ModuleName.to_string m, "Module", CompletionItemKind.Module
+      | ModuleUsage m -> m, "Module", CompletionItemKind.Module
       | StdlibModule { alias; _ } -> alias, "Stdlib Module", Module
       | Struct { name; _ } -> StructName.base name, "Structure", Struct
       | Enum { name; _ } -> EnumName.base name, "Enumeration", Enum
@@ -291,7 +308,8 @@ module Kind = struct
   let to_completion locale : t -> Linol_lwt.CompletionItem.t =
    fun k ->
     let { label; detail; kind; documentation } = itemkind locale k in
-    CompletionItem.create ~label ~detail ~kind ?documentation ()
+    CompletionItem.create ~insertText:label ~label ~detail ~kind ?documentation
+      ()
 
   module Set = struct
     include Set.Make (struct
@@ -375,6 +393,23 @@ let lookup_modules ?prefix (prg : typed Scopelang.Ast.program) m =
     |> Kind.Set.of_seq
   in
   update_all ?prefix m (Kind.Set.union stdlib_modules nonstdlib_modules)
+
+let lookup_project_modules
+    ?prefix
+    (prg : typed Scopelang.Ast.program)
+    ({ known_modules; _ } : Projects.project)
+    m =
+  let open Projects in
+  let is_eq_prg_mod_name =
+    match prg.program_module_name with
+    | None -> fun _ -> false
+    | Some (mn, _) -> String.equal (ModuleName.to_string mn)
+  in
+  ModuleMap.to_seq known_modules
+  |> Seq.filter_map (fun (m, _) ->
+      if is_eq_prg_mod_name m then None else Some (Kind.ModuleUsage m))
+  |> Kind.Set.of_seq
+  |> update_all ?prefix m
 
 let lookup_scopes ?prefix ?modname (prg : typed Scopelang.Ast.program) m =
   let scopes =
@@ -594,7 +629,8 @@ let follow_ups ?prefix prg (kind : Kind.t) m =
   | Topdef _, _
   | ScopeVar _, _
   | StructField _, _
-  | Keyword _, _ ->
+  | Keyword _, _
+  | ModuleUsage _, _ ->
     m
 
 let lookup_keywords ~prefix (prg : typed Scopelang.Ast.program) m =
@@ -609,6 +645,7 @@ let lookup_keywords ~prefix (prg : typed Scopelang.Ast.program) m =
   |> update_all ~prefix m
 
 let tok_to_prefix full = function
+  | Tokens.DIRECTIVE_ARG s -> if full then FullUident s else PartialUident s
   | Tokens.UIDENT s -> if full then FullUident s else PartialUident s
   | Tokens.LIDENT s -> if full then FullLident s else PartialLident s
   | _ -> assert false
@@ -648,6 +685,42 @@ let lident_dot_prefix lident ?prefix_tok prg =
     (fun _qual s m -> Kind.Set.fold (fun k m -> follow_ups ?prefix prg k m) s m)
     map CompletionMap.empty
 
+let directives ?prefix (prg : typed Scopelang.Ast.program) needs_space =
+  let using =
+    Kind.Keyword
+      {
+        lexeme = Type_printing.using_s prg.program_lang;
+        token = Tokens.MODULE_USE;
+      }
+  in
+  let def = Kind.Keyword { lexeme = "Module"; token = Tokens.MODULE_DEF } in
+  let l =
+    [using; def]
+    |> fun l ->
+    if needs_space then
+      List.filter_map
+        (function
+          | Kind.Keyword x ->
+            Some (Kind.Keyword { x with lexeme = " " ^ x.lexeme })
+          | _ -> None)
+        l
+    else l
+  in
+  update_all ?prefix CompletionMap.empty (Kind.Set.of_list l)
+
+let module_def ?prefix doc =
+  let mod_name =
+    File.basename (doc.document_id :> string)
+    |> File.remove_extension
+    |> String.capitalize_ascii
+  in
+  if prefix = None then
+    CompletionMap.singleton mod_name
+      Kind.(Set.singleton (ModuleUsage ("Module " ^ mod_name)))
+  else
+    update_all ?prefix CompletionMap.empty
+      Kind.(Set.singleton (ModuleUsage mod_name))
+
 let to_completions locale completion_map =
   CompletionMap.map
     (fun kinds ->
@@ -683,10 +756,27 @@ let lookup_completions (doc : document_state) ~doc_content pos =
   let open Tokens in
   let r =
     match rev_tokens with
+    | (_, ((UIDENT _ | DIRECTIVE_ARG _) as tok), _) :: (_, MODULE_USE, _) :: _
+      ->
+      lookup_project_modules prg doc.project ~prefix:(partial_prefix tok)
+        CompletionMap.empty
+    | (_, MODULE_USE, _) :: _ ->
+      lookup_project_modules prg doc.project CompletionMap.empty
+    | (_, (DIRECTIVE_ARG _ as tok), _)
+      :: (_, MODULE_DEF, _)
+      :: (_, BEGIN_DIRECTIVE, _)
+      :: _ ->
+      module_def ~prefix:(partial_prefix tok) doc
+    | (_, MODULE_DEF, _) :: (_, BEGIN_DIRECTIVE, _) :: _ -> module_def doc
+    | (_, ((UIDENT _ | DIRECTIVE_ARG _) as tok), _)
+      :: (_, BEGIN_DIRECTIVE, _)
+      :: _ ->
+      directives ~prefix:(partial_prefix tok) prg false
+    | (_, BEGIN_DIRECTIVE, _) :: _ -> directives prg on_token
     | (_, (UIDENT _s as tok), _) :: (_, OF, _) :: (_, OUTPUT, _) :: _ ->
       lookup_scopes prg ~prefix:(partial_prefix tok) CompletionMap.empty
     | (_, OF, _) :: (_, OUTPUT, _) :: _ -> lookup_scopes prg CompletionMap.empty
-    | (_, ((UIDENT _ | LIDENT _) as tok), _) (* <= curr token *)
+    | (_, ((UIDENT _ | LIDENT _) as tok), _)
       :: (_, DOT, _)
       :: (_, UIDENT qualif, _)
       :: _ ->
@@ -702,14 +792,15 @@ let lookup_completions (doc : document_state) ~doc_content pos =
     | (_, (LIDENT _s as tok), _) :: _ when on_token -> single_lident tok prg
     | _ -> CompletionMap.empty
   in
-  (* Log.debug (fun m -> *)
-  (*     m "@[<v 2>Full completion candidates:@ %a@]" *)
-  (*       (pp_opt *)
-  (*          Format.( *)
-  (*            pp_print_list (fun fmt { CompletionItem.label; _ } -> *)
-  (*                Format.pp_print_string fmt label))) *)
-  (*       r); *)
-  to_completions r
+  let completions = to_completions r in
+  Log.debug (fun m ->
+      m "@[<v 2>Completion candidates:@ %a@]"
+        (pp_opt
+           Format.(
+             pp_print_list (fun fmt { CompletionItem.label; _ } ->
+                 Format.fprintf fmt "'%s'" label)))
+        completions);
+  completions
 
 let lookup_completions
     (doc : document_state)

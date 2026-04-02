@@ -24,7 +24,7 @@ module Scan_item : sig
 end
 
 module ScanItemFiles : Set.S with type elt = Clerk_scan.item
-module ModuleMap : Map.S with type key = string
+module ModuleMap : Catala_utils.Map.S with type key = string
 
 module Project_graph : sig
   type t

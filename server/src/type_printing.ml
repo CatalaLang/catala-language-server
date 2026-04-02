@@ -95,6 +95,11 @@ let option_s = function
   | Fr -> "optionnel de"
   | Pl -> assert false
 
+let using_s = function
+  | Global.En -> "Using"
+  | Fr -> "Usage de"
+  | Pl -> assert false
+
 let pp_lit locale fmt l =
   fprintf fmt "%s"
   @@ (if locale = Global.En then fst else snd)
