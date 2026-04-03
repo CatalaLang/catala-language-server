@@ -21,8 +21,8 @@ open Server_types
 open Debug_interpret
 open Debug_protocol
 
-type dcalc_expr = ((yes, yes) interpr_kind, typed) gexpr
-type dcalc_env = (yes, typed) env
+type dcalc_expr = ((yes, no, yes) interpr_kind, typed) gexpr
+type dcalc_env = (yes, no, typed) env
 
 module PMap = Position_map.Make (struct
   type t = dcalc_expr
@@ -34,7 +34,7 @@ end)
 let get_pos (_, Typed { pos; _ }) = pos
 let get_typ (_, Typed { ty; _ }) = ty
 
-type paused_state = { e : dcalc_expr; env : (yes, typed) env }
+type paused_state = { e : dcalc_expr; env : (yes, no, typed) env }
 
 type interp_exn =
   | Runtime of
@@ -117,7 +117,13 @@ let run_debugger
   in
   let rev_steps = ref [first_step] in
   let steps_table_r = ref Pos.Map.empty in
-  let on_expr expr env =
+  let on_expr :
+      ( (yes, no, yes) Shared_ast__Definitions.interpr_kind,
+        typed )
+      Shared_ast__Definitions.gexpr ->
+      _ ->
+      unit Lwt.t =
+   fun expr env ->
     let pos = get_pos expr in
     let step = { value = Expr expr; env; breakpoint = false } in
     if (not (should_stop expr)) || is_equivalent step then Lwt.return_unit
@@ -267,7 +273,7 @@ let load_program options ((clerk_config : Clerk_config.t), root_dir) file scope
   in
   let scope = find_scope prg scope in
   let pmap =
-    let e = Expr.unbox (Program.to_expr prg scope) |> addcustom in
+    let e = Expr.unbox (Program.to_expr prg scope) |> Interpreter.addcustom in
     let rec process e acc =
       let acc =
         match Mark.remove e with

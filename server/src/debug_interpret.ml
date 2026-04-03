@@ -21,11 +21,12 @@
 open Catala_utils
 open Shared_ast
 open Lwt.Syntax
+module Runtime = Catala_runtime
 
-type ('a, 'b) env =
+type ('a, 'r, 'b) env =
   | Env of
-      ( (('a, yes) interpr_kind, 'b) gexpr,
-        (('a, yes) interpr_kind, 'b) gexpr * ('a, 'b) env )
+      ( (('a, 'r, yes) interpr_kind, 'b) gexpr,
+        (('a, 'r, yes) interpr_kind, 'b) gexpr * ('a, 'r, 'b) env )
       Var.Map.t
 
 let empty_env = Env Var.Map.empty
@@ -61,48 +62,22 @@ let lwt_map2 f l l' =
   let ll = List.combine l l' in
   Lwt_list.map_s (fun (x, y) -> f x y) ll
 
-(* Typing shenanigan to add custom terms to the AST type. *)
-let addcustom e =
-  let rec f : type c d.
-      ((d, c) interpr_kind, 't) gexpr -> ((d, yes) interpr_kind, 't) gexpr boxed
-      = function
-    | (ECustom _, _) as e -> Expr.map ~f e
-    | EAppOp { op; tys; args }, m ->
-      Expr.eappop ~tys ~args:(List.map f args) ~op:(Operator.translate op) m
-    | (EDefault _, _) as e -> Expr.map ~f e
-    | (EPureDefault _, _) as e -> Expr.map ~f e
-    | (EEmpty, _) as e -> Expr.map ~f e
-    | (EErrorOnEmpty _, _) as e -> Expr.map ~f e
-    | (EPos _, _) as e -> Expr.map ~f e
-    | ( ( EAssert _ | EFatalError _ | ELit _ | EApp _ | EArray _ | EVar _
-        | EExternal _ | EAbs _ | EIfThenElse _ | ETuple _ | ETupleAccess _
-        | EInj _ | EStruct _ | EStructAccess _ | EMatch _ | EBad ),
-        _ ) as e ->
-      Expr.map ~f e
-    | _ -> .
-  in
-  let open struct
-    external id :
-      (('d, 'c) interpr_kind, 't) gexpr -> (('d, yes) interpr_kind, 't) gexpr
-      = "%identity"
-  end in
-  if false then Expr.unbox (f e)
-    (* We keep the implementation as a typing proof, but bypass the AST
-       traversal for performance. Note that it's not completely 1-1 since the
-       traversal would do a reboxing of all bound variables *)
-  else id e
-
-let rec runtime_to_val : type d.
-    (decl_ctx ->
-    ((d, _) interpr_kind, 'm) gexpr ->
-    ((d, _) interpr_kind, 'm) gexpr Lwt.t) ->
+let rec runtime_to_val : type d r.
     decl_ctx ->
     'm mark ->
     typ ->
     Obj.t ->
-    ((d, yes) interpr_kind, 'm) gexpr Lwt.t =
- fun eval_expr ctx m ty o ->
+    ((d, r, yes) interpr_kind, 'm) gexpr Lwt.t =
+ fun ctx m ty o ->
   let m = Expr.map_ty (fun _ -> ty) m in
+  let cast :
+      type (* The OCaml typer can't know if we are retrieving dcalc or lcalc
+              terms, so we require this additional cast on e.g. default terms *)
+      a b a2 b2.
+      ((a, b, 'c) interpr_kind, 'm) gexpr ->
+      ((a2, b2, 'c) interpr_kind, 'm) gexpr =
+    Obj.magic
+  in
   match Mark.remove ty with
   | TLit TBool -> Lwt.return (ELit (LBool (Obj.obj o)), m)
   | TLit TUnit -> Lwt.return (ELit LUnit, m)
@@ -114,17 +89,15 @@ let rec runtime_to_val : type d.
   | TLit TPos ->
     Lwt.return
     @@
-    let rpos : Catala_runtime.code_location = Obj.obj o in
+    let rpos : Runtime.code_location = Obj.obj o in
     let p =
       Pos.from_info rpos.filename rpos.start_line rpos.start_column
         rpos.end_line rpos.end_column
     in
     let p = Pos.overwrite_law_info p rpos.law_headings in
-    EPos p, m
+    cast (EPos p, m)
   | TTuple ts ->
-    let* ll =
-      lwt_map2 (runtime_to_val eval_expr ctx m) ts (Array.to_list (Obj.obj o))
-    in
+    let* ll = lwt_map2 (runtime_to_val ctx m) ts (Array.to_list (Obj.obj o)) in
     Lwt.return (ETuple ll, m)
   | TStruct name ->
     let bindings =
@@ -133,7 +106,7 @@ let rec runtime_to_val : type d.
     let* l =
       lwt_map2
         (fun o (fld, ty) ->
-          let* e = runtime_to_val eval_expr ctx m ty o in
+          let* e = runtime_to_val ctx m ty o in
           Lwt.return (fld, e))
         (Array.to_list (Obj.obj o))
         bindings
@@ -175,7 +148,7 @@ let rec runtime_to_val : type d.
             | TLit TUnit, _ -> skip
             | _ -> if skip = 0 then raise (Found (cons, ty)) else skip - 1)
           cons_map
-          (Obj.tag o - Obj.first_non_constant_constructor_tag)
+          (tag - Obj.first_non_constant_constructor_tag)
       with
       | _ -> assert false
       | exception Found (cons, ty) ->
@@ -183,7 +156,7 @@ let rec runtime_to_val : type d.
           Obj.field o 0
           (* Arity is always 1 in the runtime *)
         in
-        let* e = runtime_to_val eval_expr ctx m ty payload in
+        let* e = runtime_to_val ctx m ty payload in
         Lwt.return (EInj { name; cons; e }, m))
   | TOption ty ->
     if Obj.is_int o then
@@ -198,7 +171,7 @@ let rec runtime_to_val : type d.
           m )
     else
       (* Some case *)
-      let* e = runtime_to_val eval_expr ctx m ty (Obj.field o 0) in
+      let* e = runtime_to_val ctx m ty (Obj.field o 0) in
       Lwt.return
         (EInj { name = Expr.option_enum; cons = Expr.some_constr; e }, m)
   | TClosureEnv ->
@@ -208,25 +181,22 @@ let rec runtime_to_val : type d.
     Lwt.return (Obj.obj o, m)
   | TArray ty ->
     let* l =
-      Lwt_list.map_s
-        (runtime_to_val eval_expr ctx m ty)
-        (Array.to_list (Obj.obj o))
+      Lwt_list.map_s (runtime_to_val ctx m ty) (Array.to_list (Obj.obj o))
     in
     Lwt.return (EArray l, m)
   | TArrow (targs, tret) -> Lwt.return (ECustom { obj = o; targs; tret }, m)
   | TDefault ty -> (
-    (* This case is only valid for ASTs including default terms; but the typer
-       isn't aware so we need some additional dark arts. *)
-    match (Obj.obj o : 'a Catala_runtime.Optional.t) with
-    | Catala_runtime.Optional.Absent -> Lwt.return (Obj.magic EEmpty, m)
-    | Catala_runtime.Optional.Present o -> (
-      let* r = runtime_to_val eval_expr ctx m ty o in
+    match (Obj.obj o : 'a Runtime.Optional.t) with
+    | Runtime.Optional.Absent -> Lwt.return (cast (EEmpty, m))
+    | Runtime.Optional.Present o -> (
+      let* r = runtime_to_val ctx m ty o in
       match r with
-      | ETuple [(e, m); (EPos pos, _)], _ -> Lwt.return (e, Expr.with_pos pos m)
+      | ETuple [(e, m); (EPos pos, _)], _ ->
+        Lwt.return (cast (e, Expr.with_pos pos m))
       | _ -> assert false))
   | TForAll tb ->
     let _v, ty = Bindlib.unmbind tb in
-    runtime_to_val eval_expr ctx m ty o
+    runtime_to_val ctx m ty o
   | TVar _ ->
     (* A type variable being an unresolved type, it can't be deconstructed, so
        we can let it pass through. *)
@@ -234,13 +204,13 @@ let rec runtime_to_val : type d.
   | TAbstract _ -> Lwt.return (ECustom { obj = o; targs = []; tret = ty }, m)
   | TError -> assert false
 
-and val_to_runtime : type d.
+and val_to_runtime : type d r.
     (decl_ctx ->
-    ((d, _) interpr_kind, 'm) gexpr ->
-    ((d, _) interpr_kind, 'm) gexpr Lwt.t) ->
+    ((d, r, _) interpr_kind, 'm) gexpr ->
+    ((d, r, _) interpr_kind, 'm) gexpr Lwt.t) ->
     decl_ctx ->
     typ ->
-    ((d, _) interpr_kind, 'm) gexpr ->
+    ((d, r, _) interpr_kind, 'm) gexpr ->
     Obj.t Lwt.t =
  fun eval_expr ctx ty v ->
   match Mark.remove ty, Mark.remove v with
@@ -252,9 +222,9 @@ and val_to_runtime : type d.
   | TLit TDate, ELit (LDate t) -> Lwt.return (Obj.repr t)
   | TLit TDuration, ELit (LDuration d) -> Lwt.return (Obj.repr d)
   | TLit TPos, EPos p ->
-    let rpos : Catala_runtime.code_location =
+    let rpos : Runtime.code_location =
       {
-        Catala_runtime.filename = Pos.get_file p;
+        Runtime.filename = Pos.get_file p;
         start_line = Pos.get_start_line p;
         start_column = Pos.get_start_column p;
         end_line = Pos.get_end_line p;
@@ -335,7 +305,7 @@ and val_to_runtime : type d.
       | targ :: targs ->
         Lwt.return
           (Obj.repr (fun x ->
-               let* x = runtime_to_val eval_expr ctx m targ x in
+               let* x = runtime_to_val ctx m targ x in
                curry (x :: acc) targs))
     in
     curry [] targs
@@ -343,16 +313,22 @@ and val_to_runtime : type d.
     (* In dcalc, this is an expression. in the runtime (lcalc), this is an
        option(pair(expression, pos)) *)
     match v with
-    | EEmpty, _ -> Lwt.return (Obj.repr Catala_runtime.Optional.Absent)
+    | EEmpty, _ -> Lwt.return (Obj.repr Runtime.Optional.Absent)
     | EPureDefault e, m | ((_, m) as e) ->
       let* e = eval_expr ctx e in
       let pos = Expr.pos e in
       let ty = TTuple [ty; TLit TPos, pos], pos in
+      let cast : type a b a2 b2.
+          ((a, b, 'c) interpr_kind, 'm) gexpr ->
+          ((a2, b2, 'c) interpr_kind, 'm) gexpr =
+        Obj.magic
+      in
       let with_pos =
-        ETuple [e; EPos pos, Expr.with_ty m (TLit TPos, pos)], Expr.with_ty m ty
+        ( ETuple [e; cast (EPos pos, Expr.with_ty m (TLit TPos, pos))],
+          Expr.with_ty m ty )
       in
       let* v = val_to_runtime eval_expr ctx ty with_pos in
-      Lwt.return (Obj.repr (Catala_runtime.Optional.Present v)))
+      Lwt.return (Obj.repr (Runtime.Optional.Present v)))
   | TForAll tb, _ ->
     let _v, ty = Bindlib.unmbind tb in
     val_to_runtime eval_expr ctx ty v
@@ -370,103 +346,6 @@ and val_to_runtime : type d.
     Message.error ~internal:true
       "Could not convert value of type %a@ to@ runtime:@ %a" Print.typ ty
       Expr.format v
-
-let rec value_to_runtime_embedded = function
-  | ELit LUnit -> Catala_runtime.Unit
-  | ELit (LBool b) -> Catala_runtime.Bool b
-  | ELit (LMoney m) -> Catala_runtime.Money m
-  | ELit (LInt i) -> Catala_runtime.Integer i
-  | ELit (LRat r) -> Catala_runtime.Decimal r
-  | ELit (LDate d) -> Catala_runtime.Date d
-  | ELit (LDuration dt) -> Catala_runtime.Duration dt
-  | EInj { name; cons; e } ->
-    Catala_runtime.Enum
-      ( EnumName.to_string name,
-        ( EnumConstructor.to_string cons,
-          value_to_runtime_embedded (Mark.remove e) ) )
-  | EStruct { name; fields } ->
-    Catala_runtime.Struct
-      ( StructName.to_string name,
-        List.map
-          (fun (f, e) ->
-            StructField.to_string f, value_to_runtime_embedded (Mark.remove e))
-          (StructField.Map.bindings fields) )
-  | EArray el ->
-    Catala_runtime.Array
-      (Array.of_list
-         (List.map (fun e -> value_to_runtime_embedded (Mark.remove e)) el))
-  | ETuple el ->
-    Catala_runtime.Tuple
-      (Array.of_list
-         (List.map (fun e -> value_to_runtime_embedded (Mark.remove e)) el))
-  | _ -> Catala_runtime.Unembeddable
-
-(* Todo: this should be handled early when resolving overloads. Here we have
-   proper structural equality, but the OCaml backend for example uses the
-   builtin equality function instead of this. *)
-let handle_eq
-    pos
-    (evaluate_operator :
-      _ operator Mark.pos ->
-      'a mark ->
-      Global.backend_lang ->
-      ((< .. > as 'b), 'c) Shared_ast__Definitions.gexpr list ->
-      (('b, 'b, 'c) base_gexpr, 'a mark) Mark.ed Lwt.t)
-    m
-    lang
-    e1
-    e2 =
-  let eq_eval = evaluate_operator (Op.Eq, pos) m lang in
-  let open Catala_runtime.Oper in
-  match e1, e2 with
-  | ELit LUnit, ELit LUnit -> Lwt.return_true
-  | ELit (LBool b1), ELit (LBool b2) -> Lwt.return (o_eq_boo_boo b1 b2)
-  | ELit (LInt x1), ELit (LInt x2) -> Lwt.return (o_eq_int_int x1 x2)
-  | ELit (LRat x1), ELit (LRat x2) -> Lwt.return (o_eq_rat_rat x1 x2)
-  | ELit (LMoney x1), ELit (LMoney x2) -> Lwt.return (o_eq_mon_mon x1 x2)
-  | ELit (LDuration x1), ELit (LDuration x2) ->
-    Lwt.return (o_eq_dur_dur (Expr.pos_to_runtime (Expr.mark_pos m)) x1 x2)
-  | ELit (LDate x1), ELit (LDate x2) -> Lwt.return (o_eq_dat_dat x1 x2)
-  | EArray es1, EArray es2 | ETuple es1, ETuple es2 -> (
-    try
-      Lwt_list.for_all_s
-        (fun (e1, e2) ->
-          let* r = eq_eval [e1; e2] in
-          match Mark.remove r with
-          | ELit (LBool b) -> Lwt.return b
-          | _ -> assert false
-          (* should not happen *))
-        (List.combine es1 es2)
-    with Invalid_argument _ -> Lwt.return_false)
-  | EStruct { fields = es1; name = s1 }, EStruct { fields = es2; name = s2 } ->
-    if not (StructName.equal s1 s2) then Lwt.return_false
-    else
-      let bls =
-        List.combine
-          (StructField.Map.bindings es1)
-          (StructField.Map.bindings es2)
-      in
-      Lwt_list.for_all_p
-        (fun ((k1, e1), (k2, e2)) ->
-          if not (StructField.equal k1 k2) then Lwt.return_false
-          else
-            let* r = eq_eval [e1; e2] in
-            match Mark.remove r with
-            | ELit (LBool b) -> Lwt.return b
-            | _ -> assert false (* should not happen *))
-        bls
-  | ( EInj { e = e1; cons = i1; name = en1 },
-      EInj { e = e2; cons = i2; name = en2 } ) -> (
-    try
-      if not (EnumName.equal en1 en2 && EnumConstructor.equal i1 i2) then
-        Lwt.return_false
-      else
-        let* r = eq_eval [e1; e2] in
-        match Mark.remove r with
-        | ELit (LBool b) -> Lwt.return b
-        | _ -> assert false (* should not happen *)
-    with Invalid_argument _ -> Lwt.return_false)
-  | _, _ -> Lwt.return_false (* comparing anything else return false *)
 
 let eval_application evaluate_expr f args =
   match f with
@@ -498,8 +377,19 @@ let eval_application evaluate_expr f args =
     Message.error ~internal:true
       "Trying to apply non-function passed as operator argument"
 
+let handle_eq ctx pos e1 e2 =
+  Runtime.Value.equal (Expr.pos_to_runtime pos) (Expr.embed_value ctx e1)
+    (Expr.embed_value ctx e2)
+  |> Lwt.return
+
+let handle_compare ctx pos e1 e2 =
+  Runtime.Value.compare (Expr.pos_to_runtime pos) (Expr.embed_value ctx e1)
+    (Expr.embed_value ctx e2)
+  |> Lwt.return
+
 (* Call-by-value: the arguments are expected to be already evaluated here *)
-let rec evaluate_operator
+let evaluate_operator
+    ctx
     (evaluate_expr :
       (_ interpr_kind, 'm) gexpr -> (_ interpr_kind, 'm) gexpr Lwt.t)
     ((op, opos) : < overloaded : no ; .. > operator Mark.pos)
@@ -534,31 +424,31 @@ let rec evaluate_operator
       (Print.operator ~debug:true)
       op
   in
-  let open Catala_runtime.Oper in
+  let open Runtime.Oper in
   let* r =
     match op, args with
     | Length, [(EArray es, _)] ->
-      Lwt.return (ELit (LInt (Catala_runtime.integer_of_int (List.length es))))
-    | Log (entry, infos), [(e, _)] when Global.options.trace <> None -> (
+      Lwt.return (ELit (LInt (Runtime.integer_of_int (List.length es))))
+    | Log (entry, infos), [(e, m)] when Global.options.trace <> None -> (
       let rtinfos = List.map Uid.MarkedString.to_string infos in
       match entry with
-      | BeginCall -> Lwt.return (Catala_runtime.log_begin_call rtinfos e)
-      | EndCall -> Lwt.return (Catala_runtime.log_end_call rtinfos e)
+      | BeginCall -> Lwt.return (Runtime.log_begin_call rtinfos e)
+      | EndCall -> Lwt.return (Runtime.log_end_call rtinfos e)
       | PosRecordIfTrueBool ->
         (match e with
         | ELit (LBool b) ->
-          Catala_runtime.log_decision_taken (Expr.pos_to_runtime pos) b
-          |> ignore
+          Runtime.log_decision_taken (Expr.pos_to_runtime pos) b |> ignore
         | _ -> ());
         Lwt.return e
       | VarDef def ->
         Lwt.return
-          (Catala_runtime.log_variable_definition rtinfos
-             {
-               Catala_runtime.io_input = def.log_io_input;
-               io_output = def.log_io_output;
-             }
-             value_to_runtime_embedded e))
+          (Mark.remove
+             (Runtime.log_variable_definition rtinfos
+                {
+                  Runtime.io_input = def.log_io_input;
+                  io_output = def.log_io_output;
+                }
+                (Expr.embed_value ctx) (e, m))))
     | Log _, [(e', _)] -> Lwt.return e'
     | (FromClosureEnv | ToClosureEnv), [e'] ->
       (* [FromClosureEnv] and [ToClosureEnv] are just there to bypass the need
@@ -566,9 +456,27 @@ let rec evaluate_operator
          are effectively no-ops. *)
       Lwt.return (Mark.remove e')
     | (ToClosureEnv | FromClosureEnv), _ -> err ()
-    | Eq, [(e1, _); (e2, _)] ->
-      let* b = handle_eq opos (evaluate_operator evaluate_expr) m lang e1 e2 in
+    | ArrayAccess n, [(EArray es, _)] ->
+      Lwt.return (Mark.remove (List.nth es n))
+    | ArrayAccess _, _ -> err ()
+    | ConstructorCheck (_, cstr), [(EInj { cons; _ }, _)] ->
+      Lwt.return (ELit (LBool (EnumConstructor.equal cstr cons)))
+    | ConstructorCheck _, _ -> err ()
+    | Eq, [e1; e2] ->
+      let* b = handle_eq ctx opos e1 e2 in
       Lwt.return (ELit (LBool b))
+    | Lt, [e1; e2] ->
+      let* b = handle_compare ctx opos e1 e2 in
+      Lwt.return (ELit (LBool (b < 0)))
+    | Lte, [e1; e2] ->
+      let* b = handle_compare ctx opos e1 e2 in
+      Lwt.return (ELit (LBool (b <= 0)))
+    | Gt, [e1; e2] ->
+      let* b = handle_compare ctx opos e1 e2 in
+      Lwt.return (ELit (LBool (b > 0)))
+    | Gte, [e1; e2] ->
+      let* b = handle_compare ctx opos e1 e2 in
+      Lwt.return (ELit (LBool (b >= 0)))
     | Map, [f; (EArray es, _)] ->
       let* l =
         Lwt_list.map_s (fun e' -> eval_application evaluate_expr f [e']) es
@@ -583,9 +491,7 @@ let rec evaluate_operator
         in
         Lwt.return (EArray l)
       with Invalid_argument _ ->
-        raise
-          Catala_runtime.(
-            Error (NotSameLength, [Expr.pos_to_runtime opos], None)))
+        raise Runtime.(Error (NotSameLength, [Expr.pos_to_runtime opos], None)))
     | Reduce, [_; default; (EArray [], _)] ->
       let* r =
         eval_application evaluate_expr default
@@ -702,58 +608,6 @@ let rec evaluate_operator
       Lwt.return (ELit (LMoney (o_div_mon_rat (div_pos ()) x y)))
     | Div_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
       Lwt.return (ELit (LRat (o_div_dur_dur (div_pos ()) x y)))
-    | Lt_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_int_int x y)))
-    | Lt_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_rat_rat x y)))
-    | Lt_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_mon_mon x y)))
-    | Lt_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_dat_dat x y)))
-    | Lt_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_lt_dur_dur (rpos ()) x y)))
-    | Lte_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_int_int x y)))
-    | Lte_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_rat_rat x y)))
-    | Lte_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_mon_mon x y)))
-    | Lte_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_dat_dat x y)))
-    | Lte_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_lte_dur_dur (rpos ()) x y)))
-    | Gt_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_int_int x y)))
-    | Gt_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_rat_rat x y)))
-    | Gt_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_mon_mon x y)))
-    | Gt_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_dat_dat x y)))
-    | Gt_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_gt_dur_dur (rpos ()) x y)))
-    | Gte_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_int_int x y)))
-    | Gte_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_rat_rat x y)))
-    | Gte_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_mon_mon x y)))
-    | Gte_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_dat_dat x y)))
-    | Gte_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_gte_dur_dur (rpos ()) x y)))
-    | Eq_boo_boo, [(ELit (LBool x), _); (ELit (LBool y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_boo_boo x y)))
-    | Eq_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_int_int x y)))
-    | Eq_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_rat_rat x y)))
-    | Eq_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_mon_mon x y)))
-    | Eq_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_dat_dat x y)))
-    | Eq_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LBool (o_eq_dur_dur (rpos ()) x y)))
     | HandleExceptions, [(EArray exps, _)] -> (
       (* Shallow conversion to runtime option, so that we can call
          [handle_exceptions] *)
@@ -765,14 +619,14 @@ let rec evaluate_operator
               if EnumConstructor.equal cons Expr.some_constr then
                 match e with
                 | ETuple [e; (EPos p, _)], _ ->
-                  Catala_runtime.Optional.Present (e, Expr.pos_to_runtime p)
+                  Runtime.Optional.Present (e, Expr.pos_to_runtime p)
                 | _ -> err ()
-              else Catala_runtime.Optional.Absent
+              else Runtime.Optional.Absent
             | _ -> err ())
           exps
       in
-      match Catala_runtime.handle_exceptions (Array.of_list exps) with
-      | Catala_runtime.Optional.Absent ->
+      match Runtime.handle_exceptions (Array.of_list exps) with
+      | Runtime.Optional.Absent ->
         Lwt.return
           (EInj
              {
@@ -780,7 +634,7 @@ let rec evaluate_operator
                cons = Expr.none_constr;
                e = ELit LUnit, m;
              })
-      | Catala_runtime.Optional.Present (e, rpos) ->
+      | Runtime.Optional.Present (e, rpos) ->
         let p = Expr.runtime_to_pos rpos in
         Lwt.return
           (EInj
@@ -795,13 +649,8 @@ let rec evaluate_operator
         | Add_dur_dur | Sub_int_int | Sub_rat_rat | Sub_mon_mon | Sub_dat_dat
         | Sub_dat_dur _ | Sub_dur_dur | Mult_int_int | Mult_rat_rat
         | Mult_mon_int | Mult_mon_rat | Mult_dur_int | Div_int_int | Div_rat_rat
-        | Div_mon_mon | Div_mon_int | Div_mon_rat | Div_dur_dur | Lt_int_int
-        | Lt_rat_rat | Lt_mon_mon | Lt_dat_dat | Lt_dur_dur | Lte_int_int
-        | Lte_rat_rat | Lte_mon_mon | Lte_dat_dat | Lte_dur_dur | Gt_int_int
-        | Gt_rat_rat | Gt_mon_mon | Gt_dat_dat | Gt_dur_dur | Gte_int_int
-        | Gte_rat_rat | Gte_mon_mon | Gte_dat_dat | Gte_dur_dur | Eq_boo_boo
-        | Eq_int_int | Eq_rat_rat | Eq_mon_mon | Eq_dat_dat | Eq_dur_dur
-        | HandleExceptions ),
+        | Div_mon_mon | Div_mon_int | Div_mon_rat | Div_dur_dur | Lt | Lte | Gt
+        | Gte | HandleExceptions ),
         _ ) ->
       err ()
   in
@@ -809,13 +658,97 @@ let rec evaluate_operator
 
 let on_expr_void _ _ = Lwt.return_unit
 
-let rec evaluate_expr_with_env : type d.
-    on_expr:(((d, yes) interpr_kind, 't) gexpr -> (d, 't) env -> unit Lwt.t) ->
-    (d, 't) env ->
+let rec handle_assert : type d r.
+    eval_expr:
+      (((d, r, yes) interpr_kind, 't) gexpr ->
+      ((d, r, yes) interpr_kind, 't) gexpr Lwt.t) ->
+    lang:Global.backend_lang ->
+    ((d, r, yes) interpr_kind, 't) gexpr ->
+    't mark ->
+    Pos.t ->
+    ((d, r, yes) interpr_kind, 't) gexpr Lwt.t =
+ fun ~eval_expr ~lang pred m pos ->
+  let* e = eval_expr pred in
+  match Mark.remove e with
+  | ELit (LBool true) -> Lwt.return (ELit LUnit, m)
+  | ELit (LBool false) ->
+    let msg ppf =
+      match
+        Pos.get_attr (Expr.mark_pos m) (function
+          | ErrorMessage m -> Some m
+          | _ -> None)
+      with
+      | Some note ->
+        Format.fprintf ppf "@[<hv 4>Assertion failed:@ @[<hov>%a@].@]"
+          Format.pp_print_text note
+      | None -> Format.fprintf ppf "Assertion failed."
+    in
+    let* partially_evaluated_assertion_failure_expr =
+      partially_evaluate_expr_for_assertion_failure_message ~eval_expr
+        (Expr.skip_wrappers pred)
+    in
+    (match Mark.remove partially_evaluated_assertion_failure_expr with
+    | ELit (LBool false) ->
+      if Global.options.no_fail_on_assert then Message.warning ~pos "%t" msg
+      else Message.delayed_error ~kind:AssertFailure () ~pos "%t" msg
+    | _ ->
+      if Global.options.no_fail_on_assert then
+        Message.warning ~pos
+          "@[<v>%t@,@[<hv 4>The condition resolved to:@ %a@]@]" msg
+          (Print.UserFacing.expr lang)
+          partially_evaluated_assertion_failure_expr
+      else
+        Message.delayed_error ~kind:AssertFailure () ~pos
+          "@[<v>%t@,@[<hv 4>The condition resolved to:@ %a@]@]" msg
+          (Print.UserFacing.expr lang)
+          partially_evaluated_assertion_failure_expr);
+    Lwt.return (Mark.add m (ELit LUnit))
+  | _ ->
+    Message.error ~pos:(Expr.pos pred) "%a" Format.pp_print_text
+      "Expected a boolean literal for the result of this assertion (should not \
+       happen if the term was well-typed)"
+
+and partially_evaluate_expr_for_assertion_failure_message : type d r.
+    eval_expr:
+      (((d, r, yes) interpr_kind, 't) gexpr ->
+      ((d, r, yes) interpr_kind, 't) gexpr Lwt.t) ->
+    ((d, r, yes) interpr_kind, 't) gexpr ->
+    ((d, r, yes) interpr_kind, 't) gexpr Lwt.t =
+ fun ~eval_expr e ->
+  (* Here we want to print an expression that explains why an assertion has
+     failed. Since assertions have type [bool] and are usually constructed with
+     comparisons and logical operators, we leave those unevaluated at the top of
+     the AST while evaluating everything below. This makes for a good error
+     message. *)
+  match Mark.remove e with
+  | EAppOp
+      {
+        args = [e1; e2];
+        tys;
+        op = ((And | Or | Xor | Eq | Lt | Lte | Gt | Gte), _) as op;
+      } ->
+    let* e1 =
+      partially_evaluate_expr_for_assertion_failure_message ~eval_expr e1
+    in
+    let* e2 =
+      partially_evaluate_expr_for_assertion_failure_message ~eval_expr e2
+    in
+    Lwt.return (EAppOp { op; tys; args = [e1; e2] }, Mark.get e)
+  | EAppOp { args = [e1]; tys; op = (Not, _) as op } ->
+    let* e1 =
+      partially_evaluate_expr_for_assertion_failure_message ~eval_expr e1
+    in
+    Lwt.return (EAppOp { op; tys; args = [e1] }, Mark.get e)
+  | _ -> eval_expr e
+
+let rec evaluate_expr_with_env : type d r.
+    on_expr:
+      (((d, r, yes) interpr_kind, 't) gexpr -> (d, r, 't) env -> unit Lwt.t) ->
+    (d, r, 't) env ->
     decl_ctx ->
     Global.backend_lang ->
-    ((d, yes) interpr_kind, 't) gexpr ->
-    (((d, yes) interpr_kind, 't) gexpr * (d, 't) env) Lwt.t =
+    ((d, r, yes) interpr_kind, 't) gexpr ->
+    (((d, r, yes) interpr_kind, 't) gexpr * (d, r, 't) env) Lwt.t =
  fun ~on_expr env ctx lang e ->
   let* () = on_expr e env in
   let m = Mark.get e in
@@ -867,16 +800,8 @@ let rec evaluate_expr_with_env : type d.
       (* we have the guarantee that the two cases won't collide because they
          have different capitalisation rules inherited from the input *)
     in
-    let o = Catala_runtime.lookup_value runtime_modname in
-    let* e =
-      runtime_to_val
-        (fun ctx e ->
-          let* e, _ =
-            evaluate_expr_with_env ~on_expr:on_expr_void env ctx lang e
-          in
-          Lwt.return e)
-        ctx m ty o
-    in
+    let o = Runtime.lookup_value runtime_modname in
+    let* e = runtime_to_val ctx m ty o in
     Lwt.return (e, env)
   | EApp { f = e1; args; _ } -> (
     let (Env env) = env in
@@ -929,15 +854,7 @@ let rec evaluate_expr_with_env : type d.
             Lwt.return (f arg))
           (Lwt.return obj) targs (List.map fst args)
       in
-      let* rval =
-        runtime_to_val
-          (fun ctx e ->
-            let* e, _ =
-              evaluate_expr_with_env ~on_expr:on_expr_void (Env env) ctx lang e
-            in
-            Lwt.return e)
-          ctx m tret o
-      in
+      let* rval = runtime_to_val ctx m tret o in
       Lwt.return (rval, Env env)
     | _ ->
       Message.error ~pos ~internal:true "%a%a" Format.pp_print_text
@@ -955,7 +872,7 @@ let rec evaluate_expr_with_env : type d.
       Lwt.return (List.map fst l)
     in
     let* e =
-      evaluate_operator
+      evaluate_operator ctx
         (fun e ->
           let* e, _ = evaluate_expr_with_env ~on_expr env ctx lang e in
           Lwt.return e)
@@ -1058,6 +975,27 @@ let rec evaluate_expr_with_env : type d.
       Message.error ~pos:(Expr.pos e)
         "Expected a term having a sum type as an argument to a match (should \
          not happen if the term was well-typed")
+  | EIfThenElse
+      {
+        cond = EAppOp { op = Not, _; args = [pred]; _ }, _;
+        efalse = ELit LUnit, _;
+        etrue =
+          EFatalError_pos { error = AssertionFailed; pos_expr = EPos pos, _ }, _;
+      } ->
+    (* For lcalc's already compiled assertions *)
+    let eval_expr e =
+      let* r, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
+      Lwt.return r
+    in
+    let* r = handle_assert ~eval_expr ~lang pred m pos in
+    Lwt.return (r, env)
+  | EAssert pred ->
+    let eval_expr e =
+      let* r, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
+      Lwt.return r
+    in
+    let* r = handle_assert ~eval_expr ~lang pred m pos in
+    Lwt.return (r, env)
   | EIfThenElse { cond; etrue; efalse } -> (
     let* cond, _env = evaluate_expr_with_env ~on_expr env ctx lang cond in
     match Mark.remove cond with
@@ -1077,60 +1015,20 @@ let rec evaluate_expr_with_env : type d.
       Lwt.return (List.map fst l)
     in
     Lwt.return (Mark.add m (EArray es), env)
-  | EAssert e' -> (
-    let* e, env = evaluate_expr_with_env ~on_expr env ctx lang e' in
-    match Mark.remove e with
-    | ELit (LBool true) -> Lwt.return (Mark.add m (ELit LUnit), env)
-    | ELit (LBool false) ->
-      let msg ppf =
-        match
-          Pos.get_attr (Expr.mark_pos m) (function
-            | ErrorMessage m -> Some m
-            | _ -> None)
-        with
-        | Some note ->
-          Format.fprintf ppf "@[<hv 4>Assertion failed:@ @[<hov>%a@].@]"
-            Format.pp_print_text note
-        | None -> Format.fprintf ppf "Assertion failed."
-      in
-      let* partially_evaluated_assertion_failure_expr, _env =
-        partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
-          lang (Expr.skip_wrappers e')
-      in
-      (match Mark.remove partially_evaluated_assertion_failure_expr with
-      | ELit (LBool false) ->
-        if Global.options.no_fail_on_assert then Message.warning ~pos "%t" msg
-        else Message.delayed_error ~kind:AssertFailure () ~pos "%t" msg
-      | _ ->
-        if Global.options.no_fail_on_assert then
-          Message.warning ~pos
-            "@[<v>%t@,@[<hv 4>The condition resolved to:@ %a@]@]" msg
-            (Print.UserFacing.expr lang)
-            partially_evaluated_assertion_failure_expr
-        else
-          Message.delayed_error ~kind:AssertFailure () ~pos
-            "@[<v>%t@,@[<hv 4>The condition resolved to:@ %a@]@]" msg
-            (Print.UserFacing.expr lang)
-            partially_evaluated_assertion_failure_expr);
-      Lwt.return (Mark.add m (ELit LUnit), env)
-    | _ ->
-      Message.error ~pos:(Expr.pos e') "%a" Format.pp_print_text
-        "Expected a boolean literal for the result of this assertion (should \
-         not happen if the term was well-typed)")
-  | EFatalError err ->
+  | EFatalError error | EFatalError_pos { error; _ } ->
     let note =
       Pos.get_attr (Expr.mark_pos m) (function
         | ErrorMessage m -> Some m
         | _ -> None)
     in
-    raise (Catala_runtime.Error (err, [Expr.pos_to_runtime pos], note))
+    raise (Runtime.Error (error, [Expr.pos_to_runtime pos], note))
   | EErrorOnEmpty e' -> (
     let* r = evaluate_expr_with_env ~on_expr env ctx lang e' in
     match r with
     | (EEmpty, _), _ ->
-      raise Catala_runtime.(Error (NoValue, [Expr.pos_to_runtime pos], None))
-    | exception Catala_runtime.Empty ->
-      raise Catala_runtime.(Error (NoValue, [Expr.pos_to_runtime pos], None))
+      raise Runtime.(Error (NoValue, [Expr.pos_to_runtime pos], None))
+    | exception Runtime.Empty ->
+      raise Runtime.(Error (NoValue, [Expr.pos_to_runtime pos], None))
     | e, _env -> Lwt.return (e, env))
   | EDefault { excepts; just; cons } -> (
     let* l =
@@ -1159,63 +1057,19 @@ let rec evaluate_expr_with_env : type d.
             else Some Expr.(pos_to_runtime (pos ex)))
           excepts
       in
-      raise Catala_runtime.(Error (Conflict, poslist, None)))
+      raise Runtime.(Error (Conflict, poslist, None)))
   | EPureDefault e ->
     let* e, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
     Lwt.return (e, env)
   | EBad -> assert false
   | _ -> .
 
-and partially_evaluate_expr_for_assertion_failure_message : type d.
-    on_expr:(((d, yes) interpr_kind, 'm) gexpr -> (d, 't) env -> unit Lwt.t) ->
-    (d, 't) env ->
-    decl_ctx ->
-    Global.backend_lang ->
-    ((d, yes) interpr_kind, 't) gexpr ->
-    (((d, yes) interpr_kind, 't) gexpr * (d, 't) env) Lwt.t =
- fun ~on_expr env ctx lang e ->
-  (* Here we want to print an expression that explains why an assertion has
-     failed. Since assertions have type [bool] and are usually constructed with
-     comparisons and logical operators, we leave those unevaluated at the top of
-     the AST while evaluating everything below. This makes for a good error
-     message. *)
-  match Mark.remove e with
-  | EAppOp
-      {
-        args = [e1; e2];
-        tys;
-        op =
-          ( ( And | Or | Xor | Eq | Lt_int_int | Lt_rat_rat | Lt_mon_mon
-            | Lt_dat_dat | Lt_dur_dur | Lte_int_int | Lte_rat_rat | Lte_mon_mon
-            | Lte_dat_dat | Lte_dur_dur | Gt_int_int | Gt_rat_rat | Gt_mon_mon
-            | Gt_dat_dat | Gt_dur_dur | Gte_int_int | Gte_rat_rat | Gte_mon_mon
-            | Gte_dat_dat | Gte_dur_dur | Eq_int_int | Eq_rat_rat | Eq_mon_mon
-            | Eq_dur_dur | Eq_dat_dat ),
-            _ ) as op;
-      } ->
-    let* e1', _env1 =
-      partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
-        lang e1
-    in
-    let* e2', _env2 =
-      partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
-        lang e2
-    in
-    Lwt.return ((EAppOp { op; tys; args = [e1'; e2'] }, Mark.get e), env)
-  | EAppOp { args = [e1]; tys; op = (Not, _) as op } ->
-    let* e1', _env1 =
-      partially_evaluate_expr_for_assertion_failure_message ~on_expr env ctx
-        lang e1
-    in
-    Lwt.return ((EAppOp { op; tys; args = [e1'] }, Mark.get e), env)
-  | _ -> evaluate_expr_with_env ~on_expr env ctx lang e
-
 let interpret_with_env
     ?inputs
     ?(on_expr = on_expr_void)
-    (p : (yes Shared_ast__Definitions.dcalc_lcalc, typed) gexpr program)
+    (p : ((yes, no) Shared_ast__Definitions.dcalc_lcalc, typed) gexpr program)
     scope =
-  let e = Expr.unbox (Program.to_expr p scope) |> addcustom in
+  let e = Expr.unbox (Program.to_expr p scope) |> Interpreter.addcustom in
   let ctx = p.decl_ctx in
   let scope_info = ScopeName.Map.find scope ctx.ctx_scopes in
   let scope_input_struct = scope_info.in_struct_name in
@@ -1236,7 +1090,7 @@ let interpret_with_env
       in
       Encoding.convert_to_dcalc ctx mark in_scope_ty rval
       |> Expr.unbox
-      |> addcustom
+      |> Interpreter.addcustom
       |> Expr.box
   in
   let to_interpret =
