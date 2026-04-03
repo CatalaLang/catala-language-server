@@ -194,14 +194,37 @@ let unlocked_process_document document open_documents :
     | Some { St.buffer_state = Modified { contents }; _ } ->
       Global.Contents (contents, (doc_id :> string))
   in
-  let processing_result, diags =
+  let validation_result =
     Document_processing.process ~resolve_file_content document
   in
-  let is_valid, document =
-    match processing_result with
-    | None -> false, document
-    | valid_result -> true, { document with last_valid_result = valid_result }
+  let document = { document with last_result = Some validation_result } in
+  let is_valid, document, diags =
+    match validation_result with
+    | Skipped -> false, document, Doc_id.Map.empty
+    | Faulty diags -> false, document, diags
+    | Partial (diags, result) -> begin
+      if document.last_valid_result = None then
+        (* If the document was never valid, a partial result is better than
+           nothing... *)
+        false, { document with last_valid_result = Some result }, diags
+      else false, document, diags
+    end
+    | Valid result ->
+      ( true,
+        { document with last_valid_result = Some result },
+        (* We need to put an empty singleton in diags, otherwise the underlying
+           mechanism doesn't update the previous error... *)
+        Doc_id.Map.singleton document.document_id Range.Map.empty )
   in
+  (* (\* Uncomment to display all symbols as warnings *\) *)
+  (* let diags = *)
+  (*   let extra_diags = *)
+  (*     Doc_queries.all_symbols_as_warning document.document_id validation_result *)
+  (*   in *)
+  (*   Doc_id.Map.union *)
+  (*     (fun _ l r -> Some (Range.Map.union (fun _ _ r -> Some r) l r)) *)
+  (*     diags extra_diags *)
+  (* in *)
   is_valid, document, diags
 
 let make_error_handler () =
@@ -398,7 +421,7 @@ class catala_lsp_server =
       InitializeParams.create ~capabilities:(ClientCapabilities.create ()) ()
 
     (* Extra-configurations *)
-    method! config_code_action_provider = `Bool true
+    method! config_code_action_provider = `Bool false
     method! config_completion = Some (CompletionOptions.create ())
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
@@ -411,6 +434,7 @@ class catala_lsp_server =
     method private config_declaration = Some (`Bool true)
     method private config_references = Some (`Bool true)
     method private config_type_definition = Some (`Bool true)
+    method private config_rename = Some (`Bool true)
 
     method! config_sync_opts =
       (* configure how sync happens *)
@@ -441,6 +465,7 @@ class catala_lsp_server =
           ?hoverProvider:self#config_hover
           ?inlayHintProvider:self#config_inlay_hints
           ?documentSymbolProvider:self#config_symbol
+          ?renameProvider:self#config_rename
           ~textDocumentSync:(`TextDocumentSyncOptions sync_opts)
           ~workspaceSymbolProvider:self#config_workspace_symbol
           ?typeDefinitionProvider:self#config_type_definition ()
@@ -551,7 +576,7 @@ class catala_lsp_server =
                       St.make_document St.Saved doc_id project project_file
                     | Some document -> document
                   in
-                  let _processed_file, document, document_diagnostics =
+                  let _is_valid, document, document_diagnostics =
                     unlocked_process_document document open_documents
                   in
                   let new_diagnostics =
@@ -650,7 +675,7 @@ class catala_lsp_server =
                   |> function
                   | Some { last_valid_result = Some { prg; _ }; _ } ->
                     Lwt.return_some prg
-                  | _ ->
+                  | _ -> (
                     let*? project_file =
                       Lwt.return
                         (Doc_id.Map.find_opt doc_id project.project_files)
@@ -661,15 +686,12 @@ class catala_lsp_server =
                     let document =
                       St.make_document St.Saved doc_id project project_file
                     in
-                    let r_opt =
-                      try
-                        fst
-                          (Document_processing.process ~resolve_file_content
-                             document)
-                      with _exn -> None
+                    let validation_result =
+                      Document_processing.process ~resolve_file_content document
                     in
-                    Lwt.return
-                      (Option.map (fun { Server_state.prg; _ } -> prg) r_opt)
+                    match validation_result with
+                    | Skipped | Faulty _ | Partial _ -> Lwt.return_none
+                    | Valid r -> Lwt.return_some r.prg)
                 in
                 list_entrypoints ~get_prog project params)
               all_projects
@@ -705,6 +727,9 @@ class catala_lsp_server =
             ~pos:params.position ()
         | TextDocumentFormatting params ->
           self#on_req_document_formatting ~notify_back params
+        | TextDocumentRename params ->
+          self#on_req_document_rename ~notify_back params
+        | WorkspaceSymbol _params -> Lwt.return_none
         | UnknownRequest { meth = "catala.listEntrypoints"; params } ->
           self#list_entrypoints
             (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
@@ -724,79 +749,20 @@ class catala_lsp_server =
     method on_notif_doc_did_close ~notify_back d =
       self#on_doc_did_close ~notify_back (Doc_id.of_lsp_uri d.uri)
 
-    method! on_req_code_action ~notify_back:_ ~id:_
-        {
-          textDocument;
-          range;
-          context = _;
-          partialResultToken = _;
-          workDoneToken = _;
-        } : CodeActionResult.t Lwt.t =
-      let doc_id = Doc_id.of_lsp_uri textDocument.uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let* r = retrieve_existing_document_when_ready doc_id server_state in
-        match r with
-        | None -> Lwt.return_none
-        | Some ({ St.document_id; _ }, diagnostics) ->
-          let suggestions_opt =
-            DQ.lookup_suggestions document_id diagnostics range
-          in
-          let actions_opt : CodeAction.t list option =
-            Option.map
-              (fun (range, suggestions) ->
-                let changes : (DocumentUri.t * TextEdit.t list) list option =
-                  Option.some
-                  @@ List.map
-                       (fun suggestion ->
-                         ( textDocument.uri,
-                           [TextEdit.create ~range ~newText:suggestion] ))
-                       suggestions
-                in
-                [
-                  CodeAction.create ~title:"suggestions"
-                    ~kind:CodeActionKind.QuickFix ~isPreferred:true
-                    ~edit:
-                      {
-                        changes;
-                        documentChanges = None;
-                        changeAnnotations = None;
-                      }
-                    ();
-                ])
-              suggestions_opt
-          in
-          let result =
-            Option.map
-              (fun l -> List.map (fun action -> `CodeAction action) l)
-              actions_opt
-          in
-          Lwt.return result
-
     method! on_req_completion ~notify_back:_ ~id:_ ~uri ~pos ~ctx:_
-        ~workDoneToken:_ ~partialResultToken:_ _doc_state =
+        ~workDoneToken:_ ~partialResultToken:_ doc_state =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
-        let*? { St.document_id; _ }, diagnostics =
+        let*? document, diagnostics =
           retrieve_existing_document_now doc_id server_state
         in
-        let suggestions_opt =
-          DQ.lookup_suggestions_by_pos document_id diagnostics pos
-        in
-        match suggestions_opt with
-        | None -> Lwt.return_none
-        | Some (range, suggestions) ->
+        let*? completions =
           Lwt.return
-          @@ Some
-               (`List
-                  (List.map
-                     (fun sugg ->
-                       let textEdit =
-                         `TextEdit (TextEdit.create ~range ~newText:sugg)
-                       in
-                       CompletionItem.create ~label:sugg ~textEdit ())
-                     suggestions))
+            (DQ.lookup_completions document ~doc_content:doc_state.content pos
+               diagnostics)
+        in
+        Lwt.return_some (`List completions)
 
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ _doc_state =
@@ -891,6 +857,7 @@ class catala_lsp_server =
         | `SymbolInformation of SymbolInformation.t list ]
         option
         t =
+      Log.info (fun m -> m "DOCUMENT SYMBOL REQUEST");
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -939,4 +906,40 @@ class catala_lsp_server =
           | Some r ->
             Log.info (fun m -> m "document formatting done");
             Lwt.return_some r)
+
+    method private on_req_document_rename ~notify_back:_
+        {
+          newName : string;
+          position : Types.Position.t;
+          textDocument : TextDocumentIdentifier.t;
+          _;
+        } : WorkspaceEdit.t Lwt.t =
+      let empty_response = WorkspaceEdit.create () in
+      let doc_id = Doc_id.of_lsp_uri textDocument.uri in
+      if should_ignore doc_id then Lwt.return empty_response
+      else
+        let* r =
+          protect_project_not_found_opt
+          @@ fun () ->
+          let*? doc, _ = retrieve_existing_document doc_id server_state in
+          let*? all_occurences =
+            Lwt.return (DQ.lookup_occurences doc position)
+          in
+          let changes : (Uri0.t * TextEdit.t list) list =
+            let open Server_types in
+            Doc_id.Map.map
+              (fun rs ->
+                Range.Set.elements rs
+                |> List.map (fun range ->
+                    TextEdit.create ~newText:newName ~range))
+              all_occurences
+            |> Doc_id.Map.bindings
+            |> List.map (fun (doc_id, ranges) ->
+                Doc_id.to_lsp_uri doc_id, ranges)
+          in
+          Lwt.return_some (WorkspaceEdit.create ~changes ())
+        in
+        match r with
+        | None -> Lwt.return empty_response
+        | Some r -> Lwt.return r
   end

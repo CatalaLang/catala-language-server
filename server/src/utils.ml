@@ -21,6 +21,7 @@ open Server_types
 
 let ( let*? ) = Option.bind
 let ( let*?! ) (x, default) f = match x with None -> default | Some x -> f x
+let ( let*! ) x f = match x with None -> f () | Some x -> Some x
 let never_ending = fst (Lwt.wait ())
 
 let pp_opt pp fmt =
@@ -33,6 +34,15 @@ let pp_list pp fmt =
     (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt " ;@ ") pp)
 
 let pp_string_list fmt = pp_list Format.pp_print_string fmt
+
+let pp_range fmt { Linol_lwt.Range.start; end_ } =
+  let open Format in
+  let pp_pos fmt { Linol_lwt.Position.line; character } =
+    fprintf fmt "l:%d, c:%d" line character
+  in
+  fprintf fmt "start:(%a), end:(%a)" pp_pos start pp_pos end_
+
+let option_of_list = function [] -> None | l -> Some l
 
 let is_included (p : Pos.t) p' =
   (* true if p is included in p' *)
@@ -164,7 +174,8 @@ let lookup_clerk_toml (path : string) =
   let open Catala_utils in
   try
     begin match
-      File.find_in_parents ~cwd:from_dir (fun dir -> File.(exists (dir / "clerk.toml")))
+      File.find_in_parents ~cwd:from_dir (fun dir ->
+          File.(exists (dir / "clerk.toml")))
     with
     | None ->
       Log.debug (fun m -> m "no 'clerk.toml' config file found");
@@ -243,3 +254,55 @@ let get_timestamp ?(no_brackets = false) () =
   in
   if no_brackets then Format.asprintf "%02d:%02d:%02d.%02Ld" hh mm ss cs
   else Format.asprintf "[%02d:%02d:%02d.%02Ld]" hh mm ss cs
+
+let lookup_alias_name =
+  (* TODO: officialize this list in catala/clerk directly *)
+  let en_names =
+    [
+      "Date";
+      "Duration";
+      "MonthYear";
+      "Period";
+      "Money";
+      "Integer";
+      "Decimal";
+      "List";
+    ]
+  in
+  let en_aliases = List.map (fun s -> s ^ "_en") en_names in
+  let fr_aliases = List.map (fun s -> s ^ "_fr") en_names in
+  let fr_names =
+    [
+      "Date";
+      "Durée";
+      "MoisAnnée";
+      "Période";
+      "Argent";
+      "Entier";
+      "Décimal";
+      "Liste";
+    ]
+  in
+  let en_alias_map = String.Map.of_list (List.combine en_aliases en_names) in
+  let fr_alias_map = String.Map.of_list (List.combine fr_aliases fr_names) in
+  let lookup_alias_name lang s =
+    match lang with
+    | Catala_utils.Global.Fr -> String.Map.find s fr_alias_map
+    | Catala_utils.Global.En | _ -> String.Map.find s en_alias_map
+  in
+  lookup_alias_name
+
+let rename_alias_in_path locale map_info x =
+  map_info
+    (fun (path, r) ->
+      ( List.map
+          (fun m ->
+            try
+              let alias =
+                lookup_alias_name locale (Shared_ast.ModuleName.to_string m)
+              in
+              Shared_ast.ModuleName.fresh (alias, Pos.void)
+            with _ -> m)
+          path,
+        r ))
+    x

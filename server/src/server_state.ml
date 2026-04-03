@@ -19,11 +19,18 @@ open Lwt.Syntax
 open Shared_ast
 open Catala_utils
 
-type processing_result = {
+type valid_result = {
+  surface : Surface.Ast.program;
   prg : typed Scopelang.Ast.program;
   used_modules : ModuleName.t File.Map.t;
   jump_table : Jump_table.t Lazy.t;
 }
+
+type processing_result =
+  | Skipped
+  | Faulty of diagnostics
+  | Partial of diagnostics * valid_result
+  | Valid of valid_result
 
 type buffer_state = Saved | Modified of { contents : string }
 
@@ -33,7 +40,8 @@ type document_state = {
   buffer_state : buffer_state;
   project : Projects.project;
   project_file : Projects.project_file;
-  last_valid_result : processing_result option;
+  last_valid_result : valid_result option;
+  last_result : processing_result option;
 }
 
 let make_document buffer_state (document_id : Doc_id.t) project project_file =
@@ -45,6 +53,7 @@ let make_document buffer_state (document_id : Doc_id.t) project project_file =
     project;
     project_file;
     last_valid_result = None;
+    last_result = None;
   }
 
 type server_state = {

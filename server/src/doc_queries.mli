@@ -4,21 +4,15 @@ open Server_types
 open Server_state
 open Catala_utils
 
-val pp_range : Format.formatter -> Range.t -> unit
-
-val lookup_suggestions :
-  Doc_id.t -> diagnostics -> Range.t -> (Range.t * string list) option
-
-val lookup_suggestions_by_pos :
-  Doc_id.t ->
-  diagnostics ->
+val lookup_completions :
+  document_state ->
+  doc_content:string ->
   Linol_lwt.Position.t ->
-  (Range.t * string list) option
+  diagnostics ->
+  Linol_lwt.CompletionItem.t list option
 
 val all_symbols_as_warning :
-  Doc_id.doc_id ->
-  processing_result option ->
-  (Doc_id.doc_id * Diagnostic.t list) list
+  Doc_id.doc_id -> processing_result -> diagnostic Range.Map.t Doc_id.Map.t
 
 val of_position : Pos.t -> string * Range.t
 
@@ -46,6 +40,9 @@ val lookup_usages :
   document_state ->
   Linol_lwt.Position.t ->
   (string * Range.t) list option
+
+val lookup_occurences :
+  document_state -> Linol_lwt.Position.t -> Range.Set.t Doc_id.Map.t option
 
 val get_hover_type :
   ?markdown:bool ->

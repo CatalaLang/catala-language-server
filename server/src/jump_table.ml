@@ -645,6 +645,8 @@ let populate_modules
       { Surface.Ast.mod_use_name = name, pname; mod_use_alias = alias, palias }
       =
     try
+      let name = String.to_ascii name in
+      let alias = String.to_ascii alias in
       let mname = C.find name convert_map in
       let mname_pos = Mark.get (ModuleName.get_info mname) in
       let interface = ModuleName.Map.find mname modules_contents in
@@ -687,7 +689,8 @@ let populate_modules
     | None -> acc
     | Some { module_name; module_external = _ } -> (
       try
-        let mname = C.find (Mark.remove module_name) convert_map in
+        let name = String.to_ascii (Mark.remove module_name) in
+        let mname = C.find name convert_map in
         let mcontent = ModuleName.Map.find mname modules_contents in
         let interface =
           Surface.Parser_driver.load_interface
