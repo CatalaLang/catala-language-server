@@ -18,6 +18,7 @@ open Utils
 open Diagnostic
 open Linol_lwt
 open Catala_utils
+open Server_state
 open Server_types
 open Shared_ast
 
@@ -111,11 +112,13 @@ let lsp_errors_to_diag doc_id errors =
 let surface_to_scopelang
     ~on_error
     ~get_errors
+    ~(get_module_content : Surface.Parser_driver.module_loading)
     ?resolve_included_file
     (doc_id : Doc_id.t)
     options
     project
-    k : Server_state.processing_result =
+    k : processing_result =
+  let load_module = get_module_content in
   let open Projects in
   let handle = function
     | Ok r -> r
@@ -147,9 +150,9 @@ let surface_to_scopelang
     let mod_uses, modules =
       let check stdlib k =
         if File.exists stdlib then
-          Driver.load_modules options
+          Surface.Parser_driver.load_modules options
             ~stdlib:(Some (Global.raw_file stdlib))
-            includes surface
+            ~load_module includes surface
         else k ()
       in
       let build_stdlib_path =
@@ -162,9 +165,9 @@ let surface_to_scopelang
       check build_stdlib_path
       @@ fun () ->
       try
-        Driver.load_modules options
+        Surface.Parser_driver.load_modules options
           ~stdlib:(Some (Global.raw_file build_stdlib_path))
-          includes surface
+          ~load_module includes surface
       with e ->
         on_error
           {
@@ -209,18 +212,14 @@ let surface_to_scopelang
     | Error () ->
       Partial
         ( lsp_errors_to_diag doc_id (get_errors ()),
-          { Server_state.surface; prg; used_modules; jump_table } )
-    | Ok () -> k { Server_state.surface; prg; used_modules; jump_table })
+          { surface; prg; used_modules; jump_table } )
+    | Ok () -> k { surface; prg; used_modules; jump_table })
 
 let process
     ~(resolve_file_content : string -> string Global.input_src)
-    {
-      Server_state.document_id = doc_id;
-      buffer_state;
-      project;
-      project_file;
-      _;
-    } : Server_state.processing_result =
+    ~(get_module_content : Surface.Parser_driver.module_loading)
+    { document_id = doc_id; buffer_state; project; project_file; _ } :
+    processing_result =
   let file = (doc_id :> File.t) in
   let input_src =
     match buffer_state with
@@ -259,14 +258,13 @@ let process
   in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
   (* From surface to scopelang *)
-  surface_to_scopelang ~on_error ~get_errors ?resolve_included_file doc_id
-    options project
+  surface_to_scopelang ~on_error ~get_errors ~get_module_content
+    ?resolve_included_file doc_id options project
   @@ fun ({ prg; _ } as valid_result) ->
   let handle = function
-    | Ok () -> Server_state.Valid valid_result
+    | Ok () -> Valid valid_result
     | Error _errs ->
-      Server_state.Partial
-        (lsp_errors_to_diag doc_id (get_errors ()), valid_result)
+      Partial (lsp_errors_to_diag doc_id (get_errors ()), valid_result)
   in
   (* Linting *)
   handle
@@ -280,8 +278,8 @@ let process
   ignore @@ Typing.program ~internal_check:true prg;
   Message.report_delayed_errors_if_any ()
 
-let process ~resolve_file_content document =
-  let r = process ~resolve_file_content document in
+let process ~resolve_file_content ~get_module_content document =
+  let r = process ~resolve_file_content ~get_module_content document in
   let nb_diags diags =
     Doc_id.Map.fold
       (fun _d rm i -> Server_types.Range.Map.cardinal rm + i)

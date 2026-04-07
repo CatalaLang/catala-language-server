@@ -56,9 +56,12 @@ let make_document buffer_state (document_id : Doc_id.t) project project_file =
     last_result = None;
   }
 
+type module_cache = Surface.Ast.module_content Doc_id.Hashtbl.t
+
 type server_state = {
   projects : Projects.t;
   open_documents : document_state Doc_id.Map.t;
+  module_cache : module_cache;
   diagnostics : diagnostics;
 }
 
@@ -222,7 +225,34 @@ let make () =
     {
       projects = Projects.empty;
       open_documents = Doc_id.Map.empty;
+      module_cache = Doc_id.Hashtbl.create 13;
       diagnostics = Doc_id.Map.empty;
     }
   in
   { lock = Lwt_mutex.create (); delayed_state = Ready state }
+
+let lookup_module_content
+    (module_cache : _ Doc_id.Hashtbl.t)
+    ~allow_notmodules
+    ~is_stdlib
+    options
+    file =
+  let module H = Doc_id.Hashtbl in
+  let doc_id = Doc_id.of_file file in
+  match H.find_opt module_cache doc_id with
+  | None ->
+    let r =
+      Surface.Parser_driver.load_module ~allow_notmodules ~is_stdlib options
+        file
+    in
+    H.replace module_cache doc_id r;
+    r
+  | Some r ->
+    r
+
+let get_module_content server_state =
+  lookup_module_content server_state.module_cache
+
+let unload_module_content server_state doc_id =
+  let module H = Doc_id.Hashtbl in
+  H.remove server_state.module_cache doc_id

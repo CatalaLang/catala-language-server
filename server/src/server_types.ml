@@ -34,6 +34,12 @@ module Doc_id = struct
   module Map = File.Map
   module Set = File.Set
 
+  module Hashtbl = Hashtbl.Make (struct
+    include String
+
+    let hash x = (hash x :> int)
+  end)
+
   let of_file = Fun.id
 end
 
