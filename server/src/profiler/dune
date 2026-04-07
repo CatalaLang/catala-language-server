@@ -1,0 +1,6 @@
+(library
+ (package catala-lsp)
+ (name profiler)
+ (libraries
+   json-data-encoding
+   lwt))

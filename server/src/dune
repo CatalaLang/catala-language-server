@@ -19,20 +19,21 @@
  (name lib)
  (package catala-lsp)
  (libraries
-  threads.posix
-  linol
-  linol-lwt
-  dap.rpc_lwt
-  gen
-  logs
-  logs.fmt
-  catala.driver
-  catala.surface
-  catala.clerk_lib
-  ptime.clock.os
-  uri
-  re
-  catala_types_atd)
+   profiler_backends
+   threads.posix
+   linol
+   linol-lwt
+   dap.rpc_lwt
+   gen
+   logs
+   logs.fmt
+   catala.driver
+   catala.surface
+   catala.clerk_lib
+   ptime.clock.os
+   uri
+   re
+   catala_types_atd)
  (modules
   (:standard \ Main_lsp Main_dap))
  (preprocess

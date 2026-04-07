@@ -1,0 +1,13 @@
+; This file was automatically generated, do not edit.
+; Edit file manifest/main.ml instead.
+
+(library
+ (name profiler_unix)
+ (package catala-lsp)
+ (libraries
+  profiler
+  unix
+  json-data-encoding)
+ (flags
+  (:standard)
+  -open Json_encoding))
