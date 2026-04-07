@@ -176,7 +176,10 @@ let unlocked_send_all_diagnostics
   in
   unlocked_raw_send_all_diagnostics ~notify_back all_diagnostics
 
-let unlocked_process_document document open_documents :
+let unlocked_process_document
+    document
+    open_documents
+    ~(get_module_content : Surface.Parser_driver.module_loading) :
     bool * St.document_state * diagnostics =
   Log.info (fun m ->
       m "Processing document %s" (document.St.document_id :> string));
@@ -195,7 +198,8 @@ let unlocked_process_document document open_documents :
       Global.Contents (contents, (doc_id :> string))
   in
   let validation_result =
-    Document_processing.process ~resolve_file_content document
+    Document_processing.process ~resolve_file_content ~get_module_content
+      document
   in
   let document = { document with last_result = Some validation_result } in
   let is_valid, document, diags =
@@ -261,7 +265,11 @@ let process_affected_files project possibly_affected_files server_state =
           diagnostics, new_open_documents
         else
           let _processed_file, document, new_diags =
-            unlocked_process_document document open_documents
+            let get_module_content =
+              Server_state.get_module_content server_state
+            in
+            unlocked_process_document ~get_module_content document
+              open_documents
           in
           let is_empty =
             Doc_id.Map.is_empty new_diags
@@ -322,7 +330,8 @@ let process_document_dependencies
 let unlocked_process_file
     buffer_state
     doc_id
-    { St.projects; open_documents; diagnostics } : St.server_state =
+    ({ St.projects; open_documents; diagnostics; module_cache } as sstate) :
+    St.server_state =
   let doc_errors, on_error = make_error_handler () in
   let document, projects =
     Doc_id.Map.find_opt doc_id open_documents
@@ -336,7 +345,10 @@ let unlocked_process_file
       St.make_document buffer_state doc_id project project_file, projects
   in
   let is_valid, new_document, document_diagnostics =
-    unlocked_process_document { document with buffer_state } open_documents
+    let get_module_content = Server_state.get_module_content sstate in
+    unlocked_process_document ~get_module_content
+      { document with buffer_state }
+      open_documents
   in
   let is_fully_saved, document_diagnostics =
     match
@@ -375,7 +387,7 @@ let unlocked_process_file
     let open_documents =
       Doc_id.Map.add new_document.document_id new_document open_documents
     in
-    { St.projects; open_documents; diagnostics }
+    { St.projects; open_documents; diagnostics; module_cache }
   in
   let new_diagnostics, new_server_state =
     if should_process_dependencies then
@@ -399,6 +411,8 @@ let process_saved_file ~notify_back server_state doc_id =
   @@ fun unlocked_server_state ->
   let new_state = unlocked_process_file St.Saved doc_id unlocked_server_state in
   let* () = unlocked_send_all_diagnostics ~doc_id ~notify_back new_state in
+  (* Invalidate the cache *)
+  Server_state.unload_module_content new_state doc_id;
   Lwt.return new_state
 
 let server_initialized, resolve_init =
@@ -516,7 +530,9 @@ class catala_lsp_server =
         protect_project_not_found
         @@ fun () ->
         St.use_and_update server_state
-        @@ fun ({ projects; open_documents; diagnostics = _ } as sstate) ->
+        @@ fun ({ projects; open_documents; module_cache; diagnostics = _ } as
+                sstate)
+        ->
         let doc_errors, on_error = make_error_handler () in
         match Projects.lookup_project doc_id projects with
         | None ->
@@ -538,7 +554,9 @@ class catala_lsp_server =
               (fun _doc_id new_diag _ -> Some new_diag)
               new_diagnostics existing_diagnostics
           in
-          let new_state = { St.projects; open_documents; diagnostics } in
+          let new_state =
+            { St.projects; open_documents; module_cache; diagnostics }
+          in
           let* () = unlocked_send_all_diagnostics ~notify_back new_state in
           Lwt.return new_state
 
@@ -556,7 +574,8 @@ class catala_lsp_server =
         changes
 
     method private scan_project ~notify_back
-        { St.projects; open_documents; diagnostics = _ } =
+        ({ St.projects; open_documents; module_cache; diagnostics = _ } as
+         sstate) =
       let diagnostics, open_documents =
         Projects.Projects.fold
           (fun project documents ->
@@ -577,7 +596,11 @@ class catala_lsp_server =
                     | Some document -> document
                   in
                   let _is_valid, document, document_diagnostics =
-                    unlocked_process_document document open_documents
+                    let get_module_content =
+                      Server_state.get_module_content sstate
+                    in
+                    unlocked_process_document ~get_module_content document
+                      open_documents
                   in
                   let new_diagnostics =
                     merge_diags document_diagnostics diagnostics
@@ -587,7 +610,7 @@ class catala_lsp_server =
           projects
           (Doc_id.Map.empty, open_documents)
       in
-      let sstate = { St.projects; open_documents; diagnostics } in
+      let sstate = { St.projects; open_documents; module_cache; diagnostics } in
       let* () = unlocked_send_all_diagnostics ~notify_back sstate in
       Lwt.return sstate
 
@@ -647,7 +670,7 @@ class catala_lsp_server =
         Yojson.Safe.t Lwt.t =
       let* () = server_initialized in
       St.use_when_ready server_state
-      @@ fun { projects; open_documents; _ } ->
+      @@ fun ({ projects; open_documents; _ } as sstate) ->
       let open Projects in
       Lwt.catch
         (fun () ->
@@ -687,7 +710,11 @@ class catala_lsp_server =
                       St.make_document St.Saved doc_id project project_file
                     in
                     let validation_result =
-                      Document_processing.process ~resolve_file_content document
+                      let get_module_content =
+                        Server_state.get_module_content sstate
+                      in
+                      Document_processing.process ~get_module_content
+                        ~resolve_file_content document
                     in
                     match validation_result with
                     | Skipped | Faulty _ | Partial _ -> Lwt.return_none
@@ -741,10 +768,10 @@ class catala_lsp_server =
       if should_ignore doc_id then Lwt.return_unit
       else
         St.use_and_update server_state
-        @@ fun { projects; open_documents; diagnostics } ->
+        @@ fun { projects; open_documents; module_cache; diagnostics } ->
         let open_documents = Doc_id.Map.remove doc_id open_documents in
         let diagnostics = Doc_id.Map.remove doc_id diagnostics in
-        Lwt.return { St.projects; open_documents; diagnostics }
+        Lwt.return { St.projects; open_documents; module_cache; diagnostics }
 
     method on_notif_doc_did_close ~notify_back d =
       self#on_doc_did_close ~notify_back (Doc_id.of_lsp_uri d.uri)
