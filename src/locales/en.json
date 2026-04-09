@@ -62,5 +62,6 @@
   "tableEditor.goToParent": "Go to parent: {parentLabel}",
   "tableView.switchToTreeView": "Switch to card view",
   "arrayEditor.switchToTableView": "Switch to table view",
-  "tableView.value": "Value"
+  "tableView.value": "Value",
+  "combobox.noMatches": "No matches"
 }

@@ -62,5 +62,6 @@
   "tableEditor.goToParent": "Aller au parent : {parentLabel}",
   "tableView.switchToTreeView": "Passer en vue carte",
   "arrayEditor.switchToTableView": "Passer en vue tableau",
-  "tableView.value": "Valeur"
+  "tableView.value": "Valeur",
+  "combobox.noMatches": "Aucun résultat"
 }
