@@ -34,7 +34,7 @@ let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
   in
   let doc_path = (doc_id :> File.t) in
   let*? language =
-    match Clerk_scan.get_lang (doc_id :> string) with
+    match Scan.get_lang (doc_id :> string) with
     | None ->
       let* () =
         send_notification ~type_:MessageType.Warning ~notify_back

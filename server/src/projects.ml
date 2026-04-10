@@ -17,25 +17,22 @@
 open Catala_utils
 open Server_types
 
-let to_doc_id (i : Clerk_scan.item) = Doc_id.of_file i.file_name
+let to_doc_id (i : Scan.item) = Doc_id.of_file i.file_name
 
 module Scan_item = struct
-  type t = Clerk_scan.item
+  type t = Scan.item
 
-  let compare
-      { Clerk_scan.file_name; _ }
-      { Clerk_scan.file_name = file_name'; _ } =
+  let compare { Scan.file_name; _ } { Scan.file_name = file_name'; _ } =
     Doc_id.(compare (of_file file_name) (of_file file_name'))
 
-  let format fmt { Clerk_scan.file_name; _ } =
-    Format.pp_print_string fmt file_name
+  let format fmt { Scan.file_name; _ } = Format.pp_print_string fmt file_name
 end
 
 module ScanItemFiles = Set.Make (Scan_item)
 module ModuleMap = String.Map
 
 type project_file = {
-  file : Clerk_scan.item;
+  file : Scan.item;
   including_files : ScanItemFiles.t;
   used_by : ScanItemFiles.t;
 }
@@ -92,7 +89,7 @@ module Project_graph = struct
       project_files G.empty
 
   let remove_vertex
-      ~(item : Clerk_scan.item)
+      ~(item : Scan.item)
       ~(compute_using_modules : Doc_id.t -> ScanItemFiles.t)
       g : t * Doc_id.Set.t (* returns (new graph * affected docs) *) =
     let deleted_doc_id = to_doc_id item in
@@ -121,8 +118,8 @@ module Project_graph = struct
     g, Doc_id.Set.of_list (pred_documents @ using_documents)
 
   let update_vertex
-      ~(prev_item : Clerk_scan.item)
-      ~(new_item : Clerk_scan.item)
+      ~(prev_item : Scan.item)
+      ~(new_item : Scan.item)
       ~(compute_used_modules : unit -> ScanItemFiles.t)
       g =
     let prev_doc_id = to_doc_id prev_item in
@@ -255,10 +252,10 @@ let format_file ppf { file; including_files; used_by } =
     (fun fmt -> function
       | [] -> () | l -> fprintf fmt "%a, " (pp_print_list pp_print_string) l)
     (ScanItemFiles.elements including_files
-    |> List.map (fun { Clerk_scan.file_name; _ } -> file_name))
+    |> List.map (fun { Scan.file_name; _ } -> file_name))
     (pp_print_list pp_print_string)
     (ScanItemFiles.elements used_by
-    |> List.map (fun { Clerk_scan.file_name; _ } -> file_name))
+    |> List.map (fun { Scan.file_name; _ } -> file_name))
 
 let format_kind ppf =
   let open Format in
@@ -300,8 +297,7 @@ let lookup_project (doc_id : Doc_id.t) projects =
   | Some x when is_prefix x -> Some x
   | Some _ -> None
 
-let clean_item ({ Clerk_scan.file_name; included_files; _ } as item) :
-    Clerk_scan.item =
+let clean_item ({ Scan.file_name; included_files; _ } as item) : Scan.item =
   {
     item with
     file_name = File.clean_path file_name;
@@ -321,7 +317,7 @@ let find_module_candidate
     Option.value ~default:ScanItemFiles.empty
       (ModuleMap.find_opt used_module_name known_modules)
     |> ScanItemFiles.filter (fun m ->
-        List.mem (File.dirname m.Clerk_scan.file_name) includes)
+        List.mem (File.dirname m.Scan.file_name) includes)
     |> ScanItemFiles.elements
   in
   match possible_modules with
@@ -329,7 +325,7 @@ let find_module_candidate
   | [modul] -> Some modul
   | l -> (
     match
-      List.find_opt (fun m -> file_dir = File.dirname m.Clerk_scan.file_name) l
+      List.find_opt (fun m -> file_dir = File.dirname m.Scan.file_name) l
     with
     | Some x -> Some x
     | None ->
@@ -341,7 +337,7 @@ let find_module_candidate
           (fun modul ->
             Option.map
               (fun mod_def -> Mark.get mod_def, "Conflicting definition")
-              modul.Clerk_scan.module_def)
+              modul.Scan.module_def)
           l
       in
       let diag = Diagnostic.error_p ~related mod_use_pos (`String msg) in
@@ -353,7 +349,7 @@ let retrieve_project_files
     ~on_error
     (clerk_config : Clerk_config.t)
     ~project_dir =
-  let open Clerk_scan in
+  let open Scan in
   Log.info (fun m -> m "building inclusion graph of directory %s" project_dir);
   let tree = tree project_dir in
   let known_items : (string, item) Hashtbl.t = Hashtbl.create 10 in
@@ -549,7 +545,7 @@ let find_or_populate_project ~on_error (doc_id : Doc_id.t) projects =
 
 let update_known_modules ~prev_item ~new_item known_modules =
   let known_modules =
-    match prev_item.Clerk_scan.module_def with
+    match prev_item.Scan.module_def with
     | None -> known_modules
     | Some mod_def ->
       ModuleMap.update (Mark.remove mod_def)
@@ -561,7 +557,7 @@ let update_known_modules ~prev_item ~new_item known_modules =
         known_modules
   in
   let known_modules =
-    match new_item.Clerk_scan.module_def with
+    match new_item.Scan.module_def with
     | None -> known_modules
     | Some mod_def ->
       let mod_def = Mark.remove mod_def in
@@ -573,8 +569,8 @@ let update_known_modules ~prev_item ~new_item known_modules =
   in
   known_modules
 
-let eq_item (i : Clerk_scan.item) (i' : Clerk_scan.item) =
-  let open Clerk_scan in
+let eq_item (i : Scan.item) (i' : Scan.item) =
+  let open Scan in
   let {
     file_name = fn;
     module_def = md;
@@ -649,9 +645,9 @@ let update_project_file
        project or not *)
     let prev_item = project_file.file in
     let new_item =
-      Clerk_scan.catala_file
+      Scan.catala_file
         (doc_id :> string)
-        (Option.get (Clerk_scan.get_lang (doc_id :> string)))
+        (Option.get (Scan.get_lang (doc_id :> string)))
     in
     if eq_item prev_item new_item then
       let possibly_affected_files =
@@ -726,7 +722,7 @@ let remove_project_file ~on_error doc_id project projects =
     let item = project_file.file in
     let known_modules =
       (* Start by removing the known modules *)
-      match item.Clerk_scan.module_def with
+      match item.Scan.module_def with
       | None -> project.known_modules
       | Some mod_def ->
         ModuleMap.update (Mark.remove mod_def)
