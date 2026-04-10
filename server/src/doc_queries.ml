@@ -249,8 +249,26 @@ let lookup_lenses file =
     in
     [CodeLens.create ~command:run_command ~range ()]
   in
+  let mk_exception_lens scope var_name range =
+    let arguments =
+      [
+        `Assoc
+          [
+            "uri", `String (main_doc_id :> string);
+            "scope", `String (ScopeName.base scope);
+            "variable", `String var_name;
+          ];
+      ]
+    in
+    let open Linol_lwt in
+    let command =
+      Command.create ~arguments ~command:"catala.showExceptions"
+        ~title:"Definitions and exceptions" ()
+    in
+    [CodeLens.create ~command ~range ()]
+  in
   let scope_lenses =
-    let is_input_or_context_var = function
+    let is_output_or_context_var = function
       | {
           Scopelang.Ast.svar_io = { io_input = (NoInput | Reentrant), _; _ };
           _;
@@ -263,13 +281,37 @@ let lookup_lenses file =
         Jump_table.PMap.DS.fold
           (fun var acc ->
             match var with
-            | Scope_decl { scope_decl_name; scope_sig; _ } ->
-              if
-                ScopeVar.Map.for_all
-                  (fun _scope_var v -> is_input_or_context_var v)
-                  scope_sig
-              then mk_no_input_lens scope_decl_name (range_of_pos p) @ acc
-              else mk_input_lens scope_decl_name (range_of_pos p) @ acc
+            | Scope_decl { scope_decl_name; scope_sig; scope_sub_scopes; _ } ->
+              let acc =
+                if
+                  ScopeVar.Map.for_all
+                    (fun _scope_var v -> is_output_or_context_var v)
+                    scope_sig
+                then mk_no_input_lens scope_decl_name (range_of_pos p) @ acc
+                else mk_input_lens scope_decl_name (range_of_pos p) @ acc
+              in
+              ScopeVar.Map.fold
+                (fun scope_var var_ty acc ->
+                  if ScopeVar.Set.mem scope_var scope_sub_scopes then
+                    acc (* subscope call variables: skip *)
+                  else if not (is_output_or_context_var var_ty) then
+                    acc (* input-only variables: skip *)
+                  else
+                    let raw_name = ScopeVar.to_string scope_var in
+                    if String.contains raw_name '#' then
+                      acc
+                      (* stateful variable (name = "var#state"): clerk
+                         exceptions doesn't correctly handle the dot notation
+                         for states yet, so skip for now *)
+                    else
+                      let pos = Mark.get (ScopeVar.get_info scope_var) in
+                      if Pos.get_file pos = "" then
+                        acc (* skip vars with no source position *)
+                      else
+                        mk_exception_lens scope_decl_name raw_name
+                          (range_of_pos pos)
+                        @ acc)
+                scope_sig acc
             | _ -> acc)
           vl acc)
       jt.variables []
