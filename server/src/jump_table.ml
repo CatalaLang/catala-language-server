@@ -77,6 +77,9 @@ type sjump = {
   name : string;
   scope_decl_name : ScopeName.t;
   scope_sig : scope_var_ty ScopeVar.Map.t;
+  scope_sub_scopes : ScopeVar.Set.t;
+  (** Variables in scope_sig whose type is a scope output struct (i.e., subscope
+      call variables). These should be excluded from exception codelenses. *)
 }
 
 type mjump = {
@@ -540,12 +543,35 @@ let traverse
   let (all_scopes : typed scope_decl list) =
     ScopeName.Map.values prog.program_scopes |> List.map Mark.remove
   in
+  let scope_structs =
+    ScopeName.Map.fold
+      (fun scope_name scope_context m ->
+        StructName.Map.add
+          scope_context.Desugared.Name_resolution.scope_out_struct scope_name
+          m)
+      ctx.scopes StructName.Map.empty
+  in
   let add_scope_lookup (scope_decl : _ scope_decl) map =
     let scope_decl_name = scope_decl.scope_decl_name in
     let ((name, _pos) as info) = ScopeName.get_info scope_decl_name in
     let hash = Hashtbl.hash info in
+    let scope_sub_scopes =
+      ScopeVar.Map.fold
+        (fun scope_var var_ty acc ->
+          match Mark.remove var_ty.svar_out_ty with
+          | TStruct sname when StructName.Map.mem sname scope_structs ->
+            ScopeVar.Set.add scope_var acc
+          | _ -> acc)
+        scope_decl.scope_sig ScopeVar.Set.empty
+    in
     let sjump : sjump =
-      { name; hash; scope_decl_name; scope_sig = scope_decl.scope_sig }
+      {
+        name;
+        hash;
+        scope_decl_name;
+        scope_sig = scope_decl.scope_sig;
+        scope_sub_scopes;
+      }
     in
     ScopeName.Map.add scope_decl_name sjump map
   in
@@ -563,17 +589,7 @@ let traverse
   let scope_lookup =
     List.fold_left (Fun.flip add_scope_lookup) scope_lookup all_scopes
   in
-  let tctx =
-    let scope_structs =
-      ScopeName.Map.fold
-        (fun scope_name scope_context m ->
-          StructName.Map.add
-            scope_context.Desugared.Name_resolution.scope_out_struct scope_name
-            m)
-        ctx.scopes StructName.Map.empty
-    in
-    { ctx; scope_structs; module_lookup; scope_lookup }
-  in
+  let tctx = { ctx; scope_structs; module_lookup; scope_lookup } in
   let add_scope_sjump m (scope : _ scope_decl) =
     let _, pos = ScopeName.get_info scope.scope_decl_name in
     PMap.add pos

@@ -28,6 +28,24 @@
         "path": "./snippets/catala_fr.json"
       }
     ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "catala-exceptions-panel",
+          "title": "Catala Exceptions",
+          "icon": "logo.png"
+        }
+      ]
+    },
+    "views": {
+      "catala-exceptions-panel": [
+        {
+          "type": "webview",
+          "id": "catala.exceptionsView",
+          "name": "Definitions and exceptions"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "catala.selectScope",
@@ -52,6 +70,10 @@
       {
         "command": "catala.openInputEditor",
         "title": "Scope Input Editor"
+      },
+      {
+        "command": "catala.showExceptions",
+        "title": "Show variable definitions and exceptions"
       }
     ],
     "menus": {
