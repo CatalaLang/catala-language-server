@@ -164,7 +164,16 @@ async function debugScope(args: RunArgs | undefined): Promise<void> {
 }
 vscode.commands.registerCommand('catala.debug', debugScope);
 
-type ExceptionsArgs = { uri: string; scope: string; variable: string };
+type ExceptionsArgs = {
+  uri: string;
+  scope: string;
+  variable: string;
+  declFile: string;
+  declLine: number;
+  declCol: number;
+  declEndLine: number;
+  declEndCol: number;
+};
 
 type RulePos = {
   filename: string;
@@ -184,6 +193,7 @@ type ExceptionsResult = {
   variable: string;
   is_condition: boolean;
   trees: ExceptionNode[];
+  declPos: RulePos;
 };
 
 function escapeHtml(s: string): string {
@@ -284,7 +294,7 @@ function renderExceptionsWebview(
   </style>
 </head>
 <body>
-  <h1>Definitions and exceptions for <code>${escapeHtml(result.variable)}</code> in scope <code>${escapeHtml(result.scope)}</code></h1>
+  <h1>Definitions and exceptions for <code><span class="pos" ${posAttrs(result.declPos)}>${escapeHtml(result.variable)}</span></code> in scope <code>${escapeHtml(result.scope)}</code></h1>
   <pre>${treeContent}</pre>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -306,7 +316,16 @@ function renderExceptionsWebview(
 }
 
 async function showExceptions(args: ExceptionsArgs): Promise<void> {
-  const { uri, scope, variable } = args;
+  const {
+    uri,
+    scope,
+    variable,
+    declFile,
+    declLine,
+    declCol,
+    declEndLine,
+    declEndCol,
+  } = args;
   const cwd = getCwd(uri) ?? path.dirname(uri);
 
   let jsonOutput = '';
@@ -346,7 +365,17 @@ async function showExceptions(args: ExceptionsArgs): Promise<void> {
 
   let result: ExceptionsResult;
   try {
-    result = JSON.parse(jsonOutput) as ExceptionsResult;
+    const parsed = JSON.parse(jsonOutput) as Omit<ExceptionsResult, 'declPos'>;
+    result = {
+      ...parsed,
+      declPos: {
+        filename: declFile,
+        start_line: declLine,
+        start_column: declCol,
+        end_line: declEndLine,
+        end_column: declEndCol,
+      },
+    };
   } catch {
     vscode.window.showErrorMessage(
       'Failed to parse clerk exceptions output as JSON.'
