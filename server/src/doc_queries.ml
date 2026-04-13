@@ -249,7 +249,7 @@ let lookup_lenses file =
     in
     [CodeLens.create ~command:run_command ~range ()]
   in
-  let mk_exception_lens scope var_name range =
+  let mk_exception_lens scope var_name range decl_pos =
     let arguments =
       [
         `Assoc
@@ -257,6 +257,11 @@ let lookup_lenses file =
             "uri", `String (main_doc_id :> string);
             "scope", `String (ScopeName.base scope);
             "variable", `String var_name;
+            "declFile", `String (Pos.get_file decl_pos :> string);
+            "declLine", `Int (Pos.get_start_line decl_pos);
+            "declCol", `Int (Pos.get_start_column decl_pos);
+            "declEndLine", `Int (Pos.get_end_line decl_pos);
+            "declEndCol", `Int (Pos.get_end_column decl_pos);
           ];
       ]
     in
@@ -310,7 +315,7 @@ let lookup_lenses file =
                       acc (* skip vars with no source position *)
                     else
                       mk_exception_lens scope_decl_name clerk_name
-                        (range_of_pos pos)
+                        (range_of_pos pos) pos
                       @ acc)
                 scope_sig acc
             | _ -> acc)
