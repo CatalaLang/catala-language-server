@@ -298,19 +298,20 @@ let lookup_lenses file =
                     acc (* input-only variables: skip *)
                   else
                     let raw_name = ScopeVar.to_string scope_var in
-                    if String.contains raw_name '#' then
-                      acc
-                      (* stateful variable (name = "var#state"): clerk
-                         exceptions doesn't correctly handle the dot notation
-                         for states yet, so skip for now *)
+                    let clerk_name =
+                      (* Scopelang encodes stateful variables as "var#state";
+                         clerk expects "var.state" *)
+                      match String.split_on_char '#' raw_name with
+                      | [var; state] -> var ^ "." ^ state
+                      | _ -> raw_name
+                    in
+                    let pos = Mark.get (ScopeVar.get_info scope_var) in
+                    if Pos.get_file pos = "" then
+                      acc (* skip vars with no source position *)
                     else
-                      let pos = Mark.get (ScopeVar.get_info scope_var) in
-                      if Pos.get_file pos = "" then
-                        acc (* skip vars with no source position *)
-                      else
-                        mk_exception_lens scope_decl_name raw_name
-                          (range_of_pos pos)
-                        @ acc)
+                      mk_exception_lens scope_decl_name clerk_name
+                        (range_of_pos pos)
+                      @ acc)
                 scope_sig acc
             | _ -> acc)
           vl acc)
