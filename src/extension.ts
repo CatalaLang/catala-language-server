@@ -181,6 +181,7 @@ type RulePos = {
   start_column: number;
   end_line: number;
   end_column: number;
+  law_heading?: string[];
 };
 type ExceptionRule = { pos: RulePos; condition_text?: string };
 type ExceptionNode = {
@@ -233,7 +234,12 @@ function renderExceptionNode(
     const cond = rule.condition_text
       ? ` [<span class="condition">${escapeHtml(rule.condition_text)}</span>]`
       : ` <span class="always">${escapeHtml(vscode.l10n.t('(always)'))}</span>`;
-    html += `\n${escapeHtml(childPfx + bar + ' ➤ ')}${posSpan}${cond}`;
+    const heading = rule.pos.law_heading;
+    const headingHtml =
+      heading && heading.length > 0
+        ? ` <span class="heading" title="${escapeHtml([...heading].reverse().join(' › '))}">${escapeHtml(heading[0])}</span>`
+        : '';
+    html += `\n${escapeHtml(childPfx + bar + ' ➤ ')}${posSpan}${headingHtml}${cond}`;
   }
 
   // Children with box-drawing connectors
@@ -291,6 +297,7 @@ function renderExceptionsWebview(
     .pos:hover { color: var(--vscode-textLink-activeForeground); }
     .condition { color: var(--vscode-symbolIcon-variableForeground, #9cdcfe); }
     .always { color: var(--vscode-descriptionForeground); font-style: italic; }
+    .heading { color: var(--vscode-descriptionForeground); font-style: italic; margin-left: 1ch; }
     .empty { color: var(--vscode-descriptionForeground); }
   </style>
 </head>
