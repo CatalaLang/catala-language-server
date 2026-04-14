@@ -79,10 +79,17 @@
       {
         "command": "catala.showExceptionsAtCursor",
         "title": "%command.catala.showExceptionsAtCursor.title%",
-        "category": "%category.catala%"
+        "category": "%category.catala%",
+        "enablement": "catala.cursorOnExceptionLens"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "catala.showExceptions",
+          "when": "false"
+        }
+      ],
       "explorer/context": [
         {
           "command": "catala.openWithTestEditor",
