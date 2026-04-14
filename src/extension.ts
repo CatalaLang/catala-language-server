@@ -607,6 +607,12 @@ export async function activate(
     )
   );
 
+  vscode.commands.executeCommand(
+    'setContext',
+    'catala.cursorOnExceptionLens',
+    false
+  );
+
   // Keep the context key catala.cursorOnExceptionLens in sync with the cursor
   // position so the editor/context menu entry only appears on relevant lines.
   let exceptionLensContextTimer: ReturnType<typeof setTimeout> | undefined;
