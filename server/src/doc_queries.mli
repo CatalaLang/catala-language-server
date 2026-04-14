@@ -57,3 +57,6 @@ val lookup_document_symbols :
   document_state -> Linol_lwt.SymbolInformation.t list
 
 val lookup_lenses : document_state -> Linol_lwt.CodeLens.t list option
+
+val exceptions_at :
+  document_state -> Linol_lwt.Position.t -> Yojson.Safe.t option

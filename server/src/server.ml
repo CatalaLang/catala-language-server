@@ -668,6 +668,40 @@ class catala_lsp_server =
         Lwt.return sstate
       | _ -> Lwt.return_unit
 
+    method private exceptions_at (params : Yojson.Safe.t option) :
+        Yojson.Safe.t Lwt.t =
+      let* () = server_initialized in
+      St.use_when_ready server_state
+      @@ fun { open_documents; _ } ->
+      Lwt.catch
+        (fun () ->
+          match params with
+          | None -> Lwt.return `Null
+          | Some json -> (
+            let uri =
+              Yojson.Safe.Util.(json |> member "uri" |> to_string)
+            in
+            let position_json = Yojson.Safe.Util.(json |> member "position") in
+            let line =
+              Yojson.Safe.Util.(position_json |> member "line" |> to_int)
+            in
+            let character =
+              Yojson.Safe.Util.(position_json |> member "character" |> to_int)
+            in
+            let doc_id = Doc_id.of_lsp_uri (Uri0.of_string uri) in
+            match Doc_id.Map.find_opt doc_id open_documents with
+            | None -> Lwt.return `Null
+            | Some doc ->
+              let pos =
+                Linol_lwt.Position.create ~line ~character
+              in
+              Lwt.return
+                (Option.value ~default:`Null (DQ.exceptions_at doc pos))))
+        (fun exn ->
+          Log.err (fun m ->
+              m "catala.exceptionsAt failed: %s" (Printexc.to_string exn));
+          Lwt.return `Null)
+
     method private list_entrypoints (params : Yojson.Safe.t option) :
         Yojson.Safe.t Lwt.t =
       let* () = server_initialized in
@@ -761,6 +795,9 @@ class catala_lsp_server =
         | WorkspaceSymbol _params -> Lwt.return_none
         | UnknownRequest { meth = "catala.listEntrypoints"; params } ->
           self#list_entrypoints
+            (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
+        | UnknownRequest { meth = "catala.exceptionsAt"; params } ->
+          self#exceptions_at
             (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
         | UnknownRequest { meth; _ } ->
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
