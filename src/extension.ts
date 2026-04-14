@@ -597,6 +597,50 @@ export async function activate(
     )
   );
 
+  // Keep the context key catala.cursorOnExceptionLens in sync with the cursor
+  // position so the editor/context menu entry only appears on relevant lines.
+  let exceptionLensContextTimer: ReturnType<typeof setTimeout> | undefined;
+  const updateExceptionLensContext = (editor: vscode.TextEditor): void => {
+    clearTimeout(exceptionLensContextTimer);
+    const langId = editor.document.languageId;
+    if (langId !== 'catala_fr' && langId !== 'catala_en') {
+      vscode.commands.executeCommand(
+        'setContext',
+        'catala.cursorOnExceptionLens',
+        false
+      );
+      return;
+    }
+    exceptionLensContextTimer = setTimeout(async () => {
+      const line = editor.selection.active.line;
+      const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>(
+        'vscode.executeCodeLensProvider',
+        editor.document.uri
+      );
+      const found =
+        lenses?.some(
+          (l) =>
+            l.command?.command === 'catala.showExceptions' &&
+            l.range.start.line <= line &&
+            l.range.end.line >= line
+        ) ?? false;
+      vscode.commands.executeCommand(
+        'setContext',
+        'catala.cursorOnExceptionLens',
+        found
+      );
+    }, 150);
+  };
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeTextEditorSelection((e) =>
+      updateExceptionLensContext(e.textEditor)
+    )
+  );
+  if (vscode.window.activeTextEditor) {
+    updateExceptionLensContext(vscode.window.activeTextEditor);
+  }
+
   // register_memoryFileProvider(context);
 
   context.subscriptions.push(
