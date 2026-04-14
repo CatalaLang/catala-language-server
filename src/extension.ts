@@ -231,14 +231,24 @@ function renderExceptionNode(
     const shortName = rule.pos.filename.replace(/.*\//, '');
     const posStr = `${shortName}:${rule.pos.start_line}:${rule.pos.start_column}`;
     const posSpan = `<span class="pos" ${posAttrs(rule.pos)}>${escapeHtml(posStr)}</span>`;
-    const cond = rule.condition_text
-      ? ` [<span class="condition">${escapeHtml(rule.condition_text)}</span>]`
-      : ` <span class="always">${escapeHtml(vscode.l10n.t('(always)'))}</span>`;
     const heading = rule.pos.law_heading;
     const headingHtml =
       heading && heading.length > 0
         ? ` <span class="heading" title="${escapeHtml([...heading].reverse().join(' › '))}">${escapeHtml(heading[0])}</span>`
         : '';
+    // Indent continuation lines of multi-line conditions so they stay inside
+    // the subtree rather than bleeding out to the left margin.
+    const condIndent = escapeHtml(childPfx + bar + '   ');
+    const cond = rule.condition_text
+      ? ` [${rule.condition_text
+          .split('\n')
+          .map(
+            (l, i) =>
+              (i === 0 ? '' : '\n' + condIndent) +
+              `<span class="condition">${escapeHtml(l)}</span>`
+          )
+          .join('')}]`
+      : ` <span class="always">${escapeHtml(vscode.l10n.t('(always)'))}</span>`;
     html += `\n${escapeHtml(childPfx + bar + ' ➤ ')}${posSpan}${headingHtml}${cond}`;
   }
 
