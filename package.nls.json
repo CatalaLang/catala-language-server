@@ -1,5 +1,8 @@
 {
   "command.catala.openWithTestEditor.title": "Open with Catala Test Editor",
+  "command.catala.showExceptions.title": "Show variable definitions and exceptions",
+  "command.catala.showExceptionsAtCursor.title": "Show definitions and exceptions",
+  "view.catala.exceptionsView.name": "Definitions and exceptions",
   "category.catala": "Catala",
   "customEditor.testCaseEditor.displayName": "Catala Test Case Editor"
 }

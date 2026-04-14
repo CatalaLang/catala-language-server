@@ -232,7 +232,7 @@ function renderExceptionNode(
     const posSpan = `<span class="pos" ${posAttrs(rule.pos)}>${escapeHtml(posStr)}</span>`;
     const cond = rule.condition_text
       ? ` [<span class="condition">${escapeHtml(rule.condition_text)}</span>]`
-      : ` <span class="always">(always)</span>`;
+      : ` <span class="always">${escapeHtml(vscode.l10n.t('(always)'))}</span>`;
     html += `\n${escapeHtml(childPfx + bar + ' ➤ ')}${posSpan}${cond}`;
   }
 
@@ -258,7 +258,7 @@ function renderExceptionsWebview(
 ): string {
   let treeContent: string;
   if (result.trees.length === 0) {
-    treeContent = '<span class="empty">No definitions found.</span>';
+    treeContent = `<span class="empty">${escapeHtml(vscode.l10n.t('No definitions found.'))}</span>`;
   } else if (result.is_condition) {
     // Condition-typed: show "(default: false)" as root, trees as children
     const lastIdx = result.trees.length - 1;
@@ -266,7 +266,8 @@ function renderExceptionsWebview(
       .map((t, i) => '\n' + renderExceptionNode(t, '', i === lastIdx, 1))
       .join('');
     treeContent =
-      `<span class="default-false">(default: false)</span>` + childrenHtml;
+      `<span class="default-false">${escapeHtml(vscode.l10n.t('(default: false)'))}</span>` +
+      childrenHtml;
   } else {
     // Non-condition: each tree separated by a blank line
     treeContent = result.trees
@@ -294,7 +295,7 @@ function renderExceptionsWebview(
   </style>
 </head>
 <body>
-  <h1>Definitions and exceptions for <code><span class="pos" ${posAttrs(result.declPos)}>${escapeHtml(result.variable)}</span></code> in scope <code>${escapeHtml(result.scope)}</code></h1>
+  <h1>${escapeHtml(vscode.l10n.t('Definitions and exceptions for'))} <code><span class="pos" ${posAttrs(result.declPos)}>${escapeHtml(result.variable)}</span></code> ${escapeHtml(vscode.l10n.t('in scope'))} <code>${escapeHtml(result.scope)}</code></h1>
   <pre>${treeContent}</pre>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -359,7 +360,9 @@ async function showExceptions(args: ExceptionsArgs): Promise<void> {
       proc.on('error', reject);
     });
   } catch (err) {
-    vscode.window.showErrorMessage(`clerk exceptions failed: ${err}`);
+    vscode.window.showErrorMessage(
+      vscode.l10n.t('clerk exceptions failed: {0}', String(err))
+    );
     return;
   }
 
@@ -378,7 +381,7 @@ async function showExceptions(args: ExceptionsArgs): Promise<void> {
     };
   } catch {
     vscode.window.showErrorMessage(
-      'Failed to parse clerk exceptions output as JSON.'
+      vscode.l10n.t('Failed to parse clerk exceptions output as JSON.')
     );
     return;
   }
@@ -387,6 +390,34 @@ async function showExceptions(args: ExceptionsArgs): Promise<void> {
 }
 
 vscode.commands.registerCommand('catala.showExceptions', showExceptions);
+
+async function showExceptionsAtCursor(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+  const uri = editor.document.uri;
+  const line = editor.selection.active.line;
+
+  const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>(
+    'vscode.executeCodeLensProvider',
+    uri
+  );
+  if (!lenses) return;
+
+  const lens = lenses.find(
+    (l) =>
+      l.command?.command === 'catala.showExceptions' &&
+      l.range.start.line <= line &&
+      l.range.end.line >= line
+  );
+  if (!lens?.command?.arguments?.[0]) return;
+
+  await showExceptions(lens.command.arguments[0] as ExceptionsArgs);
+}
+
+vscode.commands.registerCommand(
+  'catala.showExceptionsAtCursor',
+  showExceptionsAtCursor
+);
 
 type OpenMsg = {
   command: 'open';

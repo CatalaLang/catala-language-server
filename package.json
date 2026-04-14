@@ -17,6 +17,7 @@
     "vscode": "^1.86.0"
   },
   "main": "./dist/extension.js",
+  "l10n": "./l10n",
   "contributes": {
     "snippets": [
       {
@@ -42,7 +43,7 @@
         {
           "type": "webview",
           "id": "catala.exceptionsView",
-          "name": "Definitions and exceptions"
+          "name": "%view.catala.exceptionsView.name%"
         }
       ]
     },
@@ -73,7 +74,12 @@
       },
       {
         "command": "catala.showExceptions",
-        "title": "Show variable definitions and exceptions"
+        "title": "%command.catala.showExceptions.title%"
+      },
+      {
+        "command": "catala.showExceptionsAtCursor",
+        "title": "%command.catala.showExceptionsAtCursor.title%",
+        "category": "%category.catala%"
       }
     ],
     "menus": {
@@ -82,6 +88,13 @@
           "command": "catala.openWithTestEditor",
           "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(en|fr)$/",
           "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "catala.showExceptionsAtCursor",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "group": "navigation@1"
         }
       ],
       "editor/title": [
