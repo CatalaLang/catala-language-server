@@ -1,0 +1,9 @@
+{
+  "clerk exceptions failed: {0}": "clerk exceptions a échoué : {0}",
+  "Failed to parse clerk exceptions output as JSON.": "Impossible d'analyser la sortie de clerk exceptions comme JSON.",
+  "Definitions and exceptions for": "Définitions et exceptions pour",
+  "in scope": "dans le champ d'application",
+  "No definitions found.": "Aucune définition trouvée.",
+  "(default: false)": "(par défaut : faux)",
+  "(always)": "(toujours)"
+}
