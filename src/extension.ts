@@ -445,7 +445,7 @@ function handleOpenMsg(msg: OpenMsg, cwd: string): void {
       msg.line - 1,
       msg.col - 1,
       msg.endLine - 1,
-      msg.endCol
+      msg.endCol - 1
     ),
     preserveFocus: true,
   });
