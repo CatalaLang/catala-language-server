@@ -19,8 +19,12 @@ import {
 } from './shared/util_client';
 import type { RunArgs } from './shared/util_client';
 import { initTests } from './extension/testAndCoverage';
-import type { CatalaEntrypoint } from './extension/lspRequests';
-import { listEntrypoints } from './extension/lspRequests';
+import type { CatalaEntrypoint ,
+  ExceptionsArgs} from './extension/lspRequests';
+import {
+  listEntrypoints,
+  exceptionsAt
+} from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
 
 let client: LanguageClient;
@@ -164,16 +168,6 @@ async function debugScope(args: RunArgs | undefined): Promise<void> {
 }
 vscode.commands.registerCommand('catala.debug', debugScope);
 
-type ExceptionsArgs = {
-  uri: string;
-  scope: string;
-  variable: string;
-  declFile: string;
-  declLine: number;
-  declCol: number;
-  declEndLine: number;
-  declEndCol: number;
-};
 
 type RulePos = {
   filename: string;
@@ -411,24 +405,19 @@ vscode.commands.registerCommand('catala.showExceptions', showExceptions);
 async function showExceptionsAtCursor(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) return;
-  const uri = editor.document.uri;
-  const line = editor.selection.active.line;
-
-  const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>(
-    'vscode.executeCodeLensProvider',
-    uri
+  const args = await exceptionsAt(
+    client,
+    editor.document.uri,
+    editor.selection.active
   );
-  if (!lenses) return;
-
-  const lens = lenses.find(
-    (l) =>
-      l.command?.command === 'catala.showExceptions' &&
-      l.range.start.line <= line &&
-      l.range.end.line >= line
-  );
-  if (!lens?.command?.arguments?.[0]) return;
-
-  await showExceptions(lens.command.arguments[0] as ExceptionsArgs);
+  if (!args) {
+    vscode.window.setStatusBarMessage(
+      vscode.l10n.t('No scope variable at cursor position.'),
+      3000
+    );
+    return;
+  }
+  await showExceptions(args);
 }
 
 vscode.commands.registerCommand(
@@ -607,55 +596,6 @@ export async function activate(
     )
   );
 
-  vscode.commands.executeCommand(
-    'setContext',
-    'catala.cursorOnExceptionLens',
-    false
-  );
-
-  // Keep the context key catala.cursorOnExceptionLens in sync with the cursor
-  // position so the editor/context menu entry only appears on relevant lines.
-  let exceptionLensContextTimer: ReturnType<typeof setTimeout> | undefined;
-  const updateExceptionLensContext = (editor: vscode.TextEditor): void => {
-    clearTimeout(exceptionLensContextTimer);
-    const langId = editor.document.languageId;
-    if (langId !== 'catala_fr' && langId !== 'catala_en') {
-      vscode.commands.executeCommand(
-        'setContext',
-        'catala.cursorOnExceptionLens',
-        false
-      );
-      return;
-    }
-    exceptionLensContextTimer = setTimeout(async () => {
-      const line = editor.selection.active.line;
-      const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>(
-        'vscode.executeCodeLensProvider',
-        editor.document.uri
-      );
-      const found =
-        lenses?.some(
-          (l) =>
-            l.command?.command === 'catala.showExceptions' &&
-            l.range.start.line <= line &&
-            l.range.end.line >= line
-        ) ?? false;
-      vscode.commands.executeCommand(
-        'setContext',
-        'catala.cursorOnExceptionLens',
-        found
-      );
-    }, 150);
-  };
-
-  context.subscriptions.push(
-    vscode.window.onDidChangeTextEditorSelection((e) =>
-      updateExceptionLensContext(e.textEditor)
-    )
-  );
-  if (vscode.window.activeTextEditor) {
-    updateExceptionLensContext(vscode.window.activeTextEditor);
-  }
 
   // register_memoryFileProvider(context);
 

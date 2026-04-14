@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { LanguageClient } from 'vscode-languageclient/node';
+
 import type {
   Entrypoint,
   EntrypointParamKind,
@@ -47,4 +48,30 @@ export async function listEntrypoints(
     return cep;
   });
   return entrypoints;
+}
+
+export type ExceptionsArgs = {
+  uri: string;
+  scope: string;
+  variable: string;
+  declFile: string;
+  declLine: number;
+  declCol: number;
+  declEndLine: number;
+  declEndCol: number;
+};
+
+export async function exceptionsAt(
+  client: LanguageClient,
+  uri: vscode.Uri,
+  position: vscode.Position
+): Promise<ExceptionsArgs | null> {
+  const result = await client.sendRequest<ExceptionsArgs | null>(
+    'catala.exceptionsAt',
+    {
+      uri: uri.toString(),
+      position: { line: position.line, character: position.character },
+    }
+  );
+  return result ?? null;
 }

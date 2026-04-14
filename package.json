@@ -79,8 +79,7 @@
       {
         "command": "catala.showExceptionsAtCursor",
         "title": "%command.catala.showExceptionsAtCursor.title%",
-        "category": "%category.catala%",
-        "enablement": "catala.cursorOnExceptionLens"
+        "category": "%category.catala%"
       }
     ],
     "menus": {
@@ -100,7 +99,7 @@
       "editor/context": [
         {
           "command": "catala.showExceptionsAtCursor",
-          "when": "(editorLangId == catala_fr || editorLangId == catala_en) && catala.cursorOnExceptionLens",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en",
           "group": "navigation@1"
         }
       ],

@@ -5,5 +5,6 @@
   "in scope": "dans le champ d'application",
   "No definitions found.": "Aucune définition trouvée.",
   "(default: false)": "(par défaut : faux)",
-  "(always)": "(toujours)"
+  "(always)": "(toujours)",
+  "No scope variable at cursor position.": "Aucune variable de champ d'application à la position du curseur."
 }
