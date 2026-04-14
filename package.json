@@ -93,7 +93,7 @@
       "editor/context": [
         {
           "command": "catala.showExceptionsAtCursor",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "when": "(editorLangId == catala_fr || editorLangId == catala_en) && catala.cursorOnExceptionLens",
           "group": "navigation@1"
         }
       ],
