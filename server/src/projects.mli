@@ -17,13 +17,13 @@
 open Server_types
 
 module Scan_item : sig
-  type t = Clerk_scan.item
+  type t = Scan.item
 
-  val compare : Clerk_scan.item -> Clerk_scan.item -> int
-  val format : Format.formatter -> Clerk_scan.item -> unit
+  val compare : Scan.item -> Scan.item -> int
+  val format : Format.formatter -> Scan.item -> unit
 end
 
-module ScanItemFiles : Set.S with type elt = Clerk_scan.item
+module ScanItemFiles : Set.S with type elt = Scan.item
 module ModuleMap : Catala_utils.Map.S with type key = string
 
 module Project_graph : sig
@@ -31,7 +31,7 @@ module Project_graph : sig
 end
 
 type project_file = {
-  file : Clerk_scan.item;
+  file : Scan.item;
   including_files : ScanItemFiles.t;
   used_by : ScanItemFiles.t;
 }

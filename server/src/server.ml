@@ -344,7 +344,7 @@ let unlocked_process_file
       Projects.ScanItemFiles.choose_opt document.project_file.including_files
     with
     | None -> buffer_state = St.Saved, document_diagnostics
-    | Some { Clerk_scan.file_name; _ } ->
+    | Some { Scan.file_name; _ } ->
       (* If we are considering an included file, add an empty diag to other
          included file to reset their diagnostics. *)
       let included_files =

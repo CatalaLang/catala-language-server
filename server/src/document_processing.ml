@@ -235,7 +235,7 @@ let process
       Log.info (fun m ->
           m "found document included in files: %a" Utils.pp_string_list
             (S.elements including_files
-            |> List.map (fun { Clerk_scan.file_name; _ } -> file_name)));
+            |> List.map (fun { Scan.file_name; _ } -> file_name)));
       let including_file = S.choose including_files in
       if S.cardinal including_files > 1 then
         Log.info (fun m -> m "found multiple document inclusion");

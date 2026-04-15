@@ -29,6 +29,7 @@
   catala.driver
   catala.surface
   catala.clerk_lib
+  catala.clerk_utils
   ptime.clock.os
   uri
   re
@@ -38,7 +39,7 @@
  (preprocess
   (pps ppx_deriving_yojson ppx_here ppx_deriving.make))
  (flags
-  (:standard -open Clerk_lib -open Catala_types_atd)))
+  (:standard -open Clerk_lib -open Clerk_utils -open Catala_types_atd)))
 
 (alias
  (name lsp)
