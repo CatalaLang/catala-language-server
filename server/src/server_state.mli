@@ -20,6 +20,7 @@ open Server_types
 
 type valid_result = {
   surface : Surface.Ast.program;
+  desugared : Desugared.Ast.program;
   prg : typed Scopelang.Ast.program;
   used_modules : ModuleName.t File.Map.t;
   jump_table : Jump_table.t Lazy.t;

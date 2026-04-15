@@ -442,7 +442,8 @@ let module_type
 let typ_to_content ~markdown prg locale (kind : Jump_table.type_lookup) =
   match kind with
   | Type typ | Expr typ -> data_type ~markdown prg locale typ
-  | Scope (sn, scope_var_map) -> sig_type ~markdown locale sn scope_var_map
+  | Scope scope_decl ->
+    sig_type ~markdown locale scope_decl.scope_decl_name scope_decl.scope_sig
   | Module (itf, alias) -> module_type ~markdown prg locale ?alias itf
 
 let typ_to_markdown prg locale (kind : Jump_table.type_lookup) : MarkupContent.t

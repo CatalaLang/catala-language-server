@@ -189,10 +189,10 @@ let surface_to_scopelang
       Uid.Module.Map.map (fun elt -> fst elt) modules
     in
     let ctx, modules_contents = ctx, modules_content in
-    let prg =
+    let desugared =
       Desugared.From_surface.translate_program ctx modules_contents surface
     in
-    let prg = Desugared.Disambiguate.program prg in
+    let prg = Desugared.Disambiguate.program desugared in
     let () = Desugared.Linting.lint_program prg in
     let exceptions_graphs =
       Scopelang.From_desugared.build_exceptions_graph prg
@@ -212,8 +212,9 @@ let surface_to_scopelang
     | Error () ->
       Partial
         ( lsp_errors_to_diag doc_id (get_errors ()),
-          { surface; prg; used_modules; jump_table } )
-    | Ok () -> k { surface; prg; used_modules; jump_table })
+          { Server_state.surface; desugared; prg; used_modules; jump_table } )
+    | Ok () ->
+      k { Server_state.surface; desugared; prg; used_modules; jump_table })
 
 let process
     ~(resolve_file_content : string -> string Global.input_src)
