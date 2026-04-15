@@ -643,6 +643,17 @@ let evaluate_operator
                cons = Expr.some_constr;
                e = ETuple [e; EPos p, Expr.with_pos p m], m;
              }))
+    | ValueFromJson (((TAbstract tid, _) as ty), str), [(ELit LUnit, _)] ->
+      let module E = (val Type.lookup_external tid) in
+      let* v =
+        runtime_to_val ctx m ty
+          (Obj.repr
+             (Catala_runtime.Value.from_json E.rtype
+                (Expr.pos_to_runtime (Expr.mark_pos m))
+                str))
+      in
+      Lwt.return (Mark.remove v)
+    | ValueFromJson _, _ -> failwith "todo"
     | ( ( Minus_int | Minus_rat | Minus_mon | Minus_dur | ToInt_rat | ToInt_mon
         | ToRat_int | ToRat_mon | ToMoney_rat | ToMoney_int | Round_rat
         | Round_mon | Add_int_int | Add_rat_rat | Add_mon_mon | Add_dat_dur _
@@ -792,8 +803,7 @@ let rec evaluate_expr_with_env : type d r.
           Print.external_ref name
     in
     let runtime_modname =
-      ( List.map ModuleName.to_string
-          (Option.to_list (Uid.Path.last_member path)),
+      ( ModuleName.to_string (Option.get (Uid.Path.last_member path)),
         match Mark.remove name with
         | External_value name -> TopdefName.base name
         | External_scope name -> ScopeName.base name )
