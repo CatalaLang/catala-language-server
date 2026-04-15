@@ -159,7 +159,7 @@ let lookup_type_declaration f p =
     Some (of_position pos)
   | Module ({ Surface.Ast.module_modname = itf; _ }, _) ->
     Some (of_position @@ Mark.get itf.module_name)
-  | Scope (scope_decl_name, _) ->
+  | Scope { scope_decl_name; _ } ->
     Some (of_position @@ Mark.get (ScopeName.get_info scope_decl_name))
   | Expr _ | Type _ -> None
 
@@ -202,37 +202,51 @@ let lookup_document_symbols file =
     jt.variables []
 
 let is_output_or_context_var = function
-  | {
-      Scopelang.Ast.svar_io = { io_input = (NoInput | Reentrant), _; _ };
-      _;
-    } ->
+  | { Scopelang.Ast.svar_io = { io_input = (NoInput | Reentrant), _; _ }; _ } ->
     true
   | _ -> false
 
 (* Returns (scope_name, clerk_var_name, decl_pos) for a scope variable that is
    eligible for an exception codelens/args, or None if it should be skipped. *)
-let scope_var_exception_info ~scope_decl_name ~scope_sig ~scope_sub_scopes
+let scope_var_exception_info
+    desugared
+    (scope_decl : typed Scopelang.Ast.scope_decl)
     scope_var =
-  let var_ty = ScopeVar.Map.find scope_var scope_sig in
-  if ScopeVar.Set.mem scope_var scope_sub_scopes then None
+  let var_ty = ScopeVar.Map.find scope_var scope_decl.scope_sig in
+  let*? is_sub_scope_var =
+    let scope_var_s = ScopeVar.to_string scope_var in
+    ScopeName.Map.find_opt scope_decl.scope_decl_name
+      desugared.Desugared.Ast.program_root.module_scopes
+    |> function
+    | None -> None
+    | Some scope ->
+      let sub_scope_vars = ScopeVar.Map.keys scope.scope_sub_scopes in
+      Some
+        (List.exists
+           (fun v -> ScopeVar.to_string v = scope_var_s)
+           sub_scope_vars)
+  in
+  if is_sub_scope_var then None
   else if not (is_output_or_context_var var_ty) then None
   else
     let raw_name = ScopeVar.to_string scope_var in
     let clerk_name =
-      (* Scopelang encodes stateful variables as "var#state";
-         clerk expects "var.state" *)
+      (* Scopelang encodes stateful variables as "var#state"; clerk expects
+         "var.state" *)
       match String.split_on_char '#' raw_name with
       | [v; s] -> v ^ "." ^ s
       | _ -> raw_name
     in
     let decl_pos = Mark.get (ScopeVar.get_info scope_var) in
     if Pos.get_file decl_pos = "" then None
-    else Some (scope_decl_name, clerk_name, decl_pos)
+    else Some (scope_decl.scope_decl_name, clerk_name, decl_pos)
 
-let exception_args_json (main_doc_id : string) (scope_decl_name, clerk_name, decl_pos) =
+let exception_args_json
+    (doc_id : Doc_id.t)
+    (scope_decl_name, clerk_name, decl_pos) =
   `Assoc
     [
-      "uri", `String (main_doc_id :> string);
+      "uri", `String (doc_id :> string);
       "scope", `String (ScopeName.base scope_decl_name);
       "variable", `String clerk_name;
       "declFile", `String (Pos.get_file decl_pos :> string);
@@ -243,13 +257,14 @@ let exception_args_json (main_doc_id : string) (scope_decl_name, clerk_name, dec
     ]
 
 let lookup_lenses file =
-  let*? { jump_table = (lazy jt); _ } = file.last_valid_result in
+  let*? { jump_table = (lazy jt); desugared; _ } = file.last_valid_result in
+  (* we consider only the including file's document id if the document is
+     included. *)
   let main_doc_id =
-    match Projects.including_files file.document_id file.project with
-    | [] -> file.document_id
-    | h :: _ ->
-      (* We only consider the first one *)
-      h
+    let doc_id = file.document_id in
+    if Projects.is_an_included_file doc_id file.project then
+      List.hd (Projects.including_files doc_id file.project)
+    else doc_id
   in
   let mk_no_input_lens scope range =
     let arguments =
@@ -291,7 +306,7 @@ let lookup_lenses file =
     [CodeLens.create ~command:run_command ~range ()]
   in
   let mk_exception_lens info range =
-    let arguments = [exception_args_json (main_doc_id :> string) info] in
+    let arguments = [exception_args_json main_doc_id info] in
     let open Linol_lwt in
     let command =
       Command.create ~arguments ~command:"catala.showExceptions"
@@ -305,7 +320,10 @@ let lookup_lenses file =
         Jump_table.PMap.DS.fold
           (fun var acc ->
             match var with
-            | Scope_decl { scope_decl_name; scope_sig; scope_sub_scopes; _ } ->
+            | Scope_decl { scope_decl; _ } ->
+              let { Scopelang.Ast.scope_decl_name; scope_sig; _ } =
+                scope_decl
+              in
               let acc =
                 if
                   ScopeVar.Map.for_all
@@ -317,8 +335,7 @@ let lookup_lenses file =
               ScopeVar.Map.fold
                 (fun scope_var _var_ty acc ->
                   match
-                    scope_var_exception_info ~scope_decl_name ~scope_sig
-                      ~scope_sub_scopes scope_var
+                    scope_var_exception_info desugared scope_decl scope_var
                   with
                   | None -> acc
                   | Some info ->
@@ -333,59 +350,45 @@ let lookup_lenses file =
 
 let exceptions_at (file : document_state) (p : Linol_lwt.Position.t) :
     Yojson.Safe.t option =
-  let*? { jump_table = (lazy jt); _ } = file.last_valid_result in
-  let main_doc_id =
-    match Projects.including_files file.document_id file.project with
-    | [] -> file.document_id
-    | h :: _ -> h
+  let*? { jump_table = (lazy jt); desugared; prg; _ } =
+    file.last_valid_result
   in
-  let p_catala =
-    Utils.(lsp_range p p |> pos_of_range (file.document_id :> File.t))
+  let doc_id = file.document_id in
+  let p = Utils.(lsp_range p p |> pos_of_range (file.document_id :> File.t)) in
+  let open Jump_table in
+  let*? l : PMap.DS.t = PMap.lookup p jt.variables in
+  let x =
+    PMap.DS.elements l
+    |> List.filter_map (function
+      | Usage jump | Declaration jump | Definition jump -> Some jump
+      | _ -> None)
   in
-  let vars = Jump_table.PMap.lookup p_catala jt.Jump_table.variables in
-  let hashes =
-    match vars with
-    | None -> []
-    | Some var_set ->
-      Jump_table.PMap.DS.fold
-        (fun var acc ->
-          match var with
-          | Jump_table.Declaration { hash; _ }
-          | Jump_table.Definition { hash; _ }
-          | Jump_table.Usage { hash; _ } ->
-            hash :: acc
-          | _ -> acc)
-        var_set []
-  in
-  if hashes = [] then None
-  else
-    (* Scan all Scope_decl entries across all files to find the scope that owns
-       a variable matching one of the hashes. *)
-    Jump_table.PMap.fold
-      (fun _pos var_set result ->
-        if Option.is_some result then result
-        else
-          Jump_table.PMap.DS.fold
-            (fun var result ->
-              match result, var with
-              | Some _, _ -> result
-              | ( None,
-                  Jump_table.Scope_decl
-                    { scope_decl_name; scope_sig; scope_sub_scopes; _ } ) ->
-                ScopeVar.Map.fold
-                  (fun scope_var _var_ty result ->
-                    match result with
-                    | Some _ -> result
-                    | None ->
-                      let hash =
-                        Jump_table.hash_info (module ScopeVar) scope_var
-                      in
-                      if not (List.mem hash hashes) then None
-                      else
-                        scope_var_exception_info ~scope_decl_name ~scope_sig
-                          ~scope_sub_scopes scope_var
-                        |> Option.map (exception_args_json (main_doc_id :> string)))
-                  scope_sig result
-              | None, _ -> result)
-            var_set result)
-      jt.Jump_table.variables None
+  match x with
+  | [] | _ :: _ :: _ -> None
+  | [{ hash = _; name = _; typ = _; id }] ->
+    let*? id = id in
+    let prg_scopes :
+        (ScopeName.t * typed Scopelang.Ast.scope_decl Mark.pos) list =
+      prg.program_scopes |> ScopeName.Map.bindings
+    in
+    let*? scope_decl, scope_var =
+      List.find_map
+        (fun (_scope_name, (({ Scopelang.Ast.scope_sig; _ } as scope_decl), _))
+           ->
+          let all_vars = ScopeVar.Map.bindings scope_sig in
+          List.find_map
+            (fun (scope_var, _) ->
+              if ScopeVar.id scope_var = id then Some (scope_decl, scope_var)
+              else None)
+            all_vars)
+        prg_scopes
+    in
+    let*? exceptions_args =
+      scope_var_exception_info desugared scope_decl scope_var
+    in
+    let main_doc_id =
+      if Projects.is_an_included_file doc_id file.project then
+        List.hd (Projects.including_files doc_id file.project)
+      else doc_id
+    in
+    Some (exception_args_json main_doc_id exceptions_args)

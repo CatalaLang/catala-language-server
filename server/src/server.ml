@@ -678,9 +678,7 @@ class catala_lsp_server =
           match params with
           | None -> Lwt.return `Null
           | Some json -> (
-            let uri =
-              Yojson.Safe.Util.(json |> member "uri" |> to_string)
-            in
+            let uri = Yojson.Safe.Util.(json |> member "uri" |> to_string) in
             let position_json = Yojson.Safe.Util.(json |> member "position") in
             let line =
               Yojson.Safe.Util.(position_json |> member "line" |> to_int)
@@ -692,9 +690,7 @@ class catala_lsp_server =
             match Doc_id.Map.find_opt doc_id open_documents with
             | None -> Lwt.return `Null
             | Some doc ->
-              let pos =
-                Linol_lwt.Position.create ~line ~character
-              in
+              let pos = Linol_lwt.Position.create ~line ~character in
               Lwt.return
                 (Option.value ~default:`Null (DQ.exceptions_at doc pos))))
         (fun exn ->

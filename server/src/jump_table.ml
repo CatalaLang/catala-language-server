@@ -70,16 +70,12 @@ let pp_qname
 let empty_lookup =
   { declaration = None; definitions = None; usages = None; types = None }
 
-type jump = { hash : int; name : string; typ : typ }
+type jump = { hash : int; name : string; typ : typ; id : int option }
 
 type sjump = {
   hash : int;
   name : string;
-  scope_decl_name : ScopeName.t;
-  scope_sig : scope_var_ty ScopeVar.Map.t;
-  scope_sub_scopes : ScopeVar.Set.t;
-  (** Variables in scope_sig whose type is a scope output struct (i.e., subscope
-      call variables). These should be excluded from exception codelenses. *)
+  scope_decl : typed Scopelang.Ast.scope_decl;
 }
 
 type mjump = {
@@ -202,7 +198,7 @@ let populate_struct_def (tctx : traversal_ctxt) name fields m k =
         let pos_decl = Mark.get (StructName.get_info struct_decl) in
         Mark.add pos_decl (TStruct struct_decl)
       in
-      let jump = { hash; name; typ } in
+      let jump = { hash; name; typ; id = None } in
       PMap.add_all struct_pos [Usage jump; Type jump] m
     in
     (* Add a reference for all fields *)
@@ -220,7 +216,7 @@ let populate_struct_def (tctx : traversal_ctxt) name fields m k =
           let name = StructField.to_string sfield in
           let _, pos = StructField.get_info sfield in
           let hash = hash_info (module StructField) decl_field in
-          let var = Definition { name; hash; typ } in
+          let var = Definition { name; hash; typ; id = None } in
           let m = PMap.add pos var m in
           k e m)
       fields m
@@ -254,7 +250,7 @@ let populate_enum_inject
       let name = EnumName.to_string enum_name in
       let pos = Mark.get (EnumName.get_info enum_name) in
       let hash = Hashtbl.hash (EnumName.get_info enum_decl) in
-      let jump = { name; hash; typ } in
+      let jump = { name; hash; typ; id = None } in
       PMap.(add pos (Usage jump) m |> add pos (Type jump))
     in
     (* Add enum's constructor reference *)
@@ -265,7 +261,7 @@ let populate_enum_inject
     | Some (enum_constr_decl, _typ) ->
       let name = EnumConstructor.to_string cons in
       let hash = hash_info (module EnumConstructor) enum_constr_decl in
-      let var = Usage { name; hash; typ } in
+      let var = Usage { name; hash; typ; id = None } in
       let pos = Mark.get (EnumConstructor.get_info cons) in
       PMap.add pos var m)
 
@@ -299,7 +295,7 @@ let populate_scopecall (tctx : traversal_ctxt) pos scope args acc f =
         | Some (_, t) -> t.Desugared.Name_resolution.var_sig_typ
       in
       let hash = hash_info (module ScopeVar) scope_var in
-      let var = Definition { name; hash; typ } in
+      let var = Definition { name; hash; typ; id = None } in
       let acc = PMap.add def_pos var acc in
       f e acc)
     args acc
@@ -323,7 +319,7 @@ let rec traverse_typ (tctx : traversal_ctxt) ((typ, pos) : naked_typ * Pos.t) m
       in
       let name = StructName.to_string struct_name in
       let hash = Hashtbl.hash (StructName.get_info struct_name) in
-      let jump = { name; hash; typ = typ, pos } in
+      let jump = { name; hash; typ = typ, pos; id = None } in
       let m = PMap.add pos (Type jump) m in
       PMap.add pos (Usage jump) m
     | Some scope_name -> begin
@@ -347,7 +343,7 @@ let rec traverse_typ (tctx : traversal_ctxt) ((typ, pos) : naked_typ * Pos.t) m
     in
     let name = EnumName.to_string enum_name in
     let hash = Hashtbl.hash (EnumName.get_info enum_name) in
-    let jump = { name; hash; typ = typ, pos } in
+    let jump = { name; hash; typ = typ, pos; id = None } in
     let m = PMap.add pos (Type jump) m in
     PMap.add pos (Usage jump) m
   | TArrow (tl, t) -> List.fold_right (traverse_typ tctx) (t :: tl) m
@@ -377,7 +373,7 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
       let (scope_var : ScopeVar.t), pos = name in
       let name = ScopeVar.to_string scope_var in
       let hash = hash_info (module ScopeVar) scope_var in
-      let var = Usage { name; hash; typ } in
+      let var = Usage { name; hash; typ; id = None } in
       PMap.add pos var acc
     | ELocation (ToplevelVar { name; _ }) ->
       let (topdef_var : TopdefName.t), _ = name in
@@ -392,13 +388,13 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
       in
       let name = TopdefName.to_string topdef_var in
       let hash = Hashtbl.hash (TopdefName.get_info topdef_var) in
-      let var = Usage { name; hash; typ } in
+      let var = Usage { name; hash; typ; id = None } in
       PMap.add pos var acc
     | EStructAccess { name = _; e = sub_expr; field } ->
       let name = StructField.to_string field in
       let (Typed { pos = _; ty = _ }) = Mark.get sub_expr in
       let hash = hash_info (module StructField) field in
-      let var = Usage { name; hash; typ } in
+      let var = Usage { name; hash; typ; id = None } in
       let acc = PMap.add pos var acc in
       f bnd_ctx sub_expr acc
     | EStruct { name; fields } ->
@@ -421,15 +417,15 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
               Bindlib.name_of var ^ string_of_int (Bindlib.uid_of var)
             in
             let hash = Hashtbl.hash name in
-            let var = Definition { name; hash; typ } in
+            let var = Definition { name; hash; typ; id = None } in
             PMap.add pos var acc)
           acc xs_info
       in
       f bnd_ctx body acc
     | EVar var ->
-      let name = Bindlib.name_of var ^ string_of_int (Bindlib.uid_of var) in
+      let name = Bindlib.name_of var in
       let hash = Hashtbl.hash name in
-      let var = Usage { name; hash; typ } in
+      let var = Usage { name; hash; typ; id = Some (Bindlib.uid_of var) } in
       PMap.add pos var acc
     | EMatch { name = _; e; cases } ->
       let acc = f bnd_ctx e acc in
@@ -437,7 +433,7 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
         (fun constr e acc ->
           let name = EnumConstructor.to_string constr in
           let hash = hash_info (module EnumConstructor) constr in
-          let var = Usage { name; hash; typ } in
+          let var = Usage { name; hash; typ; id = None } in
           PMap.add pos var acc |> f bnd_ctx e)
         cases acc
     | EScopeCall { scope; args } ->
@@ -456,7 +452,12 @@ let traverse_scope_def tctx (rule : typed rule) m : PMap.pmap =
     let var, pos_l = var in
     let name = ScopeVar.to_string var in
     let hash = hash_info (module ScopeVar) var in
-    let var = Definition { name; hash; typ } in
+    let id =
+      match rule with
+      | ScopeVarDefinition _ -> Some (ScopeVar.id var)
+      | _ -> None
+    in
+    let var = Definition { name; hash; typ; id } in
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
     let m = traverse_typ tctx typ m in
     traverse_expr tctx e m
@@ -470,7 +471,15 @@ let traverse_scope_sig tctx (scope : _ scope_decl) m : PMap.pmap =
       let name = ScopeVar.to_string scope_var in
       let pos = Mark.get (ScopeVar.get_info scope_var) in
       let hash = hash_info (module ScopeVar) scope_var in
-      let var = Declaration { name; hash; typ = var_ty.svar_out_ty } in
+      let var =
+        Declaration
+          {
+            name;
+            hash;
+            typ = var_ty.svar_out_ty;
+            id = Some (ScopeVar.id scope_var);
+          }
+      in
       PMap.add pos var m)
     scope.scope_sig m
 
@@ -486,7 +495,7 @@ let traverse_topdef
   let name = TopdefName.to_string topdef in
   let topdef_pos = snd (TopdefName.get_info topdef) in
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
-  let topdef = Topdef { name; hash; typ } in
+  let topdef = Topdef { name; hash; typ; id = None } in
   let m = PMap.add topdef_pos topdef m in
   let m = traverse_typ tctx typ m in
   traverse_expr tctx e m
@@ -500,7 +509,8 @@ let traverse_ctx (tctx : traversal_ctxt) m : PMap.pmap =
         let hash = Hashtbl.hash (StructName.get_info struct_name) in
         let m =
           PMap.add pos
-            (Declaration { name; hash; typ = TStruct struct_name, pos })
+            (Declaration
+               { name; hash; typ = TStruct struct_name, pos; id = None })
             m
         in
         StructField.Map.fold
@@ -509,7 +519,7 @@ let traverse_ctx (tctx : traversal_ctxt) m : PMap.pmap =
             let name = StructField.to_string sf in
             let pos = Mark.get (StructField.get_info sf) in
             let hash = hash_info (module StructField) sf in
-            let var = Declaration { name; hash; typ } in
+            let var = Declaration { name; hash; typ; id = None } in
             PMap.add pos var m)
           fields m)
       tctx.ctx.structs m
@@ -521,14 +531,18 @@ let traverse_ctx (tctx : traversal_ctxt) m : PMap.pmap =
         let pos = Mark.get (EnumName.get_info enum_name) in
         let hash = Hashtbl.hash (EnumName.get_info enum_name) in
         let enum_type = TEnum enum_name, pos in
-        let m = PMap.add pos (Declaration { name; hash; typ = enum_type }) m in
+        let m =
+          PMap.add pos
+            (Declaration { name; hash; typ = enum_type; id = None })
+            m
+        in
         EnumConstructor.Map.fold
           (fun ecstr typ m ->
             let m = traverse_typ tctx typ m in
             let name = EnumConstructor.to_string ecstr in
             let pos = Mark.get (EnumConstructor.get_info ecstr) in
             let hash = hash_info (module EnumConstructor) ecstr in
-            let var = Declaration { name; hash; typ = enum_type } in
+            let var = Declaration { name; hash; typ = enum_type; id = None } in
             PMap.add pos var m)
           cstrs m)
       tctx.ctx.enums m
@@ -547,32 +561,14 @@ let traverse
     ScopeName.Map.fold
       (fun scope_name scope_context m ->
         StructName.Map.add
-          scope_context.Desugared.Name_resolution.scope_out_struct scope_name
-          m)
+          scope_context.Desugared.Name_resolution.scope_out_struct scope_name m)
       ctx.scopes StructName.Map.empty
   in
   let add_scope_lookup (scope_decl : _ scope_decl) map =
     let scope_decl_name = scope_decl.scope_decl_name in
     let ((name, _pos) as info) = ScopeName.get_info scope_decl_name in
     let hash = Hashtbl.hash info in
-    let scope_sub_scopes =
-      ScopeVar.Map.fold
-        (fun scope_var var_ty acc ->
-          match Mark.remove var_ty.svar_out_ty with
-          | TStruct sname when StructName.Map.mem sname scope_structs ->
-            ScopeVar.Set.add scope_var acc
-          | _ -> acc)
-        scope_decl.scope_sig ScopeVar.Set.empty
-    in
-    let sjump : sjump =
-      {
-        name;
-        hash;
-        scope_decl_name;
-        scope_sig = scope_decl.scope_sig;
-        scope_sub_scopes;
-      }
-    in
+    let sjump : sjump = { name; hash; scope_decl } in
     ScopeName.Map.add scope_decl_name sjump map
   in
   let scope_lookup : sjump ScopeName.Map.t =
@@ -811,7 +807,7 @@ let lookup (tables : t) (p : Pos.t) : lookup_entry list =
 type type_lookup =
   | Expr of typ
   | Type of typ
-  | Scope of (ScopeName.t * Scopelang.Ast.scope_var_ty ScopeVar.Map.t)
+  | Scope of typed Scopelang.Ast.scope_decl
   | Module of (Surface.Ast.module_content * string option)
 
 module Ord_lookup = Set.Make (struct
@@ -837,10 +833,10 @@ let lookup_type (tables : t) (p : Pos.t) :
     | Topdef j | Definition j | Declaration j | Usage j -> Expr j.typ
     | Type j -> Type j.typ
     | Literal typ -> Expr typ
-    | Scope_use { scope_decl_name; scope_sig; _ }
-    | Scope_def { scope_decl_name; scope_sig; _ }
-    | Scope_decl { scope_decl_name; scope_sig; _ } ->
-      Scope (scope_decl_name, scope_sig)
+    | Scope_use { scope_decl; _ }
+    | Scope_def { scope_decl; _ }
+    | Scope_decl { scope_decl; _ } ->
+      Scope scope_decl
     | Module_use { mcontent; alias; _ }
     | Module_decl { mcontent; alias; _ }
     | Module_def { mcontent; alias; _ } ->
