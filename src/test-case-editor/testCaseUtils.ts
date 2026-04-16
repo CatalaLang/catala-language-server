@@ -1,6 +1,5 @@
 import type { Test, TestList, RuntimeValue } from '../generated/catala_types';
 import { isAtomicRaw } from '../diff/diff';
-import { getLocalizedMessages } from '../i18n/messages';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -42,15 +41,14 @@ function rename(testNames: Set<string>, newTestName: string): string {
  * Note: this function only handles basic atomic values and doesn't
  * properly format complex types.
  */
-export function renderAtomicValue(value: RuntimeValue): string {
+export function renderAtomicValue(
+  value: RuntimeValue,
+  formatBool: (b: boolean) => string = (b) => (b ? 'true' : 'false')
+): string {
   const raw = value.value;
   switch (raw.kind) {
-    case 'Bool': {
-      const lang = typeof navigator !== 'undefined' ? navigator.language : 'en';
-      const msgs = getLocalizedMessages(lang);
-      const key = raw.value ? 'true' : 'false';
-      return msgs[key];
-    }
+    case 'Bool':
+      return formatBool(raw.value);
     case 'Integer':
       return raw.value.toString();
     case 'Decimal':
@@ -74,7 +72,7 @@ export function renderAtomicValue(value: RuntimeValue): string {
       ) {
         return `${raw.value[1][0]}`;
       } else {
-        return `${raw.value[1][0]} ➡ ${renderAtomicValue(raw.value[1][1].value)}  `;
+        return `${raw.value[1][0]} ➡ ${renderAtomicValue(raw.value[1][1].value, formatBool)}  `;
       }
     // Complex types just get a placeholder or name
     case 'Struct':

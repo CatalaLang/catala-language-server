@@ -6,5 +6,14 @@
   "No definitions found.": "Aucune définition trouvée.",
   "(default: false)": "(par défaut : faux)",
   "(always)": "(toujours)",
-  "No scope variable at cursor position.": "Aucune variable de champ d'application à la position du curseur."
+  "No scope variable at cursor position.": "Aucune variable de champ d'application à la position du curseur.",
+  "Replace expected outputs with test run results. Are you sure?": "Remplacer les sorties attendues par le résultat de l'exécution du test ?",
+  "Replace": "Remplacer",
+  "Delete this element?": "Supprimer cet élément ?",
+  "Delete this assertion?": "Supprimer cette assertion ?",
+  "Delete": "Supprimer",
+  "Run anyway": "Lancer quand même",
+  "This test contains one or more unset or invalid values. The run will likely fail. Do you want to run it anyway?": "Ce test contient une ou plusieurs valeurs non définies ou invalides. L'exécution échouera probablement. Voulez-vous quand même lancer le test ?",
+  "Remove the override for this context variable? The current value will be lost.": "Supprimer la redéfinition de cette variable de contexte ? La valeur actuelle sera perdue.",
+  "Reset": "Réinitialiser"
 }
