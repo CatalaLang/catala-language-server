@@ -360,7 +360,9 @@ let exceptions_at (file : document_state) (p : Linol_lwt.Position.t) :
   let x =
     PMap.DS.elements l
     |> List.filter_map (function
-      | Usage jump | Declaration jump | Definition jump -> Some jump
+      | Usage ({ id = Some _; _ } as jump)
+      | Declaration ({ id = Some _; _ } as jump)
+      | Definition ({ id = Some _; _ } as jump) -> Some jump
       | _ -> None)
   in
   match x with
