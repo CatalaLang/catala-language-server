@@ -12,7 +12,7 @@ export type RulePos = {
   start_column: number;
   end_line: number;
   end_column: number;
-  law_heading?: string[];
+  law_headings?: string[];
 };
 export type ExceptionRule = { pos: RulePos; condition_text?: string };
 export type ExceptionNode = {
@@ -71,10 +71,10 @@ function renderExceptionNode(
     const shortName = rule.pos.filename.replace(/.*\//, '');
     const posStr = `${shortName}:${rule.pos.start_line}:${rule.pos.start_column}`;
     const posSpan = `<span class="pos" ${posAttrs(rule.pos)}>${escapeHtml(posStr)}</span>`;
-    const heading = rule.pos.law_heading;
+    const heading = rule.pos.law_headings;
     const headingHtml =
       heading && heading.length > 0
-        ? ` <span class="heading" title="${escapeHtml([...heading].reverse().join(' › '))}">${escapeHtml(heading[0])}</span>`
+        ? ` <span class="heading" title="${escapeHtml(heading.join(' › '))}">${escapeHtml(heading[heading.length - 1])}</span>`
         : '';
     // Condition starts on its own line; continuation lines align after '['.
     const condPrefix = escapeHtml(childPfx + bar + '   ');
