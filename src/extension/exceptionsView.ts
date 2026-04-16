@@ -76,18 +76,17 @@ function renderExceptionNode(
       heading && heading.length > 0
         ? ` <span class="heading" title="${escapeHtml([...heading].reverse().join(' › '))}">${escapeHtml(heading[0])}</span>`
         : '';
-    // Indent continuation lines of multi-line conditions so they stay inside
-    // the subtree rather than bleeding out to the left margin.
-    const condIndent = escapeHtml(childPfx + bar + '   ');
+    // Condition starts on its own line; continuation lines align after '['.
+    const condPrefix = escapeHtml(childPfx + bar + '   ');
     const cond = rule.condition_text
-      ? ` [${rule.condition_text
+      ? '\n' +
+        condPrefix +
+        '[' +
+        rule.condition_text
           .split('\n')
-          .map(
-            (l, i) =>
-              (i === 0 ? '' : '\n' + condIndent) +
-              `<span class="condition">${escapeHtml(l)}</span>`
-          )
-          .join('')}]`
+          .map((l) => `<span class="condition">${escapeHtml(l)}</span>`)
+          .join('\n' + condPrefix + ' ') +
+        ']'
       : ` <span class="always">${escapeHtml(vscode.l10n.t('(always)'))}</span>`;
     html += `\n${escapeHtml(childPfx + bar + ' ➤ ')}${posSpan}${headingHtml}${cond}`;
   }
