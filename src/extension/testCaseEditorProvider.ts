@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
 import { assertUnreachable } from '../shared/util';
-import { getLocalizedMessages } from '../i18n/messages';
 
 import type {
   ParseResults,
@@ -212,12 +211,12 @@ export class TestCaseEditorProvider
 
           const { scope, reset_outputs } = typed_msg.value;
           if (reset_outputs) {
-            const messages = getLocalizedMessages(vscode.env.language);
-
             const confirmation = await vscode.window.showInformationMessage(
-              messages.resetOutputsConfirmation,
+              vscode.l10n.t(
+                'Replace expected outputs with test run results. Are you sure?'
+              ),
               { modal: true },
-              { title: messages.resetButton, action: 'Reset' }
+              { title: vscode.l10n.t('Replace'), action: 'Reset' }
             );
 
             if (confirmation?.action !== 'Reset') {
@@ -398,7 +397,6 @@ export class TestCaseEditorProvider
         }
         case 'ConfirmRequest': {
           const { id, action } = typed_msg.value;
-          const messages = getLocalizedMessages(vscode.env.language);
 
           let prompt: string;
           let buttons: Array<{
@@ -409,26 +407,30 @@ export class TestCaseEditorProvider
 
           switch (action.kind) {
             case 'DeleteArrayElement':
-              prompt = messages.deleteArrayElementConfirmation;
-              buttons = [{ title: messages.deleteButton, action: 'Delete' }];
+              prompt = vscode.l10n.t('Delete this element?');
+              buttons = [{ title: vscode.l10n.t('Delete'), action: 'Delete' }];
               successAction = 'Delete';
               break;
             case 'DeleteAssertion':
-              prompt = messages.deleteAssertionConfirmation;
-              buttons = [{ title: messages.deleteButton, action: 'Delete' }];
+              prompt = vscode.l10n.t('Delete this assertion?');
+              buttons = [{ title: vscode.l10n.t('Delete'), action: 'Delete' }];
               successAction = 'Delete';
               break;
             case 'RunTestWithUnsetValues':
-              prompt = messages.unsetValuesRunConfirm;
+              prompt = vscode.l10n.t(
+                'This test contains one or more unset or invalid values. The run will likely fail. Do you want to run it anyway?'
+              );
               buttons = [
-                { title: messages.runAnywayButton, action: 'RunAnyway' },
+                { title: vscode.l10n.t('Run anyway'), action: 'RunAnyway' },
               ];
               successAction = 'RunAnyway';
               break;
             case 'ResetContextVar':
-              prompt = messages.resetContextVarConfirmation;
+              prompt = vscode.l10n.t(
+                'Remove the override for this context variable? The current value will be lost.'
+              );
               buttons = [
-                { title: messages.resetContextVarButton, action: 'Reset' },
+                { title: vscode.l10n.t('Reset'), action: 'Reset' },
               ];
               successAction = 'Reset';
               break;

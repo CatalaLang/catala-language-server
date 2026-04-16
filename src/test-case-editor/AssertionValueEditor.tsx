@@ -1,5 +1,5 @@
 import { type ReactElement } from 'react';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import type { TestIo, Diff, PathSegment } from '../generated/catala_types';
 import ValueEditor from '../editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
@@ -22,7 +22,10 @@ type Props = {
 /**
  * Creates a hook function that highlights editors with diffs
  */
-function createDiffHighlightHook(diffs: Diff[]) {
+function createDiffHighlightHook(
+  diffs: Diff[],
+  formatBool: (b: boolean) => string
+) {
   return (editor: ReactElement, path: PathSegment[]): ReactElement => {
     // Check if current path matches any diff path (exact match)
     const matchingDiff = findMatchingDiff(diffs, path);
@@ -56,7 +59,7 @@ function createDiffHighlightHook(diffs: Diff[]) {
           {editor}
           <div className="diff-actual">
             <FormattedMessage id="diff.actual" />:{' '}
-            {renderAtomicValue(matchingDiff.actual)}
+            {renderAtomicValue(matchingDiff.actual, formatBool)}
           </div>
         </div>
       );
@@ -78,12 +81,16 @@ export default function AssertionValueEditor({
   onDiffResolved,
   onInvalidateDiffs,
 }: Props): ReactElement {
+  const intl = useIntl();
+  const formatBool = (b: boolean): string =>
+    intl.formatMessage({ id: b ? 'true' : 'false' });
+
   // Array item phantom rendering is handled inside ArrayEditor based on diffs.
 
   // Create the diff highlight hook if we have diffs
   const editorHook =
     diffs.length > 0 && highlightDiffs
-      ? createDiffHighlightHook(diffs)
+      ? createDiffHighlightHook(diffs, formatBool)
       : undefined;
 
   return (
