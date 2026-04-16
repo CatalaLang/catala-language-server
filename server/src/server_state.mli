@@ -50,9 +50,12 @@ val make_document :
   Projects.project_file ->
   document_state
 
+type module_cache
+
 type server_state = {
   projects : Projects.t;
   open_documents : document_state Doc_id.Map.t;
+  module_cache : module_cache;
   diagnostics : diagnostics;
 }
 
@@ -79,3 +82,5 @@ val delayed_update :
   unit Lwt.t
 
 val make : unit -> locked_server_state
+val get_module_content : server_state -> Surface.Parser_driver.module_loading
+val unload_module_content : server_state -> Doc_id.t -> unit

@@ -246,7 +246,7 @@ let load_program options ((clerk_config : Clerk_config.t), root_dir) file scope
     failwith "Stdlib not found - Please compile your project first.";
   let mod_uses, modules =
     try
-      Driver.load_modules options
+      Surface.Parser_driver.load_modules options
         ~stdlib:(Some (Global.raw_file stdlib_path))
         (List.map Global.raw_file clerk_config.global.include_dirs)
         surface

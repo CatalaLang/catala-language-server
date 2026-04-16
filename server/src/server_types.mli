@@ -29,6 +29,7 @@ module Doc_id : sig
 
   module Map : Map.S with type key = doc_id
   module Set : Set.S with type elt = doc_id
+  module Hashtbl : Hashtbl.S with type key = doc_id
 
   val of_file : File.t -> doc_id
 end
