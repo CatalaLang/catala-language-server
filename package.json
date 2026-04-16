@@ -33,7 +33,7 @@
       "panel": [
         {
           "id": "catala-exceptions-panel",
-          "title": "Catala Exceptions",
+          "title": "Definition tree",
           "icon": "logo.png"
         }
       ]

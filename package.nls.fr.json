@@ -1,8 +1,8 @@
 {
   "command.catala.openWithTestEditor.title": "Ouvrir avec l'éditeur de tests Catala",
-  "command.catala.showExceptions.title": "Afficher les définitions et exceptions de la variable",
-  "command.catala.showExceptionsAtCursor.title": "Afficher les définitions et exceptions",
-  "view.catala.exceptionsView.name": "Définitions et exceptions",
+  "command.catala.showExceptions.title": "Afficher l'arbre de définitions",
+  "command.catala.showExceptionsAtCursor.title": "Afficher l'arbre de définitions",
+  "view.catala.exceptionsView.name": "Arbre de définitions",
   "category.catala": "Catala",
   "customEditor.testCaseEditor.displayName": "Éditeur de cas de test Catala"
 }

@@ -152,7 +152,7 @@ function renderExceptionsWebview(
   </style>
 </head>
 <body>
-  <h1>${escapeHtml(vscode.l10n.t('Definitions and exceptions for'))} <code><span class="pos" ${posAttrs(result.declPos)}>${escapeHtml(result.variable)}</span></code> ${escapeHtml(vscode.l10n.t('in scope'))} <code>${escapeHtml(result.scope)}</code></h1>
+  <h1>${escapeHtml(vscode.l10n.t('Definition tree for'))} <code><span class="pos" ${posAttrs(result.declPos)}>${escapeHtml(result.variable)}</span></code> ${escapeHtml(vscode.l10n.t('in scope'))} <code>${escapeHtml(result.scope)}</code></h1>
   <pre>${treeContent}</pre>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
