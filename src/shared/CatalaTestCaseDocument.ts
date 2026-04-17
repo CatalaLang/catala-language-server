@@ -2,9 +2,11 @@ import * as vscode from 'vscode';
 import type {
   ParseResults,
   Test,
+  TestIo,
   TestList,
   TestOutputs,
 } from '../generated/catala_types';
+import { ensureArrayUids } from '../editors/tableArrayUtils';
 import { atdToCatala } from '../test-case-editor/testCaseCompilerInterop';
 import {
   parseContents,
@@ -12,6 +14,27 @@ import {
 } from '../extension/testCaseEditorProvider';
 import { logger } from '../extension/logger';
 import type { integer } from 'vscode-languageclient';
+
+function stampIoUids(io: TestIo): TestIo {
+  if (!io.value) return io;
+  return {
+    ...io,
+    value: { ...io.value, value: ensureArrayUids(io.value.value) },
+  };
+}
+
+function stampParseResultsUids(results: ParseResults): ParseResults {
+  if (results.kind !== 'Results') return results;
+  return {
+    kind: 'Results',
+    value: results.value.map((test) => ({
+      ...test,
+      test_outputs: new Map(
+        Array.from(test.test_outputs, ([k, v]) => [k, stampIoUids(v)])
+      ),
+    })),
+  };
+}
 
 /**
  * Custom document.
@@ -103,7 +126,9 @@ export class CatalaTestCaseDocument
 
   async revert(_cancellation: vscode.CancellationToken): Promise<void> {
     const diskContent = await CatalaTestCaseDocument.readFile(this.uri);
-    this._parseResults = parseContents(diskContent, this._uri, this._language);
+    this._parseResults = stampParseResultsUids(
+      parseContents(diskContent, this._uri, this._language)
+    );
 
     this._onDidChangeDocument.fire({
       document: this,
@@ -173,10 +198,8 @@ export class CatalaTestCaseDocument
     this._uri = uri;
     this._language = getLanguageFromUri(this._uri);
 
-    this._parseResults = parseContents(
-      initialContent,
-      this._uri,
-      this._language
+    this._parseResults = stampParseResultsUids(
+      parseContents(initialContent, this._uri, this._language)
     );
 
     this._editManager = new EditManager(this);
@@ -241,9 +264,12 @@ class EditManager {
       return;
     }
     // replace outputs
+    const stampedOutputs: TestOutputs = new Map(
+      Array.from(outputs, ([k, v]) => [k, stampIoUids(v)])
+    );
     const updatedTest: Test = {
       ...testList[idx],
-      test_outputs: outputs,
+      test_outputs: stampedOutputs,
     };
 
     const newValue = testList.toSpliced(idx, 1, updatedTest);

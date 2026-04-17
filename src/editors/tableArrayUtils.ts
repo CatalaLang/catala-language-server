@@ -451,6 +451,58 @@ export function cloneWithNewUid(original: RuntimeValue): RuntimeValue {
 }
 
 // ============================================================================
+// UID Stamping
+// ============================================================================
+
+/**
+ * Recursively ensure every Array item in a RuntimeValue tree has a Uid attr.
+ * Idempotent: items that already carry a Uid are left untouched.
+ * Stamps items at all nesting depths (arrays inside structs, etc.).
+ */
+export function ensureArrayUids(value: RuntimeValue): RuntimeValue {
+  const raw = value.value;
+  switch (raw.kind) {
+    case 'Array':
+      return {
+        ...value,
+        value: {
+          kind: 'Array',
+          value: raw.value.map((item) => {
+            const withUid = item.attrs.some((a) => a.kind === 'Uid')
+              ? item
+              : {
+                  ...item,
+                  attrs: [
+                    ...item.attrs,
+                    { kind: 'Uid' as const, value: crypto.randomUUID() },
+                  ],
+                };
+            return ensureArrayUids(withUid);
+          }),
+        },
+      };
+    case 'Struct': {
+      const [decl, data] = raw.value;
+      const newData = new Map<string, RuntimeValue>();
+      for (const [k, v] of data) {
+        newData.set(k, ensureArrayUids(v));
+      }
+      return { ...value, value: { kind: 'Struct', value: [decl, newData] } };
+    }
+    case 'Enum': {
+      const [decl, [name, inner]] = raw.value;
+      const newInner = inner ? { value: ensureArrayUids(inner.value) } : null;
+      return {
+        ...value,
+        value: { kind: 'Enum', value: [decl, [name, newInner]] },
+      };
+    }
+    default:
+      return value;
+  }
+}
+
+// ============================================================================
 // Array Item Label Management
 // ============================================================================
 
