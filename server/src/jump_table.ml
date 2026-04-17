@@ -449,8 +449,7 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
 
 let traverse_scope_def tctx (rule : typed rule) m : PMap.pmap =
   match rule with
-  | ScopeVarDefinition { var; typ; io = _; e }
-  | SubScopeVarDefinition { var; typ; var_within_origin_scope = _; e } ->
+  | ScopeVarDefinition { var; typ; io = _; e } ->
     let var, pos_l = var in
     let name = ScopeVar.to_string var in
     let hash = hash_info (module ScopeVar) var in
