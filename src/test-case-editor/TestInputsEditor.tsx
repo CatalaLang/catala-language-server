@@ -1,7 +1,10 @@
 import { type ReactElement, useState } from 'react';
 import { useIntl } from 'react-intl';
 import type { TestInputs, TestIo, ScopeDef } from '../generated/catala_types';
-import ValueEditor, { getDefaultValue } from '../editors/ValueEditors';
+import ValueEditor, {
+  getDefaultValue,
+  createRuntimeValue,
+} from '../editors/ValueEditors';
 import { CompositeEditor, type EditorItem } from '../editors/CompositeEditor';
 
 type Props = {
@@ -40,6 +43,10 @@ export default function TestInputsEditor(props: Props): ReactElement {
 
       function startOverride(): void {
         setOverriding((prev) => new Set([...prev, inputName]));
+        onTestInputChange({
+          ...testIo,
+          value: { value: getDefaultValue(testIo.typ), pos: undefined },
+        });
       }
 
       function resetToDefault(): void {
@@ -50,7 +57,10 @@ export default function TestInputsEditor(props: Props): ReactElement {
         });
         onTestInputChange({
           ...testIo,
-          value: { value: getDefaultValue(testIo.typ), pos: undefined },
+          value: {
+            value: createRuntimeValue({ kind: 'Unset' }),
+            pos: undefined,
+          },
         });
       }
 

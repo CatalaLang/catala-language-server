@@ -489,6 +489,11 @@ let unset_default_value (typ : O.typ) : O.value_def =
   in
   { O.value; pos = None }
 
+(** For context variables, always use Unset regardless of type: Unset means
+    "use computed default", even for arrays. *)
+let context_var_default : O.value_def =
+  { O.value = { O.value = O.Unset; attrs = [] }; pos = None }
+
 let get_scope_test
     (prg : I.program)
     (testing_scope : string)
@@ -515,7 +520,11 @@ let get_scope_test
   let test_inputs =
     List.map
       (fun (v, (si : O.scope_input)) ->
-        v, { O.typ = si.typ; value = Some (unset_default_value si.typ) })
+        let default =
+          if si.is_context then context_var_default
+          else unset_default_value si.typ
+        in
+        v, { O.typ = si.typ; value = Some default })
       tested_scope.inputs
   in
   let test_outputs =
@@ -800,8 +809,16 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
               RuleName.Map.bindings def.scope_def_rules
             with Ident.Map.Not_found _ | I.ScopeDef.Map.Not_found _ -> []
           in
+          let is_context =
+            List.assoc_opt var_str base_test.tested_scope.inputs
+            |> Option.map (fun (si : O.scope_input) -> si.is_context)
+            |> Option.value ~default:false
+          in
           match rules with
-          | [] -> Some (unset_default_value test_in.O.typ)
+          | [] ->
+            Some
+              (if is_context then context_var_default
+               else unset_default_value test_in.O.typ)
           | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
             let value = get_value prg.program_lang prg.program_ctx e in
