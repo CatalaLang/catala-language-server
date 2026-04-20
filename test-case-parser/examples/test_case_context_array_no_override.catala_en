@@ -1,0 +1,19 @@
+> Using Context
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = "Array context var not overridden: items uses computed default (empty list), total should be 0"]
+#[testcase.test_title = "CArray without override"]
+declaration scope CArray_no_override_test:
+  output c_array scope Context.CArray
+  
+```
+
+```catala
+scope CArray_no_override_test:
+  definition c_array.x equals 5
+  definition c_array.items equals []
+  definition c_array.total equals 33
+  assertion (c_array.total = 0)
+```
