@@ -401,8 +401,11 @@ export class TestCaseEditorProvider
           const messages = getLocalizedMessages(vscode.env.language);
 
           let prompt: string;
-          let buttons: Array<{ title: string; action: 'Delete' | 'RunAnyway' }>;
-          let successAction: 'Delete' | 'RunAnyway';
+          let buttons: Array<{
+            title: string;
+            action: 'Delete' | 'RunAnyway' | 'Reset';
+          }>;
+          let successAction: 'Delete' | 'RunAnyway' | 'Reset';
 
           switch (action.kind) {
             case 'DeleteArrayElement':
@@ -421,6 +424,13 @@ export class TestCaseEditorProvider
                 { title: messages.runAnywayButton, action: 'RunAnyway' },
               ];
               successAction = 'RunAnyway';
+              break;
+            case 'ResetContextVar':
+              prompt = messages.resetContextVarConfirmation;
+              buttons = [
+                { title: messages.resetContextVarButton, action: 'Reset' },
+              ];
+              successAction = 'Reset';
               break;
             default:
               assertUnreachable(action as never);

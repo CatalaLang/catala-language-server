@@ -186,6 +186,7 @@ type confirm_action = [
   | DeleteArrayElement
   | DeleteAssertion
   | RunTestWithUnsetValues
+  | ResetContextVar
 ]
 
 type confirm_request = {

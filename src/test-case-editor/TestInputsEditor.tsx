@@ -6,6 +6,7 @@ import ValueEditor, {
   createRuntimeValue,
 } from '../editors/ValueEditors';
 import { CompositeEditor, type EditorItem } from '../editors/CompositeEditor';
+import { confirm } from '../messaging/confirm';
 
 type Props = {
   test_inputs: TestInputs;
@@ -49,7 +50,12 @@ export default function TestInputsEditor(props: Props): ReactElement {
         });
       }
 
-      function resetToDefault(): void {
+      async function resetToDefault(): Promise<void> {
+        const hasData = testIo.value?.value.value.kind !== 'Unset';
+        if (hasData) {
+          const confirmed = await confirm('ResetContextVar');
+          if (!confirmed) return;
+        }
         setOverriding((prev) => {
           const next = new Set(prev);
           next.delete(inputName);

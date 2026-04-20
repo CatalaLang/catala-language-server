@@ -185,6 +185,7 @@ export type ConfirmAction =
 | { kind: 'DeleteArrayElement' }
 | { kind: 'DeleteAssertion' }
 | { kind: 'RunTestWithUnsetValues' }
+| { kind: 'ResetContextVar' }
 
 export type ConfirmRequest = {
   id: number /*int*/;
@@ -885,6 +886,8 @@ export function writeConfirmAction(x: ConfirmAction, context: any = x): any {
       return 'DeleteAssertion'
     case 'RunTestWithUnsetValues':
       return 'RunTestWithUnsetValues'
+    case 'ResetContextVar':
+      return 'ResetContextVar'
   }
 }
 
@@ -896,6 +899,8 @@ export function readConfirmAction(x: any, context: any = x): ConfirmAction {
       return { kind: 'DeleteAssertion' }
     case 'RunTestWithUnsetValues':
       return { kind: 'RunTestWithUnsetValues' }
+    case 'ResetContextVar':
+      return { kind: 'ResetContextVar' }
     default:
       _atd_bad_json('ConfirmAction', x, context)
       throw new Error('impossible')
