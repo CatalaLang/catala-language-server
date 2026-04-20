@@ -13,7 +13,10 @@ declaration scope CArray_no_override_test:
 ```catala
 scope CArray_no_override_test:
   definition c_array.x equals 5
-  definition c_array.tags equals []
+  definition c_array.tags equals
+    [#[testcase.uid = "470d701b-d273-4d3e-8102-9ea2446d36dd"]
+     3456; #[testcase.uid = "26e7fdf7-508c-4cf6-a63f-444c2c41d8df"]
+     345]
   definition c_array.total equals 33
   assertion (c_array.total = 0)
 ```
