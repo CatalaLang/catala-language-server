@@ -31,5 +31,5 @@ grep -q "definition c\.z" context_vars_roundtrip.catala_en && { echo "FAIL: unse
 # the round-tripped file must typecheck
 clerk typecheck context_vars_roundtrip.catala_en || exit 1
 # run the original test and check the assertion passes (z = y*2 = 198)
-clerk run test_context_vars.catala_en
+clerk run test_context_vars.catala_en || exit 1
 catala testcase run --scope C_test test_context_vars.catala_en || exit 1
