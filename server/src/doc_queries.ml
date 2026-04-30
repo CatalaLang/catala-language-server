@@ -69,7 +69,7 @@ let all_symbols_as_warning (doc_id : Doc_id.t) processing_result =
                     Format.(
                       pp_print_list ~pp_sep:pp_print_space Jump_table.pp_var)
                     (Jump_table.PMap.DS.elements v)
-                    Catala_utils.Pos.format_loc_text r
+                    (Catala_utils.Pos.format_loc_text ()) r
                 in
                 Diagnostic.diag_r Warning (range_of_pos r) (`String msg) :: acc)
               variables [] );
