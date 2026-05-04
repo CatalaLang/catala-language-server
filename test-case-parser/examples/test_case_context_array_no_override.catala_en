@@ -13,5 +13,13 @@ declaration scope CArray_no_override_test:
 ```catala
 scope CArray_no_override_test:
   definition c_array.x equals 5
+  definition c_array.items equals
+    [#[testcase.uid = "fb152135-959c-47d6-bb7b-e25c8801d8d6"]
+     Context.Item {
+       -- id: #[testcase.uid = "fb152135-959c-47d6-bb7b-e25c8801d8d6"]
+       3
+       -- amount: $2.00
+     }]
+  definition c_array.total equals 3
   assertion (c_array.total = 5)
 ```

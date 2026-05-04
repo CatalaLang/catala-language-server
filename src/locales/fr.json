@@ -64,8 +64,8 @@
   "arrayEditor.switchToTableView": "Passer en vue tableau",
   "tableView.value": "Valeur",
   "combobox.noMatches": "Aucun résultat",
-  "testEditor.contextVarTitle": "Variable de contexte : utilise sa valeur par défaut calculée si elle n'est pas redéfinie",
-  "testEditor.usingComputedDefault": "Valeur par défaut calculée",
+  "testEditor.contextVarTitle": "Variable de contexte : utilise sa valeur calculée si elle n'est pas redéfinie",
+  "testEditor.usingComputedDefault": "Valeur calculée",
   "testEditor.override": "Remplacer",
-  "testEditor.resetToDefault": "Réinitialiser à la valeur par défaut"
+  "testEditor.resetToDefault": "Supprimer la redéfinition"
 }

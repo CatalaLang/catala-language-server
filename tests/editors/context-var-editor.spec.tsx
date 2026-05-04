@@ -63,18 +63,16 @@ describe('TestInputsEditor - context variables', () => {
     const { container } = renderInputsEditor(makeInputs('Unset'), onChange);
 
     // y is context + unset → placeholder mode
-    expect(screen.getByText(/using computed default/i)).toBeInTheDocument();
+    expect(screen.getByText(/using computed value/i)).toBeInTheDocument();
     expect(container.querySelector('.context-var-editor')).toBeNull();
 
     // click Override → editor appears
     fireEvent.click(screen.getByRole('button', { name: /override/i }));
-    expect(screen.queryByText(/using computed default/i)).toBeNull();
+    expect(screen.queryByText(/using computed value/i)).toBeNull();
 
     // click reset (trash) → back to placeholder
-    fireEvent.click(
-      screen.getByRole('button', { name: /reset to computed default/i })
-    );
-    expect(screen.getByText(/using computed default/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /remove override/i }));
+    expect(screen.getByText(/using computed value/i)).toBeInTheDocument();
   });
 
   it('typing an invalid value in an overridden context var keeps the editor visible', () => {
@@ -82,7 +80,7 @@ describe('TestInputsEditor - context variables', () => {
     const { container } = renderInputsEditor(makeInputs(99));
 
     // sanity: no placeholder visible
-    expect(screen.queryByText(/using computed default/i)).toBeNull();
+    expect(screen.queryByText(/using computed value/i)).toBeNull();
 
     // type an invalid intermediate value
     const input = container.querySelector(
@@ -92,7 +90,7 @@ describe('TestInputsEditor - context variables', () => {
     fireEvent.change(input, { target: { value: '-' } });
 
     // the editor must still be showing (not reverted to placeholder)
-    expect(screen.queryByText(/using computed default/i)).toBeNull();
+    expect(screen.queryByText(/using computed value/i)).toBeNull();
     expect(container.querySelector('.context-var-editor')).toBeInTheDocument();
     // and the invalid indicator should be present
     expect(

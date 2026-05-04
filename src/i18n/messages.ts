@@ -17,7 +17,7 @@ const messages = {
     deleteArrayElementConfirmation: 'Delete this element?',
     deleteAssertionConfirmation: 'Delete this assertion?',
     resetContextVarConfirmation:
-      'Reset this context variable to its computed default? The current value will be lost.',
+      'Remove the override for this context variable? The current value will be lost.',
     resetContextVarButton: 'Reset',
     deleteButton: 'Delete',
     runAnywayButton: 'Run anyway',
@@ -40,7 +40,7 @@ const messages = {
     deleteArrayElementConfirmation: 'Supprimer cet élément ?',
     deleteAssertionConfirmation: 'Supprimer cette assertion ?',
     resetContextVarConfirmation:
-      'Réinitialiser cette variable de contexte à sa valeur par défaut calculée ? La valeur actuelle sera perdue.',
+      'Supprimer la redéfinition de cette variable de contexte ? La valeur actuelle sera perdue.',
     resetContextVarButton: 'Réinitialiser',
     deleteButton: 'Supprimer',
     runAnywayButton: 'Lancer quand même',

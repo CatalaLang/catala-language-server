@@ -7,7 +7,7 @@
 #[testcase.test_title = "C"]
 declaration scope C_test:
   output c scope Context.C
-  
+
 ```
 
 ```catala
