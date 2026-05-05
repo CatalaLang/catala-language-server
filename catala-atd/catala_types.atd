@@ -72,7 +72,6 @@ type runtime_value_raw = [
   | Empty (* for diffs *)
 ] <ocaml repr="classic">
 
-(* to be extended with free-form descriptions, etc. *)
 type attr_def = [
   | TestDescription of string
   | TestTitle of string
@@ -82,7 +81,7 @@ type attr_def = [
 
 type runtime_value = {
   value: runtime_value_raw;
-  attrs: attr_def list; (* for UIDs, comments... may be empty *)
+  attrs: attr_def list;
 }
 
 (* Test data *)
