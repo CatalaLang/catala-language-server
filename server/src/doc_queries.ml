@@ -214,17 +214,12 @@ let scope_var_exception_info
     scope_var =
   let var_ty = ScopeVar.Map.find scope_var scope_decl.scope_sig in
   let*? is_sub_scope_var =
-    let scope_var_s = ScopeVar.to_string scope_var in
     ScopeName.Map.find_opt scope_decl.scope_decl_name
       desugared.Desugared.Ast.program_root.module_scopes
     |> function
     | None -> None
     | Some scope ->
-      let sub_scope_vars = ScopeVar.Map.keys scope.scope_sub_scopes in
-      Some
-        (List.exists
-           (fun v -> ScopeVar.to_string v = scope_var_s)
-           sub_scope_vars)
+      Some (ScopeVar.Map.mem scope_var scope.scope_sub_scopes)
   in
   if is_sub_scope_var then None
   else if not (is_output_or_context_var var_ty) then None
