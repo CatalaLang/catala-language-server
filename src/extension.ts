@@ -168,11 +168,6 @@ async function debugScope(args: RunArgs | undefined): Promise<void> {
 }
 vscode.commands.registerCommand('catala.debug', debugScope);
 
-vscode.commands.registerCommand('catala.showExceptions', showExceptions);
-vscode.commands.registerCommand('catala.showExceptionsAtCursor', () =>
-  showExceptionsAtCursor(client)
-);
-
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
@@ -273,6 +268,10 @@ export async function activate(
     vscode.window.registerWebviewViewProvider(
       'catala.exceptionsView',
       exceptionsViewProvider
+    ),
+    vscode.commands.registerCommand('catala.showExceptions', showExceptions),
+    vscode.commands.registerCommand('catala.showExceptionsAtCursor', () =>
+      showExceptionsAtCursor(client)
     )
   );
 
