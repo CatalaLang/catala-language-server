@@ -489,8 +489,12 @@ let unset_default_value (typ : O.typ) : O.value_def =
   in
   { O.value; pos = None }
 
-(** For context variables, always use Unset regardless of type: Unset means
-    "use computed default", even for arrays. *)
+(** For context variables, always use Unset regardless of type.
+    Context variables have a scope-computed default. [Unset] here means
+    "no override — let the scope compute its own value". This differs from
+    [unset_default_value], which uses [Array [||]] for array types: that
+    would generate an explicit [definition x = []] override in the test
+    output, replacing the computed default with an empty array. *)
 let context_var_default : O.value_def =
   { O.value = { O.value = O.Unset; attrs = [] }; pos = None }
 
