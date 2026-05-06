@@ -39,6 +39,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Check unused CSS
+        run: node lint_scripts/purgecss-check.js
+
       - name: Knip (unused exports)
         run: npm run knip:exports
 
