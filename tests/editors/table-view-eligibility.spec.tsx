@@ -14,47 +14,17 @@ import type {
   StructDeclaration,
   EnumDeclaration,
   RuntimeValue,
-  RuntimeValueRaw,
   ValueDef,
   Option,
-} from '../../src/generated/test_case';
+} from '../../src/generated/catala_types';
 import { ArrayEditor } from '../../src/editors/ArrayEditor';
 import { structIsFlattenable } from '../../src/editors/tableArrayUtils';
 import enMessages from '../../src/locales/en.json';
+import { rv, intVal, arrayVal, structVal, enumVal } from './test-helpers';
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
-
-function rv(raw: RuntimeValueRaw): RuntimeValue {
-  return { value: raw, attrs: [{ kind: 'Uid', value: crypto.randomUUID() }] };
-}
-
-function intVal(n: number): RuntimeValue {
-  return rv({ kind: 'Integer', value: n });
-}
-
-function arrayVal(items: RuntimeValue[]): RuntimeValue {
-  return rv({ kind: 'Array', value: items });
-}
-
-function structVal(
-  decl: StructDeclaration,
-  fields: Map<string, RuntimeValue>
-): RuntimeValue {
-  return rv({ kind: 'Struct', value: [decl, fields] });
-}
-
-function enumVal(
-  decl: EnumDeclaration,
-  label: string,
-  payload?: RuntimeValue
-): RuntimeValue {
-  return rv({
-    kind: 'Enum',
-    value: [decl, [label, payload ? { value: payload } : null]],
-  });
-}
 
 function renderArrayEditor(
   elementType: Typ,

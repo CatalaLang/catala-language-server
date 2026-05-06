@@ -6,49 +6,24 @@ import type {
   Diff,
   PathSegment,
   RuntimeValue,
-  RuntimeValueRaw,
   StructDeclaration,
   ValueDef,
 } from '../../src/generated/catala_types';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
 import { tryCreateTableSchema } from '../../src/editors/tableArrayUtils';
+import {
+  rv,
+  rvWithUid,
+  intVal,
+  emptyRV,
+  arrayValueDef,
+  structVal,
+} from './test-helpers';
 
 // Mock confirm to auto-approve destructive actions
 vi.mock('../../src/messaging/confirm', () => ({
   confirm: async () => true,
 }));
-
-function rv(value: RuntimeValueRaw): RuntimeValue {
-  return { value, attrs: [] };
-}
-
-function rvWithUid(value: RuntimeValueRaw, uid: string): RuntimeValue {
-  return { value, attrs: [{ kind: 'Uid', value: uid }] };
-}
-
-function arrayValueDef(items: RuntimeValue[]): ValueDef {
-  return { value: rv({ kind: 'Array', value: items }) };
-}
-
-function intRV(n: number): RuntimeValue {
-  return rv({ kind: 'Integer', value: n });
-}
-
-function emptyRV(): RuntimeValue {
-  return rv({ kind: 'Empty' });
-}
-
-function structRV(
-  structDecl: StructDeclaration,
-  fields: Map<string, RuntimeValue>,
-  uid?: string
-): RuntimeValue {
-  const value: RuntimeValueRaw = {
-    kind: 'Struct',
-    value: [structDecl, fields],
-  };
-  return uid ? rvWithUid(value, uid) : rv(value);
-}
 
 describe('TableArrayEditor - Phantom diff support', () => {
   const personStruct: StructDeclaration = {
@@ -73,11 +48,11 @@ describe('TableArrayEditor - Phantom diff support', () => {
       {
         path: [{ kind: 'ListIndex', value: 0 }],
         expected: emptyRV(),
-        actual: structRV(
+        actual: structVal(
           personStruct,
           new Map([
-            ['name', intRV(100)],
-            ['age', intRV(25)],
+            ['name', intVal(100)],
+            ['age', intVal(25)],
           ]),
           'person-phantom-1'
         ),
@@ -115,11 +90,11 @@ describe('TableArrayEditor - Phantom diff support', () => {
 
   it('renders expected-only rows with remove button (non-empty expected, empty actual)', () => {
     const currentPath: PathSegment[] = [];
-    const person1 = structRV(
+    const person1 = structVal(
       personStruct,
       new Map([
-        ['name', intRV(1)],
-        ['age', intRV(30)],
+        ['name', intVal(1)],
+        ['age', intVal(30)],
       ]),
       'person-1'
     );
@@ -167,11 +142,11 @@ describe('TableArrayEditor - Phantom diff support', () => {
       {
         path: [{ kind: 'ListIndex', value: 0 }],
         expected: emptyRV(),
-        actual: structRV(
+        actual: structVal(
           personStruct,
           new Map([
-            ['name', intRV(100)],
-            ['age', intRV(25)],
+            ['name', intVal(100)],
+            ['age', intVal(25)],
           ])
         ),
       },
@@ -209,11 +184,11 @@ describe('TableArrayEditor - Phantom diff support', () => {
 
   it('expected-only row cells are read-only (no move/add buttons, only remove)', () => {
     const currentPath: PathSegment[] = [];
-    const person1 = structRV(
+    const person1 = structVal(
       personStruct,
       new Map([
-        ['name', intRV(1)],
-        ['age', intRV(30)],
+        ['name', intVal(1)],
+        ['age', intVal(30)],
       ])
     );
 
@@ -266,11 +241,11 @@ describe('TableArrayEditor - Phantom diff support', () => {
       {
         path: [{ kind: 'ListIndex', value: 0 }],
         expected: emptyRV(),
-        actual: structRV(
+        actual: structVal(
           personStruct,
           new Map([
-            ['name', intRV(100)],
-            ['age', intRV(25)],
+            ['name', intVal(100)],
+            ['age', intVal(25)],
           ])
         ),
       },
@@ -301,11 +276,11 @@ describe('TableArrayEditor - Phantom diff support', () => {
 
   it('renders multiple phantom rows and regular rows together', () => {
     const currentPath: PathSegment[] = [];
-    const person1 = structRV(
+    const person1 = structVal(
       personStruct,
       new Map([
-        ['name', intRV(1)],
-        ['age', intRV(30)],
+        ['name', intVal(1)],
+        ['age', intVal(30)],
       ]),
       'person-1'
     );
@@ -314,22 +289,22 @@ describe('TableArrayEditor - Phantom diff support', () => {
       {
         path: [{ kind: 'ListIndex', value: 1 }],
         expected: emptyRV(),
-        actual: structRV(
+        actual: structVal(
           personStruct,
           new Map([
-            ['name', intRV(2)],
-            ['age', intRV(35)],
+            ['name', intVal(2)],
+            ['age', intVal(35)],
           ])
         ),
       },
       {
         path: [{ kind: 'ListIndex', value: 2 }],
         expected: emptyRV(),
-        actual: structRV(
+        actual: structVal(
           personStruct,
           new Map([
-            ['name', intRV(3)],
-            ['age', intRV(40)],
+            ['name', intVal(3)],
+            ['age', intVal(40)],
           ])
         ),
       },
