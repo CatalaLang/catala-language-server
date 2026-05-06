@@ -16,34 +16,15 @@ import type {
   Typ,
   StructDeclaration,
   RuntimeValue,
-  RuntimeValueRaw,
   ValueDef,
-} from '../../src/generated/test_case';
+} from '../../src/generated/catala_types';
 import { ArrayEditor } from '../../src/editors/ArrayEditor';
 import enMessages from '../../src/locales/en.json';
+import { rv, intVal, arrayVal, structVal } from './test-helpers';
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
-
-function rv(raw: RuntimeValueRaw): RuntimeValue {
-  return { value: raw, attrs: [{ kind: 'Uid', value: crypto.randomUUID() }] };
-}
-
-function intVal(n: number): RuntimeValue {
-  return rv({ kind: 'Integer', value: n });
-}
-
-function arrayVal(items: RuntimeValue[]): RuntimeValue {
-  return rv({ kind: 'Array', value: items });
-}
-
-function structVal(
-  decl: StructDeclaration,
-  fields: Map<string, RuntimeValue>
-): RuntimeValue {
-  return rv({ kind: 'Struct', value: [decl, fields] });
-}
 
 function renderWithOnChange(
   elementType: Typ,

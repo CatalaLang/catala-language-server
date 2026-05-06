@@ -16,55 +16,24 @@ import type {
   Diff,
   PathSegment,
   RuntimeValue,
-  RuntimeValueRaw,
   StructDeclaration,
   ValueDef,
 } from '../../src/generated/catala_types';
 import { TableArrayEditor } from '../../src/editors/TableArrayEditor';
 import { tryCreateTableSchema } from '../../src/editors/tableArrayUtils';
+import {
+  rv,
+  rvWithUid,
+  intVal,
+  emptyRV,
+  arrayValueDef,
+  structVal,
+} from './test-helpers';
 
 // Mock confirm to auto-approve destructive actions
 vi.mock('../../src/messaging/confirm', () => ({
   confirm: async () => true,
 }));
-
-// Helper to create a RuntimeValue
-function rv(value: RuntimeValueRaw): RuntimeValue {
-  return { value, attrs: [] };
-}
-
-// Helper to create a RuntimeValue with a UID attribute
-function rvWithUid(value: RuntimeValueRaw, uid: string): RuntimeValue {
-  return { value, attrs: [{ kind: 'Uid', value: uid }] };
-}
-
-// Helper to create an array ValueDef
-function arrayValueDef(items: RuntimeValue[]): ValueDef {
-  return { value: rv({ kind: 'Array', value: items }) };
-}
-
-// Helper to create an integer RuntimeValue
-function intRV(n: number): RuntimeValue {
-  return rv({ kind: 'Integer', value: n });
-}
-
-// Helper to create an Empty RuntimeValue (used for missing values in diffs)
-function emptyRV(): RuntimeValue {
-  return rv({ kind: 'Empty' });
-}
-
-// Helper to create a struct RuntimeValue
-function structRV(
-  structDecl: StructDeclaration,
-  fields: Map<string, RuntimeValue>,
-  uid?: string
-): RuntimeValue {
-  const value: RuntimeValueRaw = {
-    kind: 'Struct',
-    value: [structDecl, fields],
-  };
-  return uid ? rvWithUid(value, uid) : rv(value);
-}
 
 // Render helper with IntlProvider
 function renderTableEditor(props: {
@@ -110,27 +79,27 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
   describe('Extra elements (actual-only diffs)', () => {
     it('shows phantom row for one extra element at end of array', () => {
       // Current array has 2 items, but actual has 3 (one extra at index 2)
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ]),
         'emp-1'
       );
-      const item2 = structRV(
+      const item2 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(2)],
-          ['salary', intRV(60000)],
+          ['id', intVal(2)],
+          ['salary', intVal(60000)],
         ]),
         'emp-2'
       );
-      const extraItem = structRV(
+      const extraItem = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(3)],
-          ['salary', intRV(70000)],
+          ['id', intVal(3)],
+          ['salary', intVal(70000)],
         ]),
         'emp-extra'
       );
@@ -169,26 +138,26 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
 
     it('shows phantom rows for multiple extra elements', () => {
       // Current array has 1 item, but actual has 3 (two extra)
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ]),
         'emp-1'
       );
-      const extraItem1 = structRV(
+      const extraItem1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(2)],
-          ['salary', intRV(60000)],
+          ['id', intVal(2)],
+          ['salary', intVal(60000)],
         ])
       );
-      const extraItem2 = structRV(
+      const extraItem2 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(3)],
-          ['salary', intRV(70000)],
+          ['id', intVal(3)],
+          ['salary', intVal(70000)],
         ])
       );
 
@@ -218,11 +187,11 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
 
     it('displays the actual values in phantom row cells', () => {
       // Phantom row with specific values that should be displayed
-      const extraItem = structRV(
+      const extraItem = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(999)],
-          ['salary', intRV(123456)],
+          ['id', intVal(999)],
+          ['salary', intVal(123456)],
         ])
       );
 
@@ -247,25 +216,25 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
 
     it('shows Accept button only for appendable phantom rows', () => {
       // Phantom at index 2 when array length is 2 -> appendable (index === length)
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ])
       );
-      const item2 = structRV(
+      const item2 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(2)],
-          ['salary', intRV(60000)],
+          ['id', intVal(2)],
+          ['salary', intVal(60000)],
         ])
       );
-      const extraItem = structRV(
+      const extraItem = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(3)],
-          ['salary', intRV(70000)],
+          ['id', intVal(3)],
+          ['salary', intVal(70000)],
         ])
       );
 
@@ -290,25 +259,25 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
 
     it('does not show Accept button for non-appendable phantom rows', () => {
       // Phantom at index 1 when array length is 2 -> NOT appendable (would insert in middle)
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ])
       );
-      const item2 = structRV(
+      const item2 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(2)],
-          ['salary', intRV(60000)],
+          ['id', intVal(2)],
+          ['salary', intVal(60000)],
         ])
       );
-      const extraItemInMiddle = structRV(
+      const extraItemInMiddle = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(99)],
-          ['salary', intRV(99999)],
+          ['id', intVal(99)],
+          ['salary', intVal(99999)],
         ])
       );
 
@@ -338,19 +307,19 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
   describe('Missing elements (expected-only diffs)', () => {
     it('shows expected-only styling for element present in expected but not actual', () => {
       // Array has 2 items, but diff says index 1 should be removed (expected has value, actual is empty)
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ]),
         'emp-1'
       );
-      const itemToRemove = structRV(
+      const itemToRemove = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(2)],
-          ['salary', intRV(60000)],
+          ['id', intVal(2)],
+          ['salary', intVal(60000)],
         ]),
         'emp-2'
       );
@@ -382,18 +351,18 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
 
     it('shows Remove button only for last element in expected-only rows', () => {
       // Array has 2 items, expected-only diff at index 1 (last) -> removable
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ])
       );
-      const itemToRemove = structRV(
+      const itemToRemove = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(2)],
-          ['salary', intRV(60000)],
+          ['id', intVal(2)],
+          ['salary', intVal(60000)],
         ])
       );
 
@@ -418,25 +387,25 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
 
     it('does not show Remove button for non-last expected-only rows', () => {
       // Array has 3 items, expected-only diff at index 1 (middle) -> NOT removable
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ])
       );
-      const middleItem = structRV(
+      const middleItem = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(2)],
-          ['salary', intRV(60000)],
+          ['id', intVal(2)],
+          ['salary', intVal(60000)],
         ])
       );
-      const item3 = structRV(
+      const item3 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(3)],
-          ['salary', intRV(70000)],
+          ['id', intVal(3)],
+          ['salary', intVal(70000)],
         ])
       );
 
@@ -460,11 +429,11 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
     });
 
     it('expected-only rows have no move buttons (read-only)', () => {
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ])
       );
 
@@ -501,27 +470,27 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
       // Array: [item1, item2]
       // Diff 1: index 1 is expected-only (item2 expected but not in actual)
       // Diff 2: index 2 is actual-only (extraItem in actual but not expected)
-      const item1 = structRV(
+      const item1 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ]),
         'emp-1'
       );
-      const item2 = structRV(
+      const item2 = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(2)],
-          ['salary', intRV(60000)],
+          ['id', intVal(2)],
+          ['salary', intVal(60000)],
         ]),
         'emp-2'
       );
-      const extraItem = structRV(
+      const extraItem = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(3)],
-          ['salary', intRV(70000)],
+          ['id', intVal(3)],
+          ['salary', intVal(70000)],
         ])
       );
 
@@ -558,11 +527,11 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
       const onValueChange = vi.fn();
       const onDiffResolved = vi.fn();
 
-      const extraItem = structRV(
+      const extraItem = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(42)],
-          ['salary', intRV(100000)],
+          ['id', intVal(42)],
+          ['salary', intVal(100000)],
         ])
       );
 
@@ -605,11 +574,11 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
       const onValueChange = vi.fn();
       const onDiffResolved = vi.fn();
 
-      const itemToRemove = structRV(
+      const itemToRemove = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ])
       );
 
@@ -653,11 +622,11 @@ describe('TableArrayEditor - Missing and Extra Elements in Diff View', () => {
 
   describe('Empty array with only phantom elements', () => {
     it('does not show "No data" message when phantom rows exist', () => {
-      const extraItem = structRV(
+      const extraItem = structVal(
         employeeStruct,
         new Map([
-          ['id', intRV(1)],
-          ['salary', intRV(50000)],
+          ['id', intVal(1)],
+          ['salary', intVal(50000)],
         ])
       );
 
