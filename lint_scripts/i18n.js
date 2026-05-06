@@ -125,7 +125,6 @@ function main() {
     `Found ${localeFiles.length} locale file(s) and ${tsxFiles.length} TS/TSX file(s).`
   );
 
-  // Gather all strings from TSX (AST + regex fallback) and also keep raw text for an absolute substring search
   const allStringLiterals = new Set();
 
   for (const file of tsxFiles) {
