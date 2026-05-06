@@ -232,12 +232,13 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     position: { x: number; y: number };
   } | null>(null);
 
-  // Add an item to a sub-array and navigate to it with flash
+  // Add an item to a sub-array, optionally navigating to it
   const handleAddSubArrayItem = (
     parentRowIndex: number,
     arrayFieldPath: string[],
     arrayLabel: string,
-    subElementType: Typ
+    subElementType: Typ,
+    scrollToNew: boolean = true
   ): void => {
     handlers.handleAddSubArrayItem(
       parentRowIndex,
@@ -249,9 +250,10 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
     setAddDropdownRowIndex(null);
     setDropdownAnchor(null);
 
-    // Navigate to sub-table and flash the new item
-    const subTableId = `sub-table-${arrayLabel}`;
-    navigateAndFlashSubTable(subTableId, parentRowIndex);
+    if (scrollToNew) {
+      const subTableId = `sub-table-${arrayLabel}`;
+      navigateAndFlashSubTable(subTableId, parentRowIndex);
+    }
   };
 
   // Wrapper for handleDuplicate that adds flash effect
@@ -817,7 +819,8 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                                   rowIndex,
                                   arr.fieldPath,
                                   arr.label,
-                                  arrElemType
+                                  arrElemType,
+                                  false
                                 );
                               }}
                               title={intl.formatMessage({
