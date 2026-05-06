@@ -56,7 +56,7 @@ export default [
       'no-unused-vars': 'off',
 
       // Enforce explicit function return types
-      '@typescript-eslint/explicit-function-return-type': 'warn',
+      '@typescript-eslint/explicit-function-return-type': 'error',
 
       // Disallow unused variables (TS-aware)
       '@typescript-eslint/no-unused-vars': [
@@ -76,13 +76,13 @@ export default [
       ],
 
       // Prefer nullish coalescing
-      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
 
-      // Enforce optional chain syntax (warn to reduce churn)
-      '@typescript-eslint/prefer-optional-chain': 'warn',
+      // Enforce optional chain syntax
+      '@typescript-eslint/prefer-optional-chain': 'error',
 
       // Disallow any type
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
 
       // Enforce consistent type assertions
       '@typescript-eslint/consistent-type-assertions': 'error',
