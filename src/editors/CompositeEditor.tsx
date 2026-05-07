@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import { hasNestedArrays } from './ArrayEditor';
 import type { Typ } from '../generated/catala_types';
 
@@ -27,7 +27,7 @@ import type { Typ } from '../generated/catala_types';
 
 export type EditorItem = {
   key: string;
-  label: string;
+  label: ReactNode;
   type: Typ;
   editor: ReactElement;
 };
@@ -43,7 +43,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
   const complexItems = props.items.filter((item) => hasNestedArrays(item.type));
 
   // Helper function to get tab display name with count for arrays
-  function getTabDisplayName(item: EditorItem): string {
+  function getTabDisplayName(item: EditorItem): ReactNode {
     // Check if this is an array type
     if (item.type.kind === 'TArray') {
       // Try to extract array length from the editor props
@@ -62,7 +62,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
       // Look for testIO prop which might contain our array value
       const arrayValue = editorProps?.testIO?.value?.value?.value;
       if (arrayValue?.kind === 'Array' && arrayValue.value) {
-        return `${item.label} (${arrayValue.value.length})`;
+        return `${item.key} (${arrayValue.value.length})`;
       }
     }
 

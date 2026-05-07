@@ -27,10 +27,15 @@ type struct_declaration = {
   fields: (string * typ) list <json repr="object"> <ts repr="map">;
 }
 
+type scope_input = {
+  typ: typ;
+  is_context: bool;
+}
+
 type scope_def = {
   name: string;
   module_name: string;
-  inputs: (string * typ) list <json repr="object"> <ts repr="map">;
+  inputs: (string * scope_input) list <json repr="object"> <ts repr="map">;
   outputs: (string * typ) list <json repr="object"> <ts repr="map">;
   module_deps : string list;
 }
@@ -68,7 +73,16 @@ type runtime_value_raw = [
   | Enum of (enum_declaration * (string * runtime_value option))
   | Struct of (struct_declaration * (string * runtime_value) list <json repr="object"> <ts repr="map">)
   | Array of runtime_value list <ocaml repr="array">
-  | Unset (* GUI placeholder for 'impossible' value *)
+  | Unset
+    (* Regular input (is_context = false): "not yet provided".
+       Must be filled by the user before running a test. Printed as
+       'impossible' in Catala output. The test runner rejects any
+       remaining Unset on regular inputs. *)
+  | NotOverridden
+    (* Context variable (is_context = true): "no override — use the
+       scope-computed default". The variable is omitted from the JSON
+       input sent to the runtime. This is the reset/clear action for
+       context vars. Must never appear on non-context inputs. *)
   | Empty (* for diffs *)
 ] <ocaml repr="classic">
 
@@ -180,6 +194,7 @@ type confirm_action = [
   | DeleteArrayElement
   | DeleteAssertion
   | RunTestWithUnsetValues
+  | ResetContextVar
 ]
 
 type confirm_request = {

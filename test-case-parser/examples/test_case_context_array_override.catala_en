@@ -1,0 +1,21 @@
+> Using Context
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = "Array context var overridden: items has two elements, total should be 2"]
+#[testcase.test_title = "CArray with items overridden"]
+declaration scope CArray_override_test:
+  output c scope Context.CArray
+
+```
+
+```catala
+scope CArray_override_test:
+  definition c.x equals 3
+  definition c.items equals [
+    Context.Item { -- id: 1 -- amount: $10.00 };
+    Context.Item { -- id: 2 -- amount: $20.00 }
+  ]
+  assertion (c.total = 5)
+```

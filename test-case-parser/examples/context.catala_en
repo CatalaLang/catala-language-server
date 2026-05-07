@@ -1,0 +1,27 @@
+> Module Context
+
+```catala-metadata
+declaration scope C:
+  input x content integer
+  context y content integer
+  context output z content integer
+
+declaration structure Item:
+  data id content integer
+  data amount content money
+
+declaration scope CArray:
+  input x content integer
+  context items content list of Item
+  context output total content integer
+```
+
+```catala
+scope C:
+  definition y equals x + 10
+  definition z equals y * 2
+
+scope CArray:
+  definition items equals []
+  definition total equals (number of items) + x
+```

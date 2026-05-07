@@ -1,12 +1,12 @@
 /**
  * Utilities for detecting and navigating to Unset/Invalid values in RuntimeValue trees.
+ * Note: NotOverridden (context var using computed default) is intentionally
+ * not treated as Unset — it is valid and does not block test runs.
  */
 
 import type { RuntimeValue, Test } from '../generated/catala_types';
 
-/**
- * Recursively checks if a RuntimeValue contains any Unset values.
- */
+/** Recursively checks whether a RuntimeValue contains any Unset values. */
 function containsUnset(rv: RuntimeValue): boolean {
   switch (rv.value.kind) {
     case 'Unset':
@@ -49,12 +49,12 @@ export function scrollToFirstInvalidOrUnset(
   }, delay);
 }
 
-/**
- * Checks if a Test has any Unset values in inputs and/or outputs.
- */
 export function hasUnsetInTest(
   test: Test,
-  options: { checkInputs?: boolean; checkOutputs?: boolean } = {}
+  options: {
+    checkInputs?: boolean;
+    checkOutputs?: boolean;
+  } = {}
 ): boolean {
   const { checkInputs = true, checkOutputs = true } = options;
 

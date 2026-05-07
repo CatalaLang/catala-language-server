@@ -1,0 +1,14 @@
+> Module Context_vars
+
+```catala-metadata
+declaration scope C:
+  input x content integer
+  context y content integer
+  context output z content integer
+```
+
+```catala
+scope C:
+  definition y equals x + 10
+  definition z equals y * 2
+```
