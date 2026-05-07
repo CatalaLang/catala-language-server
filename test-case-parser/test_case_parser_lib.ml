@@ -489,14 +489,14 @@ let unset_default_value (typ : O.typ) : O.value_def =
   in
   { O.value; pos = None }
 
-(** For context variables, always use Unset regardless of type.
-    Context variables have a scope-computed default. [Unset] here means
-    "no override — let the scope compute its own value". This differs from
-    [unset_default_value], which uses [Array [||]] for array types: that
-    would generate an explicit [definition x = []] override in the test
-    output, replacing the computed default with an empty array. *)
+(** For context variables, use [NotOverridden] regardless of type.
+    Context variables have a scope-computed default. [NotOverridden] means
+    "no override — let the scope compute its own value". The field is omitted
+    from the JSON input sent to the runtime and from the rendered Catala test.
+    This differs from [unset_default_value], which uses [Array [||]] for array
+    types: that would generate an explicit [definition x = []] override. *)
 let context_var_default : O.value_def =
-  { O.value = { O.value = O.Unset; attrs = [] }; pos = None }
+  { O.value = { O.value = O.NotOverridden; attrs = [] }; pos = None }
 
 let get_scope_test
     (prg : I.program)
@@ -635,7 +635,7 @@ let patch_paths
    fun ({ value; attrs } as v) ->
     match value with
     | O.Bool _ | O.Money _ | O.Integer _ | O.Decimal _ | O.Date _ | O.Duration _
-    | O.Empty | O.Unset ->
+    | O.Empty | O.Unset | O.NotOverridden ->
       v
     | O.Enum (enum_decl, (cstr, rv_opt)) ->
       {
@@ -713,16 +713,23 @@ let generate_test
     let test_inputs =
       List.map
         (fun (s, (io : O.test_io)) ->
+          let is_context =
+            List.assoc_opt s test.tested_scope.inputs
+            |> Option.map (fun (si : O.scope_input) -> si.is_context)
+            |> Option.value ~default:false
+          in
           ( s,
             O.
               {
                 io with
                 value =
                   Some
-                    {
-                      value = generate_default_value prg.program_lang io.typ;
-                      pos = None;
-                    };
+                    (if is_context then context_var_default
+                     else
+                       {
+                         value = generate_default_value prg.program_lang io.typ;
+                         pos = None;
+                       });
               } ))
         test.test_inputs
     in
@@ -979,6 +986,7 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
   print_attrs ppf v.attrs;
   match typ, v.value with
   | _, O.Unset -> pp_print_string ppf "impossible"
+  | _, O.NotOverridden -> assert false (* filtered before printing *)
   | _, O.Bool b ->
     pp_print_string ppf (if b then strings.true_str else strings.false_str)
   | _, O.Money m ->
@@ -1093,24 +1101,16 @@ let write_catala_test ppf t lang =
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;
   fprintf ppf "@]@,```@,";
-  let inputs_by_name =
-    List.to_seq t.tested_scope.inputs |> Hashtbl.of_seq
-  in
   fprintf ppf "@,```catala@,";
   fprintf ppf "@[<v 2>%s %s:" strings.scope t.testing_scope;
   List.iter
     (fun (tvar, t_in) ->
-      let is_context =
-        match Hashtbl.find_opt inputs_by_name tvar with
-        | Some (si : O.scope_input) -> si.is_context
-        | None -> false
-      in
-      let is_unset =
+      let should_skip =
         match t_in.O.value with
-        | Some { value = { value = O.Unset; _ }; _ } | None -> true
+        | Some { value = { value = O.NotOverridden; _ }; _ } -> true
         | _ -> false
       in
-      if is_context && is_unset then ()
+      if should_skip then ()
       else
         fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition
           sscope_var tvar strings.equals
@@ -1392,6 +1392,7 @@ let rec convert_atd_to_runtime_value : O.runtime_value -> Catala_runtime.Value.t
     let l = Array.map convert_atd_to_runtime_value l in
     V (Array Fun.id, l)
   | Unset -> failwith "Cannot convert 'Unset' atd value to Catala runtime value"
+  | NotOverridden -> failwith "Cannot convert 'NotOverridden' atd value to Catala runtime value"
   | Empty -> failwith "Cannot convert 'Empty' atd value to Catala runtime value"
 
 let interpret_program dcalc_prg scope_name build_term_to_interp =
@@ -1448,6 +1449,7 @@ let rec convert_to_json_input ({ value; _ } : O.runtime_value) : Yojson.Safe.t =
            fl)
     | Array l -> `List (Array.to_list l |> List.map convert_to_json_input)
     | Unset -> failwith "convert_to_json_input: cannot convert 'unset' values"
+    | NotOverridden -> failwith "convert_to_json_input: cannot convert 'NotOverridden' values"
     | Empty -> failwith "convert_to_json_input: cannot convert 'empty' values"
   in
   convert_runtime_raw value
@@ -1480,10 +1482,17 @@ let run_with_inputs
           O.Struct
             ( (* Dummy declaration *)
               { O.struct_name = StructName.to_string in_struct; fields = [] },
-              List.map
+              List.filter_map
                 (fun (field_name, { O.value; typ = _ }) ->
-                  let value = (Option.get value).value in
-                  field_name, value)
+                  let rv = (Option.get value).value in
+                  match rv.O.value with
+                  | O.NotOverridden -> None
+                  | O.Unset ->
+                    failwith
+                      (Printf.sprintf
+                         "run_with_inputs: input '%s' has Unset value"
+                         field_name)
+                  | _ -> Some (field_name, rv))
                 fields );
       }
     in
@@ -1644,10 +1653,17 @@ let serialize_inputs (scope_input : Yojson.Safe.t option) =
     let value =
       O.Struct
         ( dummy_decl,
-          List.map
+          List.filter_map
             (fun (field_name, { J.value; typ = _ }) ->
-              let value = (Option.get value).value in
-              field_name, value)
+              let rv = (Option.get value).value in
+              match rv.O.value with
+              | O.NotOverridden -> None
+              | O.Unset ->
+                failwith
+                  (Printf.sprintf
+                     "serialize_inputs: input '%s' has Unset value"
+                     field_name)
+              | _ -> Some (field_name, rv))
             fields )
     in
     let json = convert_to_json_input { value; attrs = [] } in

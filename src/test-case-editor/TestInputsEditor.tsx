@@ -22,10 +22,9 @@ function InputField({
   onTestInputChange,
 }: InputFieldProps): ReactElement {
   const intl = useIntl();
-  // Context vars have a computed default (Unset); overriding means the user
-  // has chosen to supply an explicit value instead.
+  // false iff the context var is NotOverridden (using scope-computed default)
   const [overriding, setOverriding] = useState(
-    () => !isContext || testIo.value?.value.value.kind !== 'Unset'
+    () => testIo.value?.value.value.kind !== 'NotOverridden'
   );
 
   function startOverride(): void {
@@ -37,7 +36,7 @@ function InputField({
   }
 
   async function resetToDefault(): Promise<void> {
-    const hasData = testIo.value?.value.value.kind !== 'Unset';
+    const hasData = testIo.value?.value.value.kind !== 'NotOverridden';
     if (hasData) {
       const confirmed = await confirm('ResetContextVar');
       if (!confirmed) return;
@@ -46,7 +45,7 @@ function InputField({
     onTestInputChange({
       ...testIo,
       value: {
-        value: createRuntimeValue({ kind: 'Unset' }),
+        value: createRuntimeValue({ kind: 'NotOverridden' }),
         pos: undefined,
       },
     });

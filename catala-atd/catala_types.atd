@@ -74,19 +74,15 @@ type runtime_value_raw = [
   | Struct of (struct_declaration * (string * runtime_value) list <json repr="object"> <ts repr="map">)
   | Array of runtime_value list <ocaml repr="array">
   | Unset
-    (* Sentinel with two distinct meanings depending on the variable kind:
-
-       1. Regular input (is_context = false): "not yet provided".
-          Must be filled by the user before running a test. Printed as
-          'impossible' in Catala output. The test runner rejects any
-          remaining Unset on regular inputs.
-
-       2. Context variable (is_context = true): "no override — use the
-          scope-computed default". The variable is omitted from the
-          generated Catala test entirely. This is the reset/clear action.
-
-       TODO: these two roles should be separate variants, Unset and
-       UseComputedDefault, so the type system enforces the distinction. *)
+    (* Regular input (is_context = false): "not yet provided".
+       Must be filled by the user before running a test. Printed as
+       'impossible' in Catala output. The test runner rejects any
+       remaining Unset on regular inputs. *)
+  | NotOverridden
+    (* Context variable (is_context = true): "no override — use the
+       scope-computed default". The variable is omitted from the JSON
+       input sent to the runtime. This is the reset/clear action for
+       context vars. Must never appear on non-context inputs. *)
   | Empty (* for diffs *)
 ] <ocaml repr="classic">
 

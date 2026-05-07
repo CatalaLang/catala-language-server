@@ -17,7 +17,7 @@ const testedScope: ScopeDef = {
   module_deps: [],
 };
 
-function makeInputs(yKind: 'Unset' | number): TestInputs {
+function makeInputs(yKind: 'NotOverridden' | number): TestInputs {
   return new Map([
     [
       'x',
@@ -34,8 +34,8 @@ function makeInputs(yKind: 'Unset' | number): TestInputs {
       {
         typ: { kind: 'TInt' },
         value:
-          yKind === 'Unset'
-            ? { value: { value: { kind: 'Unset' } }, pos: undefined }
+          yKind === 'NotOverridden'
+            ? { value: { value: { kind: 'NotOverridden' } }, pos: undefined }
             : {
                 value: { value: { kind: 'Int', value: yKind } },
                 pos: undefined,
@@ -60,7 +60,7 @@ function renderInputsEditor(inputs: TestInputs, onchange = vi.fn()) {
 describe('TestInputsEditor - context variables', () => {
   it('shows placeholder for unset context var, Override button switches to editor, × resets', () => {
     const onChange = vi.fn();
-    const { container } = renderInputsEditor(makeInputs('Unset'), onChange);
+    const { container } = renderInputsEditor(makeInputs('NotOverridden'), onChange);
 
     // y is context + unset → placeholder mode
     expect(screen.getByText(/using computed value/i)).toBeInTheDocument();

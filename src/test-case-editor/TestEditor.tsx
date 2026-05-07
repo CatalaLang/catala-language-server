@@ -93,7 +93,7 @@ export default function TestEditor(props: Props): ReactElement {
   };
 
   const runWithUnsetCheck = async (): Promise<void> => {
-    if (hasUnsetInTest(props.test, { testedScope: props.test.tested_scope })) {
+    if (hasUnsetInTest(props.test)) {
       scrollToFirstUnset();
       const confirmed = await confirm('RunTestWithUnsetValues');
       if (!confirmed) return;
@@ -102,7 +102,7 @@ export default function TestEditor(props: Props): ReactElement {
   };
 
   const resetWithUnsetCheck = async (): Promise<void> => {
-    if (hasUnsetInTest(props.test, { testedScope: props.test.tested_scope })) {
+    if (hasUnsetInTest(props.test)) {
       scrollToFirstUnset();
       const confirmed = await confirm('RunTestWithUnsetValues');
       if (!confirmed) return;

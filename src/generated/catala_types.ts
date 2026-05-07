@@ -85,6 +85,7 @@ export type RuntimeValueRaw =
 | { kind: 'Struct'; value: [StructDeclaration, Map<string, RuntimeValue>] }
 | { kind: 'Array'; value: RuntimeValue[] }
 | { kind: 'Unset' }
+| { kind: 'NotOverridden' }
 | { kind: 'Empty' }
 
 export type AttrDef =
@@ -489,6 +490,8 @@ export function writeRuntimeValueRaw(x: RuntimeValueRaw, context: any = x): any 
       return ['Array', _atd_write_array(writeRuntimeValue)(x.value, x)]
     case 'Unset':
       return 'Unset'
+    case 'NotOverridden':
+      return 'NotOverridden'
     case 'Empty':
       return 'Empty'
   }
@@ -499,6 +502,8 @@ export function readRuntimeValueRaw(x: any, context: any = x): RuntimeValueRaw {
     switch (x) {
       case 'Unset':
         return { kind: 'Unset' }
+      case 'NotOverridden':
+        return { kind: 'NotOverridden' }
       case 'Empty':
         return { kind: 'Empty' }
       default:
