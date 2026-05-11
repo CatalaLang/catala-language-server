@@ -34,15 +34,15 @@
         </dict>
         <dict>
           <key>match</key>
-          <string>\b(selon|sous\s+forme|mais\s+en\s+remplaçant|fixé|par|inférieur|supérieur|varie|avec|on\s+a|soit|dans|tel\s+que|existe|pour|parmi|tout|de|si|alors|sinon|initial)\b</string>
-          <key>name</key>
-          <string>keyword.control.catala_code_fr</string>
-        </dict>
-        <dict>
-          <key>match</key>
           <string>\b(champ\s+d&apos;application|dépend\s+de|résultat\s+de|déclaration|inclus|liste\s+de|contenu\s+de|contenu|type|optionnel\s+de|structure|énumération|contexte|entrée|résultat|interne|règle|sous\s+condition|condition|donnée|conséquence|rempli|égal\s+à|assertion|définition|état|étiquette|exception|n'importe\s+quel(\s+de)?|liste\s+vide|est\s+maximum|est\s+minimum|minimum\s+de|maximum\s+de|combine\s+tout|transforme\s+chaque|en|initialement|trie(\s+tout)?|par\s+ordre\s+(dé)?croissant|puis|impossible)\b</string>
           <key>name</key>
           <string>keyword.other.catala_code_fr</string>
+        </dict>
+        <dict>
+          <key>match</key>
+          <string>\b(selon|sous\s+forme|mais\s+en\s+remplaçant|fixé|par|inférieur|supérieur|varie|avec|on\s+a|soit|dans|tel\s+que|existe|pour|parmi|tout|de|si|alors|sinon|initial)\b</string>
+          <key>name</key>
+          <string>keyword.control.catala_code_fr</string>
         </dict>
         <dict>
           <key>match</key>
