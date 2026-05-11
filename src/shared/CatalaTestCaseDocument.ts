@@ -29,6 +29,9 @@ function stampParseResultsUids(results: ParseResults): ParseResults {
     kind: 'Results',
     value: results.value.map((test) => ({
       ...test,
+      test_inputs: new Map(
+        Array.from(test.test_inputs, ([k, v]) => [k, stampIoUids(v)])
+      ),
       test_outputs: new Map(
         Array.from(test.test_outputs, ([k, v]) => [k, stampIoUids(v)])
       ),
