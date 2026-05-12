@@ -347,6 +347,12 @@ and val_to_runtime : type d r.
       "Could not convert value of type %a@ to@ runtime:@ %a" Print.typ ty
       Expr.format v
 
+let get_bool ~pos = function
+  | ELit (LBool b), _ -> b
+  | _ ->
+    Message.error ~internal:true ~pos "%a" Format.pp_print_text
+      "This predicate evaluated to something else than a boolean"
+
 let eval_application evaluate_expr f args =
   match f with
   | EAbs _, _ ->
@@ -492,19 +498,28 @@ let evaluate_operator
         Lwt.return (EArray l)
       with Invalid_argument _ ->
         raise Runtime.(Error (NotSameLength, [Expr.pos_to_runtime opos], None)))
-    | Reduce, [_; default; (EArray [], _)] ->
-      let* r =
-        eval_application evaluate_expr default
-          [ELit LUnit, Expr.with_ty m (TLit TUnit, pos)]
-      in
-      Lwt.return (Mark.remove r)
-    | Reduce, [f; _; (EArray (x0 :: xn), _)] ->
+    | Reduce, [_; (EArray [], _)] ->
+      Lwt.return
+        (EInj
+           {
+             name = Expr.option_enum;
+             cons = Expr.none_constr;
+             e = ELit LUnit, Expr.with_ty m (TLit TUnit, pos);
+           }
+        )
+    | Reduce, [f; (EArray (x0 :: xn), _)] ->
       let* r =
         Lwt_list.fold_left_s
           (fun acc x -> eval_application evaluate_expr f [acc; x])
           x0 xn
       in
-      Lwt.return (Mark.remove r)
+      Lwt.return (
+        EInj
+          {
+            name = Expr.option_enum;
+            cons = Expr.some_constr;
+            e = r
+          })
     | Concat, [(EArray es1, _); (EArray es2, _)] ->
       Lwt.return (EArray (es1 @ es2))
     | Filter, [f; (EArray es, _)] ->
@@ -530,7 +545,47 @@ let evaluate_operator
           init es
       in
       Lwt.return (Mark.remove r)
-    | (Length | Log _ | Eq | Map | Map2 | Concat | Filter | Fold | Reduce), _ ->
+    | Find, [f; (EArray es, _)] ->
+        Lwt.catch
+          (fun () ->
+             let* e =
+               Lwt_list.find_s
+                 (fun e ->
+                    let* r = eval_application evaluate_expr f [e] in
+                    Lwt.return (get_bool ~pos:(Expr.pos f) r))
+                 es
+             in
+             Lwt.return (EInj { name = Expr.option_enum; cons = Expr.some_constr; e }))
+          (function
+            | Not_found ->
+              Lwt.return
+                (EInj
+                   {
+                     name = Expr.option_enum;
+                     cons = Expr.none_constr;
+                     e = ELit LUnit, Expr.with_ty m (TLit TUnit, pos);
+                   })
+            | e -> raise e)
+    | Sort updown, [f; (EArray es, _)] ->
+      let* weighted =
+        Lwt_list.map_s (fun e ->
+            let* r = eval_application evaluate_expr f [e] in
+            Lwt.return (e, r)) es
+      in
+      let sorted =
+        List.stable_sort
+          (fun (_, w1) (_, w2) ->
+             let cmp =
+               Runtime.Value.compare (Expr.pos_to_runtime pos)
+                 (Expr.embed_value ctx w1)
+                 (Expr.embed_value ctx w2)
+             in
+             (match updown with `Asc -> cmp | `Desc -> -cmp))
+          weighted
+      in
+      Lwt.return (EArray (List.map fst sorted))
+    | (Length | Log _ | Eq | Map | Map2 | Concat | Filter | Fold | Reduce
+      | Find | Sort _), _ ->
       err ()
     | Not, [(ELit (LBool b), _)] -> Lwt.return (ELit (LBool (o_not b)))
     | And, [(ELit (LBool b1), _); (ELit (LBool b2), _)] ->

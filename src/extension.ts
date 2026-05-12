@@ -58,6 +58,7 @@ async function selectScope(with_inputs: boolean): Promise<RunArgs | undefined> {
     ]);
 
   if (file) {
+    const init: vscode.QuickPickItem[] = [];
     const scopes: vscode.QuickPickItem[] = entrypoints
       .filter((f) => f.path == file.label)
       .reduce((acc, e) => {
@@ -74,7 +75,7 @@ async function selectScope(with_inputs: boolean): Promise<RunArgs | undefined> {
         } else {
           return acc;
         }
-      }, [])!
+      }, init)!
       .reverse();
 
     const scopes_to_choose: vscode.QuickPickItem[] = [
