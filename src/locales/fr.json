@@ -40,6 +40,7 @@
   "type.tuple": "tuple",
   "type.array": "tableau de {baseType}",
   "type.optional": "{baseType} optionnel",
+  "type.unset": "non défini",
   "arrayEditor.movePrevious": "Déplacer l'élément à la position précédente",
   "arrayEditor.moveNext": "Déplacer l'élément à la position suivante",
   "arrayEditor.deleteElement": "Supprimer l'élément",

@@ -358,6 +358,7 @@
     "prepare": "husky",
     "atd:generate_ts": "cd src/generated && atdts ../../catala-atd/catala_types.atd",
     "check:css": "node purgecss-check.js",
+    "check:i18n": "node lint_scripts/i18n-check.js",
     "knip": "knip",
     "knip:exports": "knip --include exports --no-progress"
   },
@@ -409,7 +410,8 @@
       "bash -c 'npx tsc --noEmit'"
     ],
     "src/styles/*.css": "node lint_scripts/purgecss-check.js",
-    "src/locales/*.json": "node lint_scripts/i18n.js",
-    "src/**/*.tsx": "node lint_scripts/i18n.js"
+    "src/locales/*.json": "node lint_scripts/i18n-check.js",
+    "l10n/**/*.json": "node lint_scripts/i18n-check.js",
+    "src/**/*.{ts,tsx}": "node lint_scripts/i18n-check.js"
   }
 }
