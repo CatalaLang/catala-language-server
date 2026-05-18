@@ -128,16 +128,100 @@ let lookup_usages ?doc_id f p =
   generic_lookup ?doc_id f p (fun { usages; _ } -> usages)
   |> Option.map (List.map of_position)
 
+let is_output_or_context_var = function
+  | { Scopelang.Ast.svar_io = { io_input = (NoInput | Reentrant), _; _ }; _ } ->
+    true
+  | _ -> false
+
+(* Returns (scope_name, clerk_var_name, decl_pos) for a scope variable that is
+   eligible for an exception codelens/args, or None if it should be skipped. *)
+let scope_var_exception_info
+    desugared
+    (scope_decl : typed Scopelang.Ast.scope_decl)
+    scope_var =
+  let var_ty = ScopeVar.Map.find scope_var scope_decl.scope_sig in
+  let*? is_sub_scope_var =
+    ScopeName.Map.find_opt scope_decl.scope_decl_name
+      desugared.Desugared.Ast.program_root.module_scopes
+    |> function
+    | None -> None
+    | Some scope ->
+      Some (ScopeVar.Map.mem scope_var scope.scope_sub_scopes)
+  in
+  if is_sub_scope_var then None
+  else if not (is_output_or_context_var var_ty) then None
+  else
+    let raw_name = ScopeVar.to_string scope_var in
+    let clerk_name =
+      (* Scopelang encodes stateful variables as "var#state"; clerk expects
+         "var.state" *)
+      match String.split_on_char '#' raw_name with
+      | [v; s] -> v ^ "." ^ s
+      | _ -> raw_name
+    in
+    let decl_pos = Mark.get (ScopeVar.get_info scope_var) in
+    if Pos.get_file decl_pos = "" then None
+    else Some (scope_decl.scope_decl_name, clerk_name, decl_pos)
+
+let exception_args_json
+    (doc_id : Doc_id.t)
+    (scope_decl_name, clerk_name, decl_pos) =
+  `Assoc
+    [
+      "uri", `String (doc_id :> string);
+      "scope", `String (ScopeName.base scope_decl_name);
+      "variable", `String clerk_name;
+      "declFile", `String (Pos.get_file decl_pos :> string);
+      "declLine", `Int (Pos.get_start_line decl_pos);
+      "declCol", `Int (Pos.get_start_column decl_pos);
+      "declEndLine", `Int (Pos.get_end_line decl_pos);
+      "declEndCol", `Int (Pos.get_end_column decl_pos);
+    ]
+
 let get_hover_type ?(markdown = false) f p =
   let p = Utils.(lsp_range p p |> pos_of_range (f.document_id :> File.t)) in
-  let*? { jump_table = (lazy jt); prg; _ } = f.last_valid_result in
+  let*? { jump_table = (lazy jt); prg; desugared; _ } = f.last_valid_result in
   let*? range, lookup_s = Jump_table.lookup_type jt p in
   let kind =
     try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
   in
   if markdown then
     let md = Type_printing.typ_to_markdown prg f.locale kind in
-    Some (Linol_lwt.Hover.create ~range ~contents:(`MarkupContent md) ())
+    let definition_tree_link =
+      let open Jump_table in
+      let*? l = PMap.lookup p jt.variables in
+      let id = PMap.DS.elements l |> List.find_map (function
+        | Declaration ({ id = Some id; _ }) -> Some id
+        | _ -> None)
+      in
+      let*? id = id in
+      let*? scope_decl, scope_var =
+        ScopeName.Map.bindings prg.program_scopes
+        |> List.find_map (fun (_, (scope_decl, _)) ->
+          ScopeVar.Map.bindings scope_decl.Scopelang.Ast.scope_sig
+          |> List.find_map (fun (scope_var, _) ->
+            if ScopeVar.id scope_var = id then Some (scope_decl, scope_var)
+            else None))
+      in
+      let*? exceptions_args = scope_var_exception_info desugared scope_decl scope_var in
+      let main_doc_id =
+        let doc_id = f.document_id in
+        if Projects.is_an_included_file doc_id f.project then
+          List.hd (Projects.including_files doc_id f.project)
+        else doc_id
+      in
+      let args_json =
+        `List [exception_args_json main_doc_id exceptions_args]
+        |> Yojson.Safe.to_string
+        |> Uri.pct_encode ~component:`Query_key
+      in
+      Some (Printf.sprintf
+        "\n\n[Show definition tree](command:catala.showExceptions?%s)"
+        args_json)
+    in
+    let value = md.Linol_lwt.MarkupContent.value ^ Option.value ~default:"" definition_tree_link in
+    Some (Linol_lwt.Hover.create ~range
+      ~contents:(`MarkupContent (Linol_lwt.MarkupContent.create ~kind:Linol_lwt.MarkupKind.Markdown ~value)) ())
   else
     let md = Type_printing.typ_to_raw_string prg f.locale kind in
     Some (Linol_lwt.Hover.create ~range ~contents:(`MarkedString md) ())
@@ -201,58 +285,8 @@ let lookup_document_symbols file =
         vl acc)
     jt.variables []
 
-let is_output_or_context_var = function
-  | { Scopelang.Ast.svar_io = { io_input = (NoInput | Reentrant), _; _ }; _ } ->
-    true
-  | _ -> false
-
-(* Returns (scope_name, clerk_var_name, decl_pos) for a scope variable that is
-   eligible for an exception codelens/args, or None if it should be skipped. *)
-let scope_var_exception_info
-    desugared
-    (scope_decl : typed Scopelang.Ast.scope_decl)
-    scope_var =
-  let var_ty = ScopeVar.Map.find scope_var scope_decl.scope_sig in
-  let*? is_sub_scope_var =
-    ScopeName.Map.find_opt scope_decl.scope_decl_name
-      desugared.Desugared.Ast.program_root.module_scopes
-    |> function
-    | None -> None
-    | Some scope ->
-      Some (ScopeVar.Map.mem scope_var scope.scope_sub_scopes)
-  in
-  if is_sub_scope_var then None
-  else if not (is_output_or_context_var var_ty) then None
-  else
-    let raw_name = ScopeVar.to_string scope_var in
-    let clerk_name =
-      (* Scopelang encodes stateful variables as "var#state"; clerk expects
-         "var.state" *)
-      match String.split_on_char '#' raw_name with
-      | [v; s] -> v ^ "." ^ s
-      | _ -> raw_name
-    in
-    let decl_pos = Mark.get (ScopeVar.get_info scope_var) in
-    if Pos.get_file decl_pos = "" then None
-    else Some (scope_decl.scope_decl_name, clerk_name, decl_pos)
-
-let exception_args_json
-    (doc_id : Doc_id.t)
-    (scope_decl_name, clerk_name, decl_pos) =
-  `Assoc
-    [
-      "uri", `String (doc_id :> string);
-      "scope", `String (ScopeName.base scope_decl_name);
-      "variable", `String clerk_name;
-      "declFile", `String (Pos.get_file decl_pos :> string);
-      "declLine", `Int (Pos.get_start_line decl_pos);
-      "declCol", `Int (Pos.get_start_column decl_pos);
-      "declEndLine", `Int (Pos.get_end_line decl_pos);
-      "declEndCol", `Int (Pos.get_end_column decl_pos);
-    ]
-
 let lookup_lenses file =
-  let*? { jump_table = (lazy jt); desugared; _ } = file.last_valid_result in
+  let*? { jump_table = (lazy jt); _ } = file.last_valid_result in
   (* we consider only the including file's document id if the document is
      included. *)
   let main_doc_id =
@@ -300,15 +334,6 @@ let lookup_lenses file =
     in
     [CodeLens.create ~command:run_command ~range ()]
   in
-  let mk_exception_lens info range =
-    let arguments = [exception_args_json main_doc_id info] in
-    let open Linol_lwt in
-    let command =
-      Command.create ~arguments ~command:"catala.showExceptions"
-        ~title:"Definitions and exceptions" ()
-    in
-    [CodeLens.create ~command ~range ()]
-  in
   let scope_lenses =
     Jump_table.PMap.fold_on_file file.document_id
       (fun p vl acc ->
@@ -319,24 +344,12 @@ let lookup_lenses file =
               let { Scopelang.Ast.scope_decl_name; scope_sig; _ } =
                 scope_decl
               in
-              let acc =
-                if
-                  ScopeVar.Map.for_all
-                    (fun _scope_var v -> is_output_or_context_var v)
-                    scope_sig
-                then mk_no_input_lens scope_decl_name (range_of_pos p) @ acc
-                else mk_input_lens scope_decl_name (range_of_pos p) @ acc
-              in
-              ScopeVar.Map.fold
-                (fun scope_var _var_ty acc ->
-                  match
-                    scope_var_exception_info desugared scope_decl scope_var
-                  with
-                  | None -> acc
-                  | Some info ->
-                    let _, _, decl_pos = info in
-                    mk_exception_lens info (range_of_pos decl_pos) @ acc)
-                scope_sig acc
+              if
+                ScopeVar.Map.for_all
+                  (fun _scope_var v -> is_output_or_context_var v)
+                  scope_sig
+              then mk_no_input_lens scope_decl_name (range_of_pos p) @ acc
+              else mk_input_lens scope_decl_name (range_of_pos p) @ acc
             | _ -> acc)
           vl acc)
       jt.variables []
