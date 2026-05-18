@@ -215,9 +215,13 @@ let get_hover_type ?(markdown = false) f p =
         |> Yojson.Safe.to_string
         |> Uri.pct_encode ~component:`Query_key
       in
-      Some (Printf.sprintf
-        "\n\n[Show definition tree](command:catala.showExceptions?%s)"
-        args_json)
+      let show_def_tree_s = function
+        | Global.En -> "Show definition tree"
+        | Global.Fr -> "Afficher l'arbre de définitions"
+        | Global.Pl -> assert false
+      in
+      Some (Printf.sprintf "\n\n[%s](command:catala.showExceptions?%s)"
+        (show_def_tree_s f.locale) args_json)
     in
     let value = md.Linol_lwt.MarkupContent.value ^ Option.value ~default:"" definition_tree_link in
     Some (Linol_lwt.Hover.create ~range
