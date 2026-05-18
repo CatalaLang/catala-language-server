@@ -104,10 +104,7 @@ export function runTestScope(
     const cwd = getCwd(filename);
     if (cwd) {
       const relFilename = path.relative(cwd, filename);
-      //compile dependencies (hack), do not fail on asserts
-      execFileSync(clerkPath, ['run', '-c--no-fail-on-assert', relFilename], {
-        cwd,
-      });
+      execFileSync(clerkPath, ['run', '--prepare-only', relFilename], { cwd });
     }
     // Here we *do* want to fail on asserts, as we catch failures through
     // the `register_lsp_error_notifier` hook.
