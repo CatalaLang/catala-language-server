@@ -182,7 +182,8 @@ function checkReactIntl(tsxFiles) {
   const allSourceIds = new Set();
   for (const file of tsxFiles) {
     const content = fs.readFileSync(file, 'utf8');
-    for (const s of collectStringsFromAst(file, content)) allStringLiterals.add(s);
+    for (const s of collectStringsFromAst(file, content))
+      allStringLiterals.add(s);
     for (const id of collectReactIntlIds(file, content)) allSourceIds.add(id);
   }
 
@@ -229,7 +230,9 @@ function checkReactIntl(tsxFiles) {
   }
 
   if (ok) {
-    const total = [...new Set(localeFiles.flatMap((f) => flattenKeys(readJSON(f))))].length;
+    const total = [
+      ...new Set(localeFiles.flatMap((f) => flattenKeys(readJSON(f)))),
+    ].length;
     console.log(
       `React-intl: all ${total} key(s) across ${localeFiles.length} locale file(s) consistent with source.`
     );
@@ -258,11 +261,15 @@ function checkVscodeLtl0n(tsxFiles) {
   const missing = [...allSourceKeys].filter((k) => !bundleKeys.has(k));
 
   if (dead.length > 0) {
-    console.error('\nvscode.l10n: dead translations (in bundle but not in source):');
+    console.error(
+      '\nvscode.l10n: dead translations (in bundle but not in source):'
+    );
     dead.forEach((k) => console.error(`  - "${k}"`));
   }
   if (missing.length > 0) {
-    console.error('\nvscode.l10n: missing translations (in source but not in bundle):');
+    console.error(
+      '\nvscode.l10n: missing translations (in source but not in bundle):'
+    );
     missing.forEach((k) => console.error(`  - "${k}"`));
   }
 

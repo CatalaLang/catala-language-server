@@ -429,9 +429,7 @@ export class TestCaseEditorProvider
               prompt = vscode.l10n.t(
                 'Remove the override for this context variable? The current value will be lost.'
               );
-              buttons = [
-                { title: vscode.l10n.t('Reset'), action: 'Reset' },
-              ];
+              buttons = [{ title: vscode.l10n.t('Reset'), action: 'Reset' }];
               successAction = 'Reset';
               break;
             default:
