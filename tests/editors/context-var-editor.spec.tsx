@@ -60,7 +60,10 @@ function renderInputsEditor(inputs: TestInputs, onchange = vi.fn()) {
 describe('TestInputsEditor - context variables', () => {
   it('shows placeholder for unset context var, Override button switches to editor, × resets', () => {
     const onChange = vi.fn();
-    const { container } = renderInputsEditor(makeInputs('NotOverridden'), onChange);
+    const { container } = renderInputsEditor(
+      makeInputs('NotOverridden'),
+      onChange
+    );
 
     // y is context + unset → placeholder mode
     expect(screen.getByText(/using computed value/i)).toBeInTheDocument();
