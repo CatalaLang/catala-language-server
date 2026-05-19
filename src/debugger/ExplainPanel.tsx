@@ -184,45 +184,6 @@ function ValueNode({
   );
 }
 
-function SourceBlock({
-  pos,
-  projectRoot,
-  onOpenFile,
-}: {
-  pos: import('./traceTypes').SourcePos;
-  projectRoot: string;
-  onOpenFile: (path: string, line: number) => void;
-}): ReactElement {
-  const [expanded, setExpanded] = useState(false);
-  const hasContext = !!pos.source_context;
-  const text = expanded && pos.source_context ? pos.source_context : pos.source_text;
-
-  return (
-    <div className="explain-event-source">
-      {pos.law_headings.length > 0 && (
-        <div className="explain-event-meta">{pos.law_headings.join(' › ')}</div>
-      )}
-      {text && (
-        <pre
-          className={`explain-event-source-text${expanded ? ' expanded' : ''}`}
-          onClick={hasContext ? () => setExpanded((v) => !v) : undefined}
-          style={hasContext ? { cursor: 'pointer' } : undefined}
-          title={hasContext ? (expanded ? 'Cliquer pour réduire' : 'Cliquer pour voir le contexte') : undefined}
-        >{text}</pre>
-      )}
-      <button
-        className="explain-event-source-link"
-        onClick={() => {
-          const abs = resolveSourcePath(projectRoot, pos.filename);
-          onOpenFile(abs, pos.start_line);
-        }}
-      >
-        {pos.filename.replace(/^_build\//, '')}:{pos.start_line}
-      </button>
-    </div>
-  );
-}
-
 function VarComputationNode({
   event,
   highlight,
@@ -243,6 +204,21 @@ function VarComputationNode({
       : rawName || event.name.join('.');
   const isInput = event.io.io_input === 'OnlyInput';
 
+  const nameEl = event.pos ? (
+    <button
+      className="explain-event-name explain-event-name-link"
+      title="Aller à la définition" /* TODO XXX i18n all explain panel strings */
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenFile(resolveSourcePath(projectRoot, event.pos!.filename), event.pos!.start_line);
+      }}
+    >
+      {varName}
+    </button>
+  ) : (
+    <span className="explain-event-name">{varName}</span>
+  );
+
   return (
     <div
       className={`explain-event-toggle${highlight ? ' highlight' : ''}`}
@@ -250,7 +226,7 @@ function VarComputationNode({
     >
       <span className="explain-event-icon codicon codicon-symbol-variable" />
       <span className="explain-event-content">
-        <span className="explain-event-name">{varName}</span>
+        {nameEl}
         {isInput && (
           <span className="explain-event-tag input">votre saisie</span>
         )}
@@ -265,9 +241,6 @@ function VarComputationNode({
           )}
           <ValueNode value={event.value} depth={0} />
         </div>
-        {event.pos && (
-          <SourceBlock pos={event.pos} projectRoot={projectRoot} onOpenFile={onOpenFile} />
-        )}
       </span>
     </div>
   );
