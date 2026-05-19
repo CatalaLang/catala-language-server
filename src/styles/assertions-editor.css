@@ -128,7 +128,8 @@
   margin-left: var(--spacing16);
 }
 
-.assertion-delete-btn {
+.assertion-delete-btn,
+.assertion-explain-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -136,6 +137,7 @@
   color: var(--vscode-descriptionForeground, rgba(128, 128, 128, 0.9));
 }
 
-.assertion-delete-btn:hover {
+.assertion-delete-btn:hover,
+.assertion-explain-btn:hover {
   color: var(--vscode-foreground, #fff);
 }

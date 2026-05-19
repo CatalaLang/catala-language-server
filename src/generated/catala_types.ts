@@ -198,6 +198,19 @@ export type ConfirmResult = {
   confirmed: boolean;
 }
 
+export type ExplainRequest = {
+  scope: string;
+}
+
+export type ExplainResult =
+| { kind: 'Error'; value: string }
+| { kind: 'Ok'; value: string }
+
+export type ExplainResultsMsg = {
+  scope: string;
+  result: ExplainResult;
+}
+
 export type UpMessage =
 | { kind: 'Ready' }
 | { kind: 'GuiEdit'; value: [TestList, boolean] }
@@ -206,11 +219,13 @@ export type UpMessage =
 | { kind: 'TestGenerateRequest'; value: TestGenerateRequest }
 | { kind: 'OpenTestScopePicker' }
 | { kind: 'ConfirmRequest'; value: ConfirmRequest }
+| { kind: 'ExplainRequest'; value: ExplainRequest }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
 | { kind: 'ConfirmResult'; value: ConfirmResult }
+| { kind: 'ExplainResults'; value: ExplainResultsMsg }
 
 export type GuiEntrypoint = {
   scope: string;
@@ -940,6 +955,54 @@ export function readConfirmResult(x: any, context: any = x): ConfirmResult {
   };
 }
 
+export function writeExplainRequest(x: ExplainRequest, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('ExplainRequest', 'scope', _atd_write_string, x.scope, x),
+  };
+}
+
+export function readExplainRequest(x: any, context: any = x): ExplainRequest {
+  return {
+    scope: _atd_read_required_field('ExplainRequest', 'scope', _atd_read_string, x['scope'], x),
+  };
+}
+
+export function writeExplainResult(x: ExplainResult, context: any = x): any {
+  switch (x.kind) {
+    case 'Error':
+      return ['Error', _atd_write_string(x.value, x)]
+    case 'Ok':
+      return ['Ok', _atd_write_string(x.value, x)]
+  }
+}
+
+export function readExplainResult(x: any, context: any = x): ExplainResult {
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'Error':
+      return { kind: 'Error', value: _atd_read_string(x[1], x) }
+    case 'Ok':
+      return { kind: 'Ok', value: _atd_read_string(x[1], x) }
+    default:
+      _atd_bad_json('ExplainResult', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeExplainResultsMsg(x: ExplainResultsMsg, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('ExplainResultsMsg', 'scope', _atd_write_string, x.scope, x),
+    'result': _atd_write_required_field('ExplainResultsMsg', 'result', writeExplainResult, x.result, x),
+  };
+}
+
+export function readExplainResultsMsg(x: any, context: any = x): ExplainResultsMsg {
+  return {
+    scope: _atd_read_required_field('ExplainResultsMsg', 'scope', _atd_read_string, x['scope'], x),
+    result: _atd_read_required_field('ExplainResultsMsg', 'result', readExplainResult, x['result'], x),
+  };
+}
+
 export function writeUpMessage(x: UpMessage, context: any = x): any {
   switch (x.kind) {
     case 'Ready':
@@ -956,6 +1019,8 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return 'OpenTestScopePicker'
     case 'ConfirmRequest':
       return ['ConfirmRequest', writeConfirmRequest(x.value, x)]
+    case 'ExplainRequest':
+      return ['ExplainRequest', writeExplainRequest(x.value, x)]
   }
 }
 
@@ -984,6 +1049,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'TestGenerateRequest', value: readTestGenerateRequest(x[1], x) }
       case 'ConfirmRequest':
         return { kind: 'ConfirmRequest', value: readConfirmRequest(x[1], x) }
+      case 'ExplainRequest':
+        return { kind: 'ExplainRequest', value: readExplainRequest(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')
@@ -999,6 +1066,8 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
       return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
     case 'ConfirmResult':
       return ['ConfirmResult', writeConfirmResult(x.value, x)]
+    case 'ExplainResults':
+      return ['ExplainResults', writeExplainResultsMsg(x.value, x)]
   }
 }
 
@@ -1011,6 +1080,8 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
       return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
     case 'ConfirmResult':
       return { kind: 'ConfirmResult', value: readConfirmResult(x[1], x) }
+    case 'ExplainResults':
+      return { kind: 'ExplainResults', value: readExplainResultsMsg(x[1], x) }
     default:
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')

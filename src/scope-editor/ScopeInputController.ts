@@ -131,6 +131,8 @@ export class ScopeInputController {
           throw new Error(`Trying to select scope while in input scope mode`);
         case 'TestGenerateRequest':
           throw new Error(`Trying to generate scope while in input scope mode`);
+        case 'ExplainRequest':
+          throw new Error(`Trying to explain scope while in input scope mode`);
         default:
           assertUnreachable(typed_msg);
       }

@@ -94,6 +94,20 @@ let cmd_serialize_inputs =
         ~doc:"Returns the normalized JSON of the given inputs.")
     Term.(const Lib.serialize_inputs $ Cli.Flags.scope_input)
 
+let cmd_explain =
+  Cmd.v
+    Cmd.(
+      info "explain"
+        ~doc:
+          "Re-run the specified test with trace enabled and print the \
+           computation events as JSON to stdout.")
+    Term.(
+      const Lib.explain_cmd
+      $ Cli.Flags.include_dirs
+      $ Cli.Flags.Global.options
+      $ Cli.Flags.ex_scope
+      $ Cli.Flags.scope_input)
+
 let man =
   [
     `S Manpage.s_description;
@@ -113,6 +127,7 @@ let register () =
       cmd_write;
       cmd_list_scopes;
       cmd_serialize_inputs;
+      cmd_explain;
     ];
   (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
      ~contexts:(function

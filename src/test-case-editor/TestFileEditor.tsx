@@ -51,6 +51,16 @@ type TestRunState = {
   };
 };
 
+type ExplainEntry = {
+  outputName: string;
+  events: string | null; // null = loading
+  error?: string;
+};
+
+type ExplainState = {
+  [scope: string]: ExplainEntry | null;
+};
+
 type Props = { contents: UIState; vscode: WebviewApi<unknown> };
 
 /** Editor for a collection of tests in a single file */
@@ -60,6 +70,7 @@ export default function TestFileEditor({
 }: Props): ReactElement {
   const [state, setState] = useState(contents);
   const [testRunState, setTestRunState] = useState<TestRunState>({});
+  const [explainState, setExplainState] = useState<ExplainState>({});
   useEffect(() => {
     setVsCodeApi(vscode);
   }, [vscode]);
@@ -188,6 +199,20 @@ export default function TestFileEditor({
     []
   );
 
+  const onExplainRequest = useCallback(
+    (scope: string, outputName: string): void => {
+      setExplainState((prev) => ({ ...prev, [scope]: { outputName, events: null } }));
+      vscode.postMessage(
+        writeUpMessage({ kind: 'ExplainRequest', value: { scope } })
+      );
+    },
+    [vscode]
+  );
+
+  const onExplainClose = useCallback((scope: string): void => {
+    setExplainState((prev) => ({ ...prev, [scope]: null }));
+  }, []);
+
   const onAddNewTest = useCallback((): void => {
     vscode.postMessage(
       writeUpMessage({
@@ -233,6 +258,19 @@ export default function TestFileEditor({
         }
         case 'ConfirmResult': {
           resolveConfirmResult(message.value.id, message.value.confirmed);
+          break;
+        }
+        case 'ExplainResults': {
+          const { scope, result } = message.value;
+          setExplainState((prev) => {
+            const entry = prev[scope];
+            if (!entry) return prev;
+            if (result.kind === 'Ok') {
+              return { ...prev, [scope]: { outputName: entry.outputName, events: result.value } };
+            } else {
+              return { ...prev, [scope]: { outputName: entry.outputName, events: null, error: result.value } };
+            }
+          });
           break;
         }
         default:
@@ -290,6 +328,9 @@ export default function TestFileEditor({
               runState={testRunState[test.testing_scope]}
               onDiffResolved={onDiffResolved}
               onInvalidateDiffs={onInvalidateDiffs}
+              onExplainRequest={onExplainRequest}
+              onExplainClose={onExplainClose}
+              explainState={explainState[test.testing_scope]}
             />
           ))}
         </div>

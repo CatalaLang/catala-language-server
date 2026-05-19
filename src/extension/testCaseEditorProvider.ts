@@ -19,6 +19,7 @@ import {
   parseTestFile,
   generate,
   getAvailableScopes,
+  explainTestScope,
 } from '../test-case-editor/testCaseCompilerInterop';
 import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
@@ -444,6 +445,23 @@ export class TestCaseEditorProvider
           postMessageToWebView({
             kind: 'ConfirmResult',
             value: { id, confirmed: confirmation?.action === successAction },
+          });
+          break;
+        }
+        case 'ExplainRequest': {
+          const { scope } = typed_msg.value;
+          await document.save(new vscode.CancellationTokenSource().token);
+          const fileName = document.uri.fsPath;
+          const explainResult = explainTestScope(fileName, scope);
+          postMessageToWebView({
+            kind: 'ExplainResults',
+            value: {
+              scope,
+              result:
+                explainResult.kind === 'Ok'
+                  ? { kind: 'Ok', value: explainResult.events }
+                  : { kind: 'Error', value: explainResult.value },
+            },
           });
           break;
         }

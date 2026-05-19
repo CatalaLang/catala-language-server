@@ -202,6 +202,34 @@ export function generate(
     return { kind: 'Error', value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}` };
   }
 }
+export function explainTestScope(
+  filename: string,
+  testScope: string,
+  inputs?: TestInputs
+): { kind: 'Ok'; events: string } | { kind: 'Error'; value: string } {
+  const input_args: string[] = inputs
+    ? ['--input', JSON.stringify(writeTestInputs(inputs))]
+    : [];
+  const args: string[] = [
+    'testcase',
+    'explain',
+    '--scope',
+    testScope,
+    filename,
+    ...input_args,
+  ];
+  logger.log(`Running ${catalaPath} ${args.join(' ')}`);
+  try {
+    const cwd = getCwd(filename);
+    const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
+    return { kind: 'Ok', events: result.toString() };
+  } catch (error) {
+    return {
+      kind: 'Error',
+      value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
+    };
+  }
+}
 
 export function serializeInputs(
   inputs: TestInputs

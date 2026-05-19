@@ -1,0 +1,210 @@
+.explain-panel {
+  border: 1px solid var(--vscode-panel-border, #ccc);
+  border-radius: 4px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.explain-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--vscode-sideBarSectionHeader-background, #f3f3f3);
+  border-bottom: 1px solid var(--vscode-panel-border, #ccc);
+}
+
+.explain-panel-title {
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.explain-panel-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.explain-panel-close:hover {
+  opacity: 1;
+}
+
+.explain-panel-error {
+  padding: 12px;
+  color: var(--vscode-errorForeground, red);
+}
+
+.explain-panel-error-detail {
+  margin-top: 6px;
+  font-size: 0.8em;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.explain-panel-loading {
+  padding: 12px;
+  color: var(--vscode-descriptionForeground, #888);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.explain-event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 16px;
+}
+
+.explain-event-item {
+  margin: 2px 0;
+}
+
+.explain-event-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  border-radius: 3px;
+}
+
+.explain-event-toggle:hover {
+  background: var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.05));
+}
+
+.explain-event-toggle.highlight {
+  background: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 220, 0, 0.2));
+  border-left: 3px solid var(--vscode-focusBorder, #007acc);
+}
+
+.explain-event-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 14px;
+}
+
+.explain-event-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.explain-event-name {
+  font-weight: 500;
+}
+
+.explain-event-tag {
+  font-size: 0.75em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--vscode-badge-background, #c4c4c4);
+  color: var(--vscode-badge-foreground, #333);
+}
+
+.explain-event-tag.input {
+  background: var(--vscode-inputValidation-infoBorder, #007acc);
+  color: #fff;
+}
+
+.explain-event-value {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.85em;
+  color: var(--vscode-debugTokenExpression-value, #1a85c4);
+  width: 100%;
+}
+
+.explain-event-meta {
+  font-size: 0.75em;
+  color: var(--vscode-descriptionForeground, #888);
+  width: 100%;
+}
+
+.explain-event-children {
+  padding-left: 16px;
+}
+
+/* Value node rendering */
+.explain-value-expand {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  color: inherit;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+}
+
+.explain-value-expand:hover {
+  opacity: 0.8;
+}
+
+.explain-value-type {
+  font-weight: 500;
+  font-size: 0.9em;
+}
+
+.explain-value-hint {
+  color: var(--vscode-descriptionForeground, #888);
+  font-size: 0.85em;
+}
+
+.explain-value-fields {
+  list-style: none;
+  margin: 2px 0 0 0;
+  padding: 0 0 0 16px;
+  border-left: 1px solid var(--vscode-panel-border, #ddd);
+}
+
+.explain-value-field {
+  margin: 1px 0;
+  font-size: 0.9em;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.explain-value-field-name {
+  color: var(--vscode-symbolIcon-fieldForeground, #6f42c1);
+  font-weight: 500;
+}
+
+.explain-value-sep {
+  color: var(--vscode-descriptionForeground, #888);
+}
+
+.explain-value-literal {
+  color: var(--vscode-debugTokenExpression-value, #1a85c4);
+}
+
+.explain-value-number {
+  color: var(--vscode-debugTokenExpression-number, #09885a);
+}
+
+.explain-value-string {
+  color: var(--vscode-debugTokenExpression-string, #a31515);
+}
+
+.explain-value-enum {
+  color: var(--vscode-debugTokenExpression-value, #1a85c4);
+}
+
+.explain-value-struct,
+.explain-value-array {
+  display: inline-block;
+  vertical-align: top;
+}

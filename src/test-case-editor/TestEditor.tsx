@@ -15,6 +15,7 @@ import {
   hasUnsetInTest,
   scrollToFirstInvalidOrUnset,
 } from '../editors/unsetValidation';
+import ExplainPanel from '../debugger/ExplainPanel';
 
 type Props = {
   test: Test;
@@ -29,6 +30,9 @@ type Props = {
   };
   onDiffResolved(scope: string, path: PathSegment[]): void;
   onInvalidateDiffs(scope: string, pathPrefix: PathSegment[]): void;
+  onExplainRequest(scope: string, outputName: string): void;
+  onExplainClose(scope: string): void;
+  explainState?: { outputName: string; events: string | null; error?: string } | null;
 };
 
 // Editor for a single test case (child of TestFileEditor)
@@ -66,6 +70,13 @@ export default function TestEditor(props: Props): ReactElement {
   }
 
   const expectedSectionRef = useRef<HTMLDivElement>(null);
+  const explainPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (props.explainState) {
+      explainPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [!!props.explainState]); // intentionally depend on presence, not content
   // Scope for searching the first '.value-editor.invalid' or '.value-editor.unset' before running; used to scroll into view
   const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
@@ -252,9 +263,22 @@ export default function TestEditor(props: Props): ReactElement {
             onInvalidateDiffs={(pathPrefix: PathSegment[]) =>
               props.onInvalidateDiffs(props.test.testing_scope, pathPrefix)
             }
+            onExplain={(outputName) =>
+              props.onExplainRequest(props.test.testing_scope, outputName)
+            }
           />
         </div>
       </div>
+      {props.explainState && (
+        <div ref={explainPanelRef}>
+          <ExplainPanel
+            outputName={props.explainState.outputName}
+            eventsJson={props.explainState.events}
+            error={props.explainState.error}
+            onClose={() => props.onExplainClose(props.test.testing_scope)}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ type Props = {
   diffs?: Diff[];
   onDiffResolved?: (path: PathSegment[]) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
+  onExplain?: (outputName: string) => void;
 };
 
 /* An editor for test outputs. Outputs are named and typed, and
@@ -41,6 +42,7 @@ export default function TestOutputsEditor({
   diffs = [],
   onDiffResolved,
   onInvalidateDiffs,
+  onExplain,
 }: Props): ReactElement {
   const intl = useIntl();
   const { test_outputs, tested_scope } = test;
@@ -87,6 +89,18 @@ export default function TestOutputsEditor({
             <div key={outputName} className="test-output-row">
               <div className="test-output-label">
                 <label>{outputName}</label>
+                {onExplain && (
+                  <button
+                    className="assertion-explain-btn"
+                    title={intl.formatMessage({
+                      id: 'assertion.explain',
+                      defaultMessage: 'Explain',
+                    })}
+                    onClick={() => onExplain(outputName)}
+                  >
+                    <span className="codicon codicon-lightbulb"></span>
+                  </button>
+                )}
                 {outputData?.value && (
                   <button
                     className="assertion-delete-btn"

@@ -207,6 +207,20 @@ type confirm_result = {
   confirmed: bool;
 }
 
+type explain_request = {
+  scope: string;
+}
+
+type explain_result = [
+  | Error of string
+  | Ok of string
+] <ocaml repr="classic">
+
+type explain_results_msg = {
+  scope: string;
+  result: explain_result;
+}
+
 type up_message = [
   | Ready
   | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
@@ -215,12 +229,14 @@ type up_message = [
   | TestGenerateRequest of test_generate_request
   | OpenTestScopePicker
   | ConfirmRequest of confirm_request
+  | ExplainRequest of explain_request
 ]
 
 type down_message = [
   | Update of parse_results
   | TestRunResults of test_run_results_msg
   | ConfirmResult of confirm_result
+  | ExplainResults of explain_results_msg
 ]
 
 (* List entrypoints *)

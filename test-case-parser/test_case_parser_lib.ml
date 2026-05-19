@@ -1609,6 +1609,173 @@ let run_test_cmd include_dirs options test_scope_name scope_input_opt =
   | None -> run_test include_dirs options test_scope_name
   | Some json -> run_with_inputs include_dirs options test_scope_name json
 
+
+let json_of_raw_events (raw_events : Catala_runtime.raw_event list) :
+    Yojson.Safe.t list =
+  let make_pos_json = function
+    | None -> `Null
+    | Some { Catala_runtime.filename; start_line; law_headings; _ } ->
+      `Assoc
+        [
+          "filename", `String filename;
+          "start_line", `Int start_line;
+          "law_headings", `List (List.map (fun s -> `String s) law_headings);
+        ]
+  in
+  let make_var_comp name io value pos_opt =
+    let io_json =
+      `Assoc
+        [
+          ( "io_input",
+            `String
+              (match io.Catala_runtime.io_input with
+              | Catala_runtime.NoInput -> "NoInput"
+              | Catala_runtime.OnlyInput -> "OnlyInput"
+              | Catala_runtime.Reentrant -> "Reentrant") );
+          "io_output", `Bool io.Catala_runtime.io_output;
+        ]
+    in
+    let value_json =
+      Yojson.Safe.from_string (Catala_runtime.Json.runtime_value value)
+    in
+    `Assoc
+      [
+        "kind", `String "VarComputation";
+        "name", `List (List.map (fun s -> `String s) name);
+        "io", io_json;
+        "value", value_json;
+        "pos", make_pos_json pos_opt;
+      ]
+  in
+  (* Returns (parsed events as json list, remaining raw events) *)
+  let rec parse_scope pos_opt inputs body = function
+    | [] -> List.rev inputs, List.rev body, []
+    | Catala_runtime.EndCall _ :: rest -> List.rev inputs, List.rev body, rest
+    | Catala_runtime.DecisionTaken pos :: rest ->
+      parse_scope (Some pos) inputs body rest
+    | Catala_runtime.BeginCall name :: rest ->
+      let sub_inputs, sub_body, rest = parse_scope None [] [] rest in
+      let sub_json =
+        `Assoc
+          [
+            "kind", `String "SubScopeCall";
+            "name", `List (List.map (fun s -> `String s) name);
+            "inputs", `List sub_inputs;
+            "body", `List sub_body;
+          ]
+      in
+      parse_scope None inputs (sub_json :: body) rest
+    | Catala_runtime.VariableDefinition (name, io, value) :: rest ->
+      let var_json = make_var_comp name io value pos_opt in
+      if io.Catala_runtime.io_input = Catala_runtime.OnlyInput && body = [] then
+        parse_scope None (var_json :: inputs) body rest
+      else
+        parse_scope None inputs (var_json :: body) rest
+  in
+  let rec parse_top pos_opt acc = function
+    | [] -> List.rev acc
+    | Catala_runtime.EndCall _ :: rest -> parse_top None acc rest
+    | Catala_runtime.DecisionTaken pos :: rest -> parse_top (Some pos) acc rest
+    | Catala_runtime.BeginCall name :: rest ->
+      let sub_inputs, sub_body, rest = parse_scope None [] [] rest in
+      let sub_json =
+        `Assoc
+          [
+            "kind", `String "SubScopeCall";
+            "name", `List (List.map (fun s -> `String s) name);
+            "inputs", `List sub_inputs;
+            "body", `List sub_body;
+          ]
+      in
+      parse_top None (sub_json :: acc) rest
+    | Catala_runtime.VariableDefinition (name, io, value) :: rest ->
+      let var_json = make_var_comp name io value pos_opt in
+      parse_top None (var_json :: acc) rest
+  in
+  parse_top None [] raw_events
+
+let explain_cmd include_dirs options testing_scope scope_input_opt =
+  (* Log nodes are inserted at compile time only when trace != None.
+     Must set trace before retrieve_program.
+     The exported Interpreter.evaluate_expr calls reset_log() in its finally
+     clause, so retrieve_log() after interpretation returns nothing.
+     We intercept the first formatter write, which fires inside
+     evaluate_expr_trace's finally while the log is still populated. *)
+  let captured_raw : Catala_runtime.raw_event list ref = ref [] in
+  let capture_fmt =
+    Format.make_formatter
+      (fun _ _ _ ->
+         if !captured_raw = [] then
+           captured_raw := Catala_runtime.retrieve_log ())
+      (fun () -> ())
+  in
+  let _opts =
+    Global.enforce_options
+      ~trace:(Some (lazy capture_fmt))
+      ~trace_format:Global.JSON
+      ~whole_program:true
+      ()
+  in
+  let _desugared_prg, _naming_ctx, scope_name, dcalc_prg =
+    retrieve_program include_dirs options testing_scope
+  in
+  let build_term =
+    match scope_input_opt with
+    | None ->
+      fun program_fun ->
+        let _args, program_expr =
+          match program_fun with
+          | EAbs { binder; _ }, _ -> Bindlib.unmbind binder
+          | _ -> assert false
+        in
+        program_expr
+    | Some scope_input ->
+      let input_expr =
+        let in_struct =
+          (ScopeName.Map.find scope_name dcalc_prg.decl_ctx.ctx_scopes)
+            .in_struct_name
+        in
+        let ty = TStruct in_struct, Pos.void in
+        let atd_test_inputs : O.runtime_value =
+          Lexing.from_string (Yojson.Safe.to_string scope_input)
+          |> J.read_test_inputs (Yojson.init_lexer ())
+          |> fun fields ->
+          {
+            O.attrs = [];
+            value =
+              O.Struct
+                ( { O.struct_name = StructName.to_string in_struct; fields = [] },
+                  List.map
+                    (fun (field_name, { O.value; typ = _ }) ->
+                      let value = (Option.get value).value in
+                      field_name, value)
+                    fields );
+          }
+        in
+        let encoding = Encoding.make_encoding dcalc_prg.decl_ctx ty in
+        let module JsonE = Json_encoding.Make (Json_repr.Yojson) in
+        let rval =
+          JsonE.destruct encoding (convert_to_json_input atd_test_inputs)
+        in
+        Encoding.convert_to_dcalc dcalc_prg.decl_ctx
+          (Typed { pos = Pos.void; ty })
+          ty rval
+        |> Expr.unbox
+        |> Interpreter.addcustom
+        |> Expr.box
+      in
+      fun program_fun ->
+        Expr.make_app (Expr.box program_fun) [input_expr]
+          [Expr.ty input_expr]
+          (Expr.pos program_fun)
+        |> Expr.unbox
+  in
+  let _result_struct, _failed_asserts =
+    interpret_program dcalc_prg scope_name build_term
+  in
+  let events_json = `List (json_of_raw_events !captured_raw) in
+  print_string (Yojson.Safe.to_string events_json)
+
 let print_scopes scopes = write_stdout J.write_scope_def_list scopes
 
 let list_scopes include_dirs options =

@@ -120,6 +120,8 @@ export default function ScopeInputEditor({
           resolveConfirmResult(message.value.id, message.value.confirmed);
           break;
         }
+        case 'ExplainResults':
+          break;
         default:
           assertUnreachable(message);
       }

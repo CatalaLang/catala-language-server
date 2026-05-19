@@ -546,26 +546,29 @@ let evaluate_operator
       in
       Lwt.return (Mark.remove r)
     | Find, [f; (EArray es, _)] ->
-        Lwt.catch
-          (fun () ->
-             let* e =
-               Lwt_list.find_s
-                 (fun e ->
-                    let* r = eval_application evaluate_expr f [e] in
-                    Lwt.return (get_bool ~pos:(Expr.pos f) r))
-                 es
-             in
-             Lwt.return (EInj { name = Expr.option_enum; cons = Expr.some_constr; e }))
-          (function
-            | Not_found ->
-              Lwt.return
-                (EInj
-                   {
-                     name = Expr.option_enum;
-                     cons = Expr.none_constr;
-                     e = ELit LUnit, Expr.with_ty m (TLit TUnit, pos);
-                   })
-            | e -> raise e)
+      let* found =
+        Lwt_list.fold_left_s
+          (fun acc e' ->
+            match acc with
+            | Some _ -> Lwt.return acc
+            | None ->
+              let* r = eval_application evaluate_expr f [e'] in
+              (match r with
+              | ELit (LBool true), _ -> Lwt.return (Some e')
+              | _ -> Lwt.return None))
+          None es
+      in
+      (match found with
+      | None ->
+        Lwt.return
+          (EInj
+             {
+               name = Expr.option_enum;
+               cons = Expr.none_constr;
+               e = ELit LUnit, Expr.with_ty m (TLit TUnit, pos);
+             })
+      | Some e ->
+        Lwt.return (EInj { name = Expr.option_enum; cons = Expr.some_constr; e }))
     | Sort updown, [f; (EArray es, _)] ->
       let* weighted =
         Lwt_list.map_s (fun e ->
@@ -584,8 +587,7 @@ let evaluate_operator
           weighted
       in
       Lwt.return (EArray (List.map fst sorted))
-    | (Length | Log _ | Eq | Map | Map2 | Concat | Filter | Fold | Reduce
-      | Find | Sort _), _ ->
+    | (Length | Log _ | Eq | Map | Map2 | Concat | Filter | Find | Fold | Reduce | Sort _), _ ->
       err ()
     | Not, [(ELit (LBool b), _)] -> Lwt.return (ELit (LBool (o_not b)))
     | And, [(ELit (LBool b1), _); (ELit (LBool b2), _)] ->
