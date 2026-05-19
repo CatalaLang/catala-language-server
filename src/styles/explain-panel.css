@@ -209,6 +209,27 @@
   vertical-align: top;
 }
 
+.explain-event-source {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.explain-event-source-text {
+  margin: 2px 0 2px 0;
+  padding: 4px 8px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.8em;
+  white-space: pre;
+  overflow-x: auto;
+  background: var(--vscode-textBlockQuote-background, rgba(0,0,0,0.04));
+  border-left: 2px solid var(--vscode-textBlockQuote-border, #ccc);
+  color: var(--vscode-editor-foreground, inherit);
+}
+
+.explain-event-source-text.expanded {
+  border-left-color: var(--vscode-focusBorder, #007acc);
+}
+
 .explain-event-source-link {
   background: none;
   border: none;

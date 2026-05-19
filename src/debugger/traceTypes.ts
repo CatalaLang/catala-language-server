@@ -9,6 +9,8 @@ export type SourcePos = {
   filename: string;
   start_line: number;
   law_headings: string[];
+  source_text?: string;
+  source_context?: string;
 };
 
 export type VarComputation = {

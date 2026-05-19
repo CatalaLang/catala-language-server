@@ -1610,16 +1610,51 @@ let run_test_cmd include_dirs options test_scope_name scope_input_opt =
   | Some json -> run_with_inputs include_dirs options test_scope_name json
 
 
+let read_source_text filename start_line end_line =
+  try
+    let ic = open_in filename in
+    for _ = 1 to start_line - 1 do
+      ignore (input_line ic)
+    done;
+    let buf = Buffer.create 256 in
+    let first = ref true in
+    (try
+       for _ = start_line to end_line do
+         if not !first then Buffer.add_char buf '\n';
+         first := false;
+         Buffer.add_string buf (input_line ic)
+       done
+     with End_of_file -> ());
+    close_in ic;
+    if Buffer.length buf > 0 then Some (Buffer.contents buf) else None
+  with _ -> None
+
 let json_of_raw_events (raw_events : Catala_runtime.raw_event list) :
     Yojson.Safe.t list =
   let make_pos_json = function
     | None -> `Null
-    | Some { Catala_runtime.filename; start_line; law_headings; _ } ->
+    | Some { Catala_runtime.filename; start_line; end_line; law_headings; _ } ->
+      let rule_end = min end_line (start_line + 6) in
+      let source_text = read_source_text filename start_line rule_end in
+      let ctx_start = max 1 (start_line - 2) in
+      let ctx_end = rule_end + 2 in
+      let source_context =
+        if ctx_start = start_line && ctx_end = rule_end then None
+        else read_source_text filename ctx_start ctx_end
+      in
       `Assoc
         [
           "filename", `String filename;
           "start_line", `Int start_line;
           "law_headings", `List (List.map (fun s -> `String s) law_headings);
+          ( "source_text",
+            match source_text with
+            | None -> `Null
+            | Some t -> `String t );
+          ( "source_context",
+            match source_context with
+            | None -> `Null
+            | Some t -> `String t );
         ]
   in
   let make_var_comp name io value pos_opt =

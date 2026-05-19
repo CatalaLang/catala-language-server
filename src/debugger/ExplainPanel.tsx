@@ -143,6 +143,45 @@ function ValueNode({
   );
 }
 
+function SourceBlock({
+  pos,
+  projectRoot,
+  onOpenFile,
+}: {
+  pos: import('./traceTypes').SourcePos;
+  projectRoot: string;
+  onOpenFile: (path: string, line: number) => void;
+}): ReactElement {
+  const [expanded, setExpanded] = useState(false);
+  const hasContext = !!pos.source_context;
+  const text = expanded && pos.source_context ? pos.source_context : pos.source_text;
+
+  return (
+    <div className="explain-event-source">
+      {pos.law_headings.length > 0 && (
+        <div className="explain-event-meta">{pos.law_headings.join(' › ')}</div>
+      )}
+      {text && (
+        <pre
+          className={`explain-event-source-text${expanded ? ' expanded' : ''}`}
+          onClick={hasContext ? () => setExpanded((v) => !v) : undefined}
+          style={hasContext ? { cursor: 'pointer' } : undefined}
+          title={hasContext ? (expanded ? 'Cliquer pour réduire' : 'Cliquer pour voir le contexte') : undefined}
+        >{text}</pre>
+      )}
+      <button
+        className="explain-event-source-link"
+        onClick={() => {
+          const abs = resolveSourcePath(projectRoot, pos.filename);
+          onOpenFile(abs, pos.start_line);
+        }}
+      >
+        {pos.filename.replace(/^_build\//, '')}:{pos.start_line}
+      </button>
+    </div>
+  );
+}
+
 function VarComputationNode({
   event,
   highlight,
@@ -178,21 +217,8 @@ function VarComputationNode({
         <div className="explain-event-value">
           <ValueNode value={event.value} depth={0} />
         </div>
-        {event.pos && event.pos.law_headings.length > 0 && (
-          <div className="explain-event-meta">
-            {event.pos.law_headings.join(' › ')}
-          </div>
-        )}
         {event.pos && (
-          <button
-            className="explain-event-source-link"
-            onClick={() => {
-              const abs = resolveSourcePath(projectRoot, event.pos!.filename);
-              onOpenFile(abs, event.pos!.start_line);
-            }}
-          >
-            {event.pos.filename.replace(/^_build\/[^/]+\//, '')}:{event.pos.start_line}
-          </button>
+          <SourceBlock pos={event.pos} projectRoot={projectRoot} onOpenFile={onOpenFile} />
         )}
       </span>
     </div>
