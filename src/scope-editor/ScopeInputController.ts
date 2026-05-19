@@ -133,6 +133,8 @@ export class ScopeInputController {
           throw new Error(`Trying to generate scope while in input scope mode`);
         case 'ExplainRequest':
           throw new Error(`Trying to explain scope while in input scope mode`);
+        case 'OpenFileRequest':
+          throw new Error(`Trying to open file while in input scope mode`);
         default:
           assertUnreachable(typed_msg);
       }

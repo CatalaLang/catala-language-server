@@ -54,6 +54,7 @@ type TestRunState = {
 type ExplainEntry = {
   outputName: string;
   events: string | null; // null = loading
+  projectRoot: string;
   error?: string;
 };
 
@@ -201,7 +202,7 @@ export default function TestFileEditor({
 
   const onExplainRequest = useCallback(
     (scope: string, outputName: string): void => {
-      setExplainState((prev) => ({ ...prev, [scope]: { outputName, events: null } }));
+      setExplainState((prev) => ({ ...prev, [scope]: { outputName, events: null, projectRoot: '' } }));
       vscode.postMessage(
         writeUpMessage({ kind: 'ExplainRequest', value: { scope } })
       );
@@ -261,14 +262,14 @@ export default function TestFileEditor({
           break;
         }
         case 'ExplainResults': {
-          const { scope, result } = message.value;
+          const { scope, result, project_root } = message.value;
           setExplainState((prev) => {
             const entry = prev[scope];
             if (!entry) return prev;
             if (result.kind === 'Ok') {
-              return { ...prev, [scope]: { outputName: entry.outputName, events: result.value } };
+              return { ...prev, [scope]: { outputName: entry.outputName, projectRoot: project_root, events: result.value } };
             } else {
-              return { ...prev, [scope]: { outputName: entry.outputName, events: null, error: result.value } };
+              return { ...prev, [scope]: { outputName: entry.outputName, projectRoot: project_root, events: null, error: result.value } };
             }
           });
           break;
@@ -331,6 +332,7 @@ export default function TestFileEditor({
               onExplainRequest={onExplainRequest}
               onExplainClose={onExplainClose}
               explainState={explainState[test.testing_scope]}
+              vscode={vscode}
             />
           ))}
         </div>

@@ -206,7 +206,7 @@ export function explainTestScope(
   filename: string,
   testScope: string,
   inputs?: TestInputs
-): { kind: 'Ok'; events: string } | { kind: 'Error'; value: string } {
+): { kind: 'Ok'; events: string; projectRoot: string } | { kind: 'Error'; value: string } {
   const input_args: string[] = inputs
     ? ['--input', JSON.stringify(writeTestInputs(inputs))]
     : [];
@@ -222,7 +222,7 @@ export function explainTestScope(
   try {
     const cwd = getCwd(filename);
     const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
-    return { kind: 'Ok', events: result.toString() };
+    return { kind: 'Ok', events: result.toString(), projectRoot: cwd ?? '' };
   } catch (error) {
     return {
       kind: 'Error',

@@ -6,6 +6,7 @@ import {
   type TestInputs,
   type TestRunResults,
   type PathSegment,
+  writeUpMessage,
 } from '../generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
@@ -16,6 +17,7 @@ import {
   scrollToFirstInvalidOrUnset,
 } from '../editors/unsetValidation';
 import ExplainPanel from '../debugger/ExplainPanel';
+import type { WebviewApi } from 'vscode-webview';
 
 type Props = {
   test: Test;
@@ -32,7 +34,8 @@ type Props = {
   onInvalidateDiffs(scope: string, pathPrefix: PathSegment[]): void;
   onExplainRequest(scope: string, outputName: string): void;
   onExplainClose(scope: string): void;
-  explainState?: { outputName: string; events: string | null; error?: string } | null;
+  explainState?: { outputName: string; events: string | null; projectRoot: string; error?: string } | null;
+  vscode: WebviewApi<unknown>;
 };
 
 // Editor for a single test case (child of TestFileEditor)
@@ -275,7 +278,13 @@ export default function TestEditor(props: Props): ReactElement {
             outputName={props.explainState.outputName}
             eventsJson={props.explainState.events}
             error={props.explainState.error}
+            projectRoot={props.explainState.projectRoot}
             onClose={() => props.onExplainClose(props.test.testing_scope)}
+            onOpenFile={(path, line) =>
+              props.vscode.postMessage(
+                writeUpMessage({ kind: 'OpenFileRequest', value: { path, line } })
+              )
+            }
           />
         </div>
       )}

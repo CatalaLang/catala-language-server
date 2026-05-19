@@ -219,6 +219,12 @@ type explain_result = [
 type explain_results_msg = {
   scope: string;
   result: explain_result;
+  project_root: string;
+}
+
+type open_file_request = {
+  path: string;
+  line: int;
 }
 
 type up_message = [
@@ -230,6 +236,7 @@ type up_message = [
   | OpenTestScopePicker
   | ConfirmRequest of confirm_request
   | ExplainRequest of explain_request
+  | OpenFileRequest of open_file_request
 ]
 
 type down_message = [

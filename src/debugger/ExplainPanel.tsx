@@ -5,8 +5,17 @@ type Props = {
   outputName: string;
   eventsJson: string | null;
   error?: string;
+  projectRoot: string;
   onClose: () => void;
+  onOpenFile: (path: string, line: number) => void;
 };
+
+function resolveSourcePath(projectRoot: string, filename: string): string {
+  // Clerk/ninja puts artifacts at _build/<same-relative-path>, so strip just _build/
+  const match = filename.match(/^_build\/(.+)$/);
+  const relative = match ? match[1] : filename;
+  return projectRoot ? `${projectRoot}/${relative}` : relative;
+}
 
 function containsTarget(events: TraceEvent[], targetName: string): boolean {
   return events.some((ev) => {
@@ -137,9 +146,13 @@ function ValueNode({
 function VarComputationNode({
   event,
   highlight,
+  projectRoot,
+  onOpenFile,
 }: {
   event: VarComputation;
   highlight: boolean;
+  projectRoot: string;
+  onOpenFile: (path: string, line: number) => void;
 }): ReactElement {
   const rawName = event.name[event.name.length - 1] ?? '';
   const varName =
@@ -171,9 +184,15 @@ function VarComputationNode({
           </div>
         )}
         {event.pos && (
-          <div className="explain-event-meta">
-            {event.pos.filename}:{event.pos.start_line}
-          </div>
+          <button
+            className="explain-event-source-link"
+            onClick={() => {
+              const abs = resolveSourcePath(projectRoot, event.pos!.filename);
+              onOpenFile(abs, event.pos!.start_line);
+            }}
+          >
+            {event.pos.filename.replace(/^_build\/[^/]+\//, '')}:{event.pos.start_line}
+          </button>
         )}
       </span>
     </div>
@@ -205,6 +224,8 @@ function SubScopeCallNode({
   highlightRef,
   callIndex,
   callCount,
+  projectRoot,
+  onOpenFile,
 }: {
   event: SubScopeCall;
   targetName: string;
@@ -212,6 +233,8 @@ function SubScopeCallNode({
   highlightRef?: React.RefObject<HTMLDivElement>;
   callIndex?: number;
   callCount?: number;
+  projectRoot: string;
+  onOpenFile: (path: string, line: number) => void;
 }): ReactElement {
   const [expanded, setExpanded] = useState(autoExpand);
   // For ["Scope", "direct"] use first element; otherwise last element
@@ -257,7 +280,7 @@ function SubScopeCallNode({
               <ul className="explain-event-list">
                 {event.inputs.map((inp, i) => (
                   <li key={i} className="explain-event-item">
-                    <VarComputationNode event={inp} highlight={false} />
+                    <VarComputationNode event={inp} highlight={false} projectRoot={projectRoot} onOpenFile={onOpenFile} />
                   </li>
                 ))}
               </ul>
@@ -270,6 +293,8 @@ function SubScopeCallNode({
                 events={event.body}
                 targetName={targetName}
                 highlightRef={highlightRef}
+                projectRoot={projectRoot}
+                onOpenFile={onOpenFile}
               />
             </>
           )}
@@ -287,10 +312,14 @@ function EventList({
   events,
   targetName,
   highlightRef,
+  projectRoot,
+  onOpenFile,
 }: {
   events: TraceEvent[];
   targetName: string;
   highlightRef?: React.RefObject<HTMLDivElement>;
+  projectRoot: string;
+  onOpenFile: (path: string, line: number) => void;
 }): ReactElement {
   // Count how many times each sub-scope name appears at this level
   const callCounts = new Map<string, number>();
@@ -311,7 +340,7 @@ function EventList({
           return (
             <li key={i} className="explain-event-item">
               <div ref={highlight ? highlightRef : undefined}>
-                <VarComputationNode event={ev} highlight={highlight} />
+                <VarComputationNode event={ev} highlight={highlight} projectRoot={projectRoot} onOpenFile={onOpenFile} />
               </div>
             </li>
           );
@@ -332,6 +361,8 @@ function EventList({
                 highlightRef={highlightRef}
                 callIndex={callIndex}
                 callCount={callCount}
+                projectRoot={projectRoot}
+                onOpenFile={onOpenFile}
               />
             </li>
           );
@@ -345,7 +376,9 @@ export default function ExplainPanel({
   outputName,
   eventsJson,
   error,
+  projectRoot,
   onClose,
+  onOpenFile,
 }: Props): ReactElement {
   let events: TraceEvent[] = [];
   let parseError: string | null = null;
@@ -394,6 +427,8 @@ export default function ExplainPanel({
           events={events}
           targetName={outputName}
           highlightRef={highlightRef}
+          projectRoot={projectRoot}
+          onOpenFile={onOpenFile}
         />
       )}
     </div>

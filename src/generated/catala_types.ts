@@ -209,6 +209,12 @@ export type ExplainResult =
 export type ExplainResultsMsg = {
   scope: string;
   result: ExplainResult;
+  project_root: string;
+}
+
+export type OpenFileRequest = {
+  path: string;
+  line: number /*int*/;
 }
 
 export type UpMessage =
@@ -220,6 +226,7 @@ export type UpMessage =
 | { kind: 'OpenTestScopePicker' }
 | { kind: 'ConfirmRequest'; value: ConfirmRequest }
 | { kind: 'ExplainRequest'; value: ExplainRequest }
+| { kind: 'OpenFileRequest'; value: OpenFileRequest }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
@@ -993,6 +1000,7 @@ export function writeExplainResultsMsg(x: ExplainResultsMsg, context: any = x): 
   return {
     'scope': _atd_write_required_field('ExplainResultsMsg', 'scope', _atd_write_string, x.scope, x),
     'result': _atd_write_required_field('ExplainResultsMsg', 'result', writeExplainResult, x.result, x),
+    'project_root': _atd_write_required_field('ExplainResultsMsg', 'project_root', _atd_write_string, x.project_root, x),
   };
 }
 
@@ -1000,6 +1008,21 @@ export function readExplainResultsMsg(x: any, context: any = x): ExplainResultsM
   return {
     scope: _atd_read_required_field('ExplainResultsMsg', 'scope', _atd_read_string, x['scope'], x),
     result: _atd_read_required_field('ExplainResultsMsg', 'result', readExplainResult, x['result'], x),
+    project_root: _atd_read_required_field('ExplainResultsMsg', 'project_root', _atd_read_string, x['project_root'], x),
+  };
+}
+
+export function writeOpenFileRequest(x: OpenFileRequest, context: any = x): any {
+  return {
+    'path': _atd_write_required_field('OpenFileRequest', 'path', _atd_write_string, x.path, x),
+    'line': _atd_write_required_field('OpenFileRequest', 'line', _atd_write_int, x.line, x),
+  };
+}
+
+export function readOpenFileRequest(x: any, context: any = x): OpenFileRequest {
+  return {
+    path: _atd_read_required_field('OpenFileRequest', 'path', _atd_read_string, x['path'], x),
+    line: _atd_read_required_field('OpenFileRequest', 'line', _atd_read_int, x['line'], x),
   };
 }
 
@@ -1021,6 +1044,8 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return ['ConfirmRequest', writeConfirmRequest(x.value, x)]
     case 'ExplainRequest':
       return ['ExplainRequest', writeExplainRequest(x.value, x)]
+    case 'OpenFileRequest':
+      return ['OpenFileRequest', writeOpenFileRequest(x.value, x)]
   }
 }
 
@@ -1051,6 +1076,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'ConfirmRequest', value: readConfirmRequest(x[1], x) }
       case 'ExplainRequest':
         return { kind: 'ExplainRequest', value: readExplainRequest(x[1], x) }
+      case 'OpenFileRequest':
+        return { kind: 'OpenFileRequest', value: readOpenFileRequest(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')

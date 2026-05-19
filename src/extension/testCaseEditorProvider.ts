@@ -457,12 +457,30 @@ export class TestCaseEditorProvider
             kind: 'ExplainResults',
             value: {
               scope,
+              project_root:
+                explainResult.kind === 'Ok' ? explainResult.projectRoot : '',
               result:
                 explainResult.kind === 'Ok'
                   ? { kind: 'Ok', value: explainResult.events }
                   : { kind: 'Error', value: explainResult.value },
             },
           });
+          break;
+        }
+        case 'OpenFileRequest': {
+          const { path: filePath, line } = typed_msg.value;
+          try {
+            const uri = vscode.Uri.file(filePath);
+            const pos = new vscode.Position(line - 1, 0);
+            await vscode.window.showTextDocument(uri, {
+              selection: new vscode.Range(pos, pos),
+              preview: true,
+            });
+          } catch (err) {
+            vscode.window.showErrorMessage(
+              `Cannot open ${filePath}: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
           break;
         }
         default:
