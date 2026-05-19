@@ -187,12 +187,14 @@ function ValueNode({
 function VarComputationNode({
   event,
   highlight,
+  isTopLevel,
   projectRoot,
   onOpenFile,
   expectedValue,
 }: {
   event: VarComputation;
   highlight: boolean;
+  isTopLevel: boolean;
   projectRoot: string;
   onOpenFile: (path: string, line: number) => void;
   expectedValue?: RuntimeValue;
@@ -235,7 +237,9 @@ function VarComputationNode({
       <span className="explain-event-content">
         {nameEl}
         {isInput && (
-          <span className="explain-event-tag input">votre saisie</span>
+          <span className="explain-event-tag input">
+            {isTopLevel ? 'votre saisie' : 'entrée'}
+          </span>
         )}
         {event.io.io_output && (
           <span className="explain-event-tag">sortie</span>
@@ -278,6 +282,7 @@ function SubScopeCallNode({
   highlightRef,
   callIndex,
   callCount,
+  isTopLevel = false,
   projectRoot,
   onOpenFile,
   expectedValue,
@@ -288,6 +293,7 @@ function SubScopeCallNode({
   highlightRef?: React.RefObject<HTMLDivElement>;
   callIndex?: number;
   callCount?: number;
+  isTopLevel?: boolean;
   projectRoot: string;
   onOpenFile: (path: string, line: number) => void;
   expectedValue?: RuntimeValue;
@@ -336,7 +342,7 @@ function SubScopeCallNode({
               <ul className="explain-event-list">
                 {event.inputs.map((inp, i) => (
                   <li key={i} className="explain-event-item">
-                    <VarComputationNode event={inp} highlight={false} projectRoot={projectRoot} onOpenFile={onOpenFile} />
+                    <VarComputationNode event={inp} highlight={false} isTopLevel={isTopLevel} projectRoot={projectRoot} onOpenFile={onOpenFile} />
                   </li>
                 ))}
               </ul>
@@ -369,6 +375,7 @@ function EventList({
   events,
   targetName,
   highlightRef,
+  isTopLevel = false,
   projectRoot,
   onOpenFile,
   expectedValue,
@@ -376,6 +383,7 @@ function EventList({
   events: TraceEvent[];
   targetName: string;
   highlightRef?: React.RefObject<HTMLDivElement>;
+  isTopLevel?: boolean;
   projectRoot: string;
   onOpenFile: (path: string, line: number) => void;
   expectedValue?: RuntimeValue;
@@ -402,6 +410,7 @@ function EventList({
                 <VarComputationNode
                   event={ev}
                   highlight={highlight}
+                  isTopLevel={isTopLevel}
                   projectRoot={projectRoot}
                   onOpenFile={onOpenFile}
                   expectedValue={highlight ? expectedValue : undefined}
@@ -426,6 +435,7 @@ function EventList({
                 highlightRef={highlightRef}
                 callIndex={callIndex}
                 callCount={callCount}
+                isTopLevel={isTopLevel}
                 projectRoot={projectRoot}
                 onOpenFile={onOpenFile}
                 expectedValue={expectedValue}
@@ -494,6 +504,7 @@ export default function ExplainPanel({
           events={events}
           targetName={outputName}
           highlightRef={highlightRef}
+          isTopLevel={true}
           projectRoot={projectRoot}
           onOpenFile={onOpenFile}
           expectedValue={expectedValue}
