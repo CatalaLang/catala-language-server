@@ -204,17 +204,24 @@ function VarComputationNode({
       : rawName || event.name.join('.');
   const isInput = event.io.io_input === 'OnlyInput';
 
+  /* TODO XXX i18n all explain panel strings */
   const nameEl = event.pos ? (
-    <button
-      className="explain-event-name explain-event-name-link"
-      title="Aller à la définition" /* TODO XXX i18n all explain panel strings */
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpenFile(resolveSourcePath(projectRoot, event.pos!.filename), event.pos!.start_line);
-      }}
-    >
-      {varName}
-    </button>
+    // NOTE: hover tooltip is CSS-only (sibling :hover trick) — prototype quality, not the way forward
+    <span className="explain-name-wrapper">
+      <button
+        className="explain-event-name explain-event-name-link"
+        title="Aller à la définition"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenFile(resolveSourcePath(projectRoot, event.pos!.filename), event.pos!.start_line);
+        }}
+      >
+        {varName}
+      </button>
+      {event.pos.source_context && (
+        <pre className="explain-hover-box">{event.pos.source_context}</pre>
+      )}
+    </span>
   ) : (
     <span className="explain-event-name">{varName}</span>
   );

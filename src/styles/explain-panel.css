@@ -122,6 +122,35 @@
   opacity: 0.8;
 }
 
+.explain-name-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.explain-hover-box {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  margin: 2px 0 0 0;
+  padding: 6px 10px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.8em;
+  white-space: pre;
+  background: var(--vscode-editorHoverWidget-background, #f5f5f5);
+  border: 1px solid var(--vscode-editorHoverWidget-border, #ccc);
+  color: var(--vscode-editor-foreground, inherit);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  pointer-events: none;
+  max-width: 500px;
+  overflow-x: auto;
+}
+
+.explain-name-wrapper:hover .explain-hover-box {
+  display: block;
+}
+
 .explain-event-tag {
   font-size: 0.75em;
   padding: 1px 5px;
