@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from 'react';
+import { useState, useEffect, useRef, type ReactElement } from 'react';
 import type { TraceEvent, VarComputation, SubScopeCall } from './traceTypes';
 
 type Props = {
@@ -7,6 +7,18 @@ type Props = {
   error?: string;
   onClose: () => void;
 };
+
+function containsTarget(events: TraceEvent[], targetName: string): boolean {
+  return events.some((ev) => {
+    if (ev.kind === 'VarComputation') {
+      return (ev.name[ev.name.length - 1] ?? '') === targetName;
+    }
+    return (
+      containsTarget(ev.inputs as TraceEvent[], targetName) ||
+      containsTarget(ev.body, targetName)
+    );
+  });
+}
 
 function ValueNode({
   value,
@@ -168,19 +180,53 @@ function VarComputationNode({
   );
 }
 
+function compactValue(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'boolean') return value ? 'vrai' : 'faux';
+  if (typeof value === 'number') return value.toLocaleString('fr-FR');
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    const v = value as Record<string, unknown>;
+    if (v.kind === 'enum') return String(v.constructor);
+    if (v.kind === 'struct') {
+      const fields = Object.entries(v.fields as Record<string, unknown>);
+      if (fields.length === 1) return compactValue(fields[0][1]);
+      return String(v.name).split('.').pop() ?? String(v.name);
+    }
+    if (v.kind === 'array') return `[${(v.value as unknown[]).length}]`;
+  }
+  return JSON.stringify(value, null, 0);
+}
+
 function SubScopeCallNode({
   event,
   targetName,
+  autoExpand,
+  highlightRef,
+  callIndex,
+  callCount,
 }: {
   event: SubScopeCall;
   targetName: string;
+  autoExpand: boolean;
+  highlightRef?: React.RefObject<HTMLDivElement>;
+  callIndex?: number;
+  callCount?: number;
 }): ReactElement {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(autoExpand);
   // For ["Scope", "direct"] use first element; otherwise last element
   const scopeName =
     event.name[1] === 'direct'
       ? event.name[0]
       : (event.name[event.name.length - 1] ?? event.name.join('.'));
+
+  const outputVars = event.body.filter(
+    (ev): ev is VarComputation => ev.kind === 'VarComputation' && ev.io.io_output,
+  );
+  const outputSummary =
+    !expanded && outputVars.length > 0
+      ? outputVars.map((v) => compactValue(v.value)).join(', ')
+      : null;
 
   return (
     <div className="explain-event-item">
@@ -194,7 +240,13 @@ function SubScopeCallNode({
         />
         <span className="explain-event-content">
           <span className="explain-event-name">{scopeName}</span>
-          <span className="explain-event-tag">sous-portée</span>
+          {callCount !== undefined && callCount > 1 && callIndex !== undefined && (
+            <span className="explain-event-tag">{callIndex + 1}/{callCount}</span>
+          )}
+          <span className="explain-event-tag">sous-champ</span>
+          {outputSummary !== null && (
+            <span className="explain-event-output-summary">→ {outputSummary}</span>
+          )}
         </span>
       </button>
       {expanded && (
@@ -214,7 +266,11 @@ function SubScopeCallNode({
           {event.body.length > 0 && (
             <>
               <div className="explain-event-meta">Calculs</div>
-              <EventList events={event.body} targetName={targetName} />
+              <EventList
+                events={event.body}
+                targetName={targetName}
+                highlightRef={highlightRef}
+              />
             </>
           )}
         </div>
@@ -223,13 +279,29 @@ function SubScopeCallNode({
   );
 }
 
+function scopeKey(ev: SubScopeCall): string {
+  return ev.name.join('\x00');
+}
+
 function EventList({
   events,
   targetName,
+  highlightRef,
 }: {
   events: TraceEvent[];
   targetName: string;
+  highlightRef?: React.RefObject<HTMLDivElement>;
 }): ReactElement {
+  // Count how many times each sub-scope name appears at this level
+  const callCounts = new Map<string, number>();
+  for (const ev of events) {
+    if (ev.kind === 'SubScopeCall') {
+      const key = scopeKey(ev);
+      callCounts.set(key, (callCounts.get(key) ?? 0) + 1);
+    }
+  }
+  const callIndices = new Map<string, number>();
+
   return (
     <ul className="explain-event-list">
       {events.map((ev, i) => {
@@ -238,13 +310,29 @@ function EventList({
           const highlight = varName === targetName;
           return (
             <li key={i} className="explain-event-item">
-              <VarComputationNode event={ev} highlight={highlight} />
+              <div ref={highlight ? highlightRef : undefined}>
+                <VarComputationNode event={ev} highlight={highlight} />
+              </div>
             </li>
           );
         } else {
+          const key = scopeKey(ev);
+          const callIndex = callIndices.get(key) ?? 0;
+          callIndices.set(key, callIndex + 1);
+          const callCount = callCounts.get(key) ?? 1;
+          const autoExpand =
+            containsTarget(ev.inputs as TraceEvent[], targetName) ||
+            containsTarget(ev.body, targetName);
           return (
             <li key={i} className="explain-event-item">
-              <SubScopeCallNode event={ev} targetName={targetName} />
+              <SubScopeCallNode
+                event={ev}
+                targetName={targetName}
+                autoExpand={autoExpand}
+                highlightRef={highlightRef}
+                callIndex={callIndex}
+                callCount={callCount}
+              />
             </li>
           );
         }
@@ -270,6 +358,14 @@ export default function ExplainPanel({
     }
   }
 
+  const highlightRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>;
+
+  useEffect(() => {
+    if (eventsJson !== null && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [eventsJson]);
+
   return (
     <div className="explain-panel" role="complementary" aria-label="Explain">
       <div className="explain-panel-header">
@@ -294,7 +390,11 @@ export default function ExplainPanel({
       ) : parseError ? (
         <div className="explain-panel-error">{parseError}</div>
       ) : (
-        <EventList events={events} targetName={outputName} />
+        <EventList
+          events={events}
+          targetName={outputName}
+          highlightRef={highlightRef}
+        />
       )}
     </div>
   );

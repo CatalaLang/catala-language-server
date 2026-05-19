@@ -208,3 +208,10 @@
   display: inline-block;
   vertical-align: top;
 }
+
+.explain-event-output-summary {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.85em;
+  color: var(--vscode-debugTokenExpression-value, #1a85c4);
+  margin-left: 4px;
+}
