@@ -279,6 +279,10 @@ export default function TestEditor(props: Props): ReactElement {
             eventsJson={props.explainState.events}
             error={props.explainState.error}
             projectRoot={props.explainState.projectRoot}
+            expectedValue={
+              props.test.test_outputs.get(props.explainState.outputName)?.value
+                ?.value
+            }
             onClose={() => props.onExplainClose(props.test.testing_scope)}
             onOpenFile={(path, line) =>
               props.vscode.postMessage(

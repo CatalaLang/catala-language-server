@@ -1,14 +1,55 @@
 import { useState, useEffect, useRef, type ReactElement } from 'react';
 import type { TraceEvent, VarComputation, SubScopeCall } from './traceTypes';
+import type { RuntimeValue } from '../generated/catala_types';
 
 type Props = {
   outputName: string;
   eventsJson: string | null;
   error?: string;
   projectRoot: string;
+  expectedValue?: RuntimeValue;
   onClose: () => void;
   onOpenFile: (path: string, line: number) => void;
 };
+
+function compactRuntimeValue(rv: RuntimeValue): string {
+  const raw = rv.value;
+  switch (raw.kind) {
+    case 'Money':
+      return (raw.value / 100).toLocaleString('fr-FR');
+    case 'Integer':
+      return raw.value.toLocaleString('fr-FR');
+    case 'Decimal':
+      return raw.value.toLocaleString('fr-FR');
+    case 'Bool':
+      return raw.value ? 'vrai' : 'faux';
+    case 'Date': {
+      const d = raw.value;
+      return `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
+    }
+    case 'Duration': {
+      const d = raw.value;
+      const parts: string[] = [];
+      if (d.years) parts.push(`${d.years}a`);
+      if (d.months) parts.push(`${d.months}m`);
+      if (d.days) parts.push(`${d.days}j`);
+      return parts.length ? parts.join(' ') : '0j';
+    }
+    case 'Enum':
+      return raw.value[1][0];
+    case 'Struct': {
+      const fields = Array.from(raw.value[1].entries());
+      if (fields.length === 1) return compactRuntimeValue(fields[0][1]);
+      return raw.value[0].struct_name;
+    }
+    case 'Array':
+      return `[${raw.value.length}]`;
+    case 'Unset':
+      return '⊘';
+    case 'Empty':
+      return '∅';
+  }
+}
 
 function resolveSourcePath(projectRoot: string, filename: string): string {
   // Clerk/ninja puts artifacts at _build/<same-relative-path>, so strip just _build/
@@ -187,11 +228,13 @@ function VarComputationNode({
   highlight,
   projectRoot,
   onOpenFile,
+  expectedValue,
 }: {
   event: VarComputation;
   highlight: boolean;
   projectRoot: string;
   onOpenFile: (path: string, line: number) => void;
+  expectedValue?: RuntimeValue;
 }): ReactElement {
   const rawName = event.name[event.name.length - 1] ?? '';
   const varName =
@@ -215,6 +258,11 @@ function VarComputationNode({
           <span className="explain-event-tag">sortie</span>
         )}
         <div className="explain-event-value">
+          {expectedValue && (
+            <span className="explain-expected-value">
+              {compactRuntimeValue(expectedValue)}
+            </span>
+          )}
           <ValueNode value={event.value} depth={0} />
         </div>
         {event.pos && (
@@ -252,6 +300,7 @@ function SubScopeCallNode({
   callCount,
   projectRoot,
   onOpenFile,
+  expectedValue,
 }: {
   event: SubScopeCall;
   targetName: string;
@@ -261,6 +310,7 @@ function SubScopeCallNode({
   callCount?: number;
   projectRoot: string;
   onOpenFile: (path: string, line: number) => void;
+  expectedValue?: RuntimeValue;
 }): ReactElement {
   const [expanded, setExpanded] = useState(autoExpand);
   // For ["Scope", "direct"] use first element; otherwise last element
@@ -292,7 +342,7 @@ function SubScopeCallNode({
           {callCount !== undefined && callCount > 1 && callIndex !== undefined && (
             <span className="explain-event-tag">{callIndex + 1}/{callCount}</span>
           )}
-          <span className="explain-event-tag">sous-champ</span>
+          <span className="explain-event-tag">champ d'application</span>
           {outputSummary !== null && (
             <span className="explain-event-output-summary">→ {outputSummary}</span>
           )}
@@ -321,6 +371,7 @@ function SubScopeCallNode({
                 highlightRef={highlightRef}
                 projectRoot={projectRoot}
                 onOpenFile={onOpenFile}
+                expectedValue={expectedValue}
               />
             </>
           )}
@@ -340,12 +391,14 @@ function EventList({
   highlightRef,
   projectRoot,
   onOpenFile,
+  expectedValue,
 }: {
   events: TraceEvent[];
   targetName: string;
   highlightRef?: React.RefObject<HTMLDivElement>;
   projectRoot: string;
   onOpenFile: (path: string, line: number) => void;
+  expectedValue?: RuntimeValue;
 }): ReactElement {
   // Count how many times each sub-scope name appears at this level
   const callCounts = new Map<string, number>();
@@ -366,7 +419,13 @@ function EventList({
           return (
             <li key={i} className="explain-event-item">
               <div ref={highlight ? highlightRef : undefined}>
-                <VarComputationNode event={ev} highlight={highlight} projectRoot={projectRoot} onOpenFile={onOpenFile} />
+                <VarComputationNode
+                  event={ev}
+                  highlight={highlight}
+                  projectRoot={projectRoot}
+                  onOpenFile={onOpenFile}
+                  expectedValue={highlight ? expectedValue : undefined}
+                />
               </div>
             </li>
           );
@@ -389,6 +448,7 @@ function EventList({
                 callCount={callCount}
                 projectRoot={projectRoot}
                 onOpenFile={onOpenFile}
+                expectedValue={expectedValue}
               />
             </li>
           );
@@ -403,6 +463,7 @@ export default function ExplainPanel({
   eventsJson,
   error,
   projectRoot,
+  expectedValue,
   onClose,
   onOpenFile,
 }: Props): ReactElement {
@@ -455,6 +516,7 @@ export default function ExplainPanel({
           highlightRef={highlightRef}
           projectRoot={projectRoot}
           onOpenFile={onOpenFile}
+          expectedValue={expectedValue}
         />
       )}
     </div>
