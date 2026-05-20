@@ -24,9 +24,9 @@ export function resolveBinaryPath(
       // Configured path is highest priority
       return configured_path;
     } else {
-      vscode.window.showWarningMessage(
-        `${public_bin_name} configured path '${configured_path}' does not exist.`
-      );
+      const msg = `${public_bin_name} configured path '${configured_path}' does not exist.`;
+      logger.log(msg);
+      vscode.window.showWarningMessage(msg);
     }
   }
   const local_path = local_bin_name

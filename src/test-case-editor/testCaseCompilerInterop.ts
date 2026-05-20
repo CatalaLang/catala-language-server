@@ -23,53 +23,63 @@ function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
 }
 
+type ExecOptions = { input?: string; cwd?: string };
+type ExecResult = { ok: true; output: string } | { ok: false; stderr: string };
+
+function execBinary(bin: string, args: string[], opts: ExecOptions = {}): ExecResult {
+  logger.log(`Running ${bin} ${args.join(' ')}`);
+  try {
+    return { ok: true, output: execFileSync(bin, args, { encoding: 'utf8', ...opts }) };
+  } catch (error) {
+    const stderr = (error as SpawnSyncReturns<Buffer | string>).stderr;
+    return {
+      ok: false,
+      stderr: stderr ? stderr.toString() : error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function parseTestFile(
   content: string,
   lang: string,
   bufferPath: string
 ): ParseResults {
   const cwd = getCwd(bufferPath);
-
-  // TODO we could revisit this to make the parsing async
+  const execResult = execBinary(
+    catalaPath,
+    ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
+    { input: content, ...(cwd && { cwd }) }
+  );
+  if (!execResult.ok) return { kind: 'ParseError', value: execResult.stderr };
+  let parsed: unknown;
   try {
-    const results = execFileSync(
-      catalaPath,
-      ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
-      { input: content, ...(cwd && { cwd }) }
-    );
-    const testList = readTestList(JSON.parse(results.toString()));
-    if (content.trim() !== '' && testList.length == 0) {
-      return {
-        kind: 'EmptyTestListMismatch',
-      };
-    }
-    return {
-      kind: 'Results',
-      value: testList,
-    };
+    parsed = JSON.parse(execResult.output);
   } catch (error) {
-    return {
-      kind: 'ParseError',
-      value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
-    };
+    logger.log(`JSON parse error in parseTestFile: ${error}`);
+    return { kind: 'ParseError', value: `JSON parse error: ${String(error)}` };
   }
+  let testList: TestList;
+  try {
+    testList = readTestList(parsed);
+  } catch (error) {
+    logger.log(`ATD read error in parseTestFile: ${error}`);
+    return { kind: 'ParseError', value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}` };
+  }
+  if (content.trim() !== '' && testList.length === 0) {
+    return { kind: 'EmptyTestListMismatch' };
+  }
+  return { kind: 'Results', value: testList };
 }
 
 export function atdToCatala(tests: TestList, lang: string): string {
-  //XXX this probably needs better error handling
-  try {
-    const results = execFileSync(
-      catalaPath,
-      ['testcase', 'write', '-l', lang],
-      {
-        input: JSON.stringify(writeTestList(tests)),
-      }
-    );
-    return results.toString();
-  } catch (error) {
-    logger.log(`Error in atdToCatala: ${error}`);
-    throw error;
+  const result = execBinary(catalaPath, ['testcase', 'write', '-l', lang], {
+    input: JSON.stringify(writeTestList(tests)),
+  });
+  if (!result.ok) {
+    logger.log(`Error in atdToCatala: ${result.stderr}`);
+    throw new Error(result.stderr);
   }
+  return result.output;
 }
 
 export function runTestScope(
@@ -86,37 +96,42 @@ export function runTestScope(
    * (note that not all these questions are related to the `runTestScope` function,
    * these could be handled externally as well)
    */
-
-  let input_args: string[] = [];
-  if (inputs) {
-    const serialized_inputs = JSON.stringify(writeTestInputs(inputs));
-    input_args = ['--input', serialized_inputs];
-  }
-  let args: string[] = [
-    'testcase',
-    'run',
-    '--scope',
-    testScope,
-    filename,
-  ].concat(input_args);
-  logger.log(`Running ${catalaPath} ${args.join(' ')}`);
-  try {
-    const cwd = getCwd(filename);
-    if (cwd) {
-      const relFilename = path.relative(cwd, filename);
-      //compile dependencies (hack), do not fail on asserts
-      execFileSync(clerkPath, ['run', '-c--no-fail-on-assert', relFilename], {
-        cwd,
-      });
+  const inputArgs = inputs
+    ? ['--input', JSON.stringify(writeTestInputs(inputs))]
+    : [];
+  const args = ['testcase', 'run', '--scope', testScope, filename, ...inputArgs];
+  const cwd = getCwd(filename);
+  if (cwd) {
+    const relFilename = path.relative(cwd, filename);
+    //compile dependencies (hack), do not fail on asserts
+    const clerkResult = execBinary(clerkPath, ['run', '-c--no-fail-on-assert', relFilename], { cwd });
+    if (!clerkResult.ok) {
+      window.showErrorMessage(clerkResult.stderr);
+      return { kind: 'Error', value: clerkResult.stderr };
     }
-    // Here we *do* want to fail on asserts, as we catch failures through
-    // the `register_lsp_error_notifier` hook.
-    const result = execFileSync(catalaPath, args, { ...(cwd && { cwd }) });
+  }
+  // Here we *do* want to fail on asserts, as we catch failures through
+  // the `register_lsp_error_notifier` hook.
+  const execResult = execBinary(catalaPath, args, { ...(cwd && { cwd }) });
+  if (!execResult.ok) {
+    window.showErrorMessage(execResult.stderr);
+    return { kind: 'Error', value: execResult.stderr };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(execResult.output);
+  } catch (error) {
+    logger.log(`JSON parse error in runTestScope: ${error}`);
+    const msg = `JSON parse error: ${String(error)}`;
+    window.showErrorMessage(msg);
+    return { kind: 'Error', value: msg };
+  }
+  try {
     const {
       test: { test_outputs },
       assert_failures,
       diffs,
-    } = readTestRun(JSON.parse(result.toString()));
+    } = readTestRun(parsed);
     return {
       kind: 'Ok',
       value: {
@@ -127,27 +142,30 @@ export function runTestScope(
       },
     };
   } catch (error) {
-    const errorMsg = String(
-      (error as SpawnSyncReturns<string | Buffer>).stderr
-    );
-    window.showErrorMessage(errorMsg);
-    return {
-      kind: 'Error',
-      value: errorMsg,
-    };
+    logger.log(`ATD read error in runTestScope: ${error}`);
+    const msg = `Schema error (catala LSP / extension version mismatch?): ${String(error)}`;
+    window.showErrorMessage(msg);
+    return { kind: 'Error', value: msg };
   }
 }
 
 export function getAvailableScopes(filename: string): ScopeDefList {
+  const execResult = execBinary(catalaPath, ['testcase', 'list-scopes', filename]);
+  if (!execResult.ok) {
+    logger.log(`Execution error in getAvailableScopes: ${execResult.stderr}`);
+    return [];
+  }
+  let parsed: unknown;
   try {
-    const results = execFileSync(catalaPath, [
-      'testcase',
-      'list-scopes',
-      filename,
-    ]);
-    return readScopeDefList(JSON.parse(results.toString()));
+    parsed = JSON.parse(execResult.output);
   } catch (error) {
-    logger.log(`Error getting available scopes: ${error}`);
+    logger.log(`JSON parse error in getAvailableScopes: ${error}`);
+    return [];
+  }
+  try {
+    return readScopeDefList(parsed);
+  } catch (error) {
+    logger.log(`ATD read error in getAvailableScopes (catala LSP / extension version mismatch?): ${error}`);
     return [];
   }
 }
@@ -158,59 +176,53 @@ export function generate(
   default_values?: boolean,
   force_module?: boolean
 ): TestGenerateResults {
-  const cmd = catalaPath;
-  const with_defaults = default_values ? ['--default-values'] : [];
-  const enforce_module = force_module ? ['--enforce-module'] : [];
   const args = [
     'testcase',
     'generate',
     '--scope',
     scope,
     filename,
-    ...with_defaults,
-    ...enforce_module,
+    ...(default_values ? ['--default-values'] : []),
+    ...(force_module ? ['--enforce-module'] : []),
   ];
-  logger.log(`Running ${cmd} ${args.join(' ')}`);
   const cwd = getCwd(filename);
+  const execResult = execBinary(catalaPath, args, { ...(cwd && { cwd }) });
+  if (!execResult.ok) return { kind: 'Error', value: execResult.stderr };
+  let parsed: unknown;
   try {
-    const results = execFileSync(cmd, args, { ...(cwd && { cwd }) });
-    const test = readTestList(JSON.parse(results.toString()));
-    return {
-      kind: 'Results',
-      value: test,
-    };
+    parsed = JSON.parse(execResult.output);
   } catch (error) {
-    return {
-      kind: 'Error',
-      value: String((error as SpawnSyncReturns<string | Buffer>).stderr),
-    };
+    logger.log(`JSON parse error in generate: ${error}`);
+    return { kind: 'Error', value: `JSON parse error: ${String(error)}` };
+  }
+  try {
+    return { kind: 'Results', value: readTestList(parsed) };
+  } catch (error) {
+    logger.log(`ATD read error in generate: ${error}`);
+    return { kind: 'Error', value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}` };
   }
 }
+
 export function serializeInputs(
   inputs: TestInputs
 ): { kind: 'Ok'; json: JSON } | { kind: 'Error'; message: string } {
-  const serialized_inputs = JSON.stringify(writeTestInputs(inputs));
-  let args: string[] = [
+  const args = [
     'testcase',
     'serialize-inputs',
     '--input',
-    serialized_inputs,
+    JSON.stringify(writeTestInputs(inputs)),
   ];
-  logger.log(`Running ${catalaPath} ${args.join(' ')}`);
+  const execResult = execBinary(catalaPath, args);
+  if (!execResult.ok) {
+    window.showErrorMessage(execResult.stderr);
+    return { kind: 'Error', message: execResult.stderr };
+  }
   try {
-    const result = execFileSync(catalaPath, args);
-    return {
-      kind: 'Ok',
-      json: JSON.parse(result.toString()),
-    };
+    return { kind: 'Ok', json: JSON.parse(execResult.output) };
   } catch (error) {
-    const errorMsg = String(
-      (error as SpawnSyncReturns<string | Buffer>).stderr
-    );
-    window.showErrorMessage(errorMsg);
-    return {
-      kind: 'Error',
-      message: errorMsg,
-    };
+    logger.log(`JSON parse error in serializeInputs: ${error}`);
+    const msg = `JSON parse error: ${String(error)}`;
+    window.showErrorMessage(msg);
+    return { kind: 'Error', message: msg };
   }
 }
