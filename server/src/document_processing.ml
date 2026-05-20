@@ -160,8 +160,19 @@ let surface_to_scopelang
       in
       check build_stdlib_path
       @@ fun () ->
-      Log.debug (fun m -> m "Stdlib not found - calling `clerk start`");
-      let _ = File.process_out "clerk" ["start"] in
+      let cmd, args =
+        ( "clerk",
+          [
+            "start";
+            "--build-dir";
+            File.(root_dir / clerk_config.global.build_dir);
+            "--target-dir";
+            File.(root_dir / clerk_config.global.target_dir);
+          ] )
+      in
+      Log.debug (fun m ->
+          m "Stdlib not found - calling `clerk %s`" (String.concat " " args));
+      let _ = File.process_out cmd args in
       check build_stdlib_path
       @@ fun () ->
       try

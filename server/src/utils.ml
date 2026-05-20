@@ -168,35 +168,67 @@ let lookup_catala_enable_project_scan ~(notify_back : Jsonrpc2.notify_back) :
   r
 
 let lookup_clerk_toml (path : string) =
+  let open Catala_utils in
+  let process_clerk_toml clerk_toml_dir =
+    Log.debug (fun m ->
+        m "found config file at: '%s'"
+          (Filename.concat clerk_toml_dir "clerk.toml"));
+    try
+      let config = Clerk_config.read File.(clerk_toml_dir / "clerk.toml") in
+      let include_dirs =
+        List.map (File.( / ) clerk_toml_dir) config.global.include_dirs
+      in
+      let config =
+        { config with global = { config.global with include_dirs } }
+      in
+      Some (config, clerk_toml_dir)
+    with Message.CompilerError c ->
+      Log.err (fun m ->
+          let pp fmt = Message.Content.emit ~ppf:fmt c Error in
+          m "error while parsing config file: %t" pp);
+      None
+  in
   let from_dir =
     if Sys.is_directory path then path else Filename.dirname path
   in
-  let open Catala_utils in
   try
     begin match
       File.find_in_parents ~cwd:from_dir (fun dir ->
           File.(exists (dir / "clerk.toml")))
     with
-    | None ->
-      Log.debug (fun m -> m "no 'clerk.toml' config file found");
-      None
-    | Some (dir, _) -> (
+    | None -> (
       Log.debug (fun m ->
-          m "found config file at: '%s'" (Filename.concat dir "clerk.toml"));
-      try
-        let config = Clerk_config.read File.(dir / "clerk.toml") in
-        let include_dirs =
-          List.map (File.( / ) dir) config.global.include_dirs
-        in
-        let config =
-          { config with global = { config.global with include_dirs } }
-        in
-        Some (config, dir)
-      with Message.CompilerError c ->
-        Log.err (fun m ->
-            let pp fmt = Message.Content.emit ~ppf:fmt c Error in
-            m "error while parsing config file: %t" pp);
-        None)
+          m
+            "no 'clerk.toml' config file found in parents: scanning \
+             sub-directories");
+      let is_clerk_toml f = String.equal (File.basename f) "clerk.toml" in
+      let clerk_tomls =
+        File.scan_tree
+          (fun f ->
+            Log.debug (fun m -> m "%s" f);
+            if is_clerk_toml f then Some f else None)
+          from_dir
+        |> List.of_seq
+      in
+      match
+        List.find_map
+          (fun (dir, _, items) ->
+            if List.exists is_clerk_toml items then Some dir else None)
+          clerk_tomls
+      with
+      | Some dir ->
+        Log.debug (fun m ->
+            m
+              "found a 'clerk.toml' config file in '%s' sub-directory: using \
+               this one"
+              dir);
+        Log.warn (fun m ->
+            m
+              "it is recommended to declare the 'clerk.toml' configuration \
+               file at the workspace's root");
+        process_clerk_toml dir
+      | None -> None)
+    | Some (dir, _) -> process_clerk_toml dir
     end
   with _ ->
     Log.err (fun m -> m "failed to lookup config file");
