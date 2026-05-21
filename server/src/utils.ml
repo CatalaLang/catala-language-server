@@ -167,72 +167,92 @@ let lookup_catala_enable_project_scan ~(notify_back : Jsonrpc2.notify_back) :
   in
   r
 
-let lookup_clerk_toml (path : string) =
-  let open Catala_utils in
-  let process_clerk_toml clerk_toml_dir =
-    Log.debug (fun m ->
-        m "found config file at: '%s'"
-          (Filename.concat clerk_toml_dir "clerk.toml"));
-    try
-      let config = Clerk_config.read File.(clerk_toml_dir / "clerk.toml") in
-      let include_dirs =
-        List.map (File.( / ) clerk_toml_dir) config.global.include_dirs
-      in
-      let config =
-        { config with global = { config.global with include_dirs } }
-      in
-      Some (config, clerk_toml_dir)
-    with Message.CompilerError c ->
-      Log.err (fun m ->
-          let pp fmt = Message.Content.emit ~ppf:fmt c Error in
-          m "error while parsing config file: %t" pp);
-      None
-  in
+let process_clerk_toml clerk_toml_dir =
+  try
+    let config = Clerk_config.read File.(clerk_toml_dir / "clerk.toml") in
+    let include_dirs =
+      List.map (File.( / ) clerk_toml_dir) config.global.include_dirs
+    in
+    let config = { config with global = { config.global with include_dirs } } in
+    Some (config, clerk_toml_dir)
+  with Message.CompilerError c ->
+    Log.err (fun m ->
+        let pp fmt = Message.Content.emit ~ppf:fmt c Error in
+        m "error while parsing config file: %t" pp);
+    None
+
+let lookup_clerk_toml_in_parents (path : string) :
+    (Clerk_config.config_file * string) option =
   let from_dir =
     if Sys.is_directory path then path else Filename.dirname path
   in
-  try
-    begin match
-      File.find_in_parents ~cwd:from_dir (fun dir ->
-          File.(exists (dir / "clerk.toml")))
-    with
-    | None -> (
-      Log.debug (fun m ->
-          m
-            "no 'clerk.toml' config file found in parents: scanning \
-             sub-directories");
-      let is_clerk_toml f = String.equal (File.basename f) "clerk.toml" in
-      let clerk_tomls =
-        File.scan_tree
-          (fun f ->
-            Log.debug (fun m -> m "%s" f);
-            if is_clerk_toml f then Some f else None)
-          from_dir
-        |> List.of_seq
-      in
-      match
-        List.find_map
-          (fun (dir, _, items) ->
-            if List.exists is_clerk_toml items then Some dir else None)
-          clerk_tomls
-      with
-      | Some dir ->
-        Log.debug (fun m ->
-            m
-              "found a 'clerk.toml' config file in '%s' sub-directory: using \
-               this one"
-              dir);
-        Log.warn (fun m ->
-            m
-              "it is recommended to declare the 'clerk.toml' configuration \
-               file at the workspace's root");
-        process_clerk_toml dir
-      | None -> None)
-    | Some (dir, _) -> process_clerk_toml dir
-    end
-  with _ ->
-    Log.err (fun m -> m "failed to lookup config file");
+  let open Catala_utils in
+  match
+    File.find_in_parents ~cwd:from_dir (fun dir ->
+        File.(exists (dir / "clerk.toml")))
+  with
+  | None ->
+    Log.debug (fun m -> m "no 'clerk.toml' config file found");
     None
+  | Some (dir, _) -> process_clerk_toml dir
+
+let lookup_clerk_tomls_in_sub_directories ~on_error (path : string) :
+    (Clerk_config.config_file * string) list option =
+  let open Catala_utils in
+  let from_dir =
+    if Sys.is_directory path then path else Filename.dirname path
+  in
+  let is_clerk_toml f = String.equal (File.basename f) "clerk.toml" in
+  let clerk_tomls =
+    File.scan_tree (fun f -> if is_clerk_toml f then Some f else None) from_dir
+    |> List.of_seq
+  in
+  let all_clerk_tomls =
+    List.filter_map
+      (fun (dir, _, items) ->
+        if List.exists is_clerk_toml items then Some dir else None)
+      clerk_tomls
+    |> List.sort File.compare
+  in
+  let rec remove_suffixes (acc, ignored) pred = function
+    | [] -> acc, ignored
+    | h :: t ->
+      if String.starts_with ~prefix:pred h then
+        remove_suffixes (acc, (h, pred) :: ignored) pred t
+      else remove_suffixes (h :: acc, ignored) h t
+  in
+  match all_clerk_tomls with
+  | [] -> None
+  | h :: t -> (
+    let clerk_tomls_dirs, ignored_dirs = remove_suffixes ([h], []) h t in
+    if ignored_dirs <> [] then (
+      Log.warn (fun m ->
+          m "ignoring lower priority config files: %s."
+            (String.concat ", "
+               (List.map (fun (d, _) -> File.(d / "clerk.toml")) ignored_dirs)));
+      List.iter
+        (fun (d, parent) ->
+          let f = Doc_id.of_file File.(d / "clerk.toml") in
+          let range =
+            Range.create
+              ~start:{ line = 0; character = 0 }
+              ~end_:{ line = 10000; character = 0 }
+          in
+          let diag =
+            Linol_lwt.Diagnostic.create ~range ~severity:Warning
+              ~source:"catala-lsp"
+              ~message:
+                (`String
+                   (Format.sprintf
+                      "Ignored 'clerk.toml' configuration file, a parent \
+                       'clerk.toml' is present at %s/clerk.toml "
+                      parent))
+              ()
+          in
+          on_error (f, range, diag))
+        ignored_dirs);
+    List.filter_map process_clerk_toml clerk_tomls_dirs
+    |> function [] -> None | l -> Some l)
 
 let list_scopes ~tests_only file : Shared_ast.ScopeName.t list =
   let open Shared_ast in
