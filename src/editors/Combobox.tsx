@@ -8,6 +8,13 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { FormattedMessage } from 'react-intl';
+import {
+  useFloating,
+  flip,
+  size,
+  offset,
+  autoUpdate,
+} from '@floating-ui/react';
 
 export type ComboboxOption = {
   value: string;
@@ -34,15 +41,33 @@ export function Combobox(props: ComboboxProps): ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const [activeIndex, setActiveIndex] = useState(-1);
-  const [listboxPos, setListboxPos] = useState<{
-    top: number;
-    left: number;
-    width: number;
-  } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
+
+  const { refs, floatingStyles } = useFloating({
+    placement: 'bottom-start',
+    open: isOpen,
+    middleware: [
+      offset(2),
+      flip(),
+      size({
+        apply({
+          rects,
+          availableHeight,
+          elements,
+        }: {
+          rects: { reference: { width: number } };
+          availableHeight: number;
+          elements: { floating: HTMLElement };
+        }) {
+          elements.floating.style.width = `${rects.reference.width}px`;
+          elements.floating.style.maxHeight = `${Math.min(availableHeight - 4, 200)}px`;
+        },
+      }),
+    ],
+    whileElementsMounted: autoUpdate,
+  });
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? '';
 
@@ -69,51 +94,27 @@ export function Combobox(props: ComboboxProps): ReactElement {
     (optionValue: string | null) => {
       onChange(optionValue);
       close();
-      // Return focus to the input after selection
       requestAnimationFrame(() => inputRef.current?.focus());
     },
     [onChange, close]
   );
 
-  // Compute portal position when opening
-  useEffect(() => {
-    if (!isOpen || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const maxMenuHeight = 200;
-    const top =
-      spaceBelow >= maxMenuHeight || spaceBelow > rect.top
-        ? rect.bottom - 1
-        : rect.top - maxMenuHeight + 1;
-    setListboxPos({ top, left: rect.left, width: rect.width });
-  }, [isOpen]);
-
-  // Close on outside click — listRef is portaled so not inside containerRef
+  // Close on outside click — floating listbox is portaled so not inside the reference
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: MouseEvent): void => {
       const target = e.target as Node;
+      const refEl = refs.reference.current as Element | null;
       if (
-        !containerRef.current?.contains(target) &&
-        !listRef.current?.contains(target)
+        !refEl?.contains(target) &&
+        !refs.floating.current?.contains(target)
       ) {
         close();
       }
     };
     document.addEventListener('mousedown', handler);
     return (): void => document.removeEventListener('mousedown', handler);
-  }, [isOpen, close]);
-
-  // Close on scroll (any ancestor scrolling)
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: Event): void => {
-      if (listRef.current?.contains(e.target as Node)) return;
-      close();
-    };
-    window.addEventListener('scroll', handler, true);
-    return (): void => window.removeEventListener('scroll', handler, true);
-  }, [isOpen, close]);
+  }, [isOpen, close, refs.reference, refs.floating]);
 
   // Scroll active option into view
   useEffect((): void => {
@@ -148,7 +149,6 @@ export function Combobox(props: ComboboxProps): ReactElement {
           if (activeIndex >= 0 && activeIndex < filtered.length) {
             select(filtered[activeIndex].value);
           } else {
-            // Empty input, no highlight → unset
             select(null);
           }
         } else {
@@ -160,7 +160,6 @@ export function Combobox(props: ComboboxProps): ReactElement {
           if (activeIndex >= 0 && activeIndex < filtered.length) {
             onChange(filtered[activeIndex].value);
           } else {
-            // Empty input, no highlight → unset
             onChange(null);
           }
           close();
@@ -191,7 +190,7 @@ export function Combobox(props: ComboboxProps): ReactElement {
     activeIndex >= 0 ? `combobox-option-${uid}-${activeIndex}` : undefined;
 
   return (
-    <div className="combobox" ref={containerRef}>
+    <div className="combobox" ref={refs.setReference}>
       <input
         ref={inputRef}
         role="combobox"
@@ -225,18 +224,16 @@ export function Combobox(props: ComboboxProps): ReactElement {
         <span className={`codicon codicon-chevron-${isOpen ? 'up' : 'down'}`} />
       </button>
       {isOpen &&
-        listboxPos &&
         createPortal(
           <ul
-            ref={listRef}
+            ref={(el) => {
+              listRef.current = el;
+              refs.setFloating(el);
+            }}
             id={listboxId}
             role="listbox"
             className="combobox-listbox"
-            style={{
-              top: listboxPos.top,
-              left: listboxPos.left,
-              width: listboxPos.width,
-            }}
+            style={floatingStyles}
           >
             {filtered.length === 0 && (
               <li className="combobox-no-results" role="presentation">

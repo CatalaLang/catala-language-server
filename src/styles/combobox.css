@@ -30,16 +30,13 @@
 }
 
 .combobox-listbox {
-  position: fixed;
   box-sizing: border-box;
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 200px;
   overflow-y: auto;
   border: 1px solid var(--vscode-input-border);
-  border-top: none;
-  border-radius: 0 0 2px 2px;
+  border-radius: 2px;
   background: var(
     --vscode-dropdown-background,
     var(--vscode-input-background, #fff)
