@@ -48,6 +48,8 @@ function compactRuntimeValue(rv: RuntimeValue): string {
       return '⊘';
     case 'Empty':
       return '∅';
+    case 'NotOverridden':
+      return '—';
   }
 }
 
