@@ -452,36 +452,48 @@ let retrieve_project_files
   in
   project_files, known_modules
 
-let project_of_dir ~on_error dir =
-  match Utils.lookup_clerk_toml dir with
-  | None ->
-    Log.warn (fun m ->
-        m "no clerk config file found, assuming default configuration");
-    let project_dir = dir in
-    let project_files, known_modules =
-      retrieve_project_files ~on_error Clerk_config.default_config ~project_dir
-    in
-    let project_kind = No_clerk in
-    let project_graph = Project_graph.build_graph project_files in
-    { project_dir; project_kind; project_files; project_graph; known_modules }
-  | Some (clerk_config, clerk_root_dir) ->
-    Log.debug (fun m -> m "clerk file found in '%s' directory" clerk_root_dir);
-    let project_kind = Clerk { clerk_root_dir; clerk_config } in
-    let project_dir = clerk_root_dir in
-    let project_files, known_modules =
-      retrieve_project_files ~on_error clerk_config ~project_dir
-    in
-    let project_graph = Project_graph.build_graph project_files in
-    { project_dir; project_kind; project_files; project_graph; known_modules }
+let process_config ~on_error (clerk_config, clerk_root_dir) =
+  Log.debug (fun m -> m "clerk file found in '%s' directory" clerk_root_dir);
+  let project_kind = Clerk { clerk_root_dir; clerk_config } in
+  let project_dir = clerk_root_dir in
+  let project_files, known_modules =
+    retrieve_project_files ~on_error clerk_config ~project_dir
+  in
+  let project_graph = Project_graph.build_graph project_files in
+  { project_dir; project_kind; project_files; project_graph; known_modules }
 
-let project_of_workspace_folder ~on_error workspace_folder =
+let default_config_from_dir ~on_error dir =
+  Log.warn (fun m ->
+      m "no clerk config file found, assuming default configuration");
+  let project_dir = dir in
+  let project_files, known_modules =
+    retrieve_project_files ~on_error Clerk_config.default_config ~project_dir
+  in
+  let project_kind = No_clerk in
+  let project_graph = Project_graph.build_graph project_files in
+  { project_dir; project_kind; project_files; project_graph; known_modules }
+
+let project_of_dir ~on_error dir =
+  match Utils.lookup_clerk_toml_in_parents dir with
+  | Some conf -> process_config ~on_error conf
+  | None -> default_config_from_dir ~on_error dir
+
+let projects_of_dir ~on_error dir =
+  match Utils.lookup_clerk_tomls_in_sub_directories ~on_error dir with
+  | None -> [project_of_dir ~on_error dir]
+  | Some configs -> List.map (process_config ~on_error) configs
+
+let projects_of_workspace_folder ~on_error workspace_folder =
   (* Normalize path *)
   let project_dir =
     Uri.pct_decode
       (Linol_lwt.DocumentUri.to_path
          workspace_folder.Linol_lwt.WorkspaceFolder.uri)
   in
-  project_of_dir ~on_error project_dir
+  (* TODO? Should we allow sub-clerk projects? I.e., should a clerk.toml in a
+     sub-directory have priority over a parent clerk.toml and disjointing its
+     project files from it? *)
+  projects_of_dir ~on_error project_dir
 
 let init ~on_error (params : Linol_lwt.InitializeParams.t) : projects =
   let ( let*? ) (x, err_msg) f =
@@ -504,10 +516,15 @@ let init ~on_error (params : Linol_lwt.InitializeParams.t) : projects =
   let*? workspace_folders = workspace_folders, no_workspace_folder_provided in
   List.fold_left
     (fun projects workspace_folder ->
-      let project = project_of_workspace_folder ~on_error workspace_folder in
-      Log.app (fun m -> m "project %s loaded" project.project_dir);
-      Log.debug (fun m -> m "@[<v 2>Projects:@ %a@]" format_project project);
-      Projects.add project projects)
+      let new_projects =
+        projects_of_workspace_folder ~on_error workspace_folder
+      in
+      List.fold_left
+        (fun projects project ->
+          Log.app (fun m -> m "project %s loaded" project.project_dir);
+          Log.debug (fun m -> m "@[<v 2>project:@ %a@]" format_project project);
+          Projects.add project projects)
+        projects new_projects)
     Projects.empty workspace_folders
 
 let find_file_in_project doc_id (project : project) =

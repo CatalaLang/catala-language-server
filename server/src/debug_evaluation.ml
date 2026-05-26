@@ -302,7 +302,7 @@ let try_build_deps ~logger file =
 let run_debugger ?inputs rpc ~file ~scope logger : debugger_state Lwt.t =
   let* () = logger "Initializing Catala debugger.." in
   let build_dir, ((_, root) as config_and_root) =
-    match Utils.lookup_clerk_toml file with
+    match Utils.lookup_clerk_toml_in_parents file with
     | None -> "_build", (Clerk_config.default_config, ".")
     | Some (config, root) -> File.(root / "_build"), (config, root)
   in
