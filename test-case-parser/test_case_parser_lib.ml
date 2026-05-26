@@ -1629,6 +1629,63 @@ let read_source_text filename start_line end_line =
     if Buffer.length buf > 0 then Some (Buffer.contents buf) else None
   with _ -> None
 
+let rec runtime_value_to_yojson (v : Catala_runtime.Value.t) : Yojson.Safe.t =
+  let open Catala_runtime.Value in
+  match v with
+  | V (Unit, ()) -> `Assoc []
+  | V (Bool, b) -> `Bool b
+  | V (Money, m) -> `Float (Z.to_float m /. 100.)
+  | V (Integer, i) ->
+    (try `Int (Z.to_int i) with Z.Overflow -> `Intlit (Z.to_string i))
+  | V (Decimal, d) -> `Float (Q.to_float d)
+  | V (Date, d) -> `String (Catala_runtime.date_to_string d)
+  | V (Duration, d) -> `String (Catala_runtime.duration_to_string d)
+  | V (Enum en, e) ->
+    let _, constr, value = en.constr e in
+    let extra =
+      match value with
+      | None -> []
+      | Some v -> [ "value", runtime_value_to_yojson v ]
+    in
+    `Assoc
+      ([ "kind", `String "enum";
+         "name", `String en.name;
+         "constructor", `String constr ]
+       @ extra)
+  | V (Struct str, s) ->
+    let fields = str.fields s in
+    `Assoc
+      [ "kind", `String "struct";
+        "name", `String str.name;
+        "fields",
+          `Assoc (List.map (fun (name, v) -> name, runtime_value_to_yojson v) fields)
+      ]
+  | V (Array t, a) ->
+    `Assoc
+      [ "kind", `String "array";
+        "value",
+          `List
+            (Array.to_list (Array.map (fun v -> runtime_value_to_yojson (t v)) a))
+      ]
+  | V (Tuple destr, a) ->
+    `Assoc
+      [ "kind", `String "tuple";
+        "value", `List (List.map runtime_value_to_yojson (destr a))
+      ]
+  | V (Position, pos) ->
+    `Assoc
+      [ "kind", `String "position";
+        "value",
+          `List
+            [ `String pos.filename;
+              `Int pos.start_line;
+              `Int pos.start_column;
+              `Int pos.end_line;
+              `Int pos.end_column ]
+      ]
+  | V ((Function | Polymorphic), _) -> `String "unembeddable"
+  | V (External (module E), v) -> Yojson.Safe.from_string (E.to_json v)
+
 let json_of_raw_events (raw_events : Catala_runtime.raw_event list) :
     Yojson.Safe.t list =
   let make_pos_json = function
@@ -1670,9 +1727,7 @@ let json_of_raw_events (raw_events : Catala_runtime.raw_event list) :
           "io_output", `Bool io.Catala_runtime.io_output;
         ]
     in
-    let value_json =
-      Yojson.Safe.from_string (Catala_runtime.Json.runtime_value value)
-    in
+    let value_json = runtime_value_to_yojson value in
     `Assoc
       [
         "kind", `String "VarComputation";
@@ -1780,10 +1835,17 @@ let explain_cmd include_dirs options testing_scope scope_input_opt =
             value =
               O.Struct
                 ( { O.struct_name = StructName.to_string in_struct; fields = [] },
-                  List.map
+                  List.filter_map
                     (fun (field_name, { O.value; typ = _ }) ->
-                      let value = (Option.get value).value in
-                      field_name, value)
+                      let rv = (Option.get value).value in
+                      match rv.O.value with
+                      | O.NotOverridden -> None
+                      | O.Unset ->
+                        failwith
+                          (Printf.sprintf
+                             "explain_cmd: input '%s' has Unset value"
+                             field_name)
+                      | _ -> Some (field_name, rv))
                     fields );
           }
         in
