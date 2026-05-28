@@ -313,6 +313,7 @@ let run_debugger ?inputs rpc ~file ~scope logger : debugger_state Lwt.t =
     Catala_utils.Global.enforce_options ~input_src:(FileName file)
       ~whole_program:true ~bin_dir:build_dir
       ~path_rewrite:(fun i -> (i :> string))
+      ~language:(Some (Cli.file_lang file))
       ~stop_on_error:true ()
   in
   let* () = try_build_deps ~logger file in

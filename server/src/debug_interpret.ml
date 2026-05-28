@@ -400,7 +400,6 @@ let evaluate_operator
       (_ interpr_kind, 'm) gexpr -> (_ interpr_kind, 'm) gexpr Lwt.t)
     ((op, opos) : < overloaded : no ; .. > operator Mark.pos)
     m
-    lang
     args : 'a Lwt.t =
   let pos = Expr.mark_pos m in
   let rpos () = Expr.pos_to_runtime opos in
@@ -421,8 +420,7 @@ let evaluate_operator
         @ List.mapi
             (fun i arg ->
               ( Format.asprintf "Argument n°%d, value %a" (i + 1)
-                  (Print.UserFacing.expr lang)
-                  arg,
+                  Print.UserFacing.expr arg,
                 Expr.pos arg ))
             args)
       "Operator %a applied to the wrong@ arguments@ (should not happen if the \
@@ -726,12 +724,11 @@ let rec handle_assert : type d r.
     eval_expr:
       (((d, r, yes) interpr_kind, 't) gexpr ->
       ((d, r, yes) interpr_kind, 't) gexpr Lwt.t) ->
-    lang:Global.backend_lang ->
     ((d, r, yes) interpr_kind, 't) gexpr ->
     't mark ->
     Pos.t ->
     ((d, r, yes) interpr_kind, 't) gexpr Lwt.t =
- fun ~eval_expr ~lang pred m pos ->
+ fun ~eval_expr pred m pos ->
   let* e = eval_expr pred in
   match Mark.remove e with
   | ELit (LBool true) -> Lwt.return (ELit LUnit, m)
@@ -759,13 +756,11 @@ let rec handle_assert : type d r.
       if Global.options.no_fail_on_assert then
         Message.warning ~pos
           "@[<v>%t@,@[<hv 4>The condition resolved to:@ %a@]@]" msg
-          (Print.UserFacing.expr lang)
-          partially_evaluated_assertion_failure_expr
+          Print.UserFacing.expr partially_evaluated_assertion_failure_expr
       else
         Message.delayed_error ~kind:AssertFailure () ~pos
           "@[<v>%t@,@[<hv 4>The condition resolved to:@ %a@]@]" msg
-          (Print.UserFacing.expr lang)
-          partially_evaluated_assertion_failure_expr);
+          Print.UserFacing.expr partially_evaluated_assertion_failure_expr);
     Lwt.return (Mark.add m (ELit LUnit))
   | _ ->
     Message.error ~pos:(Expr.pos pred) "%a" Format.pp_print_text
@@ -810,10 +805,9 @@ let rec evaluate_expr_with_env : type d r.
       (((d, r, yes) interpr_kind, 't) gexpr -> (d, r, 't) env -> unit Lwt.t) ->
     (d, r, 't) env ->
     decl_ctx ->
-    Global.backend_lang ->
     ((d, r, yes) interpr_kind, 't) gexpr ->
     (((d, r, yes) interpr_kind, 't) gexpr * (d, r, 't) env) Lwt.t =
- fun ~on_expr env ctx lang e ->
+ fun ~on_expr env ctx e ->
   let* () = on_expr e env in
   let m = Mark.get e in
   let pos = Expr.mark_pos m in
@@ -825,7 +819,7 @@ let rec evaluate_expr_with_env : type d r.
     | Some (e, env') ->
       evaluate_expr_with_env
         ~on_expr:(fun _ _ -> Lwt.return_unit (* Skip variable evaluations? *))
-        env' ctx lang e
+        env' ctx e
     | None ->
       Format.kasprintf
         (Message.error ~pos "%a" Format.pp_print_text)
@@ -868,12 +862,10 @@ let rec evaluate_expr_with_env : type d r.
     Lwt.return (e, env)
   | EApp { f = e1; args; _ } -> (
     let (Env env) = env in
-    let* e1, Env env_f =
-      evaluate_expr_with_env ~on_expr (Env env) ctx lang e1
-    in
+    let* e1, Env env_f = evaluate_expr_with_env ~on_expr (Env env) ctx e1 in
     let (Env env) = join_env (Env env) (Env env_f) in
     let* args =
-      Lwt_list.map_s (evaluate_expr_with_env ~on_expr (Env env) ctx lang) args
+      Lwt_list.map_s (evaluate_expr_with_env ~on_expr (Env env) ctx) args
     in
     match Mark.remove e1 with
     | EAbs { binder; _ } ->
@@ -885,7 +877,7 @@ let rec evaluate_expr_with_env : type d r.
               Env (Var.Map.add v (e, Env env') env))
             (Env env_f) (Array.to_list vars) args
         in
-        evaluate_expr_with_env ~on_expr env ctx lang e
+        evaluate_expr_with_env ~on_expr env ctx e
       else
         Message.error ~pos "wrong function call, expected %d arguments, got %d"
           (Bindlib.mbinder_arity binder)
@@ -900,8 +892,7 @@ let rec evaluate_expr_with_env : type d r.
               val_to_runtime
                 (fun ctx e ->
                   let* e, _ =
-                    evaluate_expr_with_env ~on_expr:on_expr_void (Env env) ctx
-                      lang e
+                    evaluate_expr_with_env ~on_expr:on_expr_void (Env env) ctx e
                   in
                   Lwt.return e)
                 ctx targ arg
@@ -929,26 +920,22 @@ let rec evaluate_expr_with_env : type d r.
         e1)
   | EAppOp { op; args; _ } ->
     let* args =
-      let* l =
-        Lwt_list.map_s (evaluate_expr_with_env ~on_expr env ctx lang) args
-      in
+      let* l = Lwt_list.map_s (evaluate_expr_with_env ~on_expr env ctx) args in
       Lwt.return (List.map fst l)
     in
     let* e =
       evaluate_operator ctx
         (fun e ->
-          let* e, _ = evaluate_expr_with_env ~on_expr env ctx lang e in
+          let* e, _ = evaluate_expr_with_env ~on_expr env ctx e in
           Lwt.return e)
-        op m lang args
+        op m args
     in
     Lwt.return (e, env)
   | EAbs _ | ELit _ | EPos _ | ECustom _ | EEmpty ->
     Lwt.return (e, env) (* these are values *)
   | EStruct { fields = es; name } ->
     let fields, es = List.split (StructField.Map.bindings es) in
-    let* ll =
-      Lwt_list.map_s (evaluate_expr_with_env ~on_expr env ctx lang) es
-    in
+    let* ll = Lwt_list.map_s (evaluate_expr_with_env ~on_expr env ctx) es in
     let es, env =
       List.split ll |> fun (l, r) -> l, List.fold_left join_env env r
     in
@@ -963,7 +950,7 @@ let rec evaluate_expr_with_env : type d r.
              }),
         env )
   | EStructAccess { e; name = s; field } -> (
-    let* e, env = evaluate_expr_with_env ~on_expr env ctx lang e in
+    let* e, env = evaluate_expr_with_env ~on_expr env ctx e in
     match Mark.remove e with
     | EStruct { fields = es; name } -> (
       if not (StructName.equal s name) then
@@ -985,20 +972,17 @@ let rec evaluate_expr_with_env : type d r.
       Message.error ~pos:(Expr.pos e)
         "The expression %a@ should@ be@ a@ struct@ %a@ but@ is@ not@ (should \
          not happen if the term was well-typed)"
-        (Print.UserFacing.expr lang)
-        e StructName.format s)
+        Print.UserFacing.expr e StructName.format s)
   | ETuple es ->
     let* l =
-      Lwt_list.map_s
-        (fun e -> evaluate_expr_with_env ~on_expr env ctx lang e)
-        es
+      Lwt_list.map_s (fun e -> evaluate_expr_with_env ~on_expr env ctx e) es
     in
     let e, env =
       List.split l |> fun (l, r) -> l, List.fold_left join_env env r
     in
     Lwt.return (Mark.add m (ETuple e), env)
   | ETupleAccess { e = e1; index; size } -> (
-    let* r = evaluate_expr_with_env ~on_expr env ctx lang e1 in
+    let* r = evaluate_expr_with_env ~on_expr env ctx e1 in
     match r with
     | (ETuple es, _), env when List.length es = size ->
       Lwt.return (List.nth es index, env)
@@ -1006,13 +990,12 @@ let rec evaluate_expr_with_env : type d r.
       Message.error ~pos:(Expr.pos e)
         "The expression %a@ was@ expected@ to@ be@ a@ tuple@ of@ size@ %d@ \
          (should not happen if the term was well-typed)"
-        (Print.UserFacing.expr lang)
-        e size)
+        Print.UserFacing.expr e size)
   | EInj { e; name; cons } ->
-    let* e, env = evaluate_expr_with_env ~on_expr env ctx lang e in
+    let* e, env = evaluate_expr_with_env ~on_expr env ctx e in
     Lwt.return (Mark.add m (EInj { e; name; cons }), env)
   | EMatch { e; cases; name } -> (
-    let* e, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
+    let* e, _env = evaluate_expr_with_env ~on_expr env ctx e in
     match Mark.remove e with
     | EInj { e = e1; cons; name = name' } ->
       if not (EnumName.equal name name') then
@@ -1033,7 +1016,7 @@ let rec evaluate_expr_with_env : type d r.
         EnumConstructor.Map.find cons (EnumName.Map.find name ctx.ctx_enums)
       in
       let new_e = Mark.add m (EApp { f = es_n; args = [e1]; tys = [ty] }) in
-      evaluate_expr_with_env ~on_expr env ctx lang new_e
+      evaluate_expr_with_env ~on_expr env ctx new_e
     | _ ->
       Message.error ~pos:(Expr.pos e)
         "Expected a term having a sum type as an argument to a match (should \
@@ -1047,23 +1030,23 @@ let rec evaluate_expr_with_env : type d r.
       } ->
     (* For lcalc's already compiled assertions *)
     let eval_expr e =
-      let* r, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
+      let* r, _env = evaluate_expr_with_env ~on_expr env ctx e in
       Lwt.return r
     in
-    let* r = handle_assert ~eval_expr ~lang pred m pos in
+    let* r = handle_assert ~eval_expr pred m pos in
     Lwt.return (r, env)
   | EAssert pred ->
     let eval_expr e =
-      let* r, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
+      let* r, _env = evaluate_expr_with_env ~on_expr env ctx e in
       Lwt.return r
     in
-    let* r = handle_assert ~eval_expr ~lang pred m pos in
+    let* r = handle_assert ~eval_expr pred m pos in
     Lwt.return (r, env)
   | EIfThenElse { cond; etrue; efalse } -> (
-    let* cond, _env = evaluate_expr_with_env ~on_expr env ctx lang cond in
+    let* cond, _env = evaluate_expr_with_env ~on_expr env ctx cond in
     match Mark.remove cond with
-    | ELit (LBool true) -> evaluate_expr_with_env ~on_expr env ctx lang etrue
-    | ELit (LBool false) -> evaluate_expr_with_env ~on_expr env ctx lang efalse
+    | ELit (LBool true) -> evaluate_expr_with_env ~on_expr env ctx etrue
+    | ELit (LBool false) -> evaluate_expr_with_env ~on_expr env ctx efalse
     | _ ->
       Message.error ~pos:(Expr.pos cond) "%a" Format.pp_print_text
         "Expected a boolean literal for the result of this condition (should \
@@ -1071,9 +1054,7 @@ let rec evaluate_expr_with_env : type d r.
   | EArray es ->
     let* es =
       let* l =
-        Lwt_list.map_s
-          (fun e -> evaluate_expr_with_env ~on_expr env ctx lang e)
-          es
+        Lwt_list.map_s (fun e -> evaluate_expr_with_env ~on_expr env ctx e) es
       in
       Lwt.return (List.map fst l)
     in
@@ -1086,7 +1067,7 @@ let rec evaluate_expr_with_env : type d r.
     in
     raise (Runtime.Error (error, [Expr.pos_to_runtime pos], note))
   | EErrorOnEmpty e' -> (
-    let* r = evaluate_expr_with_env ~on_expr env ctx lang e' in
+    let* r = evaluate_expr_with_env ~on_expr env ctx e' in
     match r with
     | (EEmpty, _), _ ->
       raise Runtime.(Error (NoValue, [Expr.pos_to_runtime pos], None))
@@ -1094,17 +1075,14 @@ let rec evaluate_expr_with_env : type d r.
       raise Runtime.(Error (NoValue, [Expr.pos_to_runtime pos], None))
     | e, _env -> Lwt.return (e, env))
   | EDefault { excepts; just; cons } -> (
-    let* l =
-      Lwt_list.map_s (evaluate_expr_with_env ~on_expr env ctx lang) excepts
-    in
+    let* l = Lwt_list.map_s (evaluate_expr_with_env ~on_expr env ctx) excepts in
     let excepts = List.map fst l in
     let empty_count = List.length (List.filter is_empty_error excepts) in
     match List.length excepts - empty_count with
     | 0 -> (
-      let* just, _env = evaluate_expr_with_env ~on_expr env ctx lang just in
+      let* just, _env = evaluate_expr_with_env ~on_expr env ctx just in
       match just with
-      | ELit (LBool true), _ ->
-        evaluate_expr_with_env ~on_expr env ctx lang cons
+      | ELit (LBool true), _ -> evaluate_expr_with_env ~on_expr env ctx cons
       | ELit (LBool false), _ -> Lwt.return (Mark.copy e EEmpty, env)
       | _ ->
         Message.error ~pos:(Expr.pos e) "%a" Format.pp_print_text
@@ -1122,7 +1100,7 @@ let rec evaluate_expr_with_env : type d r.
       in
       raise Runtime.(Error (Conflict, poslist, None)))
   | EPureDefault e ->
-    let* e, _env = evaluate_expr_with_env ~on_expr env ctx lang e in
+    let* e, _env = evaluate_expr_with_env ~on_expr env ctx e in
     Lwt.return (e, env)
   | EBad -> assert false
   | _ -> .
@@ -1162,8 +1140,7 @@ let interpret_with_env
       (Expr.pos e)
   in
   let* r =
-    evaluate_expr_with_env empty_env ~on_expr ctx p.lang
-      (Expr.unbox to_interpret)
+    evaluate_expr_with_env empty_env ~on_expr ctx (Expr.unbox to_interpret)
   in
   match r with
   | ((EStruct _, _) as e), _env -> Lwt.return e

@@ -21,9 +21,9 @@ open Utils
 open Server_types
 
 let to_catala_format_lang : Global.backend_lang -> string = function
-  | En -> "catala_en"
-  | Fr -> "catala_fr"
-  | Pl -> "catala_pl"
+  | `En -> "catala_en"
+  | `Fr -> "catala_fr"
+  | `Pl -> "catala_pl"
 
 let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
     TextEdit.t list option Lwt.t =

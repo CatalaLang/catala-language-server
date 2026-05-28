@@ -218,7 +218,7 @@ let rec pp_expr lang fmt (e : dcalc_expr) =
   | EArray el ->
     let typ = DE.get_typ e in
     Format.fprintf fmt "@[<h>%a (size=%d)@]" Print.typ typ (List.length el)
-  | _ -> Print.UserFacing.expr lang fmt e
+  | _ -> Print.UserFacing.expr fmt e
 
 let env_to_variable lang (t : env_tree) : Patched_variable.t =
   let name, e, variables_reference, named_variables, indexed_variables =

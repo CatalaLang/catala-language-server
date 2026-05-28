@@ -69,7 +69,8 @@ let all_symbols_as_warning (doc_id : Doc_id.t) processing_result =
                     Format.(
                       pp_print_list ~pp_sep:pp_print_space Jump_table.pp_var)
                     (Jump_table.PMap.DS.elements v)
-                    (Catala_utils.Pos.format_loc_text ()) r
+                    (Catala_utils.Pos.format_loc_text ())
+                    r
                 in
                 Diagnostic.diag_r Warning (range_of_pos r) (`String msg) :: acc)
               variables [] );
@@ -145,8 +146,7 @@ let scope_var_exception_info
       desugared.Desugared.Ast.program_root.module_scopes
     |> function
     | None -> None
-    | Some scope ->
-      Some (ScopeVar.Map.mem scope_var scope.scope_sub_scopes)
+    | Some scope -> Some (ScopeVar.Map.mem scope_var scope.scope_sub_scopes)
   in
   if is_sub_scope_var then None
   else if not (is_output_or_context_var var_ty) then None
@@ -190,20 +190,24 @@ let get_hover_type ?(markdown = false) f p =
     let definition_tree_link =
       let open Jump_table in
       let*? l = PMap.lookup p jt.variables in
-      let id = PMap.DS.elements l |> List.find_map (function
-        | Declaration ({ id = Some id; _ }) -> Some id
-        | _ -> None)
+      let id =
+        PMap.DS.elements l
+        |> List.find_map (function
+          | Declaration { id = Some id; _ } -> Some id
+          | _ -> None)
       in
       let*? id = id in
       let*? scope_decl, scope_var =
         ScopeName.Map.bindings prg.program_scopes
         |> List.find_map (fun (_, (scope_decl, _)) ->
-          ScopeVar.Map.bindings scope_decl.Scopelang.Ast.scope_sig
-          |> List.find_map (fun (scope_var, _) ->
-            if ScopeVar.id scope_var = id then Some (scope_decl, scope_var)
-            else None))
+            ScopeVar.Map.bindings scope_decl.Scopelang.Ast.scope_sig
+            |> List.find_map (fun (scope_var, _) ->
+                if ScopeVar.id scope_var = id then Some (scope_decl, scope_var)
+                else None))
       in
-      let*? exceptions_args = scope_var_exception_info desugared scope_decl scope_var in
+      let*? exceptions_args =
+        scope_var_exception_info desugared scope_decl scope_var
+      in
       let main_doc_id =
         let doc_id = f.document_id in
         if Projects.is_an_included_file doc_id f.project then
@@ -216,16 +220,25 @@ let get_hover_type ?(markdown = false) f p =
         |> Uri.pct_encode ~component:`Query_key
       in
       let show_def_tree_s = function
-        | Global.En -> "Show definition tree"
-        | Global.Fr -> "Afficher l'arbre de définitions"
-        | Global.Pl -> assert false
+        | `En -> "Show definition tree"
+        | `Fr -> "Afficher l'arbre de définitions"
+        | `Pl -> assert false
       in
-      Some (Printf.sprintf "\n\n[%s](command:catala.showExceptions?%s)"
-        (show_def_tree_s f.locale) args_json)
+      Some
+        (Printf.sprintf "\n\n[%s](command:catala.showExceptions?%s)"
+           (show_def_tree_s f.locale) args_json)
     in
-    let value = md.Linol_lwt.MarkupContent.value ^ Option.value ~default:"" definition_tree_link in
-    Some (Linol_lwt.Hover.create ~range
-      ~contents:(`MarkupContent (Linol_lwt.MarkupContent.create ~kind:Linol_lwt.MarkupKind.Markdown ~value)) ())
+    let value =
+      md.Linol_lwt.MarkupContent.value
+      ^ Option.value ~default:"" definition_tree_link
+    in
+    Some
+      (Linol_lwt.Hover.create ~range
+         ~contents:
+           (`MarkupContent
+              (Linol_lwt.MarkupContent.create
+                 ~kind:Linol_lwt.MarkupKind.Markdown ~value))
+         ())
   else
     let md = Type_printing.typ_to_raw_string prg f.locale kind in
     Some (Linol_lwt.Hover.create ~range ~contents:(`MarkedString md) ())
@@ -374,7 +387,8 @@ let exceptions_at (file : document_state) (p : Linol_lwt.Position.t) :
     |> List.filter_map (function
       | Usage ({ id = Some _; _ } as jump)
       | Declaration ({ id = Some _; _ } as jump)
-      | Definition ({ id = Some _; _ } as jump) -> Some jump
+      | Definition ({ id = Some _; _ } as jump) ->
+        Some jump
       | _ -> None)
   in
   match x with

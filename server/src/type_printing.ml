@@ -20,89 +20,89 @@ open Shared_ast
 open Format
 
 let locale_s locale =
-  match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+  match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
 
 let _for_all = function
-  | Global.En -> "anything of type"
-  | Fr -> "n'importe quel de type"
-  | Pl -> assert false
+  | `En -> "anything of type"
+  | `Fr -> "n'importe quel de type"
+  | `Pl -> assert false
 
 let list_of = function
-  | Global.En -> "list of"
-  | Fr -> "liste de"
-  | Pl -> assert false
+  | `En -> "list of"
+  | `Fr -> "liste de"
+  | `Pl -> assert false
 
 let default = function
-  | Global.En -> "default"
-  | Fr -> "défaut"
-  | Pl -> assert false
+  | `En -> "default"
+  | `Fr -> "défaut"
+  | `Pl -> assert false
 
-let enum = function Global.En -> "enum" | Fr -> "énum" | Pl -> assert false
-let struct_s = function Global.Pl -> assert false | _ -> "structure"
+let enum = function `En -> "enum" | `Fr -> "énum" | `Pl -> assert false
+let struct_s = function `Pl -> assert false | _ -> "structure"
 
 let struct_header = function
-  | Global.En -> struct_s En
-  | Fr -> struct_s Fr
-  | Pl -> assert false
+  | `En -> struct_s `En
+  | `Fr -> struct_s `Fr
+  | `Pl -> assert false
 
 let struct_data = function
-  | Global.En -> "data"
-  | Fr -> "donnée"
-  | Pl -> assert false
+  | `En -> "data"
+  | `Fr -> "donnée"
+  | `Pl -> assert false
 
 let content = function
-  | Global.En -> "content"
-  | Fr -> "contenu"
-  | Pl -> assert false
+  | `En -> "content"
+  | `Fr -> "contenu"
+  | `Pl -> assert false
 
 let depends_on = function
-  | Global.En -> "depends on"
-  | Fr -> "dépend de"
-  | Pl -> assert false
+  | `En -> "depends on"
+  | `Fr -> "dépend de"
+  | `Pl -> assert false
 
 let enum_s = function
-  | Global.En -> "enumeration"
-  | Fr -> "énumération"
-  | Pl -> assert false
+  | `En -> "enumeration"
+  | `Fr -> "énumération"
+  | `Pl -> assert false
 
 let enum_header = function
-  | Global.En -> enum_s En
-  | Fr -> enum_s Fr
-  | Pl -> assert false
+  | `En -> enum_s `En
+  | `Fr -> enum_s `Fr
+  | `Pl -> assert false
 
 let scope_s = function
-  | Global.En -> "scope"
-  | Fr -> "champ d'application"
-  | Pl -> assert false
+  | `En -> "scope"
+  | `Fr -> "champ d'application"
+  | `Pl -> assert false
 
 let topdef_s = function
-  | Global.En -> "declaration"
-  | Fr -> "déclaration"
-  | Pl -> assert false
+  | `En -> "declaration"
+  | `Fr -> "déclaration"
+  | `Pl -> assert false
 
 let external_type_s = function
-  | Global.En -> "external type"
-  | Fr -> "type externe"
-  | Pl -> assert false
+  | `En -> "external type"
+  | `Fr -> "type externe"
+  | `Pl -> assert false
 
 let alias_s = function
-  | Global.En -> "as"
-  | Fr -> "en tant que"
-  | Pl -> assert false
+  | `En -> "as"
+  | `Fr -> "en tant que"
+  | `Pl -> assert false
 
 let option_s = function
-  | Global.En -> "optional of"
-  | Fr -> "optionnel de"
-  | Pl -> assert false
+  | `En -> "optional of"
+  | `Fr -> "optionnel de"
+  | `Pl -> assert false
 
 let using_s = function
-  | Global.En -> "Using"
-  | Fr -> "Usage de"
-  | Pl -> assert false
+  | `En -> "Using"
+  | `Fr -> "Usage de"
+  | `Pl -> assert false
 
 let pp_lit locale fmt l =
   fprintf fmt "%s"
-  @@ (if locale = Global.En then fst else snd)
+  @@ (if locale = `En then fst else snd)
        (match l with
        | TUnit -> "unit", "unit"
        | TBool -> "boolean", "booléen"
@@ -182,7 +182,7 @@ let pp_typ_no_box locale fmt (ty : typ) =
 
 let expr_type ~markdown locale typ =
   let locale_s =
-    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+    match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
   in
   let typ_s =
     if markdown then
@@ -207,7 +207,7 @@ let pp_struct_code
 
 let struct_code ~markdown locale field_map =
   let locale_s =
-    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+    match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
   in
   let typ_s =
     if markdown then
@@ -237,7 +237,7 @@ let pp_enum_code
 
 let enum_code ~markdown locale field_map =
   let locale_s =
-    match locale with Global.En -> "en" | Fr -> "fr" | Pl -> assert false
+    match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
   in
   let typ_s =
     if markdown then
@@ -274,14 +274,14 @@ let data_type
 
 let svar_input_s_opt locale =
   let context_s = function
-    | Global.En -> "context"
-    | Fr -> "contexte"
-    | Pl -> assert false
+    | `En -> "context"
+    | `Fr -> "contexte"
+    | `Pl -> assert false
   in
   let input_s = function
-    | Global.En -> "input"
-    | Fr -> "entrée"
-    | Pl -> assert false
+    | `En -> "input"
+    | `Fr -> "entrée"
+    | `Pl -> assert false
   in
   function
   | Catala_runtime.NoInput -> None
@@ -290,9 +290,9 @@ let svar_input_s_opt locale =
 
 let svar_output_s_opt locale b =
   let output_s = function
-    | Global.En -> "output"
-    | Fr -> "résultat"
-    | Pl -> assert false
+    | `En -> "output"
+    | `Fr -> "résultat"
+    | `Pl -> assert false
   in
   if b then Some (output_s locale) else None
 
@@ -304,14 +304,14 @@ let svar_io_s locale (var_io : Desugared.Ast.io) =
   | None, None -> None (* internal *)
 
 let svar_internal_s = function
-  | Global.En -> "output"
-  | Fr -> "résultat"
-  | Pl -> assert false
+  | `En -> "output"
+  | `Fr -> "résultat"
+  | `Pl -> assert false
 
 let svar_state_s = function
-  | Global.En -> "state"
-  | Fr -> "état"
-  | Pl -> assert false
+  | `En -> "state"
+  | `Fr -> "état"
+  | `Pl -> assert false
 
 let pp_scope_var
     ?(skip_internals = true)
