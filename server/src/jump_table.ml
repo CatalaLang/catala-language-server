@@ -144,8 +144,7 @@ type traversal_ctxt = {
   scope_lookup : sjump ScopeName.Map.t;
 }
 
-type variables = PMap.pmap
-type t = { variables : variables; lookup_table : lookup_entry LTable.t }
+type t = { pos_map : PMap.pmap; lookup_table : lookup_entry LTable.t }
 
 let pp_table ppf { declaration; definitions; usages; types } =
   let open Format in
@@ -301,7 +300,7 @@ let populate_scopecall (tctx : traversal_ctxt) pos scope args acc f =
     args acc
 
 let rec traverse_typ (tctx : traversal_ctxt) ((typ, pos) : naked_typ * Pos.t) m
-    : PMap.pmap =
+    : PMap.acc =
   match typ with
   | TStruct struct_name -> begin
     StructName.Map.find_opt struct_name tctx.scope_structs
@@ -446,7 +445,7 @@ let traverse_expr (tctx : traversal_ctxt) (e : (scopelang, typed) gexpr) m =
   in
   f Bindlib.empty_ctxt e m
 
-let traverse_scope_def tctx (rule : typed rule) m : PMap.pmap =
+let traverse_scope_def tctx (rule : typed rule) m : PMap.acc =
   match rule with
   | ScopeVarDefinition { var; typ; io = _; e } ->
     let var, pos_l = var in
@@ -463,7 +462,7 @@ let traverse_scope_def tctx (rule : typed rule) m : PMap.pmap =
     traverse_expr tctx e m
   | Assertion e -> traverse_expr tctx e.e m
 
-let traverse_scope_sig tctx (scope : _ scope_decl) m : PMap.pmap =
+let traverse_scope_sig tctx (scope : _ scope_decl) m : PMap.acc =
   ScopeVar.Map.fold
     (fun scope_var var_ty m ->
       (* FIXME: subscope type definition is buggy *)
@@ -483,7 +482,7 @@ let traverse_scope_sig tctx (scope : _ scope_decl) m : PMap.pmap =
       PMap.add pos var m)
     scope.scope_sig m
 
-let traverse_scope tctx (scope : typed scope_decl) m : PMap.pmap =
+let traverse_scope tctx (scope : typed scope_decl) m : PMap.acc =
   let m = traverse_scope_sig tctx scope m in
   List.fold_right (traverse_scope_def tctx) scope.scope_decl_rules m
 
@@ -491,7 +490,7 @@ let traverse_topdef
     tctx
     (topdef : TopdefName.t)
     ((e, typ, _vis, _meta) : typed expr * typ * visibility * bool)
-    m : PMap.pmap =
+    m : PMap.acc =
   let name = TopdefName.to_string topdef in
   let topdef_pos = snd (TopdefName.get_info topdef) in
   let hash = Hashtbl.hash (TopdefName.get_info topdef) in
@@ -500,7 +499,7 @@ let traverse_topdef
   let m = traverse_typ tctx typ m in
   traverse_expr tctx e m
 
-let traverse_ctx (tctx : traversal_ctxt) m : PMap.pmap =
+let traverse_ctx (tctx : traversal_ctxt) m : PMap.acc =
   let m =
     StructName.Map.fold
       (fun struct_name (fields, _vis) m ->
@@ -553,7 +552,7 @@ let traverse
     (ctx : Desugared.Name_resolution.context)
     (module_lookup : ModuleName.t -> mjump)
     (prog : _ program)
-    (m : PMap.pmap) =
+    (m : PMap.acc) =
   let (all_scopes : typed scope_decl list) =
     ScopeName.Map.values prog.program_scopes |> List.map Mark.remove
   in
@@ -613,7 +612,7 @@ let traverse
 let add_scope_definitions
     (tctx : traversal_ctxt)
     (surface : Surface.Ast.program)
-    (variables : PMap.t) =
+    (pmap : PMap.acc) =
   let rec process vars_acc = function
     | Surface.Ast.CodeBlock (cb, _, _) ->
       List.fold_left
@@ -637,14 +636,14 @@ let add_scope_definitions
     | LawHeading (_, ls) -> List.fold_left process vars_acc ls
     | LawInclude _ | ModuleDef _ | ModuleUse _ | LawText _ -> vars_acc
   in
-  List.fold_left process variables surface.program_items
+  List.fold_left process pmap surface.program_items
 
 let populate_modules
     input_src
     (modules_contents : Surface.Ast.module_content ModuleName.Map.t)
     (prog : typed program)
     (surface : Surface.Ast.program)
-    (acc : PMap.t) : PMap.t * (ModuleName.t -> mjump) =
+    (acc : PMap.acc) : PMap.acc * (ModuleName.t -> mjump) =
   let module C = Map.Make (String) in
   let convert_map =
     ModuleName.Map.fold
@@ -725,11 +724,12 @@ let populate
     (modules_contents : Surface.Ast.module_content ModuleName.Map.t)
     (surface : Surface.Ast.program)
     (prog : typed program) : t =
-  let variables, mod_lookup =
-    populate_modules input_src modules_contents prog surface PMap.empty
+  let acc, mod_lookup =
+    populate_modules input_src modules_contents prog surface PMap.empty_acc
   in
-  let variables, tctx = traverse ctx mod_lookup prog variables in
-  let variables = add_scope_definitions tctx surface variables in
+  let acc, tctx = traverse ctx mod_lookup prog acc in
+  let acc = add_scope_definitions tctx surface acc in
+  let pos_map = PMap.finalize acc in
   let add f = function None -> Some (f empty_lookup) | Some v -> Some (f v) in
   let add_def p =
     add (fun v ->
@@ -784,9 +784,9 @@ let populate
             | Some (add, hash) -> LTable.update hash add tbl
             | _ -> tbl)
           data tbl)
-      variables LTable.empty
+      pos_map LTable.empty
   in
-  { variables; lookup_table }
+  { pos_map; lookup_table }
 
 let lookup (tables : t) (p : Pos.t) : lookup_entry list =
   let proj = function
@@ -801,7 +801,7 @@ let lookup (tables : t) (p : Pos.t) : lookup_entry list =
       LTable.find_opt hash tables.lookup_table
     | Literal _ -> None
   in
-  PMap.lookup p tables.variables
+  PMap.lookup p tables.pos_map
   |> function None -> [] | Some s -> List.filter_map proj (PMap.DS.elements s)
 
 type type_lookup =
@@ -842,7 +842,7 @@ let lookup_type (tables : t) (p : Pos.t) :
     | Module_def { mcontent; alias; _ } ->
       Module (mcontent, alias)
   in
-  PMap.lookup_with_range p tables.variables
+  PMap.lookup_with_range p tables.pos_map
   |> function
   | None -> None
   | Some (r, d) ->

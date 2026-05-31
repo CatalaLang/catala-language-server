@@ -33,10 +33,10 @@ let all_symbols_as_warning (doc_id : Doc_id.t) processing_result =
   let diags : (Doc_id.doc_id * Diagnostic.t list) list =
     match processing_result with
     | Skipped | Faulty _ -> []
-    | Partial (_, { jump_table = (lazy { variables; lookup_table }); _ })
-    | Valid { jump_table = (lazy { variables; lookup_table }); _ } ->
+    | Partial (_, { jump_table = (lazy { pos_map; lookup_table }); _ })
+    | Valid { jump_table = (lazy { pos_map; lookup_table }); _ } ->
       (* Displays the full position map in logs *)
-      (* Log.info (fun m -> m "%a@." Jump_table.PMap.pp variables); *)
+      (* Log.info (fun m -> m "%a@." Jump_table.PMap.format pos_map); *)
       (* Generates warning diagnostic for each symbol *)
       [
         ( doc_id,
@@ -73,7 +73,7 @@ let all_symbols_as_warning (doc_id : Doc_id.t) processing_result =
                     r
                 in
                 Diagnostic.diag_r Warning (range_of_pos r) (`String msg) :: acc)
-              variables [] );
+              pos_map [] );
         ]
   in
   let m : diagnostic Range.Map.t Doc_id.Map.t =
@@ -189,7 +189,7 @@ let get_hover_type ?(markdown = false) f p =
     let md = Type_printing.typ_to_markdown prg f.locale kind in
     let definition_tree_link =
       let open Jump_table in
-      let*? l = PMap.lookup p jt.variables in
+      let*? l = PMap.lookup p jt.pos_map in
       let id =
         PMap.DS.elements l
         |> List.find_map (function
@@ -300,7 +300,7 @@ let lookup_document_symbols file =
           | None -> acc
           | Some v -> v :: acc)
         vl acc)
-    jt.variables []
+    jt.pos_map []
 
 let lookup_lenses file =
   let*? { jump_table = (lazy jt); _ } = file.last_valid_result in
@@ -369,7 +369,7 @@ let lookup_lenses file =
               else mk_input_lens scope_decl_name (range_of_pos p) @ acc
             | _ -> acc)
           vl acc)
-      jt.variables []
+      jt.pos_map []
   in
   Some scope_lenses
 
@@ -381,7 +381,7 @@ let exceptions_at (file : document_state) (p : Linol_lwt.Position.t) :
   let doc_id = file.document_id in
   let p = Utils.(lsp_range p p |> pos_of_range (file.document_id :> File.t)) in
   let open Jump_table in
-  let*? l : PMap.DS.t = PMap.lookup p jt.variables in
+  let*? l : PMap.DS.t = PMap.lookup p jt.pos_map in
   let x =
     PMap.DS.elements l
     |> List.filter_map (function
