@@ -164,8 +164,8 @@ let rec runtime_to_val : type d r.
       Lwt.return
         ( EInj
             {
-              name = Expr.option_enum;
-              cons = Expr.none_constr;
+              name = ConstantNames.option_enum;
+              cons = ConstantNames.none_constr;
               e = ELit LUnit, Expr.with_ty m (TLit TUnit, Pos.void);
             },
           m )
@@ -173,7 +173,7 @@ let rec runtime_to_val : type d r.
       (* Some case *)
       let* e = runtime_to_val ctx m ty (Obj.field o 0) in
       Lwt.return
-        (EInj { name = Expr.option_enum; cons = Expr.some_constr; e }, m)
+        (EInj { name = ConstantNames.option_enum; cons = ConstantNames.some_constr; e }, m)
   | TClosureEnv ->
     (* By construction, a closure environment can only be consumed from the same
        scope where it was built (compiled or not) ; for this reason, we can
@@ -283,8 +283,8 @@ and val_to_runtime : type d r.
         Obj.set_field o 0 field;
         Lwt.return o))
   | TOption ty, EInj { name; cons; e } ->
-    assert (EnumName.equal name Expr.option_enum);
-    if EnumConstructor.equal cons Expr.none_constr then
+    assert (EnumName.equal name ConstantNames.option_enum);
+    if EnumConstructor.equal cons ConstantNames.none_constr then
       Lwt.return (Obj.repr None)
     else
       let* e = val_to_runtime eval_expr ctx ty e in
@@ -500,8 +500,8 @@ let evaluate_operator
       Lwt.return
         (EInj
            {
-             name = Expr.option_enum;
-             cons = Expr.none_constr;
+             name = ConstantNames.option_enum;
+             cons = ConstantNames.none_constr;
              e = ELit LUnit, Expr.with_ty m (TLit TUnit, pos);
            })
     | Reduce, [f; (EArray (x0 :: xn), _)] ->
@@ -511,7 +511,7 @@ let evaluate_operator
           x0 xn
       in
       Lwt.return
-        (EInj { name = Expr.option_enum; cons = Expr.some_constr; e = r })
+        (EInj { name = ConstantNames.option_enum; cons = ConstantNames.some_constr; e = r })
     | Concat, [(EArray es1, _); (EArray es2, _)] ->
       Lwt.return (EArray (es1 @ es2))
     | Filter, [f; (EArray es, _)] ->
@@ -548,14 +548,14 @@ let evaluate_operator
               es
           in
           Lwt.return
-            (EInj { name = Expr.option_enum; cons = Expr.some_constr; e }))
+            (EInj { name = ConstantNames.option_enum; cons = ConstantNames.some_constr; e }))
         (function
           | Not_found ->
             Lwt.return
               (EInj
                  {
-                   name = Expr.option_enum;
-                   cons = Expr.none_constr;
+                   name = ConstantNames.option_enum;
+                   cons = ConstantNames.none_constr;
                    e = ELit LUnit, Expr.with_ty m (TLit TUnit, pos);
                  })
           | e -> raise e)
@@ -665,8 +665,8 @@ let evaluate_operator
         List.map
           (function
             | EInj { name; cons; e }, _
-              when EnumName.equal name Expr.option_enum ->
-              if EnumConstructor.equal cons Expr.some_constr then
+              when EnumName.equal name ConstantNames.option_enum ->
+              if EnumConstructor.equal cons ConstantNames.some_constr then
                 match e with
                 | ETuple [e; (EPos p, _)], _ ->
                   Runtime.Optional.Present (e, Expr.pos_to_runtime p)
@@ -680,8 +680,8 @@ let evaluate_operator
         Lwt.return
           (EInj
              {
-               name = Expr.option_enum;
-               cons = Expr.none_constr;
+               name = ConstantNames.option_enum;
+               cons = ConstantNames.none_constr;
                e = ELit LUnit, m;
              })
       | Runtime.Optional.Present (e, rpos) ->
@@ -689,8 +689,8 @@ let evaluate_operator
         Lwt.return
           (EInj
              {
-               name = Expr.option_enum;
-               cons = Expr.some_constr;
+               name = ConstantNames.option_enum;
+               cons = ConstantNames.some_constr;
                e = ETuple [e; EPos p, Expr.with_pos p m], m;
              }))
     | ValueFromJson (((TAbstract tid, _) as ty), str), [(ELit LUnit, _)] ->

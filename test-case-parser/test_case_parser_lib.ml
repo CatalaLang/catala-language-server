@@ -197,7 +197,7 @@ let get_lang_strings =
 
 let mk_optional_enum_decl lang typ =
   {
-    O.enum_name = EnumName.to_string Expr.option_enum;
+    O.enum_name = EnumName.to_string ConstantNames.option_enum;
     constructors = ["Absent", None; (get_lang_strings lang).present, Some typ];
   }
 
@@ -254,7 +254,7 @@ and get_struct lang decl_ctx struct_name =
 
 and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
-  if EnumName.equal enum_name Expr.option_enum then
+  if EnumName.equal enum_name ConstantNames.option_enum then
     let typ =
       let x =
         EnumConstructor.Map.bindings constr_map
@@ -341,13 +341,13 @@ let rec get_value : type a.
             (fun (field, v) ->
               StructField.to_string field, get_value lang decl_ctx v)
             (StructField.Map.bindings fields) )
-    | EInj { name; e; _ } when EnumName.equal Expr.option_enum name -> (
+    | EInj { name; e; _ } when EnumName.equal ConstantNames.option_enum name -> (
       match Typing.expr decl_ctx e |> Expr.unbox with
       | ELit LUnit, _ty ->
-        let none_field = EnumConstructor.to_string Expr.none_constr, None in
+        let none_field = EnumConstructor.to_string ConstantNames.none_constr, None in
         let decl =
           {
-            O.enum_name = EnumName.to_string Expr.option_enum;
+            O.enum_name = EnumName.to_string ConstantNames.option_enum;
             constructors = [none_field];
           }
         in
@@ -360,15 +360,15 @@ let rec get_value : type a.
               (* e.g., while reading 'Present content impossible' *) O.TUnset
             | ty -> get_typ lang decl_ctx ty
           in
-          EnumConstructor.to_string Expr.some_constr, Some ty
+          EnumConstructor.to_string ConstantNames.some_constr, Some ty
         in
         let some_value =
-          ( EnumConstructor.to_string Expr.some_constr,
+          ( EnumConstructor.to_string ConstantNames.some_constr,
             Some (get_value lang decl_ctx e) )
         in
         let decl =
           {
-            O.enum_name = EnumName.to_string Expr.option_enum;
+            O.enum_name = EnumName.to_string ConstantNames.option_enum;
             constructors = [some_field];
           }
         in
