@@ -118,8 +118,11 @@ async function runScope(args?: RunArgs): Promise<void> {
   }
 }
 
+vscode.commands.registerCommand('catala.debug', (_ctx) => debugScope());
 vscode.commands.registerCommand('catala.run', (_ctx) => runScope());
 vscode.commands.registerCommand('catala.selectScope', selectScope);
+vscode.commands.registerCommand('catala.debugScope', debugScope);
+vscode.commands.registerCommand('catala.runScope', runScope);
 
 async function listTestableScopes(
   path: string
@@ -148,25 +151,31 @@ vscode.commands.registerCommand(
   listTestableScopes
 );
 
-async function debugScope(args: RunArgs | undefined): Promise<void> {
-  args ??= await selectScope(false);
-  if (!args) return;
-  const file = args.uri;
-  const scope = args.scope;
-  const workspace = vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(file));
-  const config: vscode.DebugConfiguration = {
-    type: 'catala-debugger',
-    request: 'launch',
-    stopOnEntry: true,
-    name: `Debug: ${scope}`,
-    args: args,
-  };
-  const success = await vscode.debug.startDebugging(workspace, config);
-  if (!success) {
-    vscode.window.showErrorMessage('Failed to start a debugging session');
+async function debugScope(args?: RunArgs): Promise<void> {
+  const inputs = args?.inputs;
+  if (!args || (args && !args.scope)) {
+    // Started from package.json debugging config
+    args = await selectScope(inputs ? true : false);
+  }
+  if (args) {
+    const file = args.uri;
+    const scope = args.scope;
+    const workspace = vscode.workspace.getWorkspaceFolder(
+      vscode.Uri.parse(file)
+    );
+    const config: vscode.DebugConfiguration = {
+      type: 'catala-debugger',
+      request: 'launch',
+      stopOnEntry: true,
+      name: `Debug: ${scope}`,
+      args: args,
+    };
+    const success = await vscode.debug.startDebugging(workspace, config);
+    if (!success) {
+      vscode.window.showErrorMessage('Failed to start a debugging session');
+    }
   }
 }
-vscode.commands.registerCommand('catala.debug', debugScope);
 
 export async function activate(
   context: vscode.ExtensionContext
@@ -190,10 +199,6 @@ export async function activate(
       }
     },
   });
-
-  vscode.commands.registerCommand('catala.debugScope', debugScope);
-
-  vscode.commands.registerCommand('catala.runScope', runScope);
 
   // Open the current resource with the custom Test Case Editor
   context.subscriptions.push(
