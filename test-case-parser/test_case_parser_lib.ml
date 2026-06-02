@@ -134,16 +134,16 @@ let implicit_stdlib_aliases, lookup_aliased_name =
   let en_implicit_aliases = en_names @ en_aliases in
   let fr_implicit_aliases = fr_names @ fr_aliases in
   let implicit_stdlib_aliases = function
-    | Catala_utils.Global.En -> en_implicit_aliases
-    | Fr -> fr_implicit_aliases
+    | `En -> en_implicit_aliases
+    | `Fr -> fr_implicit_aliases
     | _ -> []
   in
   let en_alias_map = String.Map.of_list (List.combine en_aliases en_names) in
   let fr_alias_map = String.Map.of_list (List.combine fr_aliases fr_names) in
   let lookup_aliased_name lang s =
     match lang with
-    | Catala_utils.Global.En -> String.Map.find_opt s en_alias_map
-    | Catala_utils.Global.Fr -> String.Map.find_opt s fr_alias_map
+    | `En -> String.Map.find_opt s en_alias_map
+    | `Fr -> String.Map.find_opt s fr_alias_map
     | _ -> None
   in
   implicit_stdlib_aliases, lookup_aliased_name
@@ -191,13 +191,13 @@ let get_lang_strings =
     }
   in
   function
-  | Catala_utils.Global.Fr -> fr_strings
-  | En -> en_strings
+  | `Fr -> fr_strings
+  | `En -> en_strings
   | _ -> unsupported "unsupported language"
 
 let mk_optional_enum_decl lang typ =
   {
-    O.enum_name = EnumName.to_string Expr.option_enum;
+    O.enum_name = EnumName.to_string ConstantNames.option_enum;
     constructors = ["Absent", None; (get_lang_strings lang).present, Some typ];
   }
 
@@ -254,7 +254,7 @@ and get_struct lang decl_ctx struct_name =
 
 and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
-  if EnumName.equal enum_name Expr.option_enum then
+  if EnumName.equal enum_name ConstantNames.option_enum then
     let typ =
       let x =
         EnumConstructor.Map.bindings constr_map
@@ -341,13 +341,13 @@ let rec get_value : type a.
             (fun (field, v) ->
               StructField.to_string field, get_value lang decl_ctx v)
             (StructField.Map.bindings fields) )
-    | EInj { name; e; _ } when EnumName.equal Expr.option_enum name -> (
+    | EInj { name; e; _ } when EnumName.equal ConstantNames.option_enum name -> (
       match Typing.expr decl_ctx e |> Expr.unbox with
       | ELit LUnit, _ty ->
-        let none_field = EnumConstructor.to_string Expr.none_constr, None in
+        let none_field = EnumConstructor.to_string ConstantNames.none_constr, None in
         let decl =
           {
-            O.enum_name = EnumName.to_string Expr.option_enum;
+            O.enum_name = EnumName.to_string ConstantNames.option_enum;
             constructors = [none_field];
           }
         in
@@ -360,15 +360,15 @@ let rec get_value : type a.
               (* e.g., while reading 'Present content impossible' *) O.TUnset
             | ty -> get_typ lang decl_ctx ty
           in
-          EnumConstructor.to_string Expr.some_constr, Some ty
+          EnumConstructor.to_string ConstantNames.some_constr, Some ty
         in
         let some_value =
-          ( EnumConstructor.to_string Expr.some_constr,
+          ( EnumConstructor.to_string ConstantNames.some_constr,
             Some (get_value lang decl_ctx e) )
         in
         let decl =
           {
-            O.enum_name = EnumName.to_string Expr.option_enum;
+            O.enum_name = EnumName.to_string ConstantNames.option_enum;
             constructors = [some_field];
           }
         in
@@ -407,13 +407,19 @@ let scope_inputs lang decl_ctx scope =
         | Catala_runtime.NoInput -> acc
         | Catala_runtime.OnlyInput ->
           ( ScopeVar.to_string v,
-            O.{ typ = get_typ lang decl_ctx sdef.I.scope_def_typ;
-                is_context = false } )
+            O.
+              {
+                typ = get_typ lang decl_ctx sdef.I.scope_def_typ;
+                is_context = false;
+              } )
           :: acc
         | Catala_runtime.Reentrant ->
           ( ScopeVar.to_string v,
-            O.{ typ = get_typ lang decl_ctx sdef.I.scope_def_typ;
-                is_context = true } )
+            O.
+              {
+                typ = get_typ lang decl_ctx sdef.I.scope_def_typ;
+                is_context = true;
+              } )
           :: acc))
     scope.I.scope_defs []
   |> List.rev
@@ -489,12 +495,12 @@ let unset_default_value (typ : O.typ) : O.value_def =
   in
   { O.value; pos = None }
 
-(** For context variables, use [NotOverridden] regardless of type.
-    Context variables have a scope-computed default. [NotOverridden] means
-    "no override — let the scope compute its own value". The field is omitted
-    from the JSON input sent to the runtime and from the rendered Catala test.
-    This differs from [unset_default_value], which uses [Array [||]] for array
-    types: that would generate an explicit [definition x = []] override. *)
+(** For context variables, use [NotOverridden] regardless of type. Context
+    variables have a scope-computed default. [NotOverridden] means "no override
+    — let the scope compute its own value". The field is omitted from the JSON
+    input sent to the runtime and from the rendered Catala test. This differs
+    from [unset_default_value], which uses [Array [||]] for array types: that
+    would generate an explicit [definition x = []] override. *)
 let context_var_default : O.value_def =
   { O.value = { O.value = O.NotOverridden; attrs = [] }; pos = None }
 
@@ -963,8 +969,8 @@ let get_value_strings =
     }
   in
   function
-  | Catala_utils.Global.Fr -> fr_strings
-  | En -> en_strings
+  | `Fr -> fr_strings
+  | `En -> en_strings
   | _ -> unsupported "unsupported language"
 
 let print_attrs ppf (attrs : O.attr_def list) =
@@ -1112,8 +1118,8 @@ let write_catala_test ppf t lang =
       in
       if should_skip then ()
       else
-        fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition
-          sscope_var tvar strings.equals
+        fprintf ppf "@,@[<hv 2>%s %s.%s %s@ %a@]" strings.definition sscope_var
+          tvar strings.equals
           (print_catala_value_opt ~lang)
           t_in)
     t.test_inputs;
@@ -1392,7 +1398,8 @@ let rec convert_atd_to_runtime_value : O.runtime_value -> Catala_runtime.Value.t
     let l = Array.map convert_atd_to_runtime_value l in
     V (Array Fun.id, l)
   | Unset -> failwith "Cannot convert 'Unset' atd value to Catala runtime value"
-  | NotOverridden -> failwith "Cannot convert 'NotOverridden' atd value to Catala runtime value"
+  | NotOverridden ->
+    failwith "Cannot convert 'NotOverridden' atd value to Catala runtime value"
   | Empty -> failwith "Cannot convert 'Empty' atd value to Catala runtime value"
 
 let interpret_program dcalc_prg scope_name build_term_to_interp =
@@ -1449,7 +1456,8 @@ let rec convert_to_json_input ({ value; _ } : O.runtime_value) : Yojson.Safe.t =
            fl)
     | Array l -> `List (Array.to_list l |> List.map convert_to_json_input)
     | Unset -> failwith "convert_to_json_input: cannot convert 'unset' values"
-    | NotOverridden -> failwith "convert_to_json_input: cannot convert 'NotOverridden' values"
+    | NotOverridden ->
+      failwith "convert_to_json_input: cannot convert 'NotOverridden' values"
     | Empty -> failwith "convert_to_json_input: cannot convert 'empty' values"
   in
   convert_runtime_raw value
@@ -1660,8 +1668,7 @@ let serialize_inputs (scope_input : Yojson.Safe.t option) =
               | O.NotOverridden -> None
               | O.Unset ->
                 failwith
-                  (Printf.sprintf
-                     "serialize_inputs: input '%s' has Unset value"
+                  (Printf.sprintf "serialize_inputs: input '%s' has Unset value"
                      field_name)
               | _ -> Some (field_name, rv))
             fields )

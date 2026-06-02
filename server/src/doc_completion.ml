@@ -55,9 +55,9 @@ let lex_line (doc : document_state) ~content (pos : Position.t) =
   let lexbuf = Sedlexing.Utf8.from_string content in
   let lexer =
     match doc.locale with
-    | En -> Lexer_en.lexer
-    | Fr -> Lexer_fr.lexer
-    | Pl -> Lexer_pl.lexer
+    | `En -> Lexer_en.lexer
+    | `Fr -> Lexer_fr.lexer
+    | `Pl -> Lexer_pl.lexer
   in
   let real_lpos = pos.line + 1 in
   let line_tokens =
@@ -636,9 +636,9 @@ let follow_ups ?prefix prg (kind : Kind.t) m =
 let lookup_keywords ~prefix (prg : typed Scopelang.Ast.program) m =
   let token_list =
     match prg.program_lang with
-    | En -> Lexer_en.token_list
-    | Fr -> Lexer_fr.token_list
-    | Pl -> Lexer_pl.token_list
+    | `En -> Lexer_en.token_list
+    | `Fr -> Lexer_fr.token_list
+    | `Pl -> Lexer_pl.token_list
   in
   List.map (fun (lexeme, token) -> Kind.Keyword { lexeme; token }) token_list
   |> Kind.Set.of_list

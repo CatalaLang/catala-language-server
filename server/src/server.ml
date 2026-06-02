@@ -57,7 +57,9 @@ let protect_project_not_found f =
 
 let protect_project_not_found_opt f =
   Lwt.catch f (function
-    | Projects.Project_not_found -> Lwt.return_none
+    | Projects.Project_not_found ->
+      Log.debug (fun m -> m "%s" __LOC__);
+      Lwt.return_none
     | e -> Lwt.fail e)
 
 let should_ignore (uri : Doc_id.t) =
