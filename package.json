@@ -137,20 +137,14 @@
           "catala_en",
           "catala_fr"
         ],
-        "variables": {
-          "SpecifyScope": "catala.selectScope"
-        },
         "configurationAttributes": {
           "launch": {
-            "required": [
-              "scope"
-            ],
             "properties": {
               "args": {
                 "type": "object",
                 "description": "Catala Debug arguments",
                 "properties": {
-                  "file": {
+                  "uri": {
                     "type": "string",
                     "description": "Path of a Catala program.",
                     "default": ""
@@ -176,7 +170,6 @@
             "type": "catala-debugger",
             "request": "launch",
             "name": "Catala Debug",
-            "args": "${command:catala.selectScope}",
             "stopOnEntry": true
           }
         ],
@@ -188,9 +181,8 @@
               "type": "catala-debugger",
               "name": "Catala debug (Launch)",
               "request": "launch",
-              "args": "^\"\\${command:SpecifyScope}\""
-            },
-            "trace": true
+              "stopOnEntry": true
+            }
           }
         ]
       }

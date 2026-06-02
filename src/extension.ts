@@ -180,6 +180,20 @@ async function debugScope(args?: RunArgs): Promise<void> {
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
+  vscode.debug.registerDebugConfigurationProvider('catala-debugger', {
+    async resolveDebugConfiguration(
+      _folder,
+      config: vscode.DebugConfiguration
+    ): Promise<vscode.DebugConfiguration | undefined> {
+      if (!config.args?.scope) {
+        const selected = await selectScope(false);
+        if (!selected) return undefined;
+        config.args = selected;
+      }
+      return config;
+    },
+  });
+
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
