@@ -23,38 +23,40 @@ module type Data = sig
   val format : Format.formatter -> t -> unit
 end
 
-module Make_trie (D : Data) = struct
+module MakeTree (D : Data) = struct
   module DS = Set.Make (D)
 
   type itv = (int (* line *) * int (* col *)) * (int (* line *) * int (* col *))
 
-  type node = Node of { itv : itv; data : DS.t; children : trie }
-  and trie = node list
+  type node = Node of { itv : itv; data : DS.t; children : tree }
+  and tree = node list
 
-  type t = trie
+  type t = tree
 
-  let pp_itv ppf ((li, i), (lj, j)) =
+  let format_itv ppf ((li, i), (lj, j)) =
     Format.fprintf ppf "(%d:%d)⟷(%d:%d)" li i lj j
 
   let itv_to_range ((li, i), (lj, j)) =
     let pos = Catala_utils.Pos.from_info "" li i lj j in
     Utils.range_of_pos pos
 
-  let rec pp_node ppf (Node { itv; data; children }) =
+  let rec format_node ppf (Node { itv; data; children }) =
     let open Format in
     match children with
     | [] ->
-      fprintf ppf "@[<h>%a: [ @[<h>%a@] ]@]" pp_itv itv
+      fprintf ppf "@[<h>%a: [ @[<h>%a@] ]@]" format_itv itv
         (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt " ; ") D.format)
         (DS.elements data)
     | _ ->
-      fprintf ppf "@[<v 2>%a: [ @[<h>%a@] ]@ %a@]" pp_itv itv
+      fprintf ppf "@[<v 2>%a: [ @[<h>%a@] ]@ %a@]" format_itv itv
         (pp_print_list ~pp_sep:pp_print_space D.format)
-        (DS.elements data) pp_trie children
+        (DS.elements data) format_tree children
 
-  and pp_trie ppf tries =
+  and format_tree ppf trees =
     let open Format in
-    fprintf ppf "@[<v>%a@]" (pp_print_list ~pp_sep:pp_print_cut pp_node) tries
+    fprintf ppf "@[<v>%a@]"
+      (pp_print_list ~pp_sep:pp_print_cut format_node)
+      trees
 
   let is_in ((li, i), (lj, j)) (ln, n) =
     (ln > li && ln < lj)
@@ -65,16 +67,16 @@ module Make_trie (D : Data) = struct
   let is_in_line ((li, _), (lj, _)) ln = ln >= li && ln <= lj
   let is_included itv (left, right) = is_in itv left && is_in itv right
 
-  let rec lookup i trie =
-    List.find_opt (fun (Node { itv; _ }) -> is_in itv i) trie
+  let rec lookup i tree =
+    List.find_opt (fun (Node { itv; _ }) -> is_in itv i) tree
     |> function
     | None -> None
     | Some (Node { children = []; data; _ }) -> Some data
     | Some (Node { children; data; _ }) -> (
       match lookup i children with None -> Some data | Some v -> Some v)
 
-  let rec lookup_with_range i trie =
-    List.find_opt (fun (Node { itv; _ }) -> is_in itv i) trie
+  let rec lookup_with_range i tree =
+    List.find_opt (fun (Node { itv; _ }) -> is_in itv i) tree
     |> function
     | None -> None
     | Some (Node { itv; children = []; data }) -> Some (itv_to_range itv, data)
@@ -83,25 +85,25 @@ module Make_trie (D : Data) = struct
       | None -> Some (itv_to_range itv, data)
       | Some v -> Some v)
 
-  let all_nodes trie =
+  let all_nodes tree =
     let rev_nodes = ref [] in
     let rec loop (Node { children; _ } as x) =
       rev_nodes := x :: !rev_nodes;
       List.iter loop children
     in
-    List.iter loop trie;
+    List.iter loop tree;
     List.rev !rev_nodes
 
-  let lookup_on_line l trie =
-    List.find_all (fun (Node { itv; _ }) -> is_in_line itv l) trie
+  let lookup_on_line l tree =
+    List.find_all (fun (Node { itv; _ }) -> is_in_line itv l) tree
     |> all_nodes
     |> List.filter (fun (Node { itv = (li, _), (lj, _); _ }) ->
         not (li <> l || lj <> l))
     |> List.map (fun (Node { data; _ }) -> data)
     |> function [] -> None | l -> Some l
 
-  let lookup_best_on_line (l : int) trie : DS.t option =
-    match List.find_all (fun (Node { itv; _ }) -> is_in_line itv l) trie with
+  let lookup_best_on_line (l : int) tree : DS.t option =
+    match List.find_all (fun (Node { itv; _ }) -> is_in_line itv l) tree with
     | [] -> None
     | candidates -> (
       let compare_candidate
@@ -137,13 +139,7 @@ module Make_trie (D : Data) = struct
         ( ((li', i'), (li, i - 1)) (* disjoint part *),
           ((li, i), (lj', j')) (* included part *) ))
 
-  let rec gather_children (Node { children; _ }) =
-    let fresh_children =
-      List.map (fun (Node node) -> Node { node with children = [] }) children
-    in
-    fresh_children @ List.concat_map gather_children children
-
-  let rec insert_all itv (data : DS.t) trie =
+  let rec insert_all itv (data : DS.t) tree =
     let rec find_included_nodes acc = function
       | [] -> List.rev acc, `Disjoint []
       | (Node n as h) :: t as l -> (
@@ -156,7 +152,7 @@ module Make_trie (D : Data) = struct
         | `Left_inclusion (included_itv, _disjoint_part) ->
           acc, `Joint (included_itv, l))
     in
-    let rec loop acc itv : trie -> trie = function
+    let rec loop acc itv : tree -> tree = function
       | [] -> Node { itv; data; children = [] } :: acc |> List.rev
       | (Node ({ itv = itv_p; children; _ } as node_r) as node) :: t as l -> (
         match compare_itv itv_p itv with
@@ -201,32 +197,25 @@ module Make_trie (D : Data) = struct
             (Node { node_r with children = new_children } :: acc)
             t)
     in
-    loop [] itv trie
+    loop [] itv tree
 end
 
 open Catala_utils
 
 module Make (D : Data) = struct
-  module Trie = Make_trie (D)
-  module DS = Trie.DS
+  module Tree = MakeTree (D)
+  module DS = Tree.DS
 
-  type pmap = Trie.t Doc_id.Map.t
-  type t = pmap
+  type pmap = Tree.t Doc_id.Map.t
+  type acc = (Pos.t * D.t) list
 
-  let pp ppf pmap =
+  let empty_acc = []
+
+  let format ppf pmap =
     let open Format in
     fprintf ppf "@[<v 2>variables:@ %a@]"
-      (Doc_id.Map.format ~pp_sep:pp_print_cut Trie.pp_trie)
+      (Doc_id.Map.format ~pp_sep:pp_print_cut Tree.format_tree)
       pmap
-
-  let ( -- ) i j = List.init (j - i + 1) (fun x -> i + x)
-
-  let merge_tries _i trie trie' : Trie.t option =
-    match trie, trie' with
-    | None, None -> None
-    | None, Some (itv, data) -> Some [Node { itv; data; children = [] }]
-    | Some trie, None -> Some trie
-    | Some trie, Some (itv, data) -> Some (Trie.insert_all itv data trie)
 
   let pos_to_itv pos =
     let li = Pos.get_start_line pos in
@@ -235,9 +224,9 @@ module Make (D : Data) = struct
     let j = Pos.get_end_column pos in
     (li, i), (lj, j)
 
-  let pp_raw ppf (p, d) =
+  let format_entry ppf (p, d) =
     let open Format in
-    fprintf ppf "@[<h>%a: %a@]" Trie.pp_itv (pos_to_itv p) D.format d
+    fprintf ppf "@[<h>%a: %a@]" Tree.format_itv (pos_to_itv p) D.format d
 
   let add_all pos data variables =
     if pos = Pos.void then variables
@@ -246,45 +235,56 @@ module Make (D : Data) = struct
       let data = DS.of_list data in
       Doc_id.Map.update (Doc_id.of_catala_pos pos)
         (function
-          | None -> Some [Trie.Node { itv; data; children = [] }]
-          | Some trie -> Some (Trie.insert_all itv data trie))
+          | None -> Some [Tree.Node { itv; data; children = [] }]
+          | Some tree -> Some (Tree.insert_all itv data tree))
         variables
 
   let add pos data variables = add_all pos [data] variables
 
-  let lookup pos pmap =
+  let finalize acc =
+    List.fold_left (fun m (pos, d) -> add pos d m) Doc_id.Map.empty acc
+
+  let add pos data acc = (pos, data) :: acc
+
+  let add_all pos datas acc =
+    List.fold_left (fun acc d -> (pos, d) :: acc) acc datas
+
+  let lookup pos (pmap : pmap) =
     let ( let* ) = Option.bind in
     (* we assume that pos's start/end lines, start/end column are equal *)
-    let* trie = Doc_id.Map.find_opt (Doc_id.of_catala_pos pos) pmap in
-    Trie.lookup (Pos.get_start_line pos, Pos.get_start_column pos) trie
+    let* tree = Doc_id.Map.find_opt (Doc_id.of_catala_pos pos) pmap in
+    Tree.lookup (Pos.get_start_line pos, Pos.get_start_column pos) tree
 
   let lookup_with_range pos pmap =
     let ( let* ) = Option.bind in
     (* we assume that pos's start/end lines, start/end column are equal *)
-    let* trie = Doc_id.Map.find_opt (Doc_id.of_catala_pos pos) pmap in
-    Trie.lookup_with_range
+    let* tree = Doc_id.Map.find_opt (Doc_id.of_catala_pos pos) pmap in
+    Tree.lookup_with_range
       (Pos.get_start_line pos, Pos.get_start_column pos)
-      trie
+      tree
 
   let lookup_best_on_line doc_id l pmap =
     let ( let* ) = Option.bind in
     (* we assume that pos's start/end lines, start/end column are equal *)
-    let* trie = Doc_id.Map.find_opt doc_id pmap in
-    Trie.lookup_best_on_line l trie |> Option.map DS.choose
+    let* tree = Doc_id.Map.find_opt doc_id pmap in
+    Tree.lookup_best_on_line l tree |> Option.map DS.choose
 
-  let lookup_on_line doc_id l pmap =
+  let lookup_on_line doc_id l (pmap : pmap) =
     let ( let* ) = Option.bind in
     (* we assume that pos's start/end lines, start/end column are equal *)
-    let* trie = Doc_id.Map.find_opt doc_id pmap in
-    Trie.lookup_on_line l trie |> Option.map (List.concat_map DS.elements)
+    let* tree = Doc_id.Map.find_opt doc_id pmap in
+    Tree.lookup_on_line l tree
+    |> Option.map (fun ld -> List.fold_left DS.union DS.empty ld)
+
+  let files pmap = Doc_id.Map.keys pmap
 
   let fold f pmap acc =
-    let rec fold (doc_id : Doc_id.t) trie acc =
+    let rec fold (doc_id : Doc_id.t) tree acc =
       List.fold_left
-        (fun acc (Trie.Node { itv = (li, i), (lj, j); children; data }) ->
+        (fun acc (Tree.Node { itv = (li, i), (lj, j); children; data }) ->
           let acc = f (Pos.from_info (doc_id :> File.t) li i lj j) data acc in
           fold doc_id children acc)
-        acc trie
+        acc tree
     in
     Doc_id.Map.fold fold pmap acc
 
@@ -295,5 +295,4 @@ module Make (D : Data) = struct
     | Some pmap -> fold f (Doc_id.Map.singleton file pmap) acc
 
   let iter f pmap = fold (fun k v () -> f k v) pmap ()
-  let empty = Doc_id.Map.empty
 end

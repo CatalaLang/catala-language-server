@@ -54,7 +54,7 @@ type debugger_state = {
   file : Doc_id.t;
   scope : ScopeName.t;
   program : typed Dcalc.Ast.program;
-  pmap : PMap.t;
+  pmap : PMap.pmap;
   all_steps : step array;
   mutable index : int;
   final_index : int;
@@ -272,20 +272,18 @@ let load_program options ((clerk_config : Clerk_config.t), root_dir) file scope
     (* Do not optimize, we lose some relevant locations *)
   in
   let scope = find_scope prg scope in
-  let pmap =
+  let acc =
     let e = Expr.unbox (Program.to_expr prg scope) |> Interpreter.addcustom in
     let rec process e acc =
       let acc =
-        match Mark.remove e with
-        (* | ELit _ -> acc *)
-        | _be ->
-          let pos = get_pos e in
-          PMap.add pos e acc
+        let pos = get_pos e in
+        PMap.add pos e acc
       in
       Expr.shallow_fold process e acc
     in
-    process e PMap.empty
+    process e PMap.empty_acc
   in
+  let pmap = PMap.finalize acc in
   prg, scope, pmap
 
 let try_build_deps ~logger file =
@@ -365,7 +363,8 @@ let possible_breakpoints runner doc_id line : Breakpoint_location.t list =
   in
   match PMap.lookup_on_line doc_id line runner.pmap with
   | None -> []
-  | Some l ->
+  | Some elts ->
+    let l = PMap.DS.elements elts in
     Log.debug (fun m ->
         m "possible breakpoints for line %d on lines: [%a]" line
           Format.(
@@ -414,7 +413,7 @@ let continue_back_until_breakpoint state : [ `Start | `B of step ] =
   in
   loop ()
 
-let find_breakpoint (pos_map : PMap.t) doc_id (bp : Source_breakpoint.t) :
+let find_breakpoint (pos_map : PMap.pmap) doc_id (bp : Source_breakpoint.t) :
     (Pos.t * Breakpoint.t) option =
   match bp.column with
   | None -> begin

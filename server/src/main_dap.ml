@@ -694,7 +694,7 @@ let set_handlers rpc =
     (fun () ->
       use_state
       @@ fun s ->
-      let doc_ids = Doc_id.Map.keys s.pmap in
+      let doc_ids = DE.PMap.files s.pmap in
       let sources : Source.t list = List.map doc_id_to_source doc_ids in
       Lwt.return { Loaded_sources_command.Result.sources })
 
