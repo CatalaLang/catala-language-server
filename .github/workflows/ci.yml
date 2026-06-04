@@ -107,11 +107,12 @@ jobs:
         run: |
           npx @vscode/vsce package
 
-      - name: Publish to VS Code Marketplace (Pre-release)
-        if: steps.check_prerelease.outputs.IS_PRERELEASE == 'true'
-        run: npx @vscode/vsce publish --pre-release
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      # Do not publish on pre-release
+      # - name: Publish to VS Code Marketplace (Pre-release)
+      #   if: steps.check_prerelease.outputs.IS_PRERELEASE == 'true'
+      #   run: npx @vscode/vsce publish --pre-release
+      #   env:
+      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Publish to VS Code Marketplace (Release)
         if: steps.check_prerelease.outputs.IS_PRERELEASE == 'false'
