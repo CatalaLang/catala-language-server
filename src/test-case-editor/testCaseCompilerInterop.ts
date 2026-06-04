@@ -26,15 +26,26 @@ function getCwd(bufferPath: string): string | undefined {
 type ExecOptions = { input?: string; cwd?: string };
 type ExecResult = { ok: true; output: string } | { ok: false; stderr: string };
 
-function execBinary(bin: string, args: string[], opts: ExecOptions = {}): ExecResult {
+function execBinary(
+  bin: string,
+  args: string[],
+  opts: ExecOptions = {}
+): ExecResult {
   logger.log(`Running ${bin} ${args.join(' ')}`);
   try {
-    return { ok: true, output: execFileSync(bin, args, { encoding: 'utf8', ...opts }) };
+    return {
+      ok: true,
+      output: execFileSync(bin, args, { encoding: 'utf8', ...opts }),
+    };
   } catch (error) {
     const stderr = (error as SpawnSyncReturns<Buffer | string>).stderr;
     return {
       ok: false,
-      stderr: stderr ? stderr.toString() : error instanceof Error ? error.message : String(error),
+      stderr: stderr
+        ? stderr.toString()
+        : error instanceof Error
+          ? error.message
+          : String(error),
     };
   }
 }
@@ -63,7 +74,10 @@ export function parseTestFile(
     testList = readTestList(parsed);
   } catch (error) {
     logger.log(`ATD read error in parseTestFile: ${error}`);
-    return { kind: 'ParseError', value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}` };
+    return {
+      kind: 'ParseError',
+      value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}`,
+    };
   }
   if (content.trim() !== '' && testList.length === 0) {
     return { kind: 'EmptyTestListMismatch' };
@@ -99,12 +113,23 @@ export function runTestScope(
   const inputArgs = inputs
     ? ['--input', JSON.stringify(writeTestInputs(inputs))]
     : [];
-  const args = ['testcase', 'run', '--scope', testScope, filename, ...inputArgs];
+  const args = [
+    'testcase',
+    'run',
+    '--scope',
+    testScope,
+    filename,
+    ...inputArgs,
+  ];
   const cwd = getCwd(filename);
   if (cwd) {
     const relFilename = path.relative(cwd, filename);
     //compile dependencies (hack), do not fail on asserts
-    const clerkResult = execBinary(clerkPath, ['run', '-c--no-fail-on-assert', relFilename], { cwd });
+    const clerkResult = execBinary(
+      clerkPath,
+      ['run', '-c--no-fail-on-assert', relFilename],
+      { cwd }
+    );
     if (!clerkResult.ok) {
       window.showErrorMessage(clerkResult.stderr);
       return { kind: 'Error', value: clerkResult.stderr };
@@ -150,7 +175,11 @@ export function runTestScope(
 }
 
 export function getAvailableScopes(filename: string): ScopeDefList {
-  const execResult = execBinary(catalaPath, ['testcase', 'list-scopes', filename]);
+  const execResult = execBinary(catalaPath, [
+    'testcase',
+    'list-scopes',
+    filename,
+  ]);
   if (!execResult.ok) {
     logger.log(`Execution error in getAvailableScopes: ${execResult.stderr}`);
     return [];
@@ -165,7 +194,9 @@ export function getAvailableScopes(filename: string): ScopeDefList {
   try {
     return readScopeDefList(parsed);
   } catch (error) {
-    logger.log(`ATD read error in getAvailableScopes (catala LSP / extension version mismatch?): ${error}`);
+    logger.log(
+      `ATD read error in getAvailableScopes (catala LSP / extension version mismatch?): ${error}`
+    );
     return [];
   }
 }
@@ -199,7 +230,10 @@ export function generate(
     return { kind: 'Results', value: readTestList(parsed) };
   } catch (error) {
     logger.log(`ATD read error in generate: ${error}`);
-    return { kind: 'Error', value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}` };
+    return {
+      kind: 'Error',
+      value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}`,
+    };
   }
 }
 
