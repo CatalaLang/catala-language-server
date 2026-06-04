@@ -1,4 +1,5 @@
 (library
+ (package catala-lsp)
  (name test_case_parser_lib)
  (modules test_case_parser_lib)
  (libraries catala.driver catala.clerk_lib catala_types_atd)

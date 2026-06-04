@@ -341,10 +341,13 @@ let rec get_value : type a.
             (fun (field, v) ->
               StructField.to_string field, get_value lang decl_ctx v)
             (StructField.Map.bindings fields) )
-    | EInj { name; e; _ } when EnumName.equal ConstantNames.option_enum name -> (
+    | EInj { name; e; _ } when EnumName.equal ConstantNames.option_enum name
+      -> (
       match Typing.expr decl_ctx e |> Expr.unbox with
       | ELit LUnit, _ty ->
-        let none_field = EnumConstructor.to_string ConstantNames.none_constr, None in
+        let none_field =
+          EnumConstructor.to_string ConstantNames.none_constr, None
+        in
         let decl =
           {
             O.enum_name = EnumName.to_string ConstantNames.option_enum;
@@ -1676,3 +1679,43 @@ let serialize_inputs (scope_input : Yojson.Safe.t option) =
     let json = convert_to_json_input { value; attrs = [] } in
     Format.(
       fprintf std_formatter "%a@." (Yojson.Safe.pretty_print ~std:true) json)
+
+let register_attributes () =
+  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
+     ~contexts:(function
+     | Desugared.Name_resolution.Expression _ -> true
+     | _ -> false)
+  @@ fun ~pos:_ value ->
+  match value with
+  | Shared_ast.String (s, _pos) -> Some (Uid s)
+  | _ -> failwith "unexpected UID value");
+  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
+     ~contexts:(function
+     | Desugared.Name_resolution.ScopeDecl -> true
+     | _ -> false)
+  @@ fun ~pos:_ value -> match value with _ -> Some TestUi);
+  (Driver.Plugin.register_attribute ~plugin:"testcase"
+     ~path:["test_description"] ~contexts:(function
+     | Desugared.Name_resolution.ScopeDecl -> true
+     | _ -> false)
+  @@ fun ~pos:_ value ->
+  match value with
+  | Shared_ast.String (s, _pos) -> Some (TestDescription s)
+  | _ -> failwith "unexpected test description");
+
+  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
+     ~contexts:(function
+     | Desugared.Name_resolution.ScopeDecl -> true
+     | _ -> false)
+  @@ fun ~pos:_ value ->
+  match value with
+  | Shared_ast.String (s, _pos) -> Some (TestTitle s)
+  | _ -> failwith "unexpected test title");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
+    ~contexts:(function
+    | Desugared.Name_resolution.Expression _ -> true
+    | _ -> false)
+  @@ fun ~pos:_ value ->
+  match value with
+  | Shared_ast.String (s, _pos) -> Some (ArrayItemLabel s)
+  | _ -> failwith "unexpected array item label"
