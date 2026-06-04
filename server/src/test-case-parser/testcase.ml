@@ -39,7 +39,8 @@ let cmd_generate =
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
       $ with_defaults
-      $ enforce_module)
+      $ enforce_module
+      |> map Lib.to_stdout)
 
 let cmd_read =
   Cmd.v
@@ -52,7 +53,8 @@ let cmd_read =
       const Lib.read_test
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
-      $ buffer_path)
+      $ buffer_path
+      |> map Lib.to_stdout)
 
 let cmd_run =
   Cmd.v
@@ -68,16 +70,23 @@ let cmd_run =
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
       $ Cli.Flags.ex_scope
-      $ Cli.Flags.scope_input)
+      $ Cli.Flags.scope_input
+      |> map Lib.to_stdout)
 
 let cmd_write =
+  let run flags output =
+    let tests =
+      Lib.J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
+    in
+    Lib.write_catala flags output tests
+  in
   Cmd.v
     Cmd.(
       info "write"
         ~doc:
           "Read a test structure in JSON from stdin, and output a \
            corresponding Catala file.")
-    Term.(const Lib.write_catala $ Cli.Flags.Global.flags $ Cli.Flags.output)
+    Term.(const run $ Cli.Flags.Global.flags $ Cli.Flags.output)
 
 let cmd_list_scopes =
   Cmd.v
@@ -85,14 +94,22 @@ let cmd_list_scopes =
       info "list-scopes"
         ~doc:"List the scopes exposed of a module for a given Catala file.")
     Term.(
-      const Lib.list_scopes $ Cli.Flags.include_dirs $ Cli.Flags.Global.options)
+      const Lib.list_scopes
+      $ Cli.Flags.include_dirs
+      $ Cli.Flags.Global.options
+      |> map Lib.to_stdout)
 
 let cmd_serialize_inputs =
   Cmd.v
     Cmd.(
       info "serialize-inputs"
         ~doc:"Returns the normalized JSON of the given inputs.")
-    Term.(const Lib.serialize_inputs $ Cli.Flags.scope_input)
+    Term.(
+      const Lib.serialize_inputs
+      $ Cli.Flags.scope_input
+      |> map (fun json ->
+          let open Format in
+          fprintf std_formatter "%a@." (Yojson.Safe.pretty_print ~std:true) json))
 
 let man =
   [

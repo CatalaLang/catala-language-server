@@ -556,13 +556,21 @@ let get_scope_test
 
 (* --- *)
 
-let write_stdout f arg =
+type 'a writer = Buffer.t -> unit
+
+let to_stdout f =
   let buf = Buffer.create 4096 in
-  f buf arg;
+  f buf;
   Buffer.output_buffer stdout buf
 
-let print_test test = write_stdout J.write_test test
-let print_tests test = write_stdout J.write_test_list test
+let to_json_string f =
+  let buf = Buffer.create 4096 in
+  f buf;
+  Buffer.contents buf
+
+let writer f (arg : 'a) : 'a writer = fun buf -> f buf arg
+let print_test test = writer J.write_test test
+let print_tests test = writer J.write_test_list test
 
 let read_program includes path_to_build options =
   let stdlib =
@@ -927,14 +935,15 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
-let read_test include_dirs (options : Global.options) buffer_path =
+let read_test include_dirs (options : Global.options) buffer_path :
+    O.test_list writer =
   let path_to_build, include_dirs =
     if include_dirs = [] then lookup_include_dirs ?buffer_path options
     else ".", include_dirs
   in
   let prg = read_program include_dirs path_to_build options in
   let tests = import_catala_tests prg in
-  write_stdout J.write_test_list tests
+  writer J.write_test_list tests
 
 type duration_units = { day : string; month : string; year : string }
 
@@ -1138,10 +1147,7 @@ let write_catala_test ppf t lang =
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
-let write_catala options outfile =
-  let tests =
-    J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
-  in
+let write_catala options outfile (tests : O.test_list) : unit =
   let lang =
     Catala_utils.Cli.file_lang
       (match options.Global.input_src with
@@ -1557,7 +1563,7 @@ let run_with_inputs
   in
   let assert_failures = not (failed_asserts = []) in
   let test = O.{ test with test_outputs } in
-  write_stdout J.write_test_run O.{ test; assert_failures; diffs = [] }
+  writer J.write_test_run O.{ test; assert_failures; diffs = [] }
 
 let run_test include_dirs options testing_scope =
   let desugared_prg, naming_ctx, testing_scope_name, dcalc_prg =
@@ -1613,14 +1619,14 @@ let run_test include_dirs options testing_scope =
   in
   let assert_failures = not (failed_asserts = []) in
   let test_run = { O.test; O.assert_failures; O.diffs } in
-  write_stdout J.write_test_run test_run
+  writer J.write_test_run test_run
 
 let run_test_cmd include_dirs options test_scope_name scope_input_opt =
   match scope_input_opt with
   | None -> run_test include_dirs options test_scope_name
   | Some json -> run_with_inputs include_dirs options test_scope_name json
 
-let print_scopes scopes = write_stdout J.write_scope_def_list scopes
+let print_scopes scopes = writer J.write_scope_def_list scopes
 
 let list_scopes include_dirs options =
   let path_to_build, include_dirs =
@@ -1650,10 +1656,10 @@ let list_scopes include_dirs options =
   in
   print_scopes filtered_scopes
 
-let serialize_inputs (scope_input : Yojson.Safe.t option) =
+let serialize_inputs (scope_input : Yojson.Safe.t option) : Yojson.Safe.t =
   let scope_input =
     match scope_input with
-    | None -> failwith "serliaze-inputs command requires --input argument"
+    | None -> failwith "serialize-inputs command requires --input argument"
     | Some i -> i
   in
   Lexing.from_string (Yojson.Safe.to_string scope_input)
@@ -1676,9 +1682,7 @@ let serialize_inputs (scope_input : Yojson.Safe.t option) =
               | _ -> Some (field_name, rv))
             fields )
     in
-    let json = convert_to_json_input { value; attrs = [] } in
-    Format.(
-      fprintf std_formatter "%a@." (Yojson.Safe.pretty_print ~std:true) json)
+    convert_to_json_input { value; attrs = [] }
 
 let register_attributes () =
   (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
@@ -1702,7 +1706,6 @@ let register_attributes () =
   match value with
   | Shared_ast.String (s, _pos) -> Some (TestDescription s)
   | _ -> failwith "unexpected test description");
-
   (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
      ~contexts:(function
      | Desugared.Name_resolution.ScopeDecl -> true

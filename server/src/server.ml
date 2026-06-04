@@ -797,6 +797,16 @@ class catala_lsp_server =
         | UnknownRequest { meth = "catala.exceptionsAt"; params } ->
           self#exceptions_at
             (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
+        (* TODO: Add ad hoc methods for testcase *)
+        (*
+           read_test : { "lang": <string>, "buffer-path": <string>, "contents": <string> } -> O.test_list result
+           write_catala : { "lang": <string>, "tests": <O.test_list> } : unit
+           run: { "scope": <string>, "file": <string>, "input"?: <test_inputs>} :
+              kind: 'Ok', value: { test_outputs, assert_failures, diffs } | { "kind": 'Error', "value": <err_string> }
+           list-scopes : { "file": <string> } : scope_def_list
+           generate : { "file": <string>, "scope": <string>, "default_values": <bool>, "force_module": <bool> }
+           serialize-inputs : { "test-inputs" : <O.test_inputs>}
+         *)
         | UnknownRequest { meth; _ } ->
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
