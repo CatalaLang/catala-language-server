@@ -5,11 +5,20 @@ import type {
   Entrypoint,
   EntrypointParamKind,
   EntrypointsParams,
+  ReadTestOutput,
+  ReadTestParams,
+  TestList,
+  WriteTestOutput,
+  WriteTestParams,
 } from '../generated/catala_types';
 import {
+  writeReadTestParams,
   writeEntrypointsParams,
   readEntrypoints,
+  readReadTestOutput,
+  writeWriteTestParams,
 } from '../generated/catala_types';
+import { getClient } from '../extension';
 
 // Atd prevents us to obtain direct vscode's ranges, we convert them here.
 export type CatalaEntrypoint = Omit<Entrypoint, 'range'> & {
@@ -17,12 +26,12 @@ export type CatalaEntrypoint = Omit<Entrypoint, 'range'> & {
 };
 
 export async function listEntrypoints(
-  client: LanguageClient,
   only?: EntrypointParamKind[],
   path?: string,
   no_lambdas?: boolean,
   no_variables?: boolean
 ): Promise<Array<CatalaEntrypoint>> {
+  const client = await getClient()
   const params: EntrypointsParams = {
     only: (only ??= []),
     path,
@@ -62,10 +71,10 @@ export type ExceptionsArgs = {
 };
 
 export async function exceptionsAt(
-  client: LanguageClient,
   uri: vscode.Uri,
   position: vscode.Position
 ): Promise<ExceptionsArgs | null> {
+  const client = await getClient()
   const result = await client.sendRequest<ExceptionsArgs | null>(
     'catala.exceptionsAt',
     {
@@ -73,5 +82,31 @@ export async function exceptionsAt(
       position: { line: position.line, character: position.character },
     }
   );
-  return result ?? null;
+  return result;
+}
+
+export async function readTest(
+  lang: string,
+  contents: string,
+  bufferPath?: string
+): Promise<ReadTestOutput | null> {
+  let params: ReadTestParams = { lang, contents, buffer_path: bufferPath }
+  const client = await getClient()
+  const result = await client.sendRequest(
+    'catala.readTest',
+    writeReadTestParams(params)
+  );
+  return result ? readReadTestOutput(result) : null;
+}
+
+export async function writeTest(
+  client: LanguageClient,
+  lang: string,
+  tests: TestList
+): Promise<WriteTestOutput | null> {
+  let params: WriteTestParams = { lang, tests }
+  return await client.sendRequest(
+    'catala.writeTest',
+    writeWriteTestParams(params)
+  );
 }

@@ -23,13 +23,13 @@ import {
 import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
 
-export function parseContents(
+export async function parseContents(
   content: Uint8Array,
   uri: vscode.Uri,
   language: string
-): ParseResults {
+): Promise<ParseResults> {
   const documentText = new TextDecoder('utf-8').decode(content);
-  return parseTestFile(documentText, language, uri.fsPath);
+  return await parseTestFile(documentText, language, uri.fsPath);
 }
 
 // This class contains the 'backend' part of the test case editor that

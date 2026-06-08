@@ -18,10 +18,13 @@ import { logger } from '../extension/logger';
 import { Uri, window, workspace } from 'vscode';
 import path from 'path';
 import { clerkPath, catalaPath } from '../shared/util_client';
+import { readTest, writeTest } from '../extension/lspRequests';
+import { getClient } from '../extension';
 
 function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
 }
+
 
 type ExecOptions = { input?: string; cwd?: string };
 type ExecResult = { ok: true; output: string } | { ok: false; stderr: string };
@@ -50,50 +53,62 @@ function execBinary(
   }
 }
 
-export function parseTestFile(
+export async function parseTestFile(
   content: string,
   lang: string,
   bufferPath: string
-): ParseResults {
-  const cwd = getCwd(bufferPath);
-  const execResult = execBinary(
-    catalaPath,
-    ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
-    { input: content, ...(cwd && { cwd }) }
-  );
-  if (!execResult.ok) return { kind: 'ParseError', value: execResult.stderr };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(execResult.output);
-  } catch (error) {
-    logger.log(`JSON parse error in parseTestFile: ${error}`);
-    return { kind: 'ParseError', value: `JSON parse error: ${String(error)}` };
+): Promise<ParseResults> {
+
+  const testList = await readTest(lang, content, bufferPath)
+
+  // const cwd = getCwd(bufferPath);
+  // const execResult = execBinary(
+  //   catalaPath,
+  //   ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
+  //   { input: content, ...(cwd && { cwd }) }
+  // );
+  // if (!execResult.ok) return { kind: 'ParseError', value: execResult.stderr };
+  // let parsed: unknown;
+  // try {
+  //   parsed = JSON.parse(execResult.output);
+  // } catch (error) {
+  //   logger.log(`JSON parse error in parseTestFile: ${error}`);
+  //   return { kind: 'ParseError', value: `JSON parse error: ${String(error)}` };
+  // }
+  // let testList: TestList;
+  // try {
+  //   testList = readTestList(parsed);
+  // } catch (error) {
+  //   logger.log(`ATD read error in parseTestFile: ${error}`);
+  //   return {
+  //     kind: 'ParseError',
+  //     value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}`,
+  //   };
+  // }
+
+  // TODO : CLEAN THIS UP
+
+  if (testList) {
+    if (content.trim() !== '' && testList.length === 0) {
+      return { kind: 'EmptyTestListMismatch' };
+    }
+    return { kind: 'Results', value: testList };
+  } else {
+    return { kind: 'ParseError', value: "caca" };
   }
-  let testList: TestList;
-  try {
-    testList = readTestList(parsed);
-  } catch (error) {
-    logger.log(`ATD read error in parseTestFile: ${error}`);
-    return {
-      kind: 'ParseError',
-      value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}`,
-    };
-  }
-  if (content.trim() !== '' && testList.length === 0) {
-    return { kind: 'EmptyTestListMismatch' };
-  }
-  return { kind: 'Results', value: testList };
 }
 
-export function atdToCatala(tests: TestList, lang: string): string {
-  const result = execBinary(catalaPath, ['testcase', 'write', '-l', lang], {
-    input: JSON.stringify(writeTestList(tests)),
-  });
-  if (!result.ok) {
-    logger.log(`Error in atdToCatala: ${result.stderr}`);
-    throw new Error(result.stderr);
+export async function atdToCatala(tests: TestList, lang: string): Promise<string> {
+  const result = await writeTest(await getClient(), lang, tests)
+
+  // const result = execBinary(catalaPath, ['testcase', 'write', '-l', lang], {
+  //   input: JSON.stringify(writeTestList(tests)),
+  // });
+  if (!result) {
+    logger.log(`Error in atdToCatala`);
+    throw new Error();
   }
-  return result.output;
+  return result;
 }
 
 export function runTestScope(

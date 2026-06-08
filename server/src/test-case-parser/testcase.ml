@@ -78,7 +78,16 @@ let cmd_write =
     let tests =
       Lib.J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
     in
-    Lib.write_catala flags output tests
+    let _fname, with_out =
+      File.get_main_out_formatter () ~source_file:(Global.Stdin "")
+        ~output_file:(Option.map Global.options.Global.path_rewrite output)
+    in
+    let writer = Lib.write_catala flags tests in
+    with_out
+    @@ fun ppf ->
+    let buf = Buffer.create 1024 in
+    writer buf;
+    Format.pp_print_string ppf (Buffer.contents buf)
   in
   Cmd.v
     Cmd.(

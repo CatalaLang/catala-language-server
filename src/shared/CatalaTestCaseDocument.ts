@@ -46,8 +46,7 @@ function stampParseResultsUids(results: ParseResults): ParseResults {
  */
 export class CatalaTestCaseDocument
   extends vscode.Disposable
-  implements vscode.CustomDocument
-{
+  implements vscode.CustomDocument {
   private readonly _uri: vscode.Uri;
   private readonly _language: string;
   //At some point we could think of a better type for the doc contents?
@@ -64,7 +63,11 @@ export class CatalaTestCaseDocument
     const dataFile =
       typeof backupId === 'string' ? vscode.Uri.parse(backupId) : uri;
     const fileData = await CatalaTestCaseDocument.readFile(dataFile);
-    return new CatalaTestCaseDocument(uri, fileData);
+    const language = getLanguageFromUri(uri);
+    const result = stampParseResultsUids(
+      await parseContents(fileData, uri, language)
+    );
+    return new CatalaTestCaseDocument(uri, result);
   }
 
   private static async readFile(uri: vscode.Uri): Promise<Uint8Array> {
@@ -119,7 +122,7 @@ export class CatalaTestCaseDocument
     if (this._parseResults.kind !== 'Results') {
       throw new Error('Invalid testcase file, cannot save');
     }
-    const catalaSource = atdToCatala(this._parseResults.value, this.language);
+    const catalaSource = await atdToCatala(this._parseResults.value, this.language);
     const writeData = Buffer.from(catalaSource, 'utf-8');
     if (cancellation.isCancellationRequested) {
       return;
@@ -130,7 +133,7 @@ export class CatalaTestCaseDocument
   async revert(_cancellation: vscode.CancellationToken): Promise<void> {
     const diskContent = await CatalaTestCaseDocument.readFile(this.uri);
     this._parseResults = stampParseResultsUids(
-      parseContents(diskContent, this._uri, this._language)
+      await parseContents(diskContent, this._uri, this._language)
     );
 
     this._onDidChangeDocument.fire({
@@ -196,15 +199,11 @@ export class CatalaTestCaseDocument
     });
   }
 
-  private constructor(uri: vscode.Uri, initialContent: Uint8Array) {
-    super(() => {}); //XXX -- the sample just seems to be able to call super()
+  private constructor(uri: vscode.Uri, results: ParseResults) {
+    super(() => { }); //XXX -- the sample just seems to be able to call super()
     this._uri = uri;
     this._language = getLanguageFromUri(this._uri);
-
-    this._parseResults = stampParseResultsUids(
-      parseContents(initialContent, this._uri, this._language)
-    );
-
+    this._parseResults = results
     this._editManager = new EditManager(this);
   }
 }

@@ -475,7 +475,6 @@ export async function initTests(
 
   const updateTestScopes: () => Promise<void> = async () => {
     const entrypoints = await listEntrypoints(
-      client,
       [{ kind: 'GUI' }, { kind: 'Test' }],
       undefined,
       false,

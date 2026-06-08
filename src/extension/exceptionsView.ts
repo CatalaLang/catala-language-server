@@ -5,6 +5,7 @@ import type { LanguageClient } from 'vscode-languageclient/node';
 import { clerkPath, getCwd } from '../shared/util_client';
 import { exceptionsAt } from './lspRequests';
 import type { ExceptionsArgs } from './lspRequests';
+import { getClient } from '../extension';
 
 export type RulePos = {
   filename: string;
@@ -80,13 +81,13 @@ function renderExceptionNode(
     const condPrefix = escapeHtml(childPfx + bar + '   ');
     const cond = rule.condition_text
       ? '\n' +
-        condPrefix +
-        '[' +
-        rule.condition_text
-          .split('\n')
-          .map((l) => `<span class="condition">${escapeHtml(l)}</span>`)
-          .join('\n' + condPrefix + ' ') +
-        ']'
+      condPrefix +
+      '[' +
+      rule.condition_text
+        .split('\n')
+        .map((l) => `<span class="condition">${escapeHtml(l)}</span>`)
+        .join('\n' + condPrefix + ' ') +
+      ']'
       : ` <span class="always">${escapeHtml(vscode.l10n.t('(always)'))}</span>`;
     html += `\n${escapeHtml(childPfx + bar + ' ➤ ')}${posSpan}${headingHtml}${cond}`;
   }
@@ -305,12 +306,10 @@ export async function showExceptions(args: ExceptionsArgs): Promise<void> {
 }
 
 export async function showExceptionsAtCursor(
-  client: LanguageClient
 ): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) return;
   const args = await exceptionsAt(
-    client,
     editor.document.uri,
     editor.selection.active
   );

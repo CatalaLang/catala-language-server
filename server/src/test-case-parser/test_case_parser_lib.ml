@@ -1147,7 +1147,7 @@ let write_catala_test ppf t lang =
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
-let write_catala options outfile (tests : O.test_list) : unit =
+let write_catala options (tests : O.test_list) : O.write_test_output writer =
   let lang =
     Catala_utils.Cli.file_lang
       (match options.Global.input_src with
@@ -1155,51 +1155,50 @@ let write_catala options outfile (tests : O.test_list) : unit =
       | Global.Contents (_, f) -> f
       | Global.Stdin _ -> "")
   in
-  let _fname, with_out =
-    File.get_main_out_formatter () ~source_file:(Global.Stdin "")
-      ~output_file:(Option.map options.Global.path_rewrite outfile)
+  let writer buf =
+    let ppf = Format.formatter_of_buffer buf in
+    let _opened =
+      List.fold_left
+        (fun opened test ->
+          Format.pp_open_vbox ppf 0;
+          let opened =
+            let modules_to_open0 =
+              Ident.Set.(
+                diff
+                  (of_list
+                     (test.O.tested_scope.module_name
+                     :: test.O.tested_scope.module_deps))
+                  opened)
+            in
+            (* Filter out implicit stdlib aliases from Using lines. TODO: remove
+               once the compiler provides active imports for the target module,
+               so we can decide this precisely. *)
+            let modules_to_open =
+              Ident.Set.fold
+                (fun m acc ->
+                  if is_implicit_stdlib_alias lang m then acc
+                  else Ident.Set.add m acc)
+                modules_to_open0 Ident.Set.empty
+            in
+            Ident.Set.iter
+              (fun modname ->
+                Format.fprintf ppf "> %s %s@,"
+                  (get_lang_strings lang).using_module modname)
+              modules_to_open;
+            let opened' =
+              String.Set.of_list (Ident.Set.elements modules_to_open)
+            in
+            String.Set.union opened' opened
+          in
+          write_catala_test ppf test lang;
+          Format.pp_close_box ppf ();
+          Format.pp_print_flush ppf ();
+          opened)
+        String.Set.empty tests
+    in
+    ()
   in
-  with_out
-  @@ fun ppf ->
-  let _opened =
-    List.fold_left
-      (fun opened test ->
-        Format.pp_open_vbox ppf 0;
-        let opened =
-          let modules_to_open0 =
-            Ident.Set.(
-              diff
-                (of_list
-                   (test.O.tested_scope.module_name
-                   :: test.O.tested_scope.module_deps))
-                opened)
-          in
-          (* Filter out implicit stdlib aliases from Using lines. TODO: remove
-             once the compiler provides active imports for the target module, so
-             we can decide this precisely. *)
-          let modules_to_open =
-            Ident.Set.fold
-              (fun m acc ->
-                if is_implicit_stdlib_alias lang m then acc
-                else Ident.Set.add m acc)
-              modules_to_open0 Ident.Set.empty
-          in
-          Ident.Set.iter
-            (fun modname ->
-              Format.fprintf ppf "> %s %s@,"
-                (get_lang_strings lang).using_module modname)
-            modules_to_open;
-          let opened' =
-            String.Set.of_list (Ident.Set.elements modules_to_open)
-          in
-          String.Set.union opened' opened
-        in
-        write_catala_test ppf test lang;
-        Format.pp_close_box ppf ();
-        opened)
-      String.Set.empty tests
-  in
-  ()
+  writer
 
 let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program) :
     (StructField.t * (dcalc, typed) gexpr) list =

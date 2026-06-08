@@ -223,7 +223,9 @@ type down_message = [
   | ConfirmResult of confirm_result
 ]
 
-(* List entrypoints *)
+(* LSP custom requests *)
+
+(* 'catala.listEntrypoints' request *)
 
 type gui_entrypoint = {
    scope : string;
@@ -288,3 +290,59 @@ type entrypoints_params = {
   ?no_lambdas : bool option ;
   ?no_variables : bool option ;
 }
+
+(* 'catala.readTest' request *)
+
+type read_test_params = {
+  lang: string;
+  contents: string;
+  ?buffer_path: string option;
+}
+
+type read_test_output = test_list
+
+(* 'catala.writeTests' request *)
+
+type write_test_params = {
+  lang: string;
+  tests: test_list;
+}
+
+type write_test_output = string (* Catala surface *)
+
+(* 'catala.run_test' request *)
+
+type run_test_params = {
+  scope: string;
+  file: string;
+  ?input: test_inputs option;
+}
+
+type run_test_output = test_run_results
+
+(* 'catala.list-scopes' request *)
+
+type list_scopes_params = {
+  file: string;
+}
+
+type list_scopes_output = scope_def_list
+
+(* 'catala.generate' request *)
+
+type generate_params = {
+  file: string;
+  scope: string;
+  ?default_values: bool option;
+  ?force_module: bool option;
+}
+
+type generate_output = test_list
+
+(* 'catala.serialize-inputs' request *)
+
+type serialize_inputs_params = {
+  inputs: test_inputs;
+}
+
+type serialize_inputs_output = string (* JSON *)

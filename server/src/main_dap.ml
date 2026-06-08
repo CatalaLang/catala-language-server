@@ -736,32 +736,8 @@ let () =
 
 type Catala_utils.Pos.attr += Nil
 
-let () =
-  (* Dummy registration *)
-  Driver.Plugin.register_subcommands "testcase" ~doc:"" ~man:[] [];
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
-    ~contexts:(function
-      | Desugared.Name_resolution.Expression _ -> true | _ -> false)
-    (fun ~pos:_ _ -> Some Nil);
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
-    ~contexts:(function
-      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
-    (fun ~pos:_ _ -> Some Nil);
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
-    ~contexts:(function
-      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
-    (fun ~pos:_ _ -> Some Nil);
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
-    ~contexts:(function
-      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
-    (fun ~pos:_ _ -> Some Nil);
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-    ~contexts:(function
-    | Desugared.Name_resolution.Expression _ -> true
-    | _ -> false)
-  @@ fun ~pos:_ _ -> Some Nil
-
 let main () =
+  Test_case_parser_lib.register_attributes ();
   let rpc = Debug_rpc.create ~in_:Lwt_io.stdin ~out:Lwt_io.stdout () in
   Lwt_main.run (launch rpc)
 

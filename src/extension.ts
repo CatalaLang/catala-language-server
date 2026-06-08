@@ -27,17 +27,24 @@ import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
 
-let client: LanguageClient;
+let client: LanguageClient
+let client_resolver: (val: LanguageClient) => void
+const clientPromise: Promise<LanguageClient> = new Promise((resolve, _rej) => {
+  client_resolver = resolve
+})
+
+export async function getClient(): Promise<LanguageClient> {
+  return await clientPromise
+}
 
 async function selectScope(with_inputs: boolean): Promise<RunArgs | undefined> {
-  if (!client) {
+  if (! await getClient()) {
     vscode.window.showErrorMessage(
       'Catala LSP is not running: cannot select a scope.'
     );
     return undefined;
   }
   const entrypoints: Array<CatalaEntrypoint> = await listEntrypoints(
-    client,
     with_inputs
       ? [{ kind: 'InputScope' }]
       : [{ kind: 'Test' }, { kind: 'NoInputScope' }],
@@ -128,7 +135,6 @@ async function listTestableScopes(
   path: string
 ): Promise<Array<{ path: string; scopes: string[] }>> {
   const entrypoints = await listEntrypoints(
-    client,
     [{ kind: 'InputScope' }],
     path,
     true,
@@ -264,6 +270,7 @@ export async function activate(
       clientOptions
     );
     await Promise.all([client.start(), initTests(context, client)]);
+    client_resolver(client)
   }
 
   // Always register the custom editor provider
@@ -276,7 +283,7 @@ export async function activate(
     ),
     vscode.commands.registerCommand('catala.showExceptions', showExceptions),
     vscode.commands.registerCommand('catala.showExceptionsAtCursor', () =>
-      showExceptionsAtCursor(client)
+      showExceptionsAtCursor()
     )
   );
 

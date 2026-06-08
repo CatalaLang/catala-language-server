@@ -273,6 +273,50 @@ export type EntrypointsParams = {
   no_variables?: boolean;
 }
 
+export type ReadTestParams = {
+  lang: string;
+  contents: string;
+  buffer_path?: string;
+}
+
+export type ReadTestOutput = TestList
+
+export type WriteTestParams = {
+  lang: string;
+  tests: TestList;
+}
+
+export type WriteTestOutput = string
+
+export type RunTestParams = {
+  scope: string;
+  file: string;
+  input?: TestInputs;
+}
+
+export type RunTestOutput = TestRunResults
+
+export type ListScopesParams = {
+  file: string;
+}
+
+export type ListScopesOutput = ScopeDefList
+
+export type GenerateParams = {
+  file: string;
+  scope: string;
+  default_values?: boolean;
+  force_module?: boolean;
+}
+
+export type GenerateOutput = TestList
+
+export type SerializeInputsParams = {
+  inputs: TestInputs;
+}
+
+export type SerializeInputsOutput = string
+
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
     case 'TBool':
@@ -1220,6 +1264,142 @@ export function readEntrypointsParams(x: any, context: any = x): EntrypointsPara
     no_lambdas: _atd_read_optional_field(_atd_read_bool, x['no_lambdas'], x),
     no_variables: _atd_read_optional_field(_atd_read_bool, x['no_variables'], x),
   };
+}
+
+export function writeReadTestParams(x: ReadTestParams, context: any = x): any {
+  return {
+    'lang': _atd_write_required_field('ReadTestParams', 'lang', _atd_write_string, x.lang, x),
+    'contents': _atd_write_required_field('ReadTestParams', 'contents', _atd_write_string, x.contents, x),
+    'buffer_path': _atd_write_optional_field(_atd_write_string, x.buffer_path, x),
+  };
+}
+
+export function readReadTestParams(x: any, context: any = x): ReadTestParams {
+  return {
+    lang: _atd_read_required_field('ReadTestParams', 'lang', _atd_read_string, x['lang'], x),
+    contents: _atd_read_required_field('ReadTestParams', 'contents', _atd_read_string, x['contents'], x),
+    buffer_path: _atd_read_optional_field(_atd_read_string, x['buffer_path'], x),
+  };
+}
+
+export function writeReadTestOutput(x: ReadTestOutput, context: any = x): any {
+  return writeTestList(x, context);
+}
+
+export function readReadTestOutput(x: any, context: any = x): ReadTestOutput {
+  return readTestList(x, context);
+}
+
+export function writeWriteTestParams(x: WriteTestParams, context: any = x): any {
+  return {
+    'lang': _atd_write_required_field('WriteTestParams', 'lang', _atd_write_string, x.lang, x),
+    'tests': _atd_write_required_field('WriteTestParams', 'tests', writeTestList, x.tests, x),
+  };
+}
+
+export function readWriteTestParams(x: any, context: any = x): WriteTestParams {
+  return {
+    lang: _atd_read_required_field('WriteTestParams', 'lang', _atd_read_string, x['lang'], x),
+    tests: _atd_read_required_field('WriteTestParams', 'tests', readTestList, x['tests'], x),
+  };
+}
+
+export function writeWriteTestOutput(x: WriteTestOutput, context: any = x): any {
+  return _atd_write_string(x, context);
+}
+
+export function readWriteTestOutput(x: any, context: any = x): WriteTestOutput {
+  return _atd_read_string(x, context);
+}
+
+export function writeRunTestParams(x: RunTestParams, context: any = x): any {
+  return {
+    'scope': _atd_write_required_field('RunTestParams', 'scope', _atd_write_string, x.scope, x),
+    'file': _atd_write_required_field('RunTestParams', 'file', _atd_write_string, x.file, x),
+    'input': _atd_write_optional_field(writeTestInputs, x.input, x),
+  };
+}
+
+export function readRunTestParams(x: any, context: any = x): RunTestParams {
+  return {
+    scope: _atd_read_required_field('RunTestParams', 'scope', _atd_read_string, x['scope'], x),
+    file: _atd_read_required_field('RunTestParams', 'file', _atd_read_string, x['file'], x),
+    input: _atd_read_optional_field(readTestInputs, x['input'], x),
+  };
+}
+
+export function writeRunTestOutput(x: RunTestOutput, context: any = x): any {
+  return writeTestRunResults(x, context);
+}
+
+export function readRunTestOutput(x: any, context: any = x): RunTestOutput {
+  return readTestRunResults(x, context);
+}
+
+export function writeListScopesParams(x: ListScopesParams, context: any = x): any {
+  return {
+    'file': _atd_write_required_field('ListScopesParams', 'file', _atd_write_string, x.file, x),
+  };
+}
+
+export function readListScopesParams(x: any, context: any = x): ListScopesParams {
+  return {
+    file: _atd_read_required_field('ListScopesParams', 'file', _atd_read_string, x['file'], x),
+  };
+}
+
+export function writeListScopesOutput(x: ListScopesOutput, context: any = x): any {
+  return writeScopeDefList(x, context);
+}
+
+export function readListScopesOutput(x: any, context: any = x): ListScopesOutput {
+  return readScopeDefList(x, context);
+}
+
+export function writeGenerateParams(x: GenerateParams, context: any = x): any {
+  return {
+    'file': _atd_write_required_field('GenerateParams', 'file', _atd_write_string, x.file, x),
+    'scope': _atd_write_required_field('GenerateParams', 'scope', _atd_write_string, x.scope, x),
+    'default_values': _atd_write_optional_field(_atd_write_bool, x.default_values, x),
+    'force_module': _atd_write_optional_field(_atd_write_bool, x.force_module, x),
+  };
+}
+
+export function readGenerateParams(x: any, context: any = x): GenerateParams {
+  return {
+    file: _atd_read_required_field('GenerateParams', 'file', _atd_read_string, x['file'], x),
+    scope: _atd_read_required_field('GenerateParams', 'scope', _atd_read_string, x['scope'], x),
+    default_values: _atd_read_optional_field(_atd_read_bool, x['default_values'], x),
+    force_module: _atd_read_optional_field(_atd_read_bool, x['force_module'], x),
+  };
+}
+
+export function writeGenerateOutput(x: GenerateOutput, context: any = x): any {
+  return writeTestList(x, context);
+}
+
+export function readGenerateOutput(x: any, context: any = x): GenerateOutput {
+  return readTestList(x, context);
+}
+
+export function writeSerializeInputsParams(x: SerializeInputsParams, context: any = x): any {
+  return {
+    'inputs': _atd_write_required_field('SerializeInputsParams', 'inputs', writeTestInputs, x.inputs, x),
+  };
+}
+
+export function readSerializeInputsParams(x: any, context: any = x): SerializeInputsParams {
+  return {
+    inputs: _atd_read_required_field('SerializeInputsParams', 'inputs', readTestInputs, x['inputs'], x),
+  };
+}
+
+export function writeSerializeInputsOutput(x: SerializeInputsOutput, context: any = x): any {
+  return _atd_write_string(x, context);
+}
+
+export function readSerializeInputsOutput(x: any, context: any = x): SerializeInputsOutput {
+  return _atd_read_string(x, context);
 }
 
 

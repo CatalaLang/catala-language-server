@@ -33,7 +33,8 @@
   ptime.clock.os
   uri
   re
-  catala_types_atd)
+  catala_types_atd
+  test_case_parser_lib)
  (modules
   (:standard \ Main_lsp Main_dap))
  (preprocess
