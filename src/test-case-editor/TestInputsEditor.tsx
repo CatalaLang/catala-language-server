@@ -120,10 +120,17 @@ export default function TestInputsEditor(props: Props): ReactElement {
         inputName
       );
 
+      const rawValue = testIo.value?.value.value;
+      const count =
+        testIo.typ.kind === 'TArray' && rawValue?.kind === 'Array'
+          ? rawValue.value.length
+          : undefined;
+
       return {
         key: inputName,
         label,
         type: testIo.typ,
+        count,
         editor: (
           <InputField
             inputName={inputName}

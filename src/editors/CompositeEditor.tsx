@@ -12,6 +12,7 @@ export type EditorItem = {
   label: ReactNode;
   type: Typ;
   editor: ReactElement;
+  count?: number;
 };
 
 type CompositeEditorProps = {
@@ -40,19 +41,8 @@ function categorize(item: EditorItem): 'scalar' | 'structural' | 'array' {
 }
 
 function getTabDisplayName(item: EditorItem): ReactNode {
-  if (item.type.kind !== 'TArray') return item.label;
-  const editorProps = (
-    item.editor as {
-      props: {
-        testIO?: {
-          value?: { value?: { kind?: string; value?: unknown[] } };
-        };
-      };
-    }
-  ).props;
-  const arrayValue = editorProps?.testIO?.value?.value;
-  if (arrayValue?.kind === 'Array' && arrayValue.value) {
-    return `${item.key} (${arrayValue.value.length})`;
+  if (item.count !== undefined) {
+    return `${item.key} (${item.count})`;
   }
   return item.label;
 }
