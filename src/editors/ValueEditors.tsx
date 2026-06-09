@@ -939,17 +939,23 @@ function StructEditor(props: StructEditorProps): ReactElement {
         ...currentPath,
         { kind: 'StructField', value: fieldName },
       ];
+      const fieldValue = currentMap.get(fieldName);
+      const rawFieldValue = fieldValue?.value;
+      const count =
+        fieldType.kind === 'TArray' && rawFieldValue?.kind === 'Array'
+          ? rawFieldValue.value.length
+          : undefined;
+
       return {
         key: fieldName,
         label: fieldName,
         type: fieldType,
+        count,
         editor: (
           <ValueEditor
             testIO={{
               typ: fieldType,
-              value: currentMap.get(fieldName)
-                ? { value: currentMap.get(fieldName)! }
-                : undefined,
+              value: fieldValue ? { value: fieldValue } : undefined,
             }}
             onValueChange={(newFieldTestIo) => {
               if (newFieldTestIo.value) {
