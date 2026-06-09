@@ -45,17 +45,9 @@ type ArrayEditorProps = {
   editable?: boolean;
 };
 
-// We introspect the array type to understand whether
-// there are any nested arrays down the line.
-//
-// If no nesting happens, then we display the array elements
-// as 'cards' within a 2D layout to maximize space use --
-// otherwise, we arrange elements vertically to keep horizontal
-// space for further nesting.
-//
-// `hasNestedArrays` is exported as this introspection capability
-// is also needed by CompositeEditor
-export function hasNestedArrays(typ: Typ): boolean {
+// Arrays with further nested arrays are laid out vertically;
+// otherwise elements flow in a card layout to use horizontal space.
+function hasNestedArrays(typ: Typ): boolean {
   if (typ.kind === 'TArray') {
     return true;
   } else if (
@@ -161,8 +153,6 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   const intl = useIntl();
   const elementTypeName = getTypeDisplayName(elementType, intl);
-  // if the array has nested subarrays, we lay it out vertically,
-  // otherwise we use a flowing 'card' layout.
   const isVertical = hasNestedArrays(elementType);
 
   const schemaResult = tryCreateTableSchema(elementType);
