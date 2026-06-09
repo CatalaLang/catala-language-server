@@ -42,7 +42,7 @@ async function findUnusedCSS() {
       content: [...contentFiles, { raw: THEME_SNIPPET, extension: 'html' }],
       css: cssFiles,
       rejected: true,
-      safelist: ['html', 'body'],
+      safelist: ['html', 'body', 'nest-0', 'nest-1'],
     });
 
     console.log('\n=== RESULTS ===');

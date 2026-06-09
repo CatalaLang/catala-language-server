@@ -19,6 +19,7 @@ import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../shared/util';
 import { Combobox } from './Combobox';
 import { CompositeEditor } from './CompositeEditor';
+import { useNestingDepth, NestingDepthIncrementer } from './NestingDepth';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
 
@@ -967,10 +968,16 @@ function StructEditor(props: StructEditorProps): ReactElement {
     }
   );
 
+  const nestingDepth = useNestingDepth();
+
   return (
-    <div className="struct-editor struct-container">
-      <CompositeEditor items={editorItems} />
-    </div>
+    <NestingDepthIncrementer>
+      <div
+        className={`struct-editor struct-container nest-${nestingDepth % 2}`}
+      >
+        <CompositeEditor items={editorItems} />
+      </div>
+    </NestingDepthIncrementer>
   );
 }
 

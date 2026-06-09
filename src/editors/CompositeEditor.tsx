@@ -1,30 +1,12 @@
 import { useState, type ReactElement, type ReactNode } from 'react';
-import { hasNestedArrays } from './ArrayEditor';
 import type { Typ } from '../generated/catala_types';
 
 /**
- * Base for StructEditor and TestInputsEditor.
- *
- * Those work in a fairly similar way (label/editor pairs
- * with display heuristics based on recursive array
- * nesting).
- *
- * Those heuristics are:
- * - Items without any list nesting are presented first
- * (arranged in a possibly 2D flexbox to use space efficiently,
- * and presented as 'cards')
- * - Lists are presented in a tabbed view, one tab
- * per list (question: what if there is a single list,
- * and no other item with nested lists? In that case we
- * should probably display it as-is, without tabs? But we need a label still.)
- * - Items that are not lists but contain (arbitrarily down)
- * nested lists, get one tab in the tabbed view; they
- * are shown as a recursive version of the top component
- * (first, items without list nesting, then tabbed view...)
- * - When there are only simple items (no lists, no items containing
- * nested lists) we arrange those vertically within a single card.
+ * Base for StructEditor and TestInputsEditor. Renders label/editor pairs with
+ * layout heuristics based on type structure: scalar fields wrap compactly;
+ * structural fields (structs, enums with struct payloads) stack full-width;
+ * array fields go into tabs (or plain if there is only one).
  */
-
 export type EditorItem = {
   key: string;
   label: ReactNode;
@@ -37,53 +19,62 @@ type CompositeEditorProps = {
   atomicElements?: boolean;
 };
 
-export function CompositeEditor(props: CompositeEditorProps): ReactElement {
-  // Separate items into those with and without nested arrays
-  const simpleItems = props.items.filter((item) => !hasNestedArrays(item.type));
-  const complexItems = props.items.filter((item) => hasNestedArrays(item.type));
-
-  // Helper function to get tab display name with count for arrays
-  function getTabDisplayName(item: EditorItem): ReactNode {
-    // Check if this is an array type
-    if (item.type.kind === 'TArray') {
-      // Try to extract array length from the editor props
-      const editorProps = (
-        item.editor as {
-          props: {
-            testIO?: {
-              value?: {
-                value?: { value?: { kind?: string; value?: unknown[] } };
-              };
-            };
-          };
-        }
-      ).props;
-
-      // Look for testIO prop which might contain our array value
-      const arrayValue = editorProps?.testIO?.value?.value?.value;
-      if (arrayValue?.kind === 'Array' && arrayValue.value) {
-        return `${item.key} (${arrayValue.value.length})`;
-      }
-    }
-
-    // For non-array types or arrays without accessible length, just return the label
-    return item.label;
+// True if the type needs full-width rendering (not suitable for compact wrap).
+// TArray is handled separately as 'array' category before this check.
+function isStructural(typ: Typ): boolean {
+  if (typ.kind === 'TStruct') return true;
+  if (typ.kind === 'TArray') return true;
+  if (typ.kind === 'TOption') return isStructural(typ.value);
+  if (typ.kind === 'TEnum') {
+    return Array.from(typ.value.constructors.values()).some(
+      (v) => v !== null && isStructural(v.value)
+    );
   }
+  return false;
+}
 
-  // For tabbed view of complex items
-  const [activeTab, setActiveTab] = useState(
-    complexItems.length > 0 ? complexItems[0].key : ''
+function categorize(item: EditorItem): 'scalar' | 'structural' | 'array' {
+  if (item.type.kind === 'TArray') return 'array';
+  if (isStructural(item.type)) return 'structural';
+  return 'scalar';
+}
+
+function getTabDisplayName(item: EditorItem): ReactNode {
+  if (item.type.kind !== 'TArray') return item.label;
+  const editorProps = (
+    item.editor as {
+      props: {
+        testIO?: {
+          value?: { value?: { kind?: string; value?: unknown[] } };
+        };
+      };
+    }
+  ).props;
+  const arrayValue = editorProps?.testIO?.value?.value;
+  if (arrayValue?.kind === 'Array' && arrayValue.value) {
+    return `${item.key} (${arrayValue.value.length})`;
+  }
+  return item.label;
+}
+
+export function CompositeEditor(props: CompositeEditorProps): ReactElement {
+  const scalarItems = props.items.filter((i) => categorize(i) === 'scalar');
+  const structuralItems = props.items.filter(
+    (i) => categorize(i) === 'structural'
   );
+  const arrayItems = props.items.filter((i) => categorize(i) === 'array');
 
-  // If there's only one complex item, display it directly without tabs
-  const singleComplexItem = complexItems.length === 1;
+  const hasNonScalar = structuralItems.length + arrayItems.length > 0;
+
+  const [activeTab, setActiveTab] = useState(
+    arrayItems.length > 0 ? arrayItems[0].key : ''
+  );
 
   return (
     <div className="composite-editor">
-      {/* Simple items displayed vertically when no complex items */}
-      {simpleItems.length > 0 && complexItems.length === 0 && (
+      {scalarItems.length > 0 && !hasNonScalar && (
         <div className="simple-items-vertical">
-          {simpleItems.map((item) => (
+          {scalarItems.map((item) => (
             <div
               key={item.key}
               className={`simple-item-vertical ${props.atomicElements ? 'atomic-element' : ''}`}
@@ -95,10 +86,9 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
         </div>
       )}
 
-      {/* Simple items in flex layout when there are complex items */}
-      {simpleItems.length > 0 && complexItems.length > 0 && (
+      {scalarItems.length > 0 && hasNonScalar && (
         <div className="simple-items-container">
-          {simpleItems.map((item) => (
+          {scalarItems.map((item) => (
             <div
               key={item.key}
               className={`simple-item ${props.atomicElements ? 'atomic-element' : ''}`}
@@ -110,11 +100,17 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
         </div>
       )}
 
-      {/* Complex items displayed in a tabbed view */}
-      {complexItems.length > 1 && (
+      {structuralItems.map((item) => (
+        <div key={item.key} className="structural-item">
+          <label className="item-label body-1">{item.label}</label>
+          {item.editor}
+        </div>
+      ))}
+
+      {arrayItems.length > 1 && (
         <div className="complex-items-container">
           <div className="tabs">
-            {complexItems.map((item) => (
+            {arrayItems.map((item) => (
               <button
                 key={item.key}
                 className={`tab ${activeTab === item.key ? 'active' : ''}`}
@@ -125,7 +121,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
             ))}
           </div>
           <div className="tab-content">
-            {complexItems.map((item) => (
+            {arrayItems.map((item) => (
               <div
                 key={item.key}
                 className={`tab-panel ${activeTab === item.key ? 'active' : 'hidden'}`}
@@ -137,12 +133,11 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
         </div>
       )}
 
-      {/* Single complex item displayed directly */}
-      {singleComplexItem && (
-        <>
-          <h3 className="heading-h3">{complexItems[0].label}</h3>
-          <div className="item-editor">{complexItems[0].editor}</div>
-        </>
+      {arrayItems.length === 1 && (
+        <div className="structural-item">
+          <label className="item-label body-1">{arrayItems[0].label}</label>
+          {arrayItems[0].editor}
+        </div>
       )}
     </div>
   );

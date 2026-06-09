@@ -36,6 +36,19 @@
   font-size: var(--field-label-font-size);
 }
 
+.structural-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing4);
+}
+
+.structural-item > .item-label {
+  font-size: 15px;
+  font-weight: 600;
+  padding-bottom: var(--spacing4);
+  border-bottom: 1px solid var(--card-border-light);
+}
+
 /* tabbed */
 .complex-items-container {
   overflow: hidden;

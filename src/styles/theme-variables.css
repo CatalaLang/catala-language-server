@@ -97,15 +97,6 @@
     sans-serif;
   font-weight: 500;
 }
-.heading-h3 {
-  font-size: 20px;
-  font-family:
-    SF Pro Text,
-    sans-serif;
-  text-transform: capitalize;
-  font-weight: 500;
-  margin: 0;
-}
 .body-1 {
   font-size: 16px;
   font-family:
@@ -164,6 +155,12 @@ input {
 .vscode-dark .atomic-element {
   background-color: var(--level-3-background-dark);
 }
+.vscode-dark .nest-0 {
+  background-color: var(--level-2-background-dark);
+}
+.vscode-dark .nest-1 {
+  background-color: var(--level-3-background-dark);
+}
 .vscode-dark .button-action-dvp {
   color: var(--stormgray500);
   border-color: var(--stormgray800);
@@ -218,6 +215,12 @@ input {
 .vscode-light .array-item,
 .vscode-light .atomic-element {
   background-color: var(--level-3-background);
+}
+.vscode-light .nest-0 {
+  background-color: var(--level-3-background);
+}
+.vscode-light .nest-1 {
+  background-color: var(--level-2-background);
 }
 
 .vscode-light .button-action-dvp {
