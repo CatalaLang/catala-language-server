@@ -25,7 +25,11 @@ import {
 import { confirm } from '../messaging/confirm';
 import { TableArrayEditor } from './TableArrayEditor';
 import { getTypeDisplayName } from './typeNameUtils';
-import { tryCreateTableSchema } from './tableArrayUtils';
+import {
+  tryCreateTableSchema,
+  getArrayItemLabel,
+  setArrayItemLabel,
+} from './tableArrayUtils';
 
 /**
  * Diffs are consumed only by ArrayEditor to compute "phantom" indices
@@ -134,6 +138,14 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
     const newArray = currentArray.filter((_, i) => i !== index);
     updateParent(newArray);
     invalidateArrayDiffs();
+  };
+
+  const handleLabelChange = (index: number, newLabel: string): void => {
+    const item = currentArray[index];
+    handleUpdate(index, {
+      ...item,
+      attrs: setArrayItemLabel(item.attrs, newLabel),
+    });
   };
 
   const handleMove = (fromIndex: number, toIndex: number): void => {
@@ -294,6 +306,24 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
             // Delete-last only (path-stable)
             const canRemove = canRemoveLast(currentArray.length, index);
 
+            const labelInput = !isPhantom ? (
+              <input
+                type="text"
+                className={`row-label-input${!isVertical ? ' array-item-label' : ''}`}
+                value={getArrayItemLabel(item?.attrs) ?? ''}
+                onChange={(e) => handleLabelChange(index, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Escape')
+                    (e.target as HTMLInputElement).blur();
+                }}
+                placeholder={intl.formatMessage({
+                  id: 'tableEditor.labelPlaceholder',
+                  defaultMessage: 'Name...',
+                })}
+                disabled={!editable}
+              />
+            ) : null;
+
             return (
               <div
                 key={itemKey}
@@ -306,10 +336,14 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
               >
                 <div className="array-item-content">
                   {isVertical && (
-                    <h2 className="array-item-header heading-h2">
-                      {getTypeDisplayName(elementType, intl)}
-                    </h2>
+                    <div className="array-item-header">
+                      <h2 className="heading-h2">
+                        {getTypeDisplayName(elementType, intl)}
+                      </h2>
+                      {labelInput}
+                    </div>
                   )}
+                  {!isVertical && labelInput}
                   {isPhantom &&
                   indexDiff &&
                   isEmptyValue(indexDiff.expected) &&
