@@ -11,17 +11,9 @@ import { ArrayEditor } from '../../src/editors/ArrayEditor';
 import { rv, arrayVal } from './test-helpers';
 import enMessages from '../../src/locales/en.json';
 
-// Struct with a TOption<TArray<TInt>> field:
-//   - tryCreateTableSchema fails (option-wrapping-array is unsupported)
-//   - hasNestedArrays = true → vertical layout → label input in the item header
 const decl: StructDeclaration = {
   struct_name: 'S',
-  fields: new Map<string, Typ>([
-    [
-      'f',
-      { kind: 'TOption', value: { kind: 'TArray', value: { kind: 'TInt' } } },
-    ],
-  ]),
+  fields: new Map<string, Typ>([['f', { kind: 'TInt' }]]),
 };
 const elementType: Typ = { kind: 'TStruct', value: decl };
 
@@ -74,11 +66,32 @@ describe('array item label input', () => {
     expect(onValueChange).toHaveBeenCalled();
     const updatedRV: RuntimeValue = onValueChange.mock.calls[0][0];
     expect(updatedRV.value.kind).toBe('Array');
-    const updatedAttrs =
-      updatedRV.value.kind === 'Array'
-        ? (updatedRV.value.value[0]?.attrs ?? [])
-        : [];
-    const labelAttr = updatedAttrs.find((a) => a.kind === 'ArrayItemLabel');
+    if (updatedRV.value.kind !== 'Array') throw new Error('unreachable');
+    const labelAttr = updatedRV.value.value[0]?.attrs?.find(
+      (a) => a.kind === 'ArrayItemLabel'
+    );
     expect(labelAttr?.kind === 'ArrayItemLabel' && labelAttr.value).toBe('new');
+  });
+
+  it('disables the label input when editable is false', () => {
+    setup([makeItem()]);
+    const inputs = screen.getAllByPlaceholderText('Name...');
+    expect(inputs[0]).not.toBeDisabled();
+
+    const onValueChange = vi.fn();
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <ArrayEditor
+          elementType={elementType}
+          valueDef={{ value: arrayVal([makeItem()]) }}
+          onValueChange={onValueChange}
+          currentPath={[]}
+          diffs={[]}
+          editable={false}
+        />
+      </IntlProvider>
+    );
+    const allInputs = screen.getAllByPlaceholderText('Name...');
+    expect(allInputs[allInputs.length - 1]).toBeDisabled();
   });
 });
