@@ -66,6 +66,13 @@
   margin-bottom: var(--spacing8);
 }
 
+/* Specificity override: .struct-editor input (0,2,1) beats .row-label-input (0,1,0) */
+.array-item-content input.row-label-input {
+  border: none;
+  border-bottom: 1px dashed transparent;
+  padding: 2px 4px;
+}
+
 .array-item-controls {
   display: flex;
   gap: 2px;

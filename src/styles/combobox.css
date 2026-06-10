@@ -45,6 +45,7 @@
     --vscode-dropdown-foreground,
     var(--vscode-input-foreground, inherit)
   );
+  z-index: 100;
 }
 
 .combobox-option {
