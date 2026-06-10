@@ -1,8 +1,6 @@
 /* Common input styles */
 .value-editor input,
-.value-editor select,
-.struct-editor input,
-.struct-editor select {
+.value-editor select {
   width: 100%;
   padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
   border: 1px solid;
@@ -12,9 +10,7 @@
 }
 
 .value-editor input:focus,
-.value-editor select:focus,
-.struct-editor input:focus,
-.struct-editor select:focus {
+.value-editor select:focus {
   outline: none;
   border-color: var(--tab-active-border);
 }
