@@ -135,6 +135,41 @@ let check_catala_format_availability ~notify_back =
       | WSTOPPED _ -> Lwt.return_false)
     (fun _ -> Lwt.return_false)
 
+let lookup_catala_config_path (notify_back : Jsonrpc2.notify_back) =
+  let open Lwt.Syntax in
+  let r, w = Lwt.task () in
+  let param =
+    ConfigurationParams.create
+      ~items:[ConfigurationItem.create ~section:"catala.catalaPath" ()]
+  in
+  let* _req_id =
+    notify_back#send_request (WorkspaceConfiguration param) (fun e ->
+        match e with
+        | Ok (`String x :: _) ->
+          Lwt.wakeup w (Some x);
+          Lwt.return_unit
+        | Ok _ | Error _ ->
+          Lwt.wakeup w None;
+          Lwt.return_unit)
+  in
+  r
+
+let check_catala_plugin_availability ~notify_back ~plugin =
+  let open Lwt.Syntax in
+  Lwt.catch
+    (fun () ->
+      let* path_opt = lookup_catala_config_path notify_back in
+      let path = Option.value ~default:"catala" path_opt in
+      let path = if path = "" then "catala" else path in
+      let* status =
+        Lwt_process.exec ~stdout:`Dev_null ~stderr:`Dev_null
+          ("", [| path; plugin; "--help=plain" |])
+      in
+      match status with
+      | WEXITED 0 -> Lwt.return true
+      | WEXITED _ | WSIGNALED _ | WSTOPPED _ -> Lwt.return_false)
+    (fun _ -> Lwt.return_false)
+
 let write_string oc s =
   let open Lwt.Syntax in
   let rec inner nb_write pos len =
