@@ -4,7 +4,7 @@ import { assertUnreachable } from '../shared/util';
 
 import type {
   ParseResults,
-  TestRunResults,
+  TestRunResult,
   UpMessage,
 } from '../generated/catala_types';
 import {
@@ -36,8 +36,7 @@ export async function parseContents(
 // sets up the UI, provide initial data and exchanges messages with the
 // web view whose entry point is in `uiEntryPoint.ts`
 export class TestCaseEditorProvider
-  implements vscode.CustomEditorProvider<CatalaTestCaseDocument>
-{
+  implements vscode.CustomEditorProvider<CatalaTestCaseDocument> {
   private testQueue: PQueue;
 
   private _onDidChangeCustomDocument = new vscode.EventEmitter<
@@ -153,8 +152,8 @@ export class TestCaseEditorProvider
     async function runTest(
       fileName: string,
       scope: string
-    ): Promise<TestRunResults> {
-      return runTestScope(fileName, scope);
+    ): Promise<TestRunResult> {
+      return await runTestScope(fileName, scope);
     }
 
     function applyGuiEdit(
@@ -260,7 +259,7 @@ export class TestCaseEditorProvider
           if (reset_outputs) {
             // reset assertions in the document model, update UI
             if (results.kind === 'Ok') {
-              document.resetTestOutputs(scope, results.value.test_outputs);
+              document.resetTestOutputs(scope, results.value.test.test_outputs);
             }
           }
 
@@ -268,7 +267,7 @@ export class TestCaseEditorProvider
         }
         case 'TestGenerateRequest': {
           const { scope_under_test, filename } = typed_msg.value;
-          const results = generate(scope_under_test, filename, false, true);
+          const results = await generate(scope_under_test, filename, false, true);
           if (results.kind === 'Results') {
             const newTest = results.value;
 
@@ -365,7 +364,7 @@ export class TestCaseEditorProvider
 
             if (!filename || !scopeUnderTest) break;
 
-            const results = generate(scopeUnderTest, filename, false, true);
+            const results = await generate(scopeUnderTest, filename, false, true);
             if (results.kind === 'Results') {
               const newTest = results.value;
 
@@ -388,8 +387,7 @@ export class TestCaseEditorProvider
             }
           } catch (err) {
             logger.log(
-              `OpenTestScopePicker failed: ${
-                err instanceof Error ? err.message : String(err)
+              `OpenTestScopePicker failed: ${err instanceof Error ? err.message : String(err)
               }`
             );
           }
@@ -516,7 +514,7 @@ export class TestCaseEditorProvider
     if (!entry) {
       // Create placeholder entry with the message queued; resolveCustomEditor will register later.
       TestCaseEditorProvider.webviews.set(key, {
-        post: () => {},
+        post: () => { },
         ready: false,
         queue: [msg],
       });
@@ -533,7 +531,7 @@ export class TestCaseEditorProvider
   public static async focusDiffInCustomEditor(
     uri: vscode.Uri,
     scope: string,
-    results: TestRunResults
+    results: TestRunResult
   ): Promise<boolean> {
     const config = vscode.workspace.getConfiguration('catala');
     const isEnabled = config.get<boolean>('enableCustomTestCaseEditor');
@@ -560,7 +558,7 @@ export class TestCaseEditorProvider
   public static updateOpenCustomEditorWithResults(
     uri: vscode.Uri,
     scope: string,
-    results: TestRunResults
+    results: TestRunResult
   ): boolean {
     const key = uri.toString();
     const entry = TestCaseEditorProvider.webviews.get(key);
@@ -623,7 +621,7 @@ export function getLanguageFromUri(uri: vscode.Uri): string {
 export async function focusDiffInCustomEditor(
   uri: vscode.Uri,
   scope: string,
-  results: TestRunResults
+  results: TestRunResult
 ): Promise<boolean> {
   return TestCaseEditorProvider.focusDiffInCustomEditor(uri, scope, results);
 }
@@ -631,7 +629,7 @@ export async function focusDiffInCustomEditor(
 export async function updateOpenCustomEditorWithResults(
   uri: vscode.Uri,
   scope: string,
-  results: TestRunResults
+  results: TestRunResult
 ): Promise<boolean> {
   return TestCaseEditorProvider.updateOpenCustomEditorWithResults(
     uri,

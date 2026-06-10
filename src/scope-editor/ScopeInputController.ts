@@ -4,7 +4,7 @@ import type {
   ParseResults,
   Test,
   TestGenerateResults,
-  TestRunResults,
+  TestRunResult,
 } from '../generated/catala_types';
 import {
   type DownMessage,
@@ -14,7 +14,7 @@ import {
 import {
   runTestScope,
   generate,
-  serializeInputs,
+  serializeCatalaInputs,
 } from '../test-case-editor/testCaseCompilerInterop';
 
 // This class contains the 'backend' part of the test case editor that
@@ -55,7 +55,7 @@ export class ScopeInputController {
       const typed_msg = readUpMessage(message);
       switch (typed_msg.kind) {
         case 'Ready': {
-          const generatedTest: TestGenerateResults = generate(
+          const generatedTest: TestGenerateResults = await generate(
             scope,
             file,
             true,
@@ -84,7 +84,7 @@ export class ScopeInputController {
         }
         case 'TestRunRequest': {
           if (typed_msg.value.in_shell) {
-            const result = serializeInputs(this.test.test_inputs);
+            const result = await serializeCatalaInputs(this.test.test_inputs);
             if (result.kind == 'Ok')
               vscode.commands.executeCommand('catala.runScope', {
                 uri: file,
@@ -96,7 +96,7 @@ export class ScopeInputController {
                 `Error on test scope run with inputs: ${result.message}`
               );
           } else if (typed_msg.value.debug) {
-            const result = serializeInputs(this.test.test_inputs);
+            const result = await serializeCatalaInputs(this.test.test_inputs);
             if (result.kind == 'Error') throw new Error(result.message);
             vscode.commands.executeCommand('catala.debugScope', {
               uri: file,
@@ -104,7 +104,7 @@ export class ScopeInputController {
               inputs: result.json,
             });
           } else {
-            const results: TestRunResults = runTestScope(
+            const results: TestRunResult = await runTestScope(
               file,
               scope,
               this.test.test_inputs

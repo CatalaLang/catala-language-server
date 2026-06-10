@@ -5,8 +5,17 @@ import type {
   Entrypoint,
   EntrypointParamKind,
   EntrypointsParams,
+  GenerateTestOutput,
+  GenerateTestParams,
+  ListScopesOutput,
+  ListScopesParams,
   ReadTestOutput,
   ReadTestParams,
+  RunTestOutput,
+  RunTestParams,
+  SerializeInputsOutput,
+  SerializeInputsParams,
+  TestInputs,
   TestList,
   WriteTestOutput,
   WriteTestParams,
@@ -17,8 +26,18 @@ import {
   readEntrypoints,
   readReadTestOutput,
   writeWriteTestParams,
+  writeRunTestOutput,
+  writeRunTestParams,
+  readRunTestOutput,
+  writeListScopesParams,
+  readListScopesOutput,
+  writeGenerateTestParams,
+  readGenerateTestOutput,
+  writeSerializeInputsParams,
+  readSerializeInputsOutput,
 } from '../generated/catala_types';
 import { getClient } from '../extension';
+import { logger } from './logger';
 
 // Atd prevents us to obtain direct vscode's ranges, we convert them here.
 export type CatalaEntrypoint = Omit<Entrypoint, 'range'> & {
@@ -100,13 +119,66 @@ export async function readTest(
 }
 
 export async function writeTest(
-  client: LanguageClient,
   lang: string,
   tests: TestList
 ): Promise<WriteTestOutput | null> {
   let params: WriteTestParams = { lang, tests }
+  const client = await getClient()
   return await client.sendRequest(
     'catala.writeTest',
     writeWriteTestParams(params)
   );
+}
+
+export async function runTest(
+  file: string,
+  scope: string,
+  input?: TestInputs
+): Promise<RunTestOutput | null> {
+  let params: RunTestParams = { scope, file, input }
+  const client = await getClient()
+  logger.log("before request")
+  const result = await client.sendRequest(
+    'catala.runTest',
+    writeRunTestParams(params)
+  );
+  logger.log("after request")
+  return result ? readRunTestOutput(result) : null;
+}
+
+export async function listScopes(file: string): Promise<ListScopesOutput | null> {
+  const client = await getClient()
+  let params: ListScopesParams = { file }
+  const result = await client.sendRequest(
+    'catala.runTest',
+    writeListScopesParams(params)
+  );
+  return result ? readListScopesOutput(result) : null;
+}
+
+export async function generateTest(
+  file: string,
+  scope: string,
+  defaultValues?: boolean,
+  forceModule?: boolean
+): Promise<GenerateTestOutput | null> {
+  const client = await getClient()
+  let params: GenerateTestParams = { file, scope, default_values: defaultValues, force_module: forceModule }
+  const result = await client.sendRequest(
+    'catala.runTest',
+    writeGenerateTestParams(params)
+  );
+  return result ? readGenerateTestOutput(result) : null;
+}
+
+export async function serializeInputs(
+  inputs: TestInputs
+): Promise<SerializeInputsOutput | null> {
+  const client = await getClient()
+  let params: SerializeInputsParams = { inputs }
+  const result = await client.sendRequest(
+    'catala.runTest',
+    writeSerializeInputsParams(params)
+  );
+  return result ? readSerializeInputsOutput(result) : null;
 }

@@ -1,15 +1,15 @@
 (library
  (package catala-lsp)
  (name test_case_parser_lib)
- (modules test_case_parser_lib)
- (libraries catala.driver catala.clerk_lib catala_types_atd)
+ (modules testcase_parser testcase_cli)
+ (libraries catala.driver catala.clerk_lib catala_types_atd catala.clerk_driver)
  (flags
   (:standard -open Catala_types_atd)))
 
 (executable
- (name testcase)
+ (name testcase_plugin)
  (modes plugin)
- (modules testcase)
+ (modules testcase_plugin)
  (libraries yojson atdgen-runtime test_case_parser_lib)
  (embed_in_plugin_libraries
   otoml
@@ -18,7 +18,18 @@
   catala_types_atd
   test_case_parser_lib))
 
+(executable
+ (name testcase)
+ (modes exe)
+ (modules testcase)
+ (libraries yojson atdgen-runtime test_case_parser_lib)
+)
+
 (install
  (files
-  (testcase.cmxs as catala/plugins/testcase.cmxs))
+  (testcase_plugin.cmxs as catala/plugins/testcase.cmxs))
  (section libexec_root))
+
+(install
+ (files (testcase.exe as testcase))
+ (section bin))

@@ -15,7 +15,7 @@ import type {
   RuntimeValue,
   SourcePosition,
   TestOutputs,
-  TestRunResults,
+  TestRunResult,
 } from '../generated/catala_types';
 
 type ClerkLocation = {
@@ -228,7 +228,7 @@ function applyResultsToTestItem(
   tr: vscode.TestRun,
   item: vscode.TestItem,
   file: vscode.Uri,
-  results: TestRunResults
+  results: TestRunResult
 ): void {
   if (results.kind === 'Ok') {
     const out = results.value;
@@ -238,7 +238,7 @@ function applyResultsToTestItem(
       // Prefer focusing the custom editor and displaying diffs there when
       // run from controller; location still attached for Test Explorer
       const msg = new vscode.TestMessage(formatDiffs(diffs));
-      const loc = firstDiffLocation(diffs, out.test_outputs, file);
+      const loc = firstDiffLocation(diffs, out.test.test_outputs, file);
       if (loc) msg.location = loc;
       tr.failed(item, msg);
     } else {
@@ -259,7 +259,7 @@ async function processGUITest(
 ): Promise<void> {
   try {
     const uri = vscode.Uri.file(file);
-    const res: TestRunResults = await runTestScope(file, scope);
+    const res: TestRunResult = await runTestScope(file, scope);
     if (res.kind === 'Ok') {
       const out = res.value;
       const diffs = out.diffs ?? [];
@@ -563,7 +563,7 @@ export async function initTests(
       });
       // Await GUI tests processing
       await Promise.all(test_gui_threads);
-    } catch (e) {
+    } catch (e: any) {
       testsToRun.forEach((test) => run.errored(test, e));
       console.error('Error while processing test results: ', e);
       vscode.window.showErrorMessage(
@@ -606,7 +606,7 @@ export async function initTests(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'catala.testcase.reportResult',
-      async (file: vscode.Uri, scope: string, results: TestRunResults) => {
+      async (file: vscode.Uri, scope: string, results: TestRunResult) => {
         await updateTestScopes();
         // Find the test item for this file/scope
         let item: vscode.TestItem | undefined = test_map.get(

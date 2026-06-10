@@ -44,10 +44,8 @@ let () =
   Logs.set_reporter err_std;
   ()
 
-type Catala_utils.Pos.attr += Nil
-
 let run () =
-  Test_case_parser_lib.register_attributes ();
+  Test_case_parser_lib.Testcase_parser.register_attributes ();
   Log.debug (fun m ->
       m "Command: %a"
         Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)

@@ -726,45 +726,36 @@ let generate_test
     Option.map (fun modl -> patch_paths modl test) tested_module
     |> Option.value ~default:test
   in
-  if with_default_values then
-    let test_inputs =
-      List.map
-        (fun (s, (io : O.test_io)) ->
-          let is_context =
-            List.assoc_opt s test.tested_scope.inputs
-            |> Option.map (fun (si : O.scope_input) -> si.is_context)
-            |> Option.value ~default:false
-          in
-          ( s,
-            O.
-              {
-                io with
-                value =
-                  Some
-                    (if is_context then context_var_default
-                     else
-                       {
-                         value = generate_default_value prg.program_lang io.typ;
-                         pos = None;
-                       });
-              } ))
-        test.test_inputs
-    in
-    { test with test_inputs }
-  else test
-
-let generate_cmd
-    tested_scope
-    ?testing_scope
-    include_dirs
-    options
-    with_default_values
-    enforce_module =
-  print_tests
-    [
-      generate_test ~with_default_values tested_scope ?testing_scope
-        include_dirs options ~enforce_module;
-    ]
+  let test =
+    if with_default_values then
+      let test_inputs =
+        List.map
+          (fun (s, (io : O.test_io)) ->
+            let is_context =
+              List.assoc_opt s test.tested_scope.inputs
+              |> Option.map (fun (si : O.scope_input) -> si.is_context)
+              |> Option.value ~default:false
+            in
+            ( s,
+              O.
+                {
+                  io with
+                  value =
+                    Some
+                      (if is_context then context_var_default
+                       else
+                         {
+                           value =
+                             generate_default_value prg.program_lang io.typ;
+                           pos = None;
+                         });
+                } ))
+          test.test_inputs
+      in
+      { test with test_inputs }
+    else test
+  in
+  print_tests [test]
 
 exception InvalidTestingScope of string
 
@@ -1474,7 +1465,7 @@ let run_with_inputs
     include_dirs
     options
     tested_scope_name
-    (scope_input : Yojson.Safe.t) =
+    (scope_input : Yojson.Safe.t) : O.run_test_output writer =
   let desugared_prg, _naming_ctx, scope_name, dcalc_prg =
     retrieve_program include_dirs options tested_scope_name
   in
@@ -1562,9 +1553,10 @@ let run_with_inputs
   in
   let assert_failures = not (failed_asserts = []) in
   let test = O.{ test with test_outputs } in
-  writer J.write_test_run O.{ test; assert_failures; diffs = [] }
+  let test_run : O.test_run = O.{ test; assert_failures; diffs = [] } in
+  writer J.write_run_test_output (`Ok test_run)
 
-let run_test include_dirs options testing_scope =
+let run_test include_dirs options testing_scope : O.run_test_output writer =
   let desugared_prg, naming_ctx, testing_scope_name, dcalc_prg =
     retrieve_program include_dirs options testing_scope
   in
@@ -1618,7 +1610,7 @@ let run_test include_dirs options testing_scope =
   in
   let assert_failures = not (failed_asserts = []) in
   let test_run = { O.test; O.assert_failures; O.diffs } in
-  writer J.write_test_run test_run
+  writer J.write_test_run_result (`Ok test_run)
 
 let run_test_cmd include_dirs options test_scope_name scope_input_opt =
   match scope_input_opt with
@@ -1655,33 +1647,24 @@ let list_scopes include_dirs options =
   in
   print_scopes filtered_scopes
 
-let serialize_inputs (scope_input : Yojson.Safe.t option) : Yojson.Safe.t =
-  let scope_input =
-    match scope_input with
-    | None -> failwith "serialize-inputs command requires --input argument"
-    | Some i -> i
+let serialize_inputs (test_inputs : O.test_inputs) : Yojson.Safe.t =
+  let dummy_decl = { O.struct_name = "dummy"; fields = [] } in
+  let value =
+    O.Struct
+      ( dummy_decl,
+        List.filter_map
+          (fun (field_name, { J.value; typ = _ }) ->
+            let rv = (Option.get value).value in
+            match rv.O.value with
+            | O.NotOverridden -> None
+            | O.Unset ->
+              failwith
+                (Printf.sprintf "serialize_inputs: input '%s' has Unset value"
+                   field_name)
+            | _ -> Some (field_name, rv))
+          test_inputs )
   in
-  Lexing.from_string (Yojson.Safe.to_string scope_input)
-  |> J.read_test_inputs (Yojson.init_lexer ())
-  |> function
-  | fields ->
-    let dummy_decl = { O.struct_name = "dummy"; fields = [] } in
-    let value =
-      O.Struct
-        ( dummy_decl,
-          List.filter_map
-            (fun (field_name, { J.value; typ = _ }) ->
-              let rv = (Option.get value).value in
-              match rv.O.value with
-              | O.NotOverridden -> None
-              | O.Unset ->
-                failwith
-                  (Printf.sprintf "serialize_inputs: input '%s' has Unset value"
-                     field_name)
-              | _ -> Some (field_name, rv))
-            fields )
-    in
-    convert_to_json_input { value; attrs = [] }
+  convert_to_json_input { value; attrs = [] }
 
 let register_attributes () =
   (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]

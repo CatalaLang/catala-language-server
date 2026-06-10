@@ -6,11 +6,11 @@ import {
   useState,
 } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
-import type { ParseResults, TestRunOutput } from '../generated/catala_types';
+import type { ParseResults, TestRun } from '../generated/catala_types';
 import {
   type Test,
   type TestInputs,
-  type TestRunResults,
+  type TestRunResult,
   writeUpMessage,
   readDownMessage,
 } from '../generated/catala_types';
@@ -33,7 +33,7 @@ type UIState =
 export type TestRunState =
   | { status: 'stall' }
   | { status: 'running' }
-  | { status: 'success'; results: TestRunOutput }
+  | { status: 'success'; results: TestRun }
   | { status: 'error'; message: string }
   | { status: 'cancelled' };
 
@@ -92,7 +92,7 @@ export default function ScopeInputEditor({
 
   const onTestRun = useCallback(_onTestRun, [vscode]);
 
-  function _resultsToState(results: TestRunResults): TestRunState {
+  function _resultsToState(results: TestRunResult): TestRunState {
     if (results.kind === 'Ok') {
       return { status: 'success', results: results.value };
     } else if (results.kind === 'Cancelled') {

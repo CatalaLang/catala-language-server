@@ -154,15 +154,9 @@ type parse_results = [
   | Results of test_list (* may be empty, that's fine as long as the buffer is empty too *)
 ]
 
-type test_run_output = { (* do we need that type at all when the difference with `test_run` is minimal? *)
-  test_outputs: test_outputs;
-  assert_failures: bool;
-  diffs: diff list;
-}
-
-type test_run_results = [
+type test_run_result = [
   | Error of string (* System error while attempting to run the test *)
-  | Ok of test_run_output (* Ok means 'the test was run' -- there could be assertion failures *)
+  | Ok of test_run (* Ok means 'the test was run' -- there could be assertion failures *)
   | Cancelled
 ]
 
@@ -183,10 +177,10 @@ type test_generate_request = {
   filename: string;
 }
 
-type test_run_results_msg = {
+type test_run_result_msg = {
   scope: string;
   reset_outputs: bool;
-  results: test_run_results;
+  results: test_run_result;
 }
 
 (* Confirmation dialog IPC *)
@@ -219,11 +213,16 @@ type up_message = [
 
 type down_message = [
   | Update of parse_results
-  | TestRunResults of test_run_results_msg
+  | TestRunResults of test_run_result_msg
   | ConfirmResult of confirm_result
 ]
 
 (* LSP custom requests *)
+
+type 'a response = [
+  | Ok of 'a
+  | Error of string (* message *)
+]
 
 (* 'catala.listEntrypoints' request *)
 
@@ -315,10 +314,10 @@ type write_test_output = string (* Catala surface *)
 type run_test_params = {
   scope: string;
   file: string;
-  ?input: test_inputs option;
+  ?input: abstract option; (* json *)
 }
 
-type run_test_output = test_run_results
+type run_test_output = test_run_result
 
 (* 'catala.list-scopes' request *)
 
@@ -328,16 +327,16 @@ type list_scopes_params = {
 
 type list_scopes_output = scope_def_list
 
-(* 'catala.generate' request *)
+(* 'catala.generateTest' request *)
 
-type generate_params = {
+type generate_test_params = {
   file: string;
   scope: string;
   ?default_values: bool option;
   ?force_module: bool option;
 }
 
-type generate_output = test_list
+type generate_test_output = test_list
 
 (* 'catala.serialize-inputs' request *)
 
@@ -345,4 +344,4 @@ type serialize_inputs_params = {
   inputs: test_inputs;
 }
 
-type serialize_inputs_output = string (* JSON *)
+type serialize_inputs_output = abstract (* JSON *)

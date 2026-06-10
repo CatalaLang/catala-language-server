@@ -1,145 +1,62 @@
+(* This file is part of the Catala project. Copyright (C) 2026 Inria.
+
+   Licensed under the Apache License, Version 2.0 (the "License"); you may not
+   use this file except in compliance with the License. You may obtain a copy of
+   the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+   WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+   License for the specific language governing permissions and limitations under
+   the License. *)
+
 open Catala_utils
 open Cmdliner
-module Lib = Test_case_parser_lib
+open Test_case_parser_lib
+open Testcase_parser
+open Testcase_cli
 
-let buffer_path =
-  let arg =
-    Arg.(
-      value
-      & opt (some string) None
-      & info ["bp"; "buffer-path"] ~docv:"FILEPATH"
-          ~env:(Cmd.Env.info "TESTCASE_BUFFER_PATH")
-          ~doc:"Enforce a filename when a program is provided through stdin.")
+let main_cmd = Cmd.group info commands
+
+let main () =
+  register_attributes ();
+  let argv = Array.copy Sys.argv in
+  (* Our command names (first argument) are case-insensitive *)
+  let open Cmdliner in
+  let[@inline] exit_with_error excode fcontent =
+    let bt = Printexc.get_raw_backtrace () in
+    Message.Content.emit (fcontent ()) Error;
+    if Global.options.debug then Printexc.print_raw_backtrace stderr bt;
+    exit excode
   in
-  arg
-
-let with_defaults =
-  Arg.(
-    value
-    & flag
-    & info ["default-values"] ~doc:"Generate default values for the program.")
-
-let enforce_module =
-  Arg.(
-    value
-    & flag
-    & info ["enforce-module"]
-        ~doc:"Ensure that the tested scope is part of a Catala module.")
-
-let cmd_generate =
-  Cmd.v
-    Cmd.(
-      info "generate"
-        ~doc:
-          "Generate the test structure from the given scope in the given \
-           program, and print it to stdout in JSON.")
-    Term.(
-      const (Lib.generate_cmd ?testing_scope:None)
-      $ Cli.Flags.ex_scope
-      $ Cli.Flags.include_dirs
-      $ Cli.Flags.Global.options
-      $ with_defaults
-      $ enforce_module
-      |> map Lib.to_stdout)
-
-let cmd_read =
-  Cmd.v
-    Cmd.(
-      info "read"
-        ~doc:
-          "Read the existing tests from the given catala test file, and print \
-           them to stdout in JSON.")
-    Term.(
-      const Lib.read_test
-      $ Cli.Flags.include_dirs
-      $ Cli.Flags.Global.options
-      $ buffer_path
-      |> map Lib.to_stdout)
-
-let cmd_run =
-  Cmd.v
-    Cmd.(
-      info "run"
-        ~doc:
-          "Read and runs the specified test from the given catala test file, \
-           and prints the actual results as JSON to stdout (in the same format \
-           as $(b,read)). Exits with 1 in case the test results differ from \
-           what was expected, 10 if the test could not be run.")
-    Term.(
-      const Lib.run_test_cmd
-      $ Cli.Flags.include_dirs
-      $ Cli.Flags.Global.options
-      $ Cli.Flags.ex_scope
-      $ Cli.Flags.scope_input
-      |> map Lib.to_stdout)
-
-let cmd_write =
-  let run flags output =
-    let tests =
-      Lib.J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
-    in
-    let _fname, with_out =
-      File.get_main_out_formatter () ~source_file:(Global.Stdin "")
-        ~output_file:(Option.map Global.options.Global.path_rewrite output)
-    in
-    let writer = Lib.write_catala flags tests in
-    with_out
-    @@ fun ppf ->
-    let buf = Buffer.create 1024 in
-    writer buf;
-    Format.pp_print_string ppf (Buffer.contents buf)
+  let eval_cmd () =
+    let r = Cmd.eval ~catch:false ~argv main_cmd in
+    Message.report_delayed_errors_if_any ();
+    r
   in
-  Cmd.v
-    Cmd.(
-      info "write"
-        ~doc:
-          "Read a test structure in JSON from stdin, and output a \
-           corresponding Catala file.")
-    Term.(const run $ Cli.Flags.Global.flags $ Cli.Flags.output)
+  match exit (eval_cmd ()) with
+  | Ok _ -> exit Cmd.Exit.ok
+  | Error _ -> exit Cmd.Exit.cli_error
+  | exception Cli.Exit_with n -> exit n
+  | exception Message.CompilerErrors contents ->
+    Message.Content.emit_n contents Error;
+    exit Cmd.Exit.some_error
+  | exception Message.CompilerError content ->
+    let bt = Printexc.get_raw_backtrace () in
+    let contents = Message.combine_with_pending_errors content bt in
+    Message.Content.emit_n contents Error;
+    exit Cmd.Exit.some_error
+  | exception Failure msg ->
+    exit_with_error Cmd.Exit.some_error
+    @@ fun () -> Message.Content.of_string msg
+  | exception Sys_error msg ->
+    exit_with_error Cmd.Exit.internal_error
+    @@ fun () -> Message.Content.of_string ("System error: " ^ msg)
+  | exception e ->
+    exit_with_error Cmd.Exit.internal_error
+    @@ fun () ->
+    Message.Content.of_string ("Unexpected error: " ^ Printexc.to_string e)
 
-let cmd_list_scopes =
-  Cmd.v
-    Cmd.(
-      info "list-scopes"
-        ~doc:"List the scopes exposed of a module for a given Catala file.")
-    Term.(
-      const Lib.list_scopes
-      $ Cli.Flags.include_dirs
-      $ Cli.Flags.Global.options
-      |> map Lib.to_stdout)
-
-let cmd_serialize_inputs =
-  Cmd.v
-    Cmd.(
-      info "serialize-inputs"
-        ~doc:"Returns the normalized JSON of the given inputs.")
-    Term.(
-      const Lib.serialize_inputs
-      $ Cli.Flags.scope_input
-      |> map (fun json ->
-          let open Format in
-          fprintf std_formatter "%a@." (Yojson.Safe.pretty_print ~std:true) json))
-
-let man =
-  [
-    `S Manpage.s_description;
-    `P
-      "This plugin provides facilities to generate, read, write and run tests \
-       for Catala scopes.";
-    `P "The test input-output is done through stdin/stdout in JSON format.";
-  ]
-
-let register () =
-  Test_case_parser_lib.register_attributes ();
-  Driver.Plugin.register_subcommands "testcase"
-    ~doc:"Catala plugin for the handling of scope test cases" ~man
-    [
-      cmd_generate;
-      cmd_read;
-      cmd_run;
-      cmd_write;
-      cmd_list_scopes;
-      cmd_serialize_inputs;
-    ]
-
-let () = register ()
+let () = main ()

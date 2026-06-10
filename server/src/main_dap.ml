@@ -734,10 +734,8 @@ let () =
   Logs.set_level (Some Debug);
   ()
 
-type Catala_utils.Pos.attr += Nil
-
 let main () =
-  Test_case_parser_lib.register_attributes ();
+  Test_case_parser_lib.Testcase_parser.register_attributes ();
   let rpc = Debug_rpc.create ~in_:Lwt_io.stdin ~out:Lwt_io.stdout () in
   Lwt_main.run (launch rpc)
 

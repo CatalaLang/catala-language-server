@@ -9,7 +9,7 @@ type Props = {
 export default function ScopeOutputs({ test_run_output }: Props): ReactElement {
   switch (test_run_output.status) {
     case 'success': {
-      const outputs = test_run_output.results.test_outputs;
+      const outputs = test_run_output.results.test.test_outputs;
       let items = Array.from(outputs, ([outputName, v]) => {
         return (
           <>

@@ -4,7 +4,7 @@ import {
   type ParseResults,
   type Test,
   type TestList,
-  type TestRunResults,
+  type TestRunResult,
   type PathSegment,
   type Diff,
   readDownMessage,
@@ -46,7 +46,7 @@ export type TestRunStatus = 'running' | 'success' | 'error' | 'cancelled';
 type TestRunState = {
   [scope: string]: {
     status: TestRunStatus;
-    results?: TestRunResults;
+    results?: TestRunResult;
     stale?: boolean;
   };
 };
@@ -196,7 +196,7 @@ export default function TestFileEditor({
     );
   }, [vscode]);
 
-  function _resultsToStatus(results: TestRunResults): TestRunStatus {
+  function _resultsToStatus(results: TestRunResult): TestRunStatus {
     if (results.kind === 'Ok') {
       return 'success';
     } else if (results.kind === 'Cancelled') {

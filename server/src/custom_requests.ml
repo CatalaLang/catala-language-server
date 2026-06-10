@@ -20,7 +20,8 @@ module DQ = Doc_queries
 open Server_types
 open Server_state
 open Catala_utils
-open Utils
+open Test_case_parser_lib
+module Lib = Testcase_parser
 module Atd = Catala_types_j
 
 let ( let*? ) v f =
@@ -120,7 +121,7 @@ let read_test (_sstate : server_state) params =
     in
     Global.enforce_options ~input_src ~language:(Some (lang_of_string lang)) ()
   in
-  let writer = Test_case_parser_lib.read_test [] options buffer_path in
+  let writer = Lib.read_test [] options buffer_path in
   return_json_atd writer
 
 let write_test (_sstate : server_state) params =
@@ -130,19 +131,74 @@ let write_test (_sstate : server_state) params =
   let options =
     Global.enforce_options ~language:(Some (lang_of_string lang)) ()
   in
-  let writer = Test_case_parser_lib.write_catala options tests in
+  let writer = Lib.write_catala options tests in
   let buf = Buffer.create 1024 in
   writer buf;
-  let writer =
-    Test_case_parser_lib.(
-      writer Atd.write_write_test_output (Buffer.contents buf))
+  let writer = Lib.(writer Atd.write_write_test_output (Buffer.contents buf)) in
+  return_json_atd writer
+
+let run_test _sstate params =
+  let { scope; file; input } : Atd.run_test_params =
+    Option.get @@ decode_atd_params Atd.run_test_params_of_string params
+  in
+  let options =
+    let input_src = Global.FileName file in
+    Global.enforce_options ~input_src ()
+  in
+  let writer : Atd.run_test_output Lib.writer =
+    match input with
+    | None -> Lib.run_test [] options scope
+    | Some json -> Lib.run_with_inputs [] options scope json
   in
   return_json_atd writer
 
+let list_scopes _sstate params =
+  let { file } : Atd.list_scopes_params =
+    Option.get @@ decode_atd_params Atd.list_scopes_params_of_string params
+  in
+  let options =
+    let input_src = Global.FileName file in
+    Global.enforce_options ~input_src ()
+  in
+  let writer = Lib.list_scopes [] options in
+  return_json_atd writer
+
+let generate_test _sstate params =
+  let { file; scope; default_values; force_module } : Atd.generate_test_params =
+    Option.get @@ decode_atd_params Atd.generate_test_params_of_string params
+  in
+  let options =
+    let input_src = Global.FileName file in
+    Global.enforce_options ~input_src ()
+  in
+  let writer =
+    Lib.generate_test scope ?enforce_module:force_module ~testing_scope:scope
+      ?with_default_values:default_values [] options
+  in
+  return_json_atd writer
+
+let serialize_inputs _sstate params =
+  let { inputs } : Atd.serialize_inputs_params =
+    Option.get @@ decode_atd_params Atd.serialize_inputs_params_of_string params
+  in
+  let json = Lib.serialize_inputs inputs in
+  Lwt.return json
+
 let wrap_request meth f =
   Lwt.catch f (fun exn ->
-      Log.err (fun m ->
-          m "request %s request failed: %s" meth (Printexc.to_string exn));
+      let msg =
+        match exn with
+        | Message.CompilerError contents ->
+          Format.asprintf "%a"
+            (fun ppf c -> Message.Content.emit ~ppf c Debug)
+            contents
+        | Message.CompilerErrors contents ->
+          Format.asprintf "%a"
+            (fun ppf c -> Message.Content.emit_n ~ppf c Debug)
+            contents
+        | _ -> Printexc.to_string exn
+      in
+      Log.err (fun m -> m "request %s failed: %s" meth msg);
       Lwt.return `Null)
 
 let handle_request sstate meth params =
@@ -158,14 +214,12 @@ let handle_request sstate meth params =
   | "catala.readTest" -> wrap_request meth @@ fun () -> read_test sstate params
   | "catala.writeTest" ->
     wrap_request meth @@ fun () -> write_test sstate params
+  | "catala.runTest" -> wrap_request meth @@ fun () -> run_test sstate params
+  | "catala.listScopes" ->
+    wrap_request meth @@ fun () -> list_scopes sstate params
+  | "catala.generateTest" ->
+    wrap_request meth @@ fun () -> generate_test sstate params
+  | "catala.serializeInputs" ->
+    wrap_request meth @@ fun () -> serialize_inputs sstate params
   | _ ->
-    (* TODO: Add ad hoc methods for testcase *)
-    (* read_test : { "lang": <string>, "buffer-path": <string>, "contents":
-       <string> } -> O.test_list result write_tests : { "lang": <string>,
-       "tests": <O.test_list> } : unit run: { "scope": <string>, "file":
-       <string>, "input"?: <test_inputs>} : kind: 'Ok', value: { test_outputs,
-       assert_failures, diffs } | { "kind": 'Error', "value": <err_string> }
-       list-scopes : { "file": <string> } : scope_def_list generate : { "file":
-       <string>, "scope": <string>, "default_values": <bool>, "force_module":
-       <bool> } serialize-inputs : { "test-inputs" : <O.test_inputs>} *)
     Format.kasprintf Lwt.fail_with "Unsupported LSP request received: %s" meth

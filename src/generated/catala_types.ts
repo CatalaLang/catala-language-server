@@ -149,15 +149,9 @@ export type ParseResults =
 | { kind: 'EmptyTestListMismatch' }
 | { kind: 'Results'; value: TestList }
 
-export type TestRunOutput = {
-  test_outputs: TestOutputs;
-  assert_failures: boolean;
-  diffs: Diff[];
-}
-
-export type TestRunResults =
+export type TestRunResult =
 | { kind: 'Error'; value: string }
-| { kind: 'Ok'; value: TestRunOutput }
+| { kind: 'Ok'; value: TestRun }
 | { kind: 'Cancelled' }
 
 export type TestGenerateResults =
@@ -176,10 +170,10 @@ export type TestGenerateRequest = {
   filename: string;
 }
 
-export type TestRunResultsMsg = {
+export type TestRunResultMsg = {
   scope: string;
   reset_outputs: boolean;
-  results: TestRunResults;
+  results: TestRunResult;
 }
 
 export type ConfirmAction =
@@ -209,7 +203,7 @@ export type UpMessage =
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
-| { kind: 'TestRunResults'; value: TestRunResultsMsg }
+| { kind: 'TestRunResults'; value: TestRunResultMsg }
 | { kind: 'ConfirmResult'; value: ConfirmResult }
 
 export type GuiEntrypoint = {
@@ -291,10 +285,10 @@ export type WriteTestOutput = string
 export type RunTestParams = {
   scope: string;
   file: string;
-  input?: TestInputs;
+  input?: any;
 }
 
-export type RunTestOutput = TestRunResults
+export type RunTestOutput = TestRunResult
 
 export type ListScopesParams = {
   file: string;
@@ -302,20 +296,20 @@ export type ListScopesParams = {
 
 export type ListScopesOutput = ScopeDefList
 
-export type GenerateParams = {
+export type GenerateTestParams = {
   file: string;
   scope: string;
   default_values?: boolean;
   force_module?: boolean;
 }
 
-export type GenerateOutput = TestList
+export type GenerateTestOutput = TestList
 
 export type SerializeInputsParams = {
   inputs: TestInputs;
 }
 
-export type SerializeInputsOutput = string
+export type SerializeInputsOutput = any
 
 export function writeTyp(x: Typ, context: any = x): any {
   switch (x.kind) {
@@ -806,40 +800,24 @@ export function readParseResults(x: any, context: any = x): ParseResults {
   }
 }
 
-export function writeTestRunOutput(x: TestRunOutput, context: any = x): any {
-  return {
-    'test_outputs': _atd_write_required_field('TestRunOutput', 'test_outputs', writeTestOutputs, x.test_outputs, x),
-    'assert_failures': _atd_write_required_field('TestRunOutput', 'assert_failures', _atd_write_bool, x.assert_failures, x),
-    'diffs': _atd_write_required_field('TestRunOutput', 'diffs', _atd_write_array(writeDiff), x.diffs, x),
-  };
-}
-
-export function readTestRunOutput(x: any, context: any = x): TestRunOutput {
-  return {
-    test_outputs: _atd_read_required_field('TestRunOutput', 'test_outputs', readTestOutputs, x['test_outputs'], x),
-    assert_failures: _atd_read_required_field('TestRunOutput', 'assert_failures', _atd_read_bool, x['assert_failures'], x),
-    diffs: _atd_read_required_field('TestRunOutput', 'diffs', _atd_read_array(readDiff), x['diffs'], x),
-  };
-}
-
-export function writeTestRunResults(x: TestRunResults, context: any = x): any {
+export function writeTestRunResult(x: TestRunResult, context: any = x): any {
   switch (x.kind) {
     case 'Error':
       return ['Error', _atd_write_string(x.value, x)]
     case 'Ok':
-      return ['Ok', writeTestRunOutput(x.value, x)]
+      return ['Ok', writeTestRun(x.value, x)]
     case 'Cancelled':
       return 'Cancelled'
   }
 }
 
-export function readTestRunResults(x: any, context: any = x): TestRunResults {
+export function readTestRunResult(x: any, context: any = x): TestRunResult {
   if (typeof x === 'string') {
     switch (x) {
       case 'Cancelled':
         return { kind: 'Cancelled' }
       default:
-        _atd_bad_json('TestRunResults', x, context)
+        _atd_bad_json('TestRunResult', x, context)
         throw new Error('impossible')
     }
   }
@@ -849,9 +827,9 @@ export function readTestRunResults(x: any, context: any = x): TestRunResults {
       case 'Error':
         return { kind: 'Error', value: _atd_read_string(x[1], x) }
       case 'Ok':
-        return { kind: 'Ok', value: readTestRunOutput(x[1], x) }
+        return { kind: 'Ok', value: readTestRun(x[1], x) }
       default:
-        _atd_bad_json('TestRunResults', x, context)
+        _atd_bad_json('TestRunResult', x, context)
         throw new Error('impossible')
     }
   }
@@ -911,19 +889,19 @@ export function readTestGenerateRequest(x: any, context: any = x): TestGenerateR
   };
 }
 
-export function writeTestRunResultsMsg(x: TestRunResultsMsg, context: any = x): any {
+export function writeTestRunResultMsg(x: TestRunResultMsg, context: any = x): any {
   return {
-    'scope': _atd_write_required_field('TestRunResultsMsg', 'scope', _atd_write_string, x.scope, x),
-    'reset_outputs': _atd_write_required_field('TestRunResultsMsg', 'reset_outputs', _atd_write_bool, x.reset_outputs, x),
-    'results': _atd_write_required_field('TestRunResultsMsg', 'results', writeTestRunResults, x.results, x),
+    'scope': _atd_write_required_field('TestRunResultMsg', 'scope', _atd_write_string, x.scope, x),
+    'reset_outputs': _atd_write_required_field('TestRunResultMsg', 'reset_outputs', _atd_write_bool, x.reset_outputs, x),
+    'results': _atd_write_required_field('TestRunResultMsg', 'results', writeTestRunResult, x.results, x),
   };
 }
 
-export function readTestRunResultsMsg(x: any, context: any = x): TestRunResultsMsg {
+export function readTestRunResultMsg(x: any, context: any = x): TestRunResultMsg {
   return {
-    scope: _atd_read_required_field('TestRunResultsMsg', 'scope', _atd_read_string, x['scope'], x),
-    reset_outputs: _atd_read_required_field('TestRunResultsMsg', 'reset_outputs', _atd_read_bool, x['reset_outputs'], x),
-    results: _atd_read_required_field('TestRunResultsMsg', 'results', readTestRunResults, x['results'], x),
+    scope: _atd_read_required_field('TestRunResultMsg', 'scope', _atd_read_string, x['scope'], x),
+    reset_outputs: _atd_read_required_field('TestRunResultMsg', 'reset_outputs', _atd_read_bool, x['reset_outputs'], x),
+    results: _atd_read_required_field('TestRunResultMsg', 'results', readTestRunResult, x['results'], x),
   };
 }
 
@@ -1040,7 +1018,7 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
     case 'Update':
       return ['Update', writeParseResults(x.value, x)]
     case 'TestRunResults':
-      return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
+      return ['TestRunResults', writeTestRunResultMsg(x.value, x)]
     case 'ConfirmResult':
       return ['ConfirmResult', writeConfirmResult(x.value, x)]
   }
@@ -1052,7 +1030,7 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
     case 'Update':
       return { kind: 'Update', value: readParseResults(x[1], x) }
     case 'TestRunResults':
-      return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
+      return { kind: 'TestRunResults', value: readTestRunResultMsg(x[1], x) }
     case 'ConfirmResult':
       return { kind: 'ConfirmResult', value: readConfirmResult(x[1], x) }
     default:
@@ -1316,7 +1294,7 @@ export function writeRunTestParams(x: RunTestParams, context: any = x): any {
   return {
     'scope': _atd_write_required_field('RunTestParams', 'scope', _atd_write_string, x.scope, x),
     'file': _atd_write_required_field('RunTestParams', 'file', _atd_write_string, x.file, x),
-    'input': _atd_write_optional_field(writeTestInputs, x.input, x),
+    'input': _atd_write_optional_field(((x: any, context): any => x), x.input, x),
   };
 }
 
@@ -1324,16 +1302,16 @@ export function readRunTestParams(x: any, context: any = x): RunTestParams {
   return {
     scope: _atd_read_required_field('RunTestParams', 'scope', _atd_read_string, x['scope'], x),
     file: _atd_read_required_field('RunTestParams', 'file', _atd_read_string, x['file'], x),
-    input: _atd_read_optional_field(readTestInputs, x['input'], x),
+    input: _atd_read_optional_field(((x: any, context): any => x), x['input'], x),
   };
 }
 
 export function writeRunTestOutput(x: RunTestOutput, context: any = x): any {
-  return writeTestRunResults(x, context);
+  return writeTestRunResult(x, context);
 }
 
 export function readRunTestOutput(x: any, context: any = x): RunTestOutput {
-  return readTestRunResults(x, context);
+  return readTestRunResult(x, context);
 }
 
 export function writeListScopesParams(x: ListScopesParams, context: any = x): any {
@@ -1356,29 +1334,29 @@ export function readListScopesOutput(x: any, context: any = x): ListScopesOutput
   return readScopeDefList(x, context);
 }
 
-export function writeGenerateParams(x: GenerateParams, context: any = x): any {
+export function writeGenerateTestParams(x: GenerateTestParams, context: any = x): any {
   return {
-    'file': _atd_write_required_field('GenerateParams', 'file', _atd_write_string, x.file, x),
-    'scope': _atd_write_required_field('GenerateParams', 'scope', _atd_write_string, x.scope, x),
+    'file': _atd_write_required_field('GenerateTestParams', 'file', _atd_write_string, x.file, x),
+    'scope': _atd_write_required_field('GenerateTestParams', 'scope', _atd_write_string, x.scope, x),
     'default_values': _atd_write_optional_field(_atd_write_bool, x.default_values, x),
     'force_module': _atd_write_optional_field(_atd_write_bool, x.force_module, x),
   };
 }
 
-export function readGenerateParams(x: any, context: any = x): GenerateParams {
+export function readGenerateTestParams(x: any, context: any = x): GenerateTestParams {
   return {
-    file: _atd_read_required_field('GenerateParams', 'file', _atd_read_string, x['file'], x),
-    scope: _atd_read_required_field('GenerateParams', 'scope', _atd_read_string, x['scope'], x),
+    file: _atd_read_required_field('GenerateTestParams', 'file', _atd_read_string, x['file'], x),
+    scope: _atd_read_required_field('GenerateTestParams', 'scope', _atd_read_string, x['scope'], x),
     default_values: _atd_read_optional_field(_atd_read_bool, x['default_values'], x),
     force_module: _atd_read_optional_field(_atd_read_bool, x['force_module'], x),
   };
 }
 
-export function writeGenerateOutput(x: GenerateOutput, context: any = x): any {
+export function writeGenerateTestOutput(x: GenerateTestOutput, context: any = x): any {
   return writeTestList(x, context);
 }
 
-export function readGenerateOutput(x: any, context: any = x): GenerateOutput {
+export function readGenerateTestOutput(x: any, context: any = x): GenerateTestOutput {
   return readTestList(x, context);
 }
 
@@ -1395,11 +1373,11 @@ export function readSerializeInputsParams(x: any, context: any = x): SerializeIn
 }
 
 export function writeSerializeInputsOutput(x: SerializeInputsOutput, context: any = x): any {
-  return _atd_write_string(x, context);
+  return ((x: any, context): any => x)(x, context);
 }
 
 export function readSerializeInputsOutput(x: any, context: any = x): SerializeInputsOutput {
-  return _atd_read_string(x, context);
+  return ((x: any, context): any => x)(x, context);
 }
 
 

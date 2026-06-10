@@ -4,8 +4,9 @@ import { FormattedMessage, useIntl } from 'react-intl';
 import {
   type Test,
   type TestInputs,
-  type TestRunResults,
+  type TestRun,
   type PathSegment,
+  TestRunResult,
 } from '../generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
@@ -24,7 +25,7 @@ type Props = {
   onTestOutputsReset(testScope: string): void;
   runState?: {
     status: TestRunStatus;
-    results?: TestRunResults;
+    results?: TestRunResult;
     stale?: boolean;
   };
   onDiffResolved(scope: string, path: PathSegment[]): void;
