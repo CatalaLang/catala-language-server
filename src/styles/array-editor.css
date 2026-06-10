@@ -50,6 +50,22 @@
   max-width: 100%;
 }
 
+.array-item-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing8);
+  margin-bottom: var(--spacing8);
+}
+
+.array-item-header .row-label-input {
+  flex: 1;
+}
+
+.array-item-label {
+  display: block;
+  margin-bottom: var(--spacing8);
+}
+
 .array-item-controls {
   display: flex;
   gap: 2px;
