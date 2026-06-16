@@ -358,7 +358,7 @@ export function writeEnumDeclaration(x: EnumDeclaration, context: any = x): any 
   return {
     'enum_name': _atd_write_required_field('EnumDeclaration', 'enum_name', _atd_write_string, x.enum_name, x),
     'constructors': _atd_write_required_field('EnumDeclaration', 'constructors', _atd_write_assoc_map_to_object(_atd_write_option(writeTyp)), x.constructors, x),
-    'ctor_attrs': _atd_write_field_with_default(_atd_write_assoc_map_to_object(_atd_write_array(writeAttrDef)), new Map(), x.ctor_attrs, x),
+    'ctor_attrs': _atd_write_field_with_default(_atd_write_assoc_map_to_object(_atd_write_array(writeAttrDef)), [], x.ctor_attrs, x),
   };
 }
 
@@ -366,7 +366,7 @@ export function readEnumDeclaration(x: any, context: any = x): EnumDeclaration {
   return {
     enum_name: _atd_read_required_field('EnumDeclaration', 'enum_name', _atd_read_string, x['enum_name'], x),
     constructors: _atd_read_required_field('EnumDeclaration', 'constructors', _atd_read_assoc_object_into_map(_atd_read_option(readTyp)), x['constructors'], x),
-    ctor_attrs: _atd_read_field_with_default(_atd_read_assoc_object_into_map(_atd_read_array(readAttrDef)), new Map(), x['ctor_attrs'], x),
+    ctor_attrs: _atd_read_field_with_default(_atd_read_assoc_object_into_map(_atd_read_array(readAttrDef)), [], x['ctor_attrs'], x),
   };
 }
 
