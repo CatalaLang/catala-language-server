@@ -97,6 +97,7 @@ describe('Tier 1: Array within enum payload', () => {
         },
       ],
     ]),
+    ctor_attrs: new Map(),
   };
 
   // Record { id: int, status: Status }
@@ -255,6 +256,7 @@ describe('Tier 1: Array of enums with struct payloads', () => {
       ['Stopped', null],
       ['Error', { value: { kind: 'TStruct', value: infoStructDecl } }],
     ]),
+    ctor_attrs: new Map(),
   };
 
   // Log { timestamp: date, events: Event[] }
@@ -337,6 +339,7 @@ describe('Tier 2: Deeply nested structure (4 levels)', () => {
       ['Developer', null],
       ['Intern', null],
     ]),
+    ctor_attrs: new Map(),
   };
 
   // Member { id: int, role: Role }
@@ -468,6 +471,7 @@ describe('Tier 2: Mixed primitive and complex fields', () => {
       ['Medium', null],
       ['High', { value: { kind: 'TDate' } }],
     ]),
+    ctor_attrs: new Map(),
   };
 
   // Metadata { version: int, active: bool }

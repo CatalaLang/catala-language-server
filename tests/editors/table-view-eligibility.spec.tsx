@@ -97,6 +97,8 @@ describe('structIsFlattenable - detection logic', () => {
           ['Inactive', null],
           ['Pending', { value: { kind: 'TDate' } }],
         ]),
+
+        ctor_attrs: new Map(),
       };
 
       const structDecl: StructDeclaration = {
@@ -151,6 +153,8 @@ describe('structIsFlattenable - detection logic', () => {
             },
           ],
         ]),
+
+        ctor_attrs: new Map(),
       };
 
       const orderDecl: StructDeclaration = {
@@ -186,6 +190,8 @@ describe('structIsFlattenable - detection logic', () => {
           ],
           ['Inactive', null],
         ]),
+
+        ctor_attrs: new Map(),
       };
 
       // Inner { status: Status }
@@ -284,6 +290,8 @@ describe('structIsFlattenable - detection logic', () => {
           ['Stopped', null],
           ['Error', { value: { kind: 'TStruct', value: infoDecl } }],
         ]),
+
+        ctor_attrs: new Map(),
       };
 
       // Log { timestamp: date, events: Event[] }
@@ -310,6 +318,8 @@ describe('structIsFlattenable - detection logic', () => {
           ['Inactive', null],
           ['PendingUntil', { value: { kind: 'TDate' } }],
         ]),
+
+        ctor_attrs: new Map(),
       };
 
       // Record { id: int, statuses: Status[] }
@@ -352,6 +362,8 @@ describe('TableArrayEditor - TArray<enum> sub-table rendering', () => {
         ['P', null],
         ['D', null],
       ]),
+
+      ctor_attrs: new Map(),
     };
 
     // Personne_PDN { id: int, droits_au_séjour: Code_titre_droit_sejour[] }
@@ -571,6 +583,8 @@ describe('ArrayEditor - table view eligibility', () => {
             },
           ],
         ]),
+
+        ctor_attrs: new Map(),
       };
 
       const orderDecl: StructDeclaration = {
@@ -663,6 +677,8 @@ describe('ArrayEditor - table view eligibility', () => {
             },
           ],
         ]),
+
+        ctor_attrs: new Map(),
       };
 
       const orderDecl: StructDeclaration = {
@@ -732,6 +748,8 @@ describe('ArrayEditor - table view eligibility', () => {
           ['Stopped', null],
           ['Error', { value: { kind: 'TStruct', value: infoDecl } }],
         ]),
+
+        ctor_attrs: new Map(),
       };
 
       const logDecl: StructDeclaration = {

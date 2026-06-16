@@ -45,6 +45,8 @@ describe('TableArrayEditor - Pill navigation highlighting', () => {
         ['Manager', null],
         ['Developer', null],
       ]),
+
+      ctor_attrs: new Map(),
     };
 
     // Member { id: int, role: Role }
