@@ -26,6 +26,7 @@ import { initTests } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
+import { showExplainGraph } from './extension/explainGraphView';
 
 let client: LanguageClient;
 
@@ -115,6 +116,16 @@ async function runScope(args?: RunArgs): Promise<void> {
         ' '
       )
     );
+  }
+}
+
+async function explainScope(
+  context: vscode.ExtensionContext,
+  args?: RunArgs
+): Promise<void> {
+  args ??= await selectScope(false);
+  if (args) {
+    await showExplainGraph(context, args);
   }
 }
 
@@ -277,6 +288,12 @@ export async function activate(
     vscode.commands.registerCommand('catala.showExceptions', showExceptions),
     vscode.commands.registerCommand('catala.showExceptionsAtCursor', () =>
       showExceptionsAtCursor(client)
+    ),
+    vscode.commands.registerCommand('catala.explain', () =>
+      explainScope(context)
+    ),
+    vscode.commands.registerCommand('catala.explainScope', (args?: RunArgs) =>
+      explainScope(context, args)
     )
   );
 

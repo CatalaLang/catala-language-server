@@ -4,5 +4,6 @@
   "command.catala.showExceptionsAtCursor.title": "Show definition tree",
   "view.catala.exceptionsView.name": "Definition tree",
   "category.catala": "Catala",
-  "customEditor.testCaseEditor.displayName": "Catala Test Case Editor"
+  "customEditor.testCaseEditor.displayName": "Catala Test Case Editor",
+  "command.catala.explain.title": "Explain"
 }

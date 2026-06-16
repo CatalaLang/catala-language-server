@@ -302,6 +302,9 @@ let lookup_document_symbols file =
         vl acc)
     jt.pos_map []
 
+(* check if the explain plugin is available, set in Server.on_req_code_lens *)
+let explain_plugin_available : bool option ref = ref None
+
 let lookup_lenses file =
   let*? { jump_table = (lazy jt); _ } = file.last_valid_result in
   (* we consider only the including file's document id if the document is
@@ -329,10 +332,20 @@ let lookup_lenses file =
     let debug_command =
       Command.create ~arguments ~command:"catala.debugScope" ~title:"🛠 Debug" ()
     in
-    [
-      CodeLens.create ~command:run_command ~range ();
-      CodeLens.create ~command:debug_command ~range ();
-    ]
+    let lenses =
+      [
+        CodeLens.create ~command:run_command ~range ();
+        CodeLens.create ~command:debug_command ~range ();
+      ]
+    in
+    (* Only offer "Explain" when the [explain] plugin is available. *)
+    if !explain_plugin_available = Some true then
+      let explain_command =
+        Command.create ~arguments ~command:"catala.explainScope"
+          ~title:"? Explain" ()
+      in
+      lenses @ [CodeLens.create ~command:explain_command ~range ()]
+    else lenses
   in
   let mk_input_lens scope range =
     let arguments =

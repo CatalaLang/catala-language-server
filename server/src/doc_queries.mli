@@ -56,6 +56,8 @@ val lookup_type_declaration :
 val lookup_document_symbols :
   document_state -> Linol_lwt.SymbolInformation.t list
 
+val explain_plugin_available : bool option ref
+
 val lookup_lenses : document_state -> Linol_lwt.CodeLens.t list option
 
 val exceptions_at :
