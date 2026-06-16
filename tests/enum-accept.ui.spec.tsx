@@ -29,6 +29,7 @@ describe('AssertionValueEditor - Enum accept button', () => {
         ['A', null],
         ['B', { value: { kind: 'TStruct', value: structDecl } }],
       ]),
+      ctor_attrs: new Map(),
     };
     const enumTyp: Typ = { kind: 'TEnum', value: enumDecl };
 

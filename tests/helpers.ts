@@ -14,7 +14,10 @@ export function tStruct(name: string, fields: Map<string, Typ>): Typ {
 }
 
 export function tEnum(name: string, ctors: Map<string, Option<Typ>>): Typ {
-  return { kind: 'TEnum', value: { enum_name: name, constructors: ctors } };
+  return {
+    kind: 'TEnum',
+    value: { enum_name: name, constructors: ctors, ctor_attrs: new Map() },
+  };
 }
 
 export function tRat(): Typ {

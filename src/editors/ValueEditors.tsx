@@ -228,6 +228,7 @@ export default function ValueEditor(props: Props): ReactElement {
       const option_decl: EnumDeclaration = {
         enum_name: 'Optional',
         constructors,
+        ctor_attrs: new Map(),
       };
       editor = (
         <EnumEditor
@@ -1045,7 +1046,12 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   // Note: do not early-return here; we render the expected editor and, when applicable,
   // an "actual preview" block alongside it further below.
   const ctorOptions = Array.from(enumDeclaration.constructors.keys()).map(
-    (name) => ({ value: name, label: name })
+    (name) => {
+      const labelAttr = enumDeclaration.ctor_attrs
+        .get(name)
+        ?.find((a) => a.kind === 'Description');
+      return { value: name, label: name, description: labelAttr?.value };
+    }
   );
 
   const handleCtorChange = (selected: string | null): void => {

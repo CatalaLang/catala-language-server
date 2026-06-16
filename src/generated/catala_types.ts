@@ -33,6 +33,7 @@ export type Typ =
 export type EnumDeclaration = {
   enum_name: string;
   constructors: Map<string, Option<Typ>>;
+  ctor_attrs: Map<string, AttrDef[]>;
 }
 
 export type StructDeclaration = {
@@ -93,6 +94,7 @@ export type AttrDef =
 | { kind: 'TestTitle'; value: string }
 | { kind: 'Uid'; value: string }
 | { kind: 'ArrayItemLabel'; value: string }
+| { kind: 'Description'; value: string }
 
 export type RuntimeValue = {
   value: RuntimeValueRaw;
@@ -356,6 +358,7 @@ export function writeEnumDeclaration(x: EnumDeclaration, context: any = x): any 
   return {
     'enum_name': _atd_write_required_field('EnumDeclaration', 'enum_name', _atd_write_string, x.enum_name, x),
     'constructors': _atd_write_required_field('EnumDeclaration', 'constructors', _atd_write_assoc_map_to_object(_atd_write_option(writeTyp)), x.constructors, x),
+    'ctor_attrs': _atd_write_field_with_default(_atd_write_assoc_map_to_object(_atd_write_array(writeAttrDef)), new Map(), x.ctor_attrs, x),
   };
 }
 
@@ -363,6 +366,7 @@ export function readEnumDeclaration(x: any, context: any = x): EnumDeclaration {
   return {
     enum_name: _atd_read_required_field('EnumDeclaration', 'enum_name', _atd_read_string, x['enum_name'], x),
     constructors: _atd_read_required_field('EnumDeclaration', 'constructors', _atd_read_assoc_object_into_map(_atd_read_option(readTyp)), x['constructors'], x),
+    ctor_attrs: _atd_read_field_with_default(_atd_read_assoc_object_into_map(_atd_read_array(readAttrDef)), new Map(), x['ctor_attrs'], x),
   };
 }
 
@@ -549,6 +553,8 @@ export function writeAttrDef(x: AttrDef, context: any = x): any {
       return ['Uid', _atd_write_string(x.value, x)]
     case 'ArrayItemLabel':
       return ['ArrayItemLabel', _atd_write_string(x.value, x)]
+    case 'Description':
+      return ['Description', _atd_write_string(x.value, x)]
   }
 }
 
@@ -563,6 +569,8 @@ export function readAttrDef(x: any, context: any = x): AttrDef {
       return { kind: 'Uid', value: _atd_read_string(x[1], x) }
     case 'ArrayItemLabel':
       return { kind: 'ArrayItemLabel', value: _atd_read_string(x[1], x) }
+    case 'Description':
+      return { kind: 'Description', value: _atd_read_string(x[1], x) }
     default:
       _atd_bad_json('AttrDef', x, context)
       throw new Error('impossible')

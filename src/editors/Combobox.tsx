@@ -19,6 +19,7 @@ import {
 export type ComboboxOption = {
   value: string;
   label: string;
+  description?: string;
 };
 
 type ComboboxProps = {
@@ -43,6 +44,7 @@ export function Combobox(props: ComboboxProps): ReactElement {
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const displayRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
   const { refs, floatingStyles } = useFloating({
@@ -69,12 +71,20 @@ export function Combobox(props: ComboboxProps): ReactElement {
     whileElementsMounted: autoUpdate,
   });
 
-  const selectedLabel = options.find((o) => o.value === value)?.label ?? '';
+  const selectedOption = options.find((o) => o.value === value);
+  const selectedLabel = selectedOption?.label ?? '';
+  const selectedDescription = selectedOption?.description;
+
+  const showDisplay = !isOpen && !!selectedDescription;
 
   const filtered = filter
-    ? options.filter((o) =>
-        o.label.toLowerCase().includes(filter.toLowerCase())
-      )
+    ? options.filter((o) => {
+        const q = filter.toLowerCase();
+        return (
+          o.label.toLowerCase().includes(q) ||
+          (o.description?.toLowerCase().includes(q) ?? false)
+        );
+      })
     : options;
 
   const open = useCallback(() => {
@@ -82,6 +92,7 @@ export function Combobox(props: ComboboxProps): ReactElement {
     setIsOpen(true);
     setFilter('');
     setActiveIndex(-1);
+    requestAnimationFrame(() => inputRef.current?.focus());
   }, [disabled]);
 
   const close = useCallback(() => {
@@ -94,9 +105,18 @@ export function Combobox(props: ComboboxProps): ReactElement {
     (optionValue: string | null) => {
       onChange(optionValue);
       close();
-      requestAnimationFrame(() => inputRef.current?.focus());
+      const newDescription = options.find(
+        (o) => o.value === optionValue
+      )?.description;
+      requestAnimationFrame(() => {
+        if (newDescription) {
+          displayRef.current?.focus();
+        } else {
+          inputRef.current?.focus();
+        }
+      });
     },
-    [onChange, close]
+    [onChange, close, options]
   );
 
   // Close on outside click — floating listbox is portaled so not inside the reference
@@ -191,22 +211,41 @@ export function Combobox(props: ComboboxProps): ReactElement {
 
   return (
     <div className="combobox" ref={refs.setReference}>
-      <input
-        ref={inputRef}
-        role="combobox"
-        aria-expanded={isOpen}
-        aria-controls={listboxId}
-        aria-activedescendant={activeId}
-        aria-autocomplete="list"
-        value={isOpen ? filter : selectedLabel}
-        placeholder={placeholder}
-        disabled={disabled}
-        onChange={handleInputChange}
-        onKeyDown={handleKeyDown}
-        onClick={() => {
-          if (!isOpen) open();
-        }}
-      />
+      {showDisplay ? (
+        <div
+          ref={displayRef}
+          role="combobox"
+          aria-expanded={false}
+          aria-controls={listboxId}
+          aria-haspopup="listbox"
+          tabIndex={disabled ? -1 : 0}
+          className="combobox-display"
+          onClick={() => {
+            if (!disabled) open();
+          }}
+          onKeyDown={handleKeyDown}
+        >
+          <span className="combobox-display-name">{selectedLabel}</span>
+          <span className="combobox-description">{selectedDescription}</span>
+        </div>
+      ) : (
+        <input
+          ref={inputRef}
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls={listboxId}
+          aria-activedescendant={activeId}
+          aria-autocomplete="list"
+          value={isOpen ? filter : selectedLabel}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onClick={() => {
+            if (!isOpen) open();
+          }}
+        />
+      )}
       <button
         className="combobox-toggle"
         tabIndex={-1}
@@ -217,7 +256,6 @@ export function Combobox(props: ComboboxProps): ReactElement {
             close();
           } else {
             open();
-            requestAnimationFrame(() => inputRef.current?.focus());
           }
         }}
       >
@@ -256,7 +294,12 @@ export function Combobox(props: ComboboxProps): ReactElement {
                 }}
                 onMouseEnter={() => setActiveIndex(i)}
               >
-                {option.label}
+                <span className="combobox-option-label">{option.label}</span>
+                {option.description && (
+                  <span className="combobox-description">
+                    {option.description}
+                  </span>
+                )}
               </li>
             ))}
           </ul>,

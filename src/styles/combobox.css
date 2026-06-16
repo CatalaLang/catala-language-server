@@ -9,6 +9,32 @@
   padding-right: 28px; /* room for toggle button */
 }
 
+.combobox-display {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  padding: var(--spacing8) 28px var(--spacing8) var(--spacing16);
+  box-sizing: border-box;
+  cursor: pointer;
+  border: 1px solid var(--control-border, transparent);
+  outline: none;
+}
+
+.combobox-display:focus {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+.combobox-display-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 60%;
+}
+
 .combobox-toggle {
   position: absolute;
   right: 1px;
@@ -52,6 +78,24 @@
   padding: 4px 8px;
   cursor: pointer;
   font-size: 13px;
+}
+
+.combobox-description {
+  font-size: 11px;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.combobox-option .combobox-description {
+  display: block;
+  margin-top: 1px;
+}
+
+.combobox-display .combobox-description {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
 }
 
 .combobox-option.active {

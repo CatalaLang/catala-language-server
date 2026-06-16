@@ -73,14 +73,14 @@ let () =
   match value with
   | Shared_ast.String (s, _pos) -> Some (Projects.TestTitle s)
   | _ -> failwith "unexpected test title");
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-    ~contexts:(function
-    | Desugared.Name_resolution.Expression _ -> true
-    | _ -> false)
+  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
+     ~contexts:(function
+     | Desugared.Name_resolution.Expression _ -> true
+     | _ -> false)
   @@ fun ~pos:_ value ->
   match value with
   | Shared_ast.String (_s, _pos) -> None
-  | _ -> failwith "unexpected array item label"
+  | _ -> failwith "unexpected array item label")
 
 let run () =
   Log.debug (fun m ->

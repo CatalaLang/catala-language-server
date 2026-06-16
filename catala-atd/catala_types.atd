@@ -20,6 +20,7 @@ type typ = [
 type enum_declaration = {
   enum_name: string;
   constructors: (string * typ option) list <json repr="object"> <ts repr="map">;
+  ~ctor_attrs: (string * attr_def list) list <json repr="object"> <ts repr="map">;
 }
 
 type struct_declaration = {
@@ -91,6 +92,7 @@ type attr_def = [
   | TestTitle of string
   | Uid of string
   | ArrayItemLabel of string
+  | Description of string
   ] <ocaml repr="classic">
 
 type runtime_value = {

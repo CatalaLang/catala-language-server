@@ -175,6 +175,7 @@ input {
 
 .vscode-dark .value-editor input,
 .vscode-dark .value-editor select,
+.vscode-dark .value-editor .combobox-display,
 .vscode-dark .value-editor,
 .vscode-dark .assertion-editor {
   background-color: var(--stormgray925);
@@ -236,6 +237,7 @@ input {
 
 .vscode-light .value-editor input,
 .vscode-light .value-editor select,
+.vscode-light .value-editor .combobox-display,
 .vscode-light .struct-editor .value-editor,
 .vscode-light .assertion-editor {
   background-color: var(--stormgray00);

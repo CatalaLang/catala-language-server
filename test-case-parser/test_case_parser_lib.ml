@@ -199,6 +199,7 @@ let mk_optional_enum_decl lang typ =
   {
     O.enum_name = EnumName.to_string ConstantNames.option_enum;
     constructors = ["Absent", None; (get_lang_strings lang).present, Some typ];
+    ctor_attrs = [];
   }
 
 let get_typ_literal = function
@@ -252,6 +253,19 @@ and get_struct lang decl_ctx struct_name =
   in
   { O.struct_name; fields }
 
+and enum_ctor_attrs constr_map =
+  List.filter_map
+    (fun (constr, _) ->
+      let pos = EnumConstructor.get_info constr |> snd in
+      let attrs =
+        Pos.get_attrs pos (function
+          | Description s -> Some (O.Description s)
+          | _ -> None)
+      in
+      if attrs = [] then None
+      else Some (EnumConstructor.to_string constr, attrs))
+    (EnumConstructor.Map.bindings constr_map)
+
 and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
   let constr_map = EnumName.Map.find enum_name decl_ctx.ctx_enums in
   if EnumName.equal enum_name ConstantNames.option_enum then
@@ -275,6 +289,7 @@ and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
         let alias_opt = lookup_aliased_name lang module_name in
         Option.(some (value alias_opt ~default:module_name))
     in
+    let bindings = EnumConstructor.Map.bindings constr_map in
     let constructors =
       List.map
         (fun (constr, typ) ->
@@ -282,14 +297,15 @@ and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
             match typ with
             | TLit TUnit, _ -> None
             | _ -> Some (get_typ lang decl_ctx typ) ))
-        (EnumConstructor.Map.bindings constr_map)
+        bindings
     in
+    let ctor_attrs = enum_ctor_attrs constr_map in
     let enum_name =
       match module_name with
       | None -> EnumName.base enum_name
       | Some s -> Format.asprintf "%s.%s" s (EnumName.base enum_name)
     in
-    { O.enum_name; constructors }
+    { O.enum_name; constructors; ctor_attrs }
 
 type Pos.attr += TestUi
 type Pos.attr += Uid of string
@@ -349,6 +365,7 @@ let rec get_value : type a.
           {
             O.enum_name = EnumName.to_string ConstantNames.option_enum;
             constructors = [none_field];
+            ctor_attrs = [];
           }
         in
         O.Enum (decl, none_field)
@@ -370,6 +387,7 @@ let rec get_value : type a.
           {
             O.enum_name = EnumName.to_string ConstantNames.option_enum;
             constructors = [some_field];
+            ctor_attrs = [];
           }
         in
         O.Enum (decl, some_value))
@@ -614,11 +632,12 @@ let patch_paths
     else Format.sprintf "%s.%s" (ModuleName.to_string modl) s
   in
   let rec patch_enum_decl = function
-    | { O.enum_name; constructors } ->
+    | { O.enum_name; constructors; ctor_attrs } ->
       {
         enum_name = patch_name enum_name;
         constructors =
           List.map (fun (c, t) -> c, Option.map patch_typ t) constructors;
+        ctor_attrs;
       }
   and patch_struct_decl = function
     | { struct_name; fields } ->
@@ -1032,13 +1051,13 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
                 (fun ppf -> fprintf ppf "%d %s" days strings.duration_units.day)
             else None);
          ])
-  | _, O.Enum ({ enum_name = "Optional"; constructors }, (constr, v)) ->
+  | _, O.Enum ({ enum_name = "Optional"; constructors; _ }, (constr, v)) ->
     if v = None then fprintf ppf "Absent"
     else
       fprintf ppf "%s %s %a" strings.present strings.content_str
         (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
         (Option.get v)
-  | Some (TEnum { enum_name; constructors }), O.Enum (_en, (constr, Some v)) ->
+  | Some (TEnum { enum_name; constructors; _ }), O.Enum (_en, (constr, Some v)) ->
     fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
       (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
       v
