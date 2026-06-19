@@ -79,6 +79,24 @@ let cmd_write =
            corresponding Catala file.")
     Term.(const Lib.write_catala $ Cli.Flags.Global.flags $ Cli.Flags.output)
 
+let with_canonical =
+  Arg.(
+    value
+    & flag
+    & info ["show-canonical"]
+        ~doc:"Also print the canonical projection text used for the hash.")
+
+let cmd_sig_hash =
+  Cmd.v
+    Cmd.(
+      info "sig-hash"
+        ~doc:
+          "Read a scope_def_list as JSON from stdin (e.g. the output of \
+           list-scopes) and print a '<module>.<name>\\t<hash>' line per scope. \
+           The hash is the canonical signature projection used for migration \
+           drift detection.")
+    Term.(const Lib.sig_hash $ with_canonical)
+
 let cmd_list_scopes =
   Cmd.v
     Cmd.(
@@ -113,6 +131,7 @@ let register () =
       cmd_write;
       cmd_list_scopes;
       cmd_serialize_inputs;
+      cmd_sig_hash;
     ];
   (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
      ~contexts:(function

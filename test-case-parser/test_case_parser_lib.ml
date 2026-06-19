@@ -503,6 +503,107 @@ let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
     module_deps = retrieve_scope_module_deps prg sc;
   }
 
+(* === Canonical signature projection (for migration drift detection) ===
+
+   Produces a deterministic, representation-INDEPENDENT canonical text of a
+   scope's I/O contract, then hashes it. The hash is computed over THIS canonical
+   form, never over the stored ATD JSON, so the wire/storage representation may
+   stay inlined/duplicated without affecting the hash (interning the model later
+   is hash-stable). Properties:
+   - nominal types (TStruct/TEnum) referenced BY NAME; their definitions collected
+     once into a sorted def-set (kills inline duplication; memoization breaks any
+     type recursion);
+   - structural types (option/array/tuple/scalars) inlined;
+   - inputs, outputs, struct fields and enum constructors SORTED by name
+     (declaration order is cosmetic in Catala; a reorder must not change the hash);
+   - tuple element order PRESERVED (it is positional);
+   - inputs carry their is_context flag (reentrant default vs required input is a
+     contract distinction); outputs ARE included (assertions ride on them);
+   - attributes, source positions and module_deps EXCLUDED (not contract);
+   - stamped with a scheme version so the rules can be revved deliberately. *)
+
+let sig_scheme_version = "v1"
+
+let scope_signature_canonical (sd : O.scope_def) : string =
+  let buf = Buffer.create 1024 in
+  let structs : (string, (string * O.typ) list) Hashtbl.t = Hashtbl.create 16 in
+  let enums : (string, (string * O.typ option) list) Hashtbl.t =
+    Hashtbl.create 16
+  in
+  let rec collect (t : O.typ) : unit =
+    match t with
+    | TBool | TInt | TRat | TMoney | TDate | TDuration | TUnit | TUnset -> ()
+    | TOption t | TArray t -> collect t
+    | TTuple tl -> List.iter collect tl
+    | TArrow (tl, t) ->
+      List.iter collect tl;
+      collect t
+    | TStruct { struct_name; fields } ->
+      if not (Hashtbl.mem structs struct_name) then begin
+        Hashtbl.add structs struct_name fields;
+        List.iter (fun (_, t) -> collect t) fields
+      end
+    | TEnum { enum_name; constructors; _ } ->
+      if not (Hashtbl.mem enums enum_name) then begin
+        Hashtbl.add enums enum_name constructors;
+        List.iter (fun (_, t) -> Option.iter collect t) constructors
+      end
+  in
+  let rec ref_of (t : O.typ) : string =
+    match t with
+    | TBool -> "bool"
+    | TInt -> "int"
+    | TRat -> "rat"
+    | TMoney -> "money"
+    | TDate -> "date"
+    | TDuration -> "duration"
+    | TUnit -> "unit"
+    | TUnset -> "unset"
+    | TOption t -> "option(" ^ ref_of t ^ ")"
+    | TArray t -> "array(" ^ ref_of t ^ ")"
+    | TTuple tl -> "tuple(" ^ String.concat "," (List.map ref_of tl) ^ ")"
+    | TArrow (tl, t) ->
+      "arrow(" ^ String.concat "," (List.map ref_of tl) ^ "->" ^ ref_of t ^ ")"
+    | TStruct { struct_name; _ } -> "@" ^ struct_name
+    | TEnum { enum_name; _ } -> "@" ^ enum_name
+  in
+  let by_name (a, _) (b, _) = String.compare a b in
+  List.iter (fun (_, (si : O.scope_input)) -> collect si.typ) sd.inputs;
+  List.iter (fun (_, t) -> collect t) sd.outputs;
+  Buffer.add_string buf (Printf.sprintf "sig/%s\n" sig_scheme_version);
+  Buffer.add_string buf (Printf.sprintf "scope %s.%s\n" sd.module_name sd.name);
+  List.sort by_name sd.inputs
+  |> List.iter (fun (name, (si : O.scope_input)) ->
+       Buffer.add_string buf
+         (Printf.sprintf "in %s %s %s\n" name
+            (if si.is_context then "ctx" else "inp")
+            (ref_of si.typ)));
+  List.sort by_name sd.outputs
+  |> List.iter (fun (name, t) ->
+       Buffer.add_string buf (Printf.sprintf "out %s %s\n" name (ref_of t)));
+  let names tbl = Hashtbl.fold (fun k _ acc -> k :: acc) tbl [] |> List.sort String.compare in
+  names enums
+  |> List.iter (fun name ->
+       Buffer.add_string buf (Printf.sprintf "def enum %s\n" name);
+       Hashtbl.find enums name
+       |> List.sort by_name
+       |> List.iter (fun (ctor, t) ->
+            Buffer.add_string buf
+              (Printf.sprintf "  ctor %s %s\n" ctor
+                 (match t with None -> "-" | Some t -> ref_of t))));
+  names structs
+  |> List.iter (fun name ->
+       Buffer.add_string buf (Printf.sprintf "def struct %s\n" name);
+       Hashtbl.find structs name
+       |> List.sort by_name
+       |> List.iter (fun (fld, t) ->
+            Buffer.add_string buf
+              (Printf.sprintf "  field %s %s\n" fld (ref_of t))));
+  Buffer.contents buf
+
+let scope_signature_hash (sd : O.scope_def) : string =
+  Digest.to_hex (Digest.string (scope_signature_canonical sd))
+
 (** Default placeholder for uninitialized inputs: empty array for TArray,
     explicit Unset for everything else. *)
 let unset_default_value (typ : O.typ) : O.value_def =
@@ -1665,6 +1766,22 @@ let list_scopes include_dirs options =
     |> List.map snd
   in
   print_scopes filtered_scopes
+
+(* Reads a scope_def_list (e.g. the output of list-scopes, or the tested_scopes
+   extracted from a read result) from stdin and prints one "<module>.<name>\t<hash>"
+   line per scope. With [with_canonical], also dumps the canonical projection text.
+   Mainly a validation/debug entry point for the signature hash. *)
+let sig_hash with_canonical =
+  let scopes =
+    J.read_scope_def_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
+  in
+  List.iter
+    (fun (sd : O.scope_def) ->
+      Printf.printf "%s.%s\t%s\n" sd.module_name sd.name
+        (scope_signature_hash sd);
+      if with_canonical then
+        Printf.printf "%s\n" (scope_signature_canonical sd))
+    scopes
 
 let serialize_inputs (scope_input : Yojson.Safe.t option) =
   let scope_input =
