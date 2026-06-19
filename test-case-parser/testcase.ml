@@ -97,6 +97,23 @@ let cmd_sig_hash =
            drift detection.")
     Term.(const Lib.sig_hash $ with_canonical)
 
+let out_dir =
+  Arg.(
+    required
+    & opt (some string) None
+    & info ["output-dir"] ~docv:"DIR"
+        ~doc:"Directory to write synthesized stub modules into.")
+
+let cmd_stub =
+  Cmd.v
+    Cmd.(
+      info "stub"
+        ~doc:
+          "Read a scope_def_list as JSON from stdin and write synthesized stub \
+           Catala modules for the first scope into --output-dir (migration \
+           value-recovery helper).")
+    Term.(const Lib.stub_cmd $ out_dir $ Cli.Flags.Global.flags)
+
 let cmd_list_scopes =
   Cmd.v
     Cmd.(
@@ -132,6 +149,7 @@ let register () =
       cmd_list_scopes;
       cmd_serialize_inputs;
       cmd_sig_hash;
+      cmd_stub;
     ];
   (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
      ~contexts:(function

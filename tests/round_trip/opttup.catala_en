@@ -1,0 +1,25 @@
+> Module OptTup
+
+```catala-metadata
+declaration structure Pair:
+  data first content integer
+  data second content money
+
+declaration enumeration Choice:
+  -- Yes content decimal
+  -- No
+
+declaration scope Calc:
+  input maybe_amount content optional of money
+  input pair content (integer, money)
+  input mixed content optional of (Pair, Choice)
+  input items content list of optional of integer
+  output result content optional of decimal
+  output combo content (Choice, optional of Pair)
+```
+
+```catala
+scope Calc:
+  definition result equals Absent
+  definition combo equals (No, Absent)
+```

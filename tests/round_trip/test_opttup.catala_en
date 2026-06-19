@@ -1,0 +1,19 @@
+> Using OptTup
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Rich"]
+declaration scope Calc_rich:
+  output calc scope OptTup.Calc
+```
+
+```catala
+scope Calc_rich:
+  definition calc.maybe_amount equals Present content $42.50
+  definition calc.pair equals (7, $3.00)
+  definition calc.mixed equals
+    Present content (OptTup.Pair { -- first: 1 -- second: $2.00 }, OptTup.Choice.Yes content 1.5)
+  definition calc.items equals [Present content 1; Absent; Present content 3]
+```

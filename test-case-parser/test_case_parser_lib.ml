@@ -350,6 +350,9 @@ let rec get_value : type a.
       | _ -> Message.error ~pos "Invalid duration literal.")
     | EArray args ->
       O.Array (Array.of_list (List.map (get_value lang decl_ctx) args))
+    | ETuple args ->
+      (* tuples carry as Array; the TTuple type disambiguates on print *)
+      O.Array (Array.of_list (List.map (get_value lang decl_ctx) args))
     | EStruct { name; fields } ->
       O.Struct
         ( get_struct lang decl_ctx name,
@@ -526,6 +529,14 @@ let sig_scheme_version = "v1"
 
 let scope_signature_canonical (sd : O.scope_def) : string =
   let buf = Buffer.create 1024 in
+  (* `list-scopes` of a module leaves the scope's OWN locally-declared types
+     unqualified ("Pair"), but a test importing that module sees them qualified
+     ("Mod.Pair"). Both paths must canonicalize identically for drift detection,
+     so we fully-qualify every nominal name to the scope's module. *)
+  let qualify name =
+    if String.equal sd.module_name "" || String.contains name '.' then name
+    else sd.module_name ^ "." ^ name
+  in
   let structs : (string, (string * O.typ) list) Hashtbl.t = Hashtbl.create 16 in
   let enums : (string, (string * O.typ option) list) Hashtbl.t =
     Hashtbl.create 16
@@ -539,11 +550,13 @@ let scope_signature_canonical (sd : O.scope_def) : string =
       List.iter collect tl;
       collect t
     | TStruct { struct_name; fields } ->
+      let struct_name = qualify struct_name in
       if not (Hashtbl.mem structs struct_name) then begin
         Hashtbl.add structs struct_name fields;
         List.iter (fun (_, t) -> collect t) fields
       end
     | TEnum { enum_name; constructors; _ } ->
+      let enum_name = qualify enum_name in
       if not (Hashtbl.mem enums enum_name) then begin
         Hashtbl.add enums enum_name constructors;
         List.iter (fun (_, t) -> Option.iter collect t) constructors
@@ -564,8 +577,8 @@ let scope_signature_canonical (sd : O.scope_def) : string =
     | TTuple tl -> "tuple(" ^ String.concat "," (List.map ref_of tl) ^ ")"
     | TArrow (tl, t) ->
       "arrow(" ^ String.concat "," (List.map ref_of tl) ^ "->" ^ ref_of t ^ ")"
-    | TStruct { struct_name; _ } -> "@" ^ struct_name
-    | TEnum { enum_name; _ } -> "@" ^ enum_name
+    | TStruct { struct_name; _ } -> "@" ^ qualify struct_name
+    | TEnum { enum_name; _ } -> "@" ^ qualify enum_name
   in
   let by_name (a, _) (b, _) = String.compare a b in
   List.iter (fun (_, (si : O.scope_input)) -> collect si.typ) sd.inputs;
@@ -1181,6 +1194,12 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
            fprintf ppf "-- %s: %a" fld (print_catala_value ~typ:None ~lang) v))
       fields
+  | Some (O.TTuple ts), O.Array vl ->
+    fprintf ppf "@[<hov 1>(%a)@]"
+      (pp_print_list
+         ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
+         (fun ppf (t, v) -> print_catala_value ~typ:(Some t) ~lang ppf v))
+      (List.combine ts (Array.to_list vl))
   | Some (O.TArray t), O.Array vl ->
     fprintf ppf "@[<hov 1>[%a]@]"
       (pp_print_seq
@@ -1203,6 +1222,188 @@ let print_catala_value_opt ~lang ppf (t_in : O.test_io) =
   | Some { value = { value = O.Unset; _ }; _ }, _ | None, _ ->
     Format.fprintf ppf "impossible"
   | Some { value; _ }, typ -> print_catala_value ~typ:(Some typ) ~lang ppf value
+
+(* === Stub module synthesis (for migration value recovery) ===
+
+   From a stored OLD scope signature, regenerate throwaway Catala stub modules
+   that re-declare exactly the old types + scope, so a test written against the
+   old contract typechecks again and the existing `read` can recover its values
+   (even though the real module has since changed). Reuses the whole existing
+   read/write pipeline; the only new code is this scope_def -> Catala source
+   emitter. Returns (module_name, source) pairs.
+
+   Supports all value-bearing types (literals, struct, enum, array, option,
+   tuple). Arrow/unit types raise Unsupported (they can't appear in a
+   value-bearing scope signature — get_typ rejects them upstream too). *)
+
+let split_qualified name =
+  match String.rindex_opt name '.' with
+  | None -> None, name
+  | Some i ->
+    ( Some (String.sub name 0 i),
+      String.sub name (i + 1) (String.length name - i - 1) )
+
+let stub_modules (lang : Global.backend_lang) (sd : O.scope_def) :
+    (string * string) list =
+  let strings = get_lang_strings lang in
+  let kw_struct, kw_enum, kw_data =
+    match lang with
+    | `Fr -> "déclaration structure", "déclaration énumération", "donnée"
+    | `En -> "declaration structure", "declaration enumeration", "data"
+    | _ -> unsupported "unsupported language"
+  in
+  let module_of name = fst (split_qualified name) in
+  (* list-scopes leaves the scope's own (locally-declared) types unqualified;
+     attribute those to the scope's module. *)
+  let owner name =
+    match module_of name with Some m -> m | None -> sd.module_name
+  in
+  let structs : (string, (string * O.typ) list) Hashtbl.t = Hashtbl.create 16 in
+  let enums : (string, (string * O.typ option) list) Hashtbl.t =
+    Hashtbl.create 16
+  in
+  let rec collect (t : O.typ) =
+    match t with
+    | TBool | TInt | TRat | TMoney | TDate | TDuration | TUnit | TUnset -> ()
+    | TArray t | TOption t -> collect t
+    | TTuple tl -> List.iter collect tl
+    | TStruct { struct_name; fields } ->
+      if not (Hashtbl.mem structs struct_name) then begin
+        Hashtbl.add structs struct_name fields;
+        List.iter (fun (_, t) -> collect t) fields
+      end
+    | TEnum { enum_name; constructors; _ } ->
+      if not (Hashtbl.mem enums enum_name) then begin
+        Hashtbl.add enums enum_name constructors;
+        List.iter (fun (_, t) -> Option.iter collect t) constructors
+      end
+    | TArrow _ -> unsupported "stub: arrow type not supported"
+  in
+  List.iter (fun (_, (si : O.scope_input)) -> collect si.typ) sd.inputs;
+  List.iter (fun (_, t) -> collect t) sd.outputs;
+  let qualify current name =
+    match split_qualified name with
+    | Some m, base when String.equal m current -> base
+    | None, base when String.equal current sd.module_name -> base
+    | None, base -> sd.module_name ^ "." ^ base
+    | _ -> name
+  in
+  let rec render current (t : O.typ) : string =
+    match t with
+    | TBool -> ( match lang with `Fr -> "booléen" | _ -> "boolean")
+    | TInt -> ( match lang with `Fr -> "entier" | _ -> "integer")
+    | TRat -> ( match lang with `Fr -> "décimal" | _ -> "decimal")
+    | TMoney -> ( match lang with `Fr -> "argent" | _ -> "money")
+    | TDate -> "date"
+    | TDuration -> ( match lang with `Fr -> "durée" | _ -> "duration")
+    | TArray t ->
+      (match lang with `Fr -> "liste de " | _ -> "list of ") ^ render current t
+    | TStruct { struct_name; _ } -> qualify current struct_name
+    | TEnum { enum_name; _ } -> qualify current enum_name
+    | TOption t ->
+      (match lang with `Fr -> "optionnel de " | _ -> "optional of ")
+      ^ render current t
+    | TTuple tl ->
+      "(" ^ String.concat ", " (List.map (render current) tl) ^ ")"
+    | TUnit | TUnset | TArrow _ ->
+      unsupported "stub: unsupported type in declaration"
+  in
+  let names_in tbl current =
+    Hashtbl.fold
+      (fun n _ acc -> if String.equal (owner n) current then n :: acc else acc)
+      tbl []
+    |> List.sort String.compare
+  in
+  let all_modules =
+    let m = ref [sd.module_name] in
+    let add n = m := owner n :: !m in
+    Hashtbl.iter (fun n _ -> add n) structs;
+    Hashtbl.iter (fun n _ -> add n) enums;
+    List.sort_uniq String.compare !m
+  in
+  (* modules referenced by [current]'s own declarations (+ scope I/O) *)
+  let deps_of current =
+    let acc = ref [] in
+    let rec visit = function
+      | O.TStruct { struct_name = n; _ } | O.TEnum { enum_name = n; _ } ->
+        let m = owner n in
+        if not (String.equal m current) then acc := m :: !acc
+      | O.TArray t | O.TOption t -> visit t
+      | O.TTuple tl -> List.iter visit tl
+      | _ -> ()
+    in
+    List.iter (fun n -> List.iter (fun (_, t) -> visit t) (Hashtbl.find structs n))
+      (names_in structs current);
+    List.iter
+      (fun n ->
+        List.iter (fun (_, t) -> Option.iter visit t) (Hashtbl.find enums n))
+      (names_in enums current);
+    if String.equal current sd.module_name then begin
+      List.iter (fun (_, (si : O.scope_input)) -> visit si.typ) sd.inputs;
+      List.iter (fun (_, t) -> visit t) sd.outputs
+    end;
+    List.sort_uniq String.compare !acc
+  in
+  let emit_module current =
+    let b = Buffer.create 1024 in
+    let p fmt = Printf.ksprintf (Buffer.add_string b) fmt in
+    p "> Module %s\n\n" current;
+    List.iter (fun d -> p "> %s %s\n" strings.using_module d) (deps_of current);
+    p "\n```catala-metadata\n";
+    List.iter
+      (fun n ->
+        let _, base = split_qualified n in
+        p "%s %s:\n" kw_enum base;
+        List.iter
+          (fun (ctor, t) ->
+            match t with
+            | None -> p "  -- %s\n" ctor
+            | Some t -> p "  -- %s %s %s\n" ctor strings.content (render current t))
+          (Hashtbl.find enums n);
+        p "\n")
+      (names_in enums current);
+    List.iter
+      (fun n ->
+        let _, base = split_qualified n in
+        p "%s %s:\n" kw_struct base;
+        List.iter
+          (fun (fld, t) -> p "  %s %s %s %s\n" kw_data fld strings.content (render current t))
+          (Hashtbl.find structs n);
+        p "\n")
+      (names_in structs current);
+    if String.equal current sd.module_name then begin
+      let _, sbase = split_qualified sd.name in
+      p "%s %s:\n" strings.declaration_scope sbase;
+      List.iter
+        (fun (name, (si : O.scope_input)) ->
+          let kw =
+            if si.is_context then match lang with `Fr -> "contexte" | _ -> "context"
+            else match lang with `Fr -> "entrée" | _ -> "input"
+          in
+          p "  %s %s %s %s\n" kw name strings.content (render current si.typ))
+        sd.inputs;
+      List.iter
+        (fun (name, t) ->
+          p "  %s %s %s %s\n" strings.output_scope name strings.content
+            (render current t))
+        sd.outputs;
+      p "```\n\n```catala\n%s %s:\n" strings.scope sbase;
+      let default_def name typ =
+        let v = generate_default_value lang typ in
+        p "  %s %s %s %s\n" strings.definition name strings.equals
+          (Format.asprintf "%a" (print_catala_value ~typ:(Some typ) ~lang) v)
+      in
+      List.iter
+        (fun (name, (si : O.scope_input)) ->
+          if si.is_context then default_def name si.typ)
+        sd.inputs;
+      List.iter (fun (name, t) -> default_def name t) sd.outputs;
+      p "```\n"
+    end
+    else p "```\n";
+    Buffer.contents b
+  in
+  List.map (fun m -> m, emit_module m) all_modules
 
 let write_catala_test ppf t lang =
   let open Format in
@@ -1782,6 +1983,29 @@ let sig_hash with_canonical =
       if with_canonical then
         Printf.printf "%s\n" (scope_signature_canonical sd))
     scopes
+
+(* Reads a scope_def_list from stdin and writes synthesized stub modules for the
+   FIRST scope into [out_dir] as <Module>.catala_<ext>. Debug/validation entry
+   point for stub synthesis (migration value recovery). *)
+let stub_cmd out_dir options =
+  let scopes =
+    J.read_scope_def_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
+  in
+  match scopes with
+  | [] -> failwith "stub: empty scope_def_list on stdin"
+  | sd :: _ ->
+    let lang =
+      match options.Global.language with Some l -> l | None -> `Fr
+    in
+    let ext = match lang with `Fr -> "catala_fr" | `En -> "catala_en" | _ -> "catala" in
+    List.iter
+      (fun (modname, src) ->
+        let path = Filename.concat out_dir (Printf.sprintf "%s.%s" modname ext) in
+        let oc = open_out path in
+        output_string oc src;
+        close_out oc;
+        Printf.eprintf "wrote %s\n" path)
+      (stub_modules lang sd)
 
 let serialize_inputs (scope_input : Yojson.Safe.t option) =
   let scope_input =
