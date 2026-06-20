@@ -91,6 +91,9 @@ grep -q "#\[testcase.sig = \"OptTup.Calc@$LS_HASH\"\]" _sig_stub/test_opttup_rt.
   || { echo "FAIL: signature snapshot not written"; exit 1; }
 jq -e '.name == "Calc" and .module_name == "OptTup"' "_sig_snap/OptTup.Calc@$LS_HASH.sig.json" > /dev/null \
   || { echo "FAIL: snapshot is not a valid scope_def for OptTup.Calc"; exit 1; }
+# sig-hash accepts a single scope_def object (a snapshot file), not just a list.
+[ "$(catala testcase sig-hash < "_sig_snap/OptTup.Calc@$LS_HASH.sig.json" | cut -f2)" = "$LS_HASH" ] \
+  || { echo "FAIL: sig-hash on a single snapshot object did not match LS_HASH"; exit 1; }
 # Content-addressed: a second write must not error and must not duplicate.
 catala testcase read test_opttup.catala_en \
   | catala testcase write --language en --sig-dir _sig_snap > /dev/null
@@ -136,6 +139,16 @@ mv _migrate/OptTup.Calc@*.sig.json _migrate/_hidden.sig.json
 [ "$(state t.catala_en)" = "Blocked" ] \
   || { echo "FAIL(migrate): expected Blocked when snapshot is missing"; exit 1; }
 mv _migrate/_hidden.sig.json _migrate/OptTup.Calc@"$LS_HASH".sig.json
+
+# blocked (compile error): if the live module itself won't compile, status must
+# report a clear reason and not crash.
+cp _migrate/OptTup.catala_en _migrate/OptTup.bak
+sed -i 's/  input items content list of optional of integer/  input items content list of optional of integer\n  input items content list of optional of integer/' _migrate/OptTup.catala_en
+( cd _migrate && clerk start >/dev/null 2>&1 )
+( cd _migrate && catala testcase migrate status t.catala_en 2>/dev/null ) | grep -qi 'does not compile' \
+  || { echo "FAIL(migrate): expected a 'does not compile' blocked reason"; exit 1; }
+mv _migrate/OptTup.bak _migrate/OptTup.catala_en
+( cd _migrate && clerk start >/dev/null 2>&1 )
 
 # directory mode: recurses, triages every test, skips the module file
 DIR_STATES=$( ( cd _migrate && catala testcase migrate status --json . 2>/dev/null ) \

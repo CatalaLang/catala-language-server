@@ -2010,14 +2010,24 @@ let list_scopes include_dirs options =
   in
   print_scopes filtered_scopes
 
-(* Reads a scope_def_list (e.g. the output of list-scopes, or the tested_scopes
-   extracted from a read result) from stdin and prints one "<module>.<name>\t<hash>"
-   line per scope. With [with_canonical], also dumps the canonical projection text.
-   Mainly a validation/debug entry point for the signature hash. *)
+(* Read scope_def(s) from stdin, accepting EITHER a JSON array (e.g. the output
+   of list-scopes) OR a single scope_def object (e.g. a committed snapshot file),
+   so the two representations are interchangeable on these commands' input. *)
+let read_scope_defs_stdin () =
+  let content = In_channel.input_all stdin in
+  let lexer = Yojson.init_lexer () in
+  if
+    let t = String.trim content in
+    String.length t > 0 && t.[0] = '['
+  then J.read_scope_def_list lexer (Lexing.from_string content)
+  else [ J.read_scope_def lexer (Lexing.from_string content) ]
+
+(* Reads scope_def(s) from stdin (the output of list-scopes, the tested_scopes
+   extracted from a read result, or a single snapshot file) and prints one
+   "<module>.<name>\t<hash>" line per scope. With [with_canonical], also dumps the
+   canonical projection text. Mainly a validation/debug entry point for the hash. *)
 let sig_hash with_canonical =
-  let scopes =
-    J.read_scope_def_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
-  in
+  let scopes = read_scope_defs_stdin () in
   List.iter
     (fun (sd : O.scope_def) ->
       Printf.printf "%s.%s\t%s\n" sd.module_name sd.name
@@ -2030,9 +2040,7 @@ let sig_hash with_canonical =
    FIRST scope into [out_dir] as <Module>.catala_<ext>. Debug/validation entry
    point for stub synthesis (migration value recovery). *)
 let stub_cmd out_dir options =
-  let scopes =
-    J.read_scope_def_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
-  in
+  let scopes = read_scope_defs_stdin () in
   match scopes with
   | [] -> failwith "stub: empty scope_def_list on stdin"
   | sd :: _ ->
@@ -2251,7 +2259,10 @@ let live_scope_hash ~test_file ~module_name ~scope_base =
                  module_name)
           | Some sc ->
             Ok (scope_signature_hash (get_scope_def prg sc ~tested_module:mn)))
-      with e -> Error (Printexc.to_string e)
+      with
+      | Message.CompilerError _ ->
+        Error (Printf.sprintf "live module %s does not compile" module_name)
+      | e -> Error (Printexc.to_string e)
     in
     Hashtbl.replace live_hash_cache key r;
     r
