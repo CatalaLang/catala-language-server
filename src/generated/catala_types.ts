@@ -135,6 +135,24 @@ export type TestList = Test[]
 
 export type ScopeDefList = ScopeDef[]
 
+export type SigState =
+| { kind: 'Fresh' }
+| { kind: 'Stale' }
+| { kind: 'Unknown' }
+| { kind: 'Blocked' }
+
+export type SigStatusEntry = {
+  file: string;
+  test_scope: string;
+  target_scope: string;
+  state: SigState;
+  pin?: string;
+  live?: string;
+  reason?: string;
+}
+
+export type SigStatus = SigStatusEntry[]
+
 export type PathSegment =
 | { kind: 'StructField'; value: string }
 | { kind: 'ListIndex'; value: number /*int*/ }
@@ -690,6 +708,67 @@ export function writeScopeDefList(x: ScopeDefList, context: any = x): any {
 
 export function readScopeDefList(x: any, context: any = x): ScopeDefList {
   return _atd_read_array(readScopeDef)(x, context);
+}
+
+export function writeSigState(x: SigState, context: any = x): any {
+  switch (x.kind) {
+    case 'Fresh':
+      return 'Fresh'
+    case 'Stale':
+      return 'Stale'
+    case 'Unknown':
+      return 'Unknown'
+    case 'Blocked':
+      return 'Blocked'
+  }
+}
+
+export function readSigState(x: any, context: any = x): SigState {
+  switch (x) {
+    case 'Fresh':
+      return { kind: 'Fresh' }
+    case 'Stale':
+      return { kind: 'Stale' }
+    case 'Unknown':
+      return { kind: 'Unknown' }
+    case 'Blocked':
+      return { kind: 'Blocked' }
+    default:
+      _atd_bad_json('SigState', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeSigStatusEntry(x: SigStatusEntry, context: any = x): any {
+  return {
+    'file': _atd_write_required_field('SigStatusEntry', 'file', _atd_write_string, x.file, x),
+    'test_scope': _atd_write_required_field('SigStatusEntry', 'test_scope', _atd_write_string, x.test_scope, x),
+    'target_scope': _atd_write_required_field('SigStatusEntry', 'target_scope', _atd_write_string, x.target_scope, x),
+    'state': _atd_write_required_field('SigStatusEntry', 'state', writeSigState, x.state, x),
+    'pin': _atd_write_optional_field(_atd_write_string, x.pin, x),
+    'live': _atd_write_optional_field(_atd_write_string, x.live, x),
+    'reason': _atd_write_optional_field(_atd_write_string, x.reason, x),
+  };
+}
+
+export function readSigStatusEntry(x: any, context: any = x): SigStatusEntry {
+  return {
+    file: _atd_read_required_field('SigStatusEntry', 'file', _atd_read_string, x['file'], x),
+    test_scope: _atd_read_required_field('SigStatusEntry', 'test_scope', _atd_read_string, x['test_scope'], x),
+    target_scope: _atd_read_required_field('SigStatusEntry', 'target_scope', _atd_read_string, x['target_scope'], x),
+    state: _atd_read_required_field('SigStatusEntry', 'state', readSigState, x['state'], x),
+    pin: _atd_read_optional_field(_atd_read_string, x['pin'], x),
+    live: _atd_read_optional_field(_atd_read_string, x['live'], x),
+    reason: _atd_read_optional_field(_atd_read_string, x['reason'], x),
+  };
+}
+
+export function writeSigStatus(x: SigStatus, context: any = x): any {
+  return _atd_write_array(writeSigStatusEntry)(x, context);
+}
+
+export function readSigStatus(x: any, context: any = x): SigStatus {
+  return _atd_read_array(readSigStatusEntry)(x, context);
 }
 
 export function writePathSegment(x: PathSegment, context: any = x): any {

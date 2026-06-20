@@ -2046,6 +2046,299 @@ let stub_cmd out_dir options =
         Printf.eprintf "wrote %s\n" path)
       (stub_modules lang sd)
 
+(* ============================================================================
+   Migration triage: `migrate status` / `migrate init`.
+
+   Classifies tests by signature drift WITHOUT typechecking the test (a drifted
+   test would not compile). The pin and tested scope are read textually from the
+   source; the live signature is resolved by loading only the test's import
+   headers, so the live module typechecks even when the test scope is stale.
+   ============================================================================ *)
+
+(* Index of the first occurrence of [sub] in [s], or None. *)
+let find_sub ~sub s =
+  let n = String.length sub and m = String.length s in
+  if n = 0 then Some 0
+  else
+    let rec go i =
+      if i + n > m then None
+      else if String.equal (String.sub s i n) sub then Some i
+      else go (i + 1)
+    in
+    go 0
+
+let contains_sub ~sub s = find_sub ~sub s <> None
+
+(* Content of the first double-quoted run in [s], or None. *)
+let first_quoted s =
+  match String.index_opt s '"' with
+  | None -> None
+  | Some i -> (
+    match String.index_from_opt s (i + 1) '"' with
+    | None -> None
+    | Some j -> Some (String.sub s (i + 1) (j - i - 1)))
+
+(* A "<Module>.<Scope>"-shaped token (two dot-separated capitalised idents):
+   used to recover the tested scope of an unpinned test from its subscope line. *)
+let qualified_scope_token s =
+  let is_id_start c = (c >= 'A' && c <= 'Z') in
+  let is_id c =
+    (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+    || c = '_'
+  in
+  let m = String.length s in
+  let rec scan i =
+    if i >= m then None
+    else if is_id_start s.[i] then
+      let j = ref i in
+      while !j < m && (is_id s.[!j] || s.[!j] = '.') do incr j done;
+      let tok = String.sub s i (!j - i) in
+      (* must look like Mod.Scope: exactly one dot, both parts capitalised *)
+      (match String.split_on_char '.' tok with
+       | [a; b]
+         when String.length a > 0 && String.length b > 0
+              && is_id_start a.[0] && is_id_start b.[0] ->
+         Some tok
+       | _ -> scan !j)
+    else scan (i + 1)
+  in
+  scan 0
+
+(* One testing scope as recovered textually from source. *)
+type parsed_test = {
+  pt_test_scope : string;        (* testing scope name, e.g. "Calc_rich" *)
+  pt_target : string option;     (* "<Module>.<Scope>" under test *)
+  pt_pin : string option;        (* full "<Module>.<Scope>@<hash>" pin *)
+}
+
+(* Recover the test scopes of a source file without typechecking it. Walks the
+   attribute block that precedes each `declaration scope` (EN) /
+   `déclaration champ d'application` (FR), keeping the #[testcase.sig] pin and the
+   #[testcase.testui] marker, then reads the following subscope line for the
+   tested scope. *)
+let parse_tests_textually content =
+  let lines = String.split_on_char '\n' content in
+  let scope_kw = "declaration scope " in
+  let scope_kw_fr = "champ d'application " in
+  let is_scope_decl l =
+    contains_sub ~sub:scope_kw l
+    || (contains_sub ~sub:"claration" l && contains_sub ~sub:scope_kw_fr l)
+  in
+  let decl_name l =
+    (* token right after the scope keyword, trailing ':' stripped *)
+    let after =
+      match find_sub ~sub:scope_kw l with
+      | Some i -> String.sub l (i + String.length scope_kw) (String.length l - i - String.length scope_kw)
+      | None -> (
+        match find_sub ~sub:scope_kw_fr l with
+        | Some i -> String.sub l (i + String.length scope_kw_fr) (String.length l - i - String.length scope_kw_fr)
+        | None -> l)
+    in
+    let after = String.trim after in
+    match String.index_opt after ':' with
+    | Some k -> String.trim (String.sub after 0 k)
+    | None -> (
+      match String.index_opt after ' ' with
+      | Some k -> String.sub after 0 k
+      | None -> after)
+  in
+  let rec walk lines (pending : string list) (acc : parsed_test list)
+      (cur : parsed_test option) =
+    match lines with
+    | [] -> List.rev (match cur with Some t -> t :: acc | None -> acc)
+    | line :: rest ->
+      let t = String.trim line in
+      if String.length t >= 2 && t.[0] = '#' && t.[1] = '[' then
+        (* attribute line: accumulate, flushing any open subscope search *)
+        let acc = match cur with Some c -> c :: acc | None -> acc in
+        walk rest (line :: pending) acc None
+      else if is_scope_decl line then begin
+        let acc = match cur with Some c -> c :: acc | None -> acc in
+        let is_test =
+          List.exists (fun a -> contains_sub ~sub:"testcase.testui" a) pending
+        in
+        let pin =
+          List.find_map
+            (fun a ->
+              if contains_sub ~sub:"testcase.sig" a then first_quoted a else None)
+            pending
+        in
+        if is_test then
+          let target =
+            match pin with
+            | Some p -> (
+              match String.index_opt p '@' with
+              | Some k -> Some (String.sub p 0 k)
+              | None -> Some p)
+            | None -> None
+          in
+          walk rest []
+            (match cur with Some c -> c :: acc | None -> acc)
+            (Some { pt_test_scope = decl_name line; pt_target = target; pt_pin = pin })
+        else walk rest [] acc None
+      end
+      else begin
+        (* inside a test scope, before its target is known, look for the
+           "Mod.Scope" subscope reference; otherwise reset pending on blanks *)
+        match cur with
+        | Some c when c.pt_target = None -> (
+          match qualified_scope_token line with
+          | Some tok -> walk rest [] (acc) (Some { c with pt_target = Some tok })
+          | None -> walk rest (if t = "" then [] else pending) acc cur)
+        | _ -> walk rest (if t = "" then [] else pending) acc cur
+      end
+  in
+  walk lines [] [] None
+
+(* Resolve the live signature hash of [module_name].[scope_base] as seen from
+   [test_file], by loading only that file's import headers (so the live module
+   typechecks regardless of test drift). Cached per module across a run. *)
+let live_hash_cache : (string, (string, string) result) Hashtbl.t =
+  Hashtbl.create 16
+
+let live_scope_hash ~test_file ~module_name ~scope_base =
+  let key = module_name ^ "." ^ scope_base in
+  match Hashtbl.find_opt live_hash_cache key with
+  | Some r -> r
+  | None ->
+    let r =
+      try
+        let headers =
+          File.contents test_file
+          |> String.split_on_char '\n'
+          |> List.filter (fun l ->
+                 let l = String.trim l in
+                 String.length l > 0 && l.[0] = '>')
+        in
+        let content = String.concat "\n" headers ^ "\n" in
+        let options =
+          Global.enforce_options
+            ~input_src:(Global.Contents (content, test_file)) ()
+        in
+        let path_to_build, include_dirs = lookup_include_dirs options in
+        let prg, _ = read_program include_dirs path_to_build options in
+        let found =
+          ModuleName.Map.fold
+            (fun mn modul acc ->
+              match acc with
+              | Some _ -> acc
+              | None ->
+                if String.equal (ModuleName.to_string mn) module_name then
+                  Some (mn, modul)
+                else None)
+            prg.I.program_modules None
+        in
+        match found with
+        | None -> Error (Printf.sprintf "module %s not found" module_name)
+        | Some (mn, modul) -> (
+          let sc =
+            ScopeName.Map.fold
+              (fun sn sc acc ->
+                match acc with
+                | Some _ -> acc
+                | None ->
+                  if String.equal (ScopeName.base sn) scope_base then Some sc
+                  else None)
+              modul.I.module_scopes None
+          in
+          match sc with
+          | None ->
+            Error
+              (Printf.sprintf "scope %s not found in module %s" scope_base
+                 module_name)
+          | Some sc ->
+            Ok (scope_signature_hash (get_scope_def prg sc ~tested_module:mn)))
+      with e -> Error (Printexc.to_string e)
+    in
+    Hashtbl.replace live_hash_cache key r;
+    r
+
+(* Recursively collect Catala test files under [path] (file or directory). *)
+let rec collect_catala_files path =
+  if Sys.is_directory path then
+    Sys.readdir path |> Array.to_list |> List.sort String.compare
+    |> List.concat_map (fun name ->
+           if String.length name > 0 && name.[0] = '.' then []
+           else if String.equal name "_build" then []
+           else collect_catala_files (Filename.concat path name))
+  else
+    let ok ext = Filename.check_suffix path ext in
+    if ok ".catala_en" || ok ".catala_fr" || ok ".catala_pl" then [ path ]
+    else []
+
+(* Hash part of a "<Module>.<Scope>@<hash>" pin. *)
+let pin_hash p =
+  match String.index_opt p '@' with
+  | Some k -> Some (String.sub p (k + 1) (String.length p - k - 1))
+  | None -> None
+
+let classify_test ~sig_dir ~test_file (pt : parsed_test) : O.sig_status_entry =
+  let target = Option.value ~default:"?" pt.pt_target in
+  let mk ?pin ?live ?reason state =
+    {
+      O.file = test_file;
+      test_scope = pt.pt_test_scope;
+      target_scope = target;
+      state;
+      pin;
+      live;
+      reason;
+    }
+  in
+  match pt.pt_pin with
+  | None -> mk `Unknown
+  | Some pin -> (
+    let phash = pin_hash pin in
+    let module_name, scope_base =
+      match String.index_opt target '.' with
+      | Some k ->
+        String.sub target 0 k, String.sub target (k + 1) (String.length target - k - 1)
+      | None -> "", target
+    in
+    match live_scope_hash ~test_file ~module_name ~scope_base with
+    | Error reason -> mk ?pin:phash ~reason `Blocked
+    | Ok live ->
+      if phash = Some live then mk ?pin:phash ~live `Fresh
+      else
+        (* drifted: migratable only if the pinned snapshot is recoverable *)
+        let dir = Option.value ~default:(Filename.dirname test_file) sig_dir in
+        let snap = File.(dir / (pin ^ ".sig.json")) in
+        if File.exists snap then mk ?pin:phash ~live `Stale
+        else
+          mk ?pin:phash ~live
+            ~reason:(Printf.sprintf "missing snapshot %s" (Filename.basename snap))
+            `Blocked)
+
+let state_label = function
+  | `Fresh -> "fresh"
+  | `Stale -> "stale"
+  | `Unknown -> "unknown"
+  | `Blocked -> "blocked"
+
+let migrate_status json sig_dir path _options =
+  let files = collect_catala_files path in
+  let entries =
+    List.concat_map
+      (fun test_file ->
+        let content = File.contents test_file in
+        parse_tests_textually content
+        |> List.map (classify_test ~sig_dir ~test_file))
+      files
+  in
+  if json then write_stdout J.write_sig_status entries
+  else begin
+    let count st = List.length (List.filter (fun e -> e.O.state = st) entries) in
+    Printf.printf "fresh:   %d\nstale:   %d\nunknown: %d\nblocked: %d\n"
+      (count `Fresh) (count `Stale) (count `Unknown) (count `Blocked);
+    List.iter
+      (fun (e : O.sig_status_entry) ->
+        if e.state <> `Fresh then
+          Printf.printf "  %-8s %s  %s (%s)%s\n" (state_label e.state)
+            e.target_scope e.test_scope (Filename.basename e.file)
+            (match e.reason with Some r -> ": " ^ r | None -> ""))
+      entries
+  end
+
 let serialize_inputs (scope_input : Yojson.Safe.t option) =
   let scope_input =
     match scope_input with

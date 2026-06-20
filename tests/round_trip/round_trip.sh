@@ -9,6 +9,7 @@ function cleanup(){
     rm -rf _build
     rm -rf _sig_stub
     rm -rf _sig_snap
+    rm -rf _migrate
 }
 
 trap cleanup EXIT
@@ -44,38 +45,16 @@ catala testcase run --scope C_test test_context_vars.catala_en || exit 1
 
 sighash() { catala testcase sig-hash | cut -f2; }
 
-# --- Golden canonical text: guards accidental hash-scheme drift -------------
-catala testcase list-scopes opttup.catala_en \
-  | catala testcase sig-hash --show-canonical | tail -n +2 > opttup_sig.actual
-diff opttup_sig.golden opttup_sig.actual || {
-  echo "FAIL: canonical projection changed; if intended, bump sig_scheme_version and refresh opttup_sig.golden"; exit 1; }
-rm -f opttup_sig.actual
+# The canonical projection and its drift invariants are pure logic and are
+# unit-tested in test-case-parser/test/test.ml. Here we only cover what needs
+# the real compiler end-to-end.
 
 # --- Representation-independence: list-scopes hash == test tested_scope hash -
-# (closes the drift-detection loop: save-side and read-side must agree)
+# (closes the drift-detection loop: save-side and read-side must agree, against
+# the REAL compiler output for both paths)
 LS_HASH=$(catala testcase list-scopes opttup.catala_en | sighash)
 TS_HASH=$(catala testcase read test_opttup.catala_en | jq -c '[.[0].tested_scope]' | sighash)
 [ "$LS_HASH" = "$TS_HASH" ] || { echo "FAIL: list-scopes hash ($LS_HASH) != tested_scope hash ($TS_HASH)"; exit 1; }
-
-# --- Projection invariant matrix --------------------------------------------
-catala testcase list-scopes opttup.catala_en > _sig_base.json
-BASE=$(sighash < _sig_base.json)
-same() { # cosmetic mutation must NOT change the hash
-  local h; h=$(jq -c "$1" _sig_base.json | sighash)
-  [ "$h" = "$BASE" ] || { echo "FAIL(same): '$1' changed hash ($h != $BASE)"; exit 1; }
-}
-diff_() { # contract mutation MUST change the hash
-  local h; h=$(jq -c "$1" _sig_base.json | sighash)
-  [ "$h" != "$BASE" ] || { echo "FAIL(diff): '$1' left hash unchanged"; exit 1; }
-}
-same '.[0].outputs |= (to_entries|reverse|from_entries)'   # reorder outputs
-same '.[0].module_deps = ["ZZZ","AAA"]'                    # module_deps excluded
-diff_ '.[0].inputs.pair.is_context = true'                 # context vs input
-diff_ '.[0].inputs.pair.typ = ["TTuple",["TMoney","TInt"]]' # tuple order is positional
-diff_ '.[0].inputs.maybe_amount.typ = ["TOption","TInt"]'  # retype option payload
-diff_ '.[0].inputs.pair2 = .[0].inputs.pair | del(.[0].inputs.pair)' # rename input
-diff_ '.[0].outputs.extra = "TBool"'                       # added output
-rm -f _sig_base.json
 
 # --- Stub synthesis value recovery (the migration sidestep) -----------------
 # Read rich option/tuple values against the REAL module, then against ONLY a
@@ -116,3 +95,49 @@ catala testcase read test_opttup.catala_en \
   | catala testcase write --language en --sig-dir _sig_snap > /dev/null
 [ "$(ls _sig_snap | wc -l)" -eq 1 ] \
   || { echo "FAIL: snapshot store not content-addressed (expected 1 file)"; exit 1; }
+
+# ============================================================================
+# migrate status: drift triage into fresh / stale / unknown / blocked.
+# Self-contained project in _migrate: a stub OptTup module + a pinned test +
+# its committed snapshot, then we drift the module and re-triage.
+# ============================================================================
+rm -rf _migrate && mkdir -p _migrate
+catala testcase list-scopes opttup.catala_en \
+  | catala testcase stub --output-dir _migrate --language en
+catala testcase read test_opttup.catala_en \
+  | catala testcase write --language en --sig-dir _migrate > _migrate/t.catala_en
+printf '[project]\ninclude_dirs = ["."]\n' > _migrate/clerk.toml
+( cd _migrate && clerk start >/dev/null 2>&1 )
+
+state() { # state() FILE -> prints the first entry's state
+  ( cd _migrate && catala testcase migrate status --json "$1" 2>/dev/null ) | jq -r '.[0].state'
+}
+
+# fresh: pin == live
+[ "$(state t.catala_en)" = "Fresh" ] \
+  || { echo "FAIL(migrate): expected Fresh for pinned, undrifted test"; exit 1; }
+
+# unknown: a test with no #[testcase.sig] pin
+grep -v 'testcase.sig' _migrate/t.catala_en > _migrate/u.catala_en
+[ "$(state u.catala_en)" = "Unknown" ] \
+  || { echo "FAIL(migrate): expected Unknown for unpinned test"; exit 1; }
+
+# drift the live module: rename an input (changes the signature)
+sed -i 's/input pair content/input pair2 content/' _migrate/OptTup.catala_en
+( cd _migrate && clerk start >/dev/null 2>&1 )
+
+# stale: pin != live, pinned snapshot still present -> migratable
+[ "$(state t.catala_en)" = "Stale" ] \
+  || { echo "FAIL(migrate): expected Stale after drift with snapshot present"; exit 1; }
+
+# blocked: same drift but the pinned snapshot is gone -> not recoverable
+mv _migrate/OptTup.Calc@*.sig.json _migrate/_hidden.sig.json
+[ "$(state t.catala_en)" = "Blocked" ] \
+  || { echo "FAIL(migrate): expected Blocked when snapshot is missing"; exit 1; }
+mv _migrate/_hidden.sig.json _migrate/OptTup.Calc@"$LS_HASH".sig.json
+
+# directory mode: recurses, triages every test, skips the module file
+DIR_STATES=$( ( cd _migrate && catala testcase migrate status --json . 2>/dev/null ) \
+  | jq -r '[.[].state] | sort | join(",")' )
+[ "$DIR_STATES" = "Stale,Unknown" ] \
+  || { echo "FAIL(migrate): dir mode states = '$DIR_STATES' (expected Stale,Unknown)"; exit 1; }

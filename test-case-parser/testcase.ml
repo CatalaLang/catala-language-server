@@ -127,6 +127,37 @@ let cmd_stub =
            value-recovery helper).")
     Term.(const Lib.stub_cmd $ out_dir $ Cli.Flags.Global.flags)
 
+let with_json =
+  Arg.(
+    value & flag & info ["json"] ~doc:"Output machine-readable JSON instead of a report.")
+
+let migrate_path =
+  Arg.(
+    required
+    & pos 0 (some string) None
+    & info [] ~docv:"PATH" ~doc:"Test file or directory to triage.")
+
+let cmd_migrate_status =
+  Cmd.v
+    Cmd.(
+      info "status"
+        ~doc:
+          "Triage the tests under the given file or directory by signature \
+           drift, bucketing each into fresh / stale / unknown / blocked.")
+    Term.(
+      const Lib.migrate_status
+      $ with_json
+      $ sig_dir
+      $ migrate_path
+      $ Cli.Flags.Global.flags)
+
+let cmd_migrate =
+  Cmd.group
+    Cmd.(
+      info "migrate"
+        ~doc:"Signature-drift migration pipeline for testcases.")
+    [ cmd_migrate_status ]
+
 let cmd_list_scopes =
   Cmd.v
     Cmd.(
@@ -163,6 +194,7 @@ let register () =
       cmd_serialize_inputs;
       cmd_sig_hash;
       cmd_stub;
+      cmd_migrate;
     ];
   (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
      ~contexts:(function

@@ -138,6 +138,27 @@ type test_list = test list
 
 type scope_def_list = scope_def list
 
+(* Migration triage (catala testcase migrate status) *)
+
+type sig_state = [
+  | Fresh    (* pin == live signature: nothing to do *)
+  | Stale    (* pin != live, and the pinned snapshot is present: migratable *)
+  | Unknown  (* no #[testcase.sig] pin: legacy / hand-written test *)
+  | Blocked  (* pin present but snapshot missing, or scope/module gone *)
+]
+
+type sig_status_entry = {
+  file: string;
+  test_scope: string;           (* the testing scope, e.g. "Calc_rich" *)
+  target_scope: string;         (* "<Module>.<Scope>" under test *)
+  state: sig_state;
+  ?pin: string option;          (* pinned hash, if any *)
+  ?live: string option;         (* live hash, if resolvable *)
+  ?reason: string option;       (* explanation for Blocked *)
+}
+
+type sig_status = sig_status_entry list
+
 (* Diffing *)
 type path_segment = [
   | StructField of string
