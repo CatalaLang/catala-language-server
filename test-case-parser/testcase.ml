@@ -99,16 +99,26 @@ let with_canonical =
     & info ["show-canonical"]
         ~doc:"Also print the canonical projection text used for the hash.")
 
+let sig_hash_file =
+  Arg.(
+    value
+    & pos 0 (some string) None
+    & info [] ~docv:"FILE"
+        ~doc:
+          "Optional JSON file to read scope_def(s) from (a list-scopes output or \
+           a single snapshot file); reads stdin if omitted.")
+
 let cmd_sig_hash =
   Cmd.v
     Cmd.(
       info "sig-hash"
         ~doc:
-          "Read a scope_def_list as JSON from stdin (e.g. the output of \
-           list-scopes) and print a '<module>.<name>\\t<hash>' line per scope. \
-           The hash is the canonical signature projection used for migration \
-           drift detection.")
-    Term.(const Lib.sig_hash $ with_canonical)
+          "Read scope_def(s) as JSON from the given FILE or stdin (a \
+           scope_def_list like the output of list-scopes, or a single scope_def \
+           like a snapshot file) and print a '<module>.<name>\\t<hash>' line per \
+           scope. The hash is the canonical signature projection used for \
+           migration drift detection.")
+    Term.(const Lib.sig_hash $ with_canonical $ sig_hash_file)
 
 let out_dir =
   Arg.(

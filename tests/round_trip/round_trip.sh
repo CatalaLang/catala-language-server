@@ -91,9 +91,12 @@ grep -q "#\[testcase.sig = \"OptTup.Calc@$LS_HASH\"\]" _sig_stub/test_opttup_rt.
   || { echo "FAIL: signature snapshot not written"; exit 1; }
 jq -e '.name == "Calc" and .module_name == "OptTup"' "_sig_snap/OptTup.Calc@$LS_HASH.sig.json" > /dev/null \
   || { echo "FAIL: snapshot is not a valid scope_def for OptTup.Calc"; exit 1; }
-# sig-hash accepts a single scope_def object (a snapshot file), not just a list.
+# sig-hash accepts a single scope_def object (a snapshot file), not just a list,
+# from stdin OR a filename argument.
 [ "$(catala testcase sig-hash < "_sig_snap/OptTup.Calc@$LS_HASH.sig.json" | cut -f2)" = "$LS_HASH" ] \
-  || { echo "FAIL: sig-hash on a single snapshot object did not match LS_HASH"; exit 1; }
+  || { echo "FAIL: sig-hash on a single snapshot object (stdin) did not match LS_HASH"; exit 1; }
+[ "$(catala testcase sig-hash "_sig_snap/OptTup.Calc@$LS_HASH.sig.json" | cut -f2)" = "$LS_HASH" ] \
+  || { echo "FAIL: sig-hash on a single snapshot file (argument) did not match LS_HASH"; exit 1; }
 # Content-addressed: a second write must not error and must not duplicate.
 catala testcase read test_opttup.catala_en \
   | catala testcase write --language en --sig-dir _sig_snap > /dev/null

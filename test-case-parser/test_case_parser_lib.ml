@@ -2010,11 +2010,10 @@ let list_scopes include_dirs options =
   in
   print_scopes filtered_scopes
 
-(* Read scope_def(s) from stdin, accepting EITHER a JSON array (e.g. the output
-   of list-scopes) OR a single scope_def object (e.g. a committed snapshot file),
-   so the two representations are interchangeable on these commands' input. *)
-let read_scope_defs_stdin () =
-  let content = In_channel.input_all stdin in
+(* Parse scope_def(s) from a JSON string, accepting EITHER a JSON array (e.g. the
+   output of list-scopes) OR a single scope_def object (e.g. a committed snapshot
+   file), so the two representations are interchangeable on these commands. *)
+let parse_scope_defs content =
   let lexer = Yojson.init_lexer () in
   if
     let t = String.trim content in
@@ -2022,12 +2021,18 @@ let read_scope_defs_stdin () =
   then J.read_scope_def_list lexer (Lexing.from_string content)
   else [ J.read_scope_def lexer (Lexing.from_string content) ]
 
-(* Reads scope_def(s) from stdin (the output of list-scopes, the tested_scopes
-   extracted from a read result, or a single snapshot file) and prints one
-   "<module>.<name>\t<hash>" line per scope. With [with_canonical], also dumps the
-   canonical projection text. Mainly a validation/debug entry point for the hash. *)
-let sig_hash with_canonical =
-  let scopes = read_scope_defs_stdin () in
+let read_scope_defs_stdin () = parse_scope_defs (In_channel.input_all stdin)
+
+(* Reads scope_def(s) from [file] if given, else stdin (the output of list-scopes,
+   the tested_scopes extracted from a read result, or a single snapshot file) and
+   prints one "<module>.<name>\t<hash>" line per scope. With [with_canonical], also
+   dumps the canonical projection text. *)
+let sig_hash with_canonical file =
+  let scopes =
+    match file with
+    | Some f -> parse_scope_defs (File.contents f)
+    | None -> read_scope_defs_stdin ()
+  in
   List.iter
     (fun (sd : O.scope_def) ->
       Printf.printf "%s.%s\t%s\n" sd.module_name sd.name
