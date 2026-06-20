@@ -122,6 +122,7 @@ export type Test = {
   test_outputs: TestOutputs;
   description: string;
   title: string;
+  sig_pin?: string;
 }
 
 export type TestRun = {
@@ -643,6 +644,7 @@ export function writeTest(x: Test, context: any = x): any {
     'test_outputs': _atd_write_required_field('Test', 'test_outputs', writeTestOutputs, x.test_outputs, x),
     'description': _atd_write_required_field('Test', 'description', _atd_write_string, x.description, x),
     'title': _atd_write_required_field('Test', 'title', _atd_write_string, x.title, x),
+    'sig_pin': _atd_write_optional_field(_atd_write_string, x.sig_pin, x),
   };
 }
 
@@ -654,6 +656,7 @@ export function readTest(x: any, context: any = x): Test {
     test_outputs: _atd_read_required_field('Test', 'test_outputs', readTestOutputs, x['test_outputs'], x),
     description: _atd_read_required_field('Test', 'description', _atd_read_string, x['description'], x),
     title: _atd_read_required_field('Test', 'title', _atd_read_string, x['title'], x),
+    sig_pin: _atd_read_optional_field(_atd_read_string, x['sig_pin'], x),
   };
 }
 

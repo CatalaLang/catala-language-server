@@ -8,6 +8,7 @@ function cleanup(){
     rm -f context_vars_roundtrip.catala_en
     rm -rf _build
     rm -rf _sig_stub
+    rm -rf _sig_snap
 }
 
 trap cleanup EXIT
@@ -91,7 +92,27 @@ diff <(jq -S . _sig_real.json) <(jq -S . _sig_stub.json) > /dev/null \
 rm -f _sig_real.json _sig_stub.json
 
 # --- Stub + value round-trip must typecheck (tuples emitted as (a, b)) -------
-catala testcase read test_opttup.catala_en | catala testcase write --language en > _sig_stub/test_opttup_rt.catala_en
+# Also exercises the signature pin (#[testcase.sig]) + snapshot store (--sig-dir).
+catala testcase read test_opttup.catala_en \
+  | catala testcase write --language en --sig-dir _sig_snap > _sig_stub/test_opttup_rt.catala_en
 grep -q 'definition calc.pair equals (7, $3.00)' _sig_stub/test_opttup_rt.catala_en \
   || { echo "FAIL: tuple value not emitted as (a, b)"; exit 1; }
 ( cd _sig_stub && clerk typecheck test_opttup_rt.catala_en ) || exit 1
+
+# Pin is stamped on write and its hash matches the live (list-scopes) hash.
+grep -q "#\[testcase.sig = \"OptTup.Calc@$LS_HASH\"\]" _sig_stub/test_opttup_rt.catala_en \
+  || { echo "FAIL: signature pin not stamped as OptTup.Calc@$LS_HASH"; exit 1; }
+# Pin round-trips back through read into the sig_pin field.
+( cd _sig_stub && catala testcase read test_opttup_rt.catala_en ) \
+  | jq -e --arg p "OptTup.Calc@$LS_HASH" '.[0].sig_pin == $p' > /dev/null \
+  || { echo "FAIL: sig_pin not recovered on read"; exit 1; }
+# Snapshot store: content-addressed scope_def JSON, named by the same hash.
+[ -f "_sig_snap/OptTup.Calc@$LS_HASH.sig.json" ] \
+  || { echo "FAIL: signature snapshot not written"; exit 1; }
+jq -e '.name == "Calc" and .module_name == "OptTup"' "_sig_snap/OptTup.Calc@$LS_HASH.sig.json" > /dev/null \
+  || { echo "FAIL: snapshot is not a valid scope_def for OptTup.Calc"; exit 1; }
+# Content-addressed: a second write must not error and must not duplicate.
+catala testcase read test_opttup.catala_en \
+  | catala testcase write --language en --sig-dir _sig_snap > /dev/null
+[ "$(ls _sig_snap | wc -l)" -eq 1 ] \
+  || { echo "FAIL: snapshot store not content-addressed (expected 1 file)"; exit 1; }

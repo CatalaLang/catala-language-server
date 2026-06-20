@@ -122,6 +122,10 @@ type test = {
   test_outputs: test_outputs;
   description: string;
   title: string;
+  (* Signature pin: the "<Module>.<Scope>@<hash>" the test was authored or
+     last migrated against, read from the #[testcase.sig] attribute. Absent
+     for legacy tests with no pin. *)
+  ?sig_pin: string option;
 }
 
 type test_run = {

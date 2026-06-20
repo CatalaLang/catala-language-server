@@ -312,6 +312,7 @@ type Pos.attr += Uid of string
 type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
 type Pos.attr += ArrayItemLabel of string
+type Pos.attr += SigPin of string
 
 let rec get_value : type a.
     Global.backend_lang -> decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
@@ -617,6 +618,30 @@ let scope_signature_canonical (sd : O.scope_def) : string =
 let scope_signature_hash (sd : O.scope_def) : string =
   Digest.to_hex (Digest.string (scope_signature_canonical sd))
 
+(* The per-test signature pin: "<Module>.<Scope>@<hash>", stamped into the
+   #[testcase.sig] attribute. Identifies the exact signature version the test
+   targets, for migration drift detection. *)
+let scope_signature_pin (sd : O.scope_def) : string =
+  Printf.sprintf "%s.%s@%s" sd.module_name sd.name (scope_signature_hash sd)
+
+(* Committed signature snapshot store: persist the scope_def under a
+   content-addressed name so a drifted test can later be migrated against the
+   exact signature it was authored with. Content-addressed (skip if present),
+   so it is O(distinct signature versions), not O(tests). *)
+let write_sig_snapshot dir (sd : O.scope_def) : unit =
+  File.ensure_dir dir;
+  let fname =
+    Printf.sprintf "%s.%s@%s.sig.json" sd.module_name sd.name
+      (scope_signature_hash sd)
+  in
+  let path = File.(dir / fname) in
+  if not (File.exists path) then
+    File.with_out_channel path
+    @@ fun oc ->
+    let buf = Buffer.create 1024 in
+    J.write_scope_def buf sd;
+    Buffer.output_buffer oc buf
+
 (** Default placeholder for uninitialized inputs: empty array for TArray,
     explicit Unset for everything else. *)
 let unset_default_value (typ : O.typ) : O.value_def =
@@ -681,6 +706,7 @@ let get_scope_test
     test_inputs;
     description;
     title;
+    sig_pin = None;
   }
 
 (* --- *)
@@ -919,6 +945,11 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
       | TestTitle s -> Some s
       | _ -> None)
   in
+  let sig_pin =
+    get_single_attr ~default:None info (function
+      | SigPin s -> Some (Some s)
+      | _ -> None)
+  in
   let subscope_var, tested_scope =
     let count = ScopeVar.Map.cardinal testing_scope.I.scope_sub_scopes in
     if count <> 1 then
@@ -1052,7 +1083,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
         var_str, { test_out with O.value })
       base_test.test_outputs
   in
-  { base_test with O.test_inputs; test_outputs; description; title }
+  { base_test with O.test_inputs; test_outputs; description; title; sig_pin }
 
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
@@ -1424,6 +1455,10 @@ let write_catala_test ppf t lang =
   fprintf ppf "#[testcase.test_description = %s]@\n"
     (String.quote t.description);
   fprintf ppf "#[testcase.test_title = %s]@\n" (String.quote t.title);
+  (* Re-stamp the signature pin from the scope being targeted now: writing a
+     test pins it to its current signature. *)
+  fprintf ppf "#[testcase.sig = %s]@\n"
+    (String.quote (scope_signature_pin t.tested_scope));
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;
@@ -1456,10 +1491,14 @@ let write_catala_test ppf t lang =
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
-let write_catala options outfile =
+let write_catala sig_dir options outfile =
   let tests =
     J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
   in
+  Option.iter
+    (fun dir ->
+      List.iter (fun (t : O.test) -> write_sig_snapshot dir t.tested_scope) tests)
+    sig_dir;
   let lang =
     Catala_utils.Cli.file_lang
       (match options.Global.input_src with

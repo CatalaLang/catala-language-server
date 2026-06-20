@@ -70,6 +70,15 @@ let cmd_run =
       $ Cli.Flags.ex_scope
       $ Cli.Flags.scope_input)
 
+let sig_dir =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["sig-dir"] ~docv:"DIR"
+        ~doc:
+          "If set, write a committed signature snapshot (content-addressed \
+           scope_def JSON) for each test's tested scope into this directory.")
+
 let cmd_write =
   Cmd.v
     Cmd.(
@@ -77,7 +86,11 @@ let cmd_write =
         ~doc:
           "Read a test structure in JSON from stdin, and output a \
            corresponding Catala file.")
-    Term.(const Lib.write_catala $ Cli.Flags.Global.flags $ Cli.Flags.output)
+    Term.(
+      const Lib.write_catala
+      $ sig_dir
+      $ Cli.Flags.Global.flags
+      $ Cli.Flags.output)
 
 let with_canonical =
   Arg.(
@@ -189,6 +202,14 @@ let register () =
   @@ fun ~pos:_ value ->
   match value with
   | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.ArrayItemLabel s)
-  | _ -> failwith "unexpected array item label")
+  | _ -> failwith "unexpected array item label");
+  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["sig"]
+     ~contexts:(function
+     | Desugared.Name_resolution.ScopeDecl -> true
+     | _ -> false)
+  @@ fun ~pos:_ value ->
+  match value with
+  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.SigPin s)
+  | _ -> failwith "unexpected signature pin")
 
 let () = register ()
