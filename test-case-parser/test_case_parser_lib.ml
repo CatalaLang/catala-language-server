@@ -2212,26 +2212,53 @@ let parse_tests_textually content =
 let live_hash_cache : (string, (string, string) result) Hashtbl.t =
   Hashtbl.create 16
 
+(* Does a header line import [module_name] (as a dotted/underscored identifier
+   token)? Used to keep only the tested module's `> Using` line. *)
+let line_mentions_module ~module_name line =
+  let is_tok c =
+    (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+    || c = '_' || c = '.'
+  in
+  let toks = ref [] and buf = Buffer.create 16 in
+  String.iter
+    (fun c ->
+      if is_tok c then Buffer.add_char buf c
+      else if Buffer.length buf > 0 then begin
+        toks := Buffer.contents buf :: !toks;
+        Buffer.clear buf
+      end)
+    line;
+  if Buffer.length buf > 0 then toks := Buffer.contents buf :: !toks;
+  List.exists (String.equal module_name) !toks
+
 let live_scope_hash ~test_file ~module_name ~scope_base =
   let key = module_name ^ "." ^ scope_base in
   match Hashtbl.find_opt live_hash_cache key with
   | Some r -> r
   | None ->
+    (* Load ONLY the tested module's import — not every `> Using` in the test —
+       so a broken *sibling* import can't sink resolution of a healthy module
+       (its transitive deps still come in through the module's own source). *)
+    let all_headers =
+      File.contents test_file
+      |> String.split_on_char '\n'
+      |> List.filter (fun l ->
+             let l = String.trim l in
+             String.length l > 0 && l.[0] = '>')
+    in
+    let headers =
+      match List.filter (line_mentions_module ~module_name) all_headers with
+      | [] -> all_headers (* defensive: no matching import (shouldn't happen) *)
+      | xs -> xs
+    in
+    let content = String.concat "\n" headers ^ "\n" in
+    let options =
+      Global.enforce_options ~input_src:(Global.Contents (content, test_file)) ()
+    in
+    let path_to_build, include_dirs = lookup_include_dirs options in
+    let build_ready = File.exists File.(path_to_build / "_build") in
     let r =
       try
-        let headers =
-          File.contents test_file
-          |> String.split_on_char '\n'
-          |> List.filter (fun l ->
-                 let l = String.trim l in
-                 String.length l > 0 && l.[0] = '>')
-        in
-        let content = String.concat "\n" headers ^ "\n" in
-        let options =
-          Global.enforce_options
-            ~input_src:(Global.Contents (content, test_file)) ()
-        in
-        let path_to_build, include_dirs = lookup_include_dirs options in
         let prg, _ = read_program include_dirs path_to_build options in
         let found =
           ModuleName.Map.fold
@@ -2245,7 +2272,10 @@ let live_scope_hash ~test_file ~module_name ~scope_base =
             prg.I.program_modules None
         in
         match found with
-        | None -> Error (Printf.sprintf "module %s not found" module_name)
+        | None ->
+          Error
+            (Printf.sprintf "module %s not found (renamed or removed?)"
+               module_name)
         | Some (mn, modul) -> (
           let sc =
             ScopeName.Map.fold
@@ -2266,7 +2296,12 @@ let live_scope_hash ~test_file ~module_name ~scope_base =
             Ok (scope_signature_hash (get_scope_def prg sc ~tested_module:mn)))
       with
       | Message.CompilerError _ ->
-        Error (Printf.sprintf "live module %s does not compile" module_name)
+        if not build_ready then
+          Error "project not built — run `clerk start` first"
+        else
+          Error
+            (Printf.sprintf "live module %s is missing or does not compile"
+               module_name)
       | e -> Error (Printexc.to_string e)
     in
     Hashtbl.replace live_hash_cache key r;
@@ -2291,6 +2326,23 @@ let pin_hash p =
   | Some k -> Some (String.sub p (k + 1) (String.length p - k - 1))
   | None -> None
 
+(* Pure classification decision (no IO), so the bucketing rules are unit-tested
+   as a decision table. Inputs: the pin's hash (None = unpinned), the live-hash
+   resolution (Ok hash | Error reason), whether the pinned snapshot is on disk,
+   and the snapshot's basename (for the missing-snapshot reason). *)
+let classify_decision ~(pin_hash : string option)
+    ~(live : (string, string) result) ~(snapshot_present : bool)
+    ~(snapshot_basename : string) : O.sig_state * string option =
+  match pin_hash with
+  | None -> `Unknown, None
+  | Some _ -> (
+    match live with
+    | Error reason -> `Blocked, Some reason
+    | Ok live_hash ->
+      if pin_hash = Some live_hash then `Fresh, None
+      else if snapshot_present then `Stale, None
+      else `Blocked, Some (Printf.sprintf "missing snapshot %s" snapshot_basename))
+
 let classify_test ~sig_dir ~test_file (pt : parsed_test) : O.sig_status_entry =
   let target = Option.value ~default:"?" pt.pt_target in
   let mk ?pin ?live ?reason state =
@@ -2306,27 +2358,23 @@ let classify_test ~sig_dir ~test_file (pt : parsed_test) : O.sig_status_entry =
   in
   match pt.pt_pin with
   | None -> mk `Unknown
-  | Some pin -> (
+  | Some pin ->
     let phash = pin_hash pin in
     let module_name, scope_base =
       match String.index_opt target '.' with
       | Some k ->
-        String.sub target 0 k, String.sub target (k + 1) (String.length target - k - 1)
+        ( String.sub target 0 k,
+          String.sub target (k + 1) (String.length target - k - 1) )
       | None -> "", target
     in
-    match live_scope_hash ~test_file ~module_name ~scope_base with
-    | Error reason -> mk ?pin:phash ~reason `Blocked
-    | Ok live ->
-      if phash = Some live then mk ?pin:phash ~live `Fresh
-      else
-        (* drifted: migratable only if the pinned snapshot is recoverable *)
-        let dir = Option.value ~default:(Filename.dirname test_file) sig_dir in
-        let snap = File.(dir / (pin ^ ".sig.json")) in
-        if File.exists snap then mk ?pin:phash ~live `Stale
-        else
-          mk ?pin:phash ~live
-            ~reason:(Printf.sprintf "missing snapshot %s" (Filename.basename snap))
-            `Blocked)
+    let live = live_scope_hash ~test_file ~module_name ~scope_base in
+    let dir = Option.value ~default:(Filename.dirname test_file) sig_dir in
+    let snap = File.(dir / (pin ^ ".sig.json")) in
+    let state, reason =
+      classify_decision ~pin_hash:phash ~live ~snapshot_present:(File.exists snap)
+        ~snapshot_basename:(Filename.basename snap)
+    in
+    mk ?pin:phash ?live:(Result.to_option live) ?reason state
 
 let state_label = function
   | `Fresh -> "fresh"

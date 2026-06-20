@@ -215,6 +215,59 @@ let test_helpers () =
   check_eq "pin_hash" ~expected:"abc123"
     ~actual:(Option.value ~default:"" (L.pin_hash "M.Calc@abc123"))
 
+(* ---- classification decision table (the corner cases) ------------------- *)
+
+(* Bucketing is pure given (pin hash, live resolution, snapshot present). The
+   corner cases we care about reduce to rows of this table:
+   - #1 sibling renamed, type still in sig -> live resolves to a *different* hash,
+        snapshot present                                                 -> Stale
+   - #2 sibling deleted, type still in sig -> tested module can't compile,
+        live = Error                                                     -> Blocked
+   - #3 refactor removed the type from the sig -> different hash, snapshot present
+                                                                         -> Stale
+   - #4 junk import, sig unchanged -> live == pin                        -> Fresh
+   plus: unpinned -> Unknown; drift with no snapshot -> Blocked. *)
+let test_classify () =
+  let state ?(snap = false) pin live =
+    fst
+      (L.classify_decision ~pin_hash:pin ~live ~snapshot_present:snap
+         ~snapshot_basename:"M.S@h.sig.json")
+  in
+  check "unknown (no pin)" (state None (Ok "h") = `Unknown);
+  check "fresh (#4 junk import: pin == live)" (state (Some "h") (Ok "h") = `Fresh);
+  check "stale (#1/#3 drift, snapshot present)"
+    (state ~snap:true (Some "h") (Ok "h2") = `Stale);
+  check "blocked (drift, snapshot missing)"
+    (state ~snap:false (Some "h") (Ok "h2") = `Blocked);
+  check "blocked (#2 live unresolved)"
+    (state (Some "h") (Error "live module Tax is missing or does not compile")
+    = `Blocked);
+  (* the live-resolution reason is passed through verbatim on Blocked *)
+  let _, reason =
+    L.classify_decision ~pin_hash:(Some "h") ~live:(Error "boom")
+      ~snapshot_present:false ~snapshot_basename:"x"
+  in
+  check_eq "blocked reason passthrough" ~expected:"boom"
+    ~actual:(Option.value ~default:"" reason);
+  (* missing-snapshot reason names the snapshot file *)
+  let _, reason2 =
+    L.classify_decision ~pin_hash:(Some "h") ~live:(Ok "h2")
+      ~snapshot_present:false ~snapshot_basename:"M.S@h.sig.json"
+  in
+  check_eq "missing-snapshot reason" ~expected:"missing snapshot M.S@h.sig.json"
+    ~actual:(Option.value ~default:"" reason2)
+
+(* the isolation helper: keep only the tested module's import line *)
+let test_line_mentions_module () =
+  check "plain import"
+    (L.line_mentions_module ~module_name:"OptTup" "> Using OptTup");
+  check "aliased import"
+    (L.line_mentions_module ~module_name:"OptTup" "> Using OptTup as O");
+  check "not a substring match"
+    (not (L.line_mentions_module ~module_name:"Tax" "> Using TaxHelper"));
+  check "unrelated import"
+    (not (L.line_mentions_module ~module_name:"Tax" "> Using Helper"))
+
 let () =
   let reg title f =
     Tezt.Test.register ~__FILE__ ~title ~tags:[ "unit"; "migration" ] (fun () ->
@@ -228,4 +281,6 @@ let () =
   reg "textual test parser" test_parse;
   reg "parser ignores non-test scopes" test_parse_ignores_non_test;
   reg "textual helpers" test_helpers;
+  reg "classification decision table" test_classify;
+  reg "import-line module matching" test_line_mentions_module;
   Tezt.Test.run ()
