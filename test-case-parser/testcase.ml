@@ -172,12 +172,51 @@ let cmd_migrate_init =
     Term.(
       const Lib.migrate_init $ sig_dir $ migrate_path $ Cli.Flags.Global.flags)
 
+let diff_old =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["old"] ~docv:"FILE"
+        ~doc:"Old scope_def JSON file (use with --new for an explicit diff).")
+
+let diff_new =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["new"] ~docv:"FILE"
+        ~doc:"New scope_def JSON file (use with --old for an explicit diff).")
+
+let diff_path =
+  Arg.(
+    value
+    & pos 0 (some string) None
+    & info [] ~docv:"PATH"
+        ~doc:
+          "Test file or directory: for each pinned test, diff its committed \
+           snapshot against the live signature.")
+
+let cmd_migrate_diff =
+  Cmd.v
+    Cmd.(
+      info "diff"
+        ~doc:
+          "Show the canonical signature difference. Given a PATH, diffs each \
+           pinned test's snapshot against the live signature; or pass --old and \
+           --new to compare two scope_def JSON files directly.")
+    Term.(
+      const Lib.migrate_diff
+      $ diff_old
+      $ diff_new
+      $ sig_dir
+      $ diff_path
+      $ Cli.Flags.Global.flags)
+
 let cmd_migrate =
   Cmd.group
     Cmd.(
       info "migrate"
         ~doc:"Signature-drift migration pipeline for testcases.")
-    [ cmd_migrate_status; cmd_migrate_init ]
+    [ cmd_migrate_status; cmd_migrate_init; cmd_migrate_diff ]
 
 let cmd_list_scopes =
   Cmd.v

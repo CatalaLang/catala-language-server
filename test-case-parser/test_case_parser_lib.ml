@@ -2209,7 +2209,7 @@ let parse_tests_textually content =
 (* Resolve the live signature hash of [module_name].[scope_base] as seen from
    [test_file], by loading only that file's import headers (so the live module
    typechecks regardless of test drift). Cached per module across a run. *)
-let live_hash_cache : (string, (string, string) result) Hashtbl.t =
+let live_def_cache : (string, (O.scope_def, string) result) Hashtbl.t =
   Hashtbl.create 16
 
 (* Does a header line import [module_name] (as a dotted/underscored identifier
@@ -2231,9 +2231,11 @@ let line_mentions_module ~module_name line =
   if Buffer.length buf > 0 then toks := Buffer.contents buf :: !toks;
   List.exists (String.equal module_name) !toks
 
-let live_scope_hash ~test_file ~module_name ~scope_base =
+(* Resolve the live [scope_def] of [module_name].[scope_base] as seen from
+   [test_file] (see §6b of the design doc). Cached per module across a run. *)
+let live_scope_def ~test_file ~module_name ~scope_base =
   let key = module_name ^ "." ^ scope_base in
-  match Hashtbl.find_opt live_hash_cache key with
+  match Hashtbl.find_opt live_def_cache key with
   | Some r -> r
   | None ->
     (* Load ONLY the tested module's import — not every `> Using` in the test —
@@ -2292,8 +2294,7 @@ let live_scope_hash ~test_file ~module_name ~scope_base =
             Error
               (Printf.sprintf "scope %s not found in module %s" scope_base
                  module_name)
-          | Some sc ->
-            Ok (scope_signature_hash (get_scope_def prg sc ~tested_module:mn)))
+          | Some sc -> Ok (get_scope_def prg sc ~tested_module:mn))
       with
       | Message.CompilerError _ ->
         if not build_ready then
@@ -2304,8 +2305,12 @@ let live_scope_hash ~test_file ~module_name ~scope_base =
                module_name)
       | e -> Error (Printexc.to_string e)
     in
-    Hashtbl.replace live_hash_cache key r;
+    Hashtbl.replace live_def_cache key r;
     r
+
+let live_scope_hash ~test_file ~module_name ~scope_base =
+  Result.map scope_signature_hash
+    (live_scope_def ~test_file ~module_name ~scope_base)
 
 (* Recursively collect Catala test files under [path] (file or directory). *)
 let rec collect_catala_files path =
@@ -2325,6 +2330,14 @@ let pin_hash p =
   match String.index_opt p '@' with
   | Some k -> Some (String.sub p (k + 1) (String.length p - k - 1))
   | None -> None
+
+(* Split "<Module>.<Scope>" into (module, scope). *)
+let split_target target =
+  match String.index_opt target '.' with
+  | Some k ->
+    ( String.sub target 0 k,
+      String.sub target (k + 1) (String.length target - k - 1) )
+  | None -> "", target
 
 (* Pure classification decision (no IO), so the bucketing rules are unit-tested
    as a decision table. Inputs: the pin's hash (None = unpinned), the live-hash
@@ -2360,13 +2373,7 @@ let classify_test ~sig_dir ~test_file (pt : parsed_test) : O.sig_status_entry =
   | None -> mk `Unknown
   | Some pin ->
     let phash = pin_hash pin in
-    let module_name, scope_base =
-      match String.index_opt target '.' with
-      | Some k ->
-        ( String.sub target 0 k,
-          String.sub target (k + 1) (String.length target - k - 1) )
-      | None -> "", target
-    in
+    let module_name, scope_base = split_target target in
     let live = live_scope_hash ~test_file ~module_name ~scope_base in
     let dir = Option.value ~default:(Filename.dirname test_file) sig_dir in
     let snap = File.(dir / (pin ^ ".sig.json")) in
@@ -2451,6 +2458,106 @@ let migrate_init sig_dir path _options =
              "skipped %s: does not typecheck against the live module (needs \
               migration, not a seed)\n"
              test_file)
+
+(* ============================================================================
+   migrate diff: show the canonical-projection difference between an old and a
+   new signature. The common case (a pinned test) wires up "snapshot vs live"
+   for you; --old/--new compares two scope_def JSON files directly.
+   ============================================================================ *)
+
+(* Minimal LCS line diff of two canonical projections; emits only the changed
+   lines ("- " removed, "+ " added), common lines elided. *)
+let diff_canonical (old_c : string) (new_c : string) : string list =
+  let a = Array.of_list (String.split_on_char '\n' old_c)
+  and b = Array.of_list (String.split_on_char '\n' new_c) in
+  let n = Array.length a and m = Array.length b in
+  let dp = Array.make_matrix (n + 1) (m + 1) 0 in
+  for i = n - 1 downto 0 do
+    for j = m - 1 downto 0 do
+      dp.(i).(j) <-
+        (if String.equal a.(i) b.(j) then 1 + dp.(i + 1).(j + 1)
+         else max dp.(i + 1).(j) dp.(i).(j + 1))
+    done
+  done;
+  let out = ref [] in
+  let i = ref 0 and j = ref 0 in
+  while !i < n && !j < m do
+    if String.equal a.(!i) b.(!j) then begin incr i; incr j end
+    else if dp.(!i + 1).(!j) >= dp.(!i).(!j + 1) then begin
+      out := ("- " ^ a.(!i)) :: !out;
+      incr i
+    end
+    else begin
+      out := ("+ " ^ b.(!j)) :: !out;
+      incr j
+    end
+  done;
+  while !i < n do out := ("- " ^ a.(!i)) :: !out; incr i done;
+  while !j < m do out := ("+ " ^ b.(!j)) :: !out; incr j done;
+  List.rev !out
+
+let scope_def_of_file f =
+  match parse_scope_defs (File.contents f) with
+  | sd :: _ -> sd
+  | [] -> failwith (Printf.sprintf "diff: %s contains no scope_def" f)
+
+let migrate_diff old_file new_file sig_dir path _options =
+  match old_file, new_file with
+  | Some o, Some n ->
+    (* explicit: diff two scope_def JSON files directly *)
+    let d =
+      diff_canonical
+        (scope_signature_canonical (scope_def_of_file o))
+        (scope_signature_canonical (scope_def_of_file n))
+    in
+    if d = [] then print_endline "no difference" else List.iter print_endline d
+  | _ ->
+    let path =
+      match path with
+      | Some p -> p
+      | None -> failwith "diff: provide a PATH, or both --old and --new"
+    in
+    collect_catala_files path
+    |> List.iter (fun test_file ->
+           File.contents test_file
+           |> parse_tests_textually
+           |> List.iter (fun (pt : parsed_test) ->
+                  match pt.pt_pin with
+                  | None -> () (* unpinned: nothing to diff against *)
+                  | Some pin ->
+                    let target = Option.value ~default:"?" pt.pt_target in
+                    let module_name, scope_base = split_target target in
+                    let dir =
+                      Option.value ~default:(Filename.dirname test_file) sig_dir
+                    in
+                    let snap = File.(dir / (pin ^ ".sig.json")) in
+                    let header () =
+                      Printf.printf "%s  (%s in %s)\n" target pt.pt_test_scope
+                        (Filename.basename test_file)
+                    in
+                    if not (File.exists snap) then begin
+                      header ();
+                      Printf.printf "  (snapshot %s missing — cannot diff)\n"
+                        (Filename.basename snap)
+                    end
+                    else (
+                      match
+                        live_scope_def ~test_file ~module_name ~scope_base
+                      with
+                      | Error reason ->
+                        header ();
+                        Printf.printf "  (cannot resolve live signature: %s)\n"
+                          reason
+                      | Ok live ->
+                        let d =
+                          diff_canonical
+                            (scope_signature_canonical (scope_def_of_file snap))
+                            (scope_signature_canonical live)
+                        in
+                        if d <> [] then begin
+                          header ();
+                          List.iter (fun l -> Printf.printf "  %s\n" l) d
+                        end)))
 
 let serialize_inputs (scope_input : Yojson.Safe.t option) =
   let scope_input =

@@ -137,6 +137,13 @@ sed -i 's/input pair content/input pair2 content/' _migrate/OptTup.catala_en
 [ "$(state t.catala_en)" = "Stale" ] \
   || { echo "FAIL(migrate): expected Stale after drift with snapshot present"; exit 1; }
 
+# migrate diff: the canonical diff of the snapshot vs live shows the rename
+DIFF=$( cd _migrate && catala testcase migrate diff t.catala_en 2>/dev/null )
+echo "$DIFF" | grep -q '^[[:space:]]*- in pair inp tuple(int,money)$' \
+  || { echo "FAIL(diff): expected '- in pair ...' line; got:"; echo "$DIFF"; exit 1; }
+echo "$DIFF" | grep -q '^[[:space:]]*+ in pair2 inp tuple(int,money)$' \
+  || { echo "FAIL(diff): expected '+ in pair2 ...' line; got:"; echo "$DIFF"; exit 1; }
+
 # blocked: same drift but the pinned snapshot is gone -> not recoverable
 mv _migrate/OptTup.Calc@*.sig.json _migrate/_hidden.sig.json
 [ "$(state t.catala_en)" = "Blocked" ] \
