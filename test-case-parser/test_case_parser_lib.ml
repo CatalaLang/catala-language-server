@@ -1491,27 +1491,9 @@ let write_catala_test ppf t lang =
     t.test_outputs;
   fprintf ppf "@]@,```@,"
 
-let write_catala sig_dir options outfile =
-  let tests =
-    J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
-  in
-  Option.iter
-    (fun dir ->
-      List.iter (fun (t : O.test) -> write_sig_snapshot dir t.tested_scope) tests)
-    sig_dir;
-  let lang =
-    Catala_utils.Cli.file_lang
-      (match options.Global.input_src with
-      | Global.FileName f -> f
-      | Global.Contents (_, f) -> f
-      | Global.Stdin _ -> "")
-  in
-  let _fname, with_out =
-    File.get_main_out_formatter () ~source_file:(Global.Stdin "")
-      ~output_file:(Option.map options.Global.path_rewrite outfile)
-  in
-  with_out
-  @@ fun ppf ->
+(* Emit a whole test file (Using headers + each test scope) to [ppf]. Shared by
+   `write` and `migrate init`. *)
+let emit_test_list ppf lang tests =
   let _opened =
     List.fold_left
       (fun opened test ->
@@ -1551,6 +1533,27 @@ let write_catala sig_dir options outfile =
       String.Set.empty tests
   in
   ()
+
+let write_catala sig_dir options outfile =
+  let tests =
+    J.read_test_list (Yojson.init_lexer ()) (Lexing.from_channel stdin)
+  in
+  Option.iter
+    (fun dir ->
+      List.iter (fun (t : O.test) -> write_sig_snapshot dir t.tested_scope) tests)
+    sig_dir;
+  let lang =
+    Catala_utils.Cli.file_lang
+      (match options.Global.input_src with
+      | Global.FileName f -> f
+      | Global.Contents (_, f) -> f
+      | Global.Stdin _ -> "")
+  in
+  let _fname, with_out =
+    File.get_main_out_formatter () ~source_file:(Global.Stdin "")
+      ~output_file:(Option.map options.Global.path_rewrite outfile)
+  in
+  with_out @@ fun ppf -> emit_test_list ppf lang tests
 
 let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program) :
     (StructField.t * (dcalc, typed) gexpr) list =
@@ -2338,6 +2341,52 @@ let migrate_status json sig_dir path _options =
             (match e.reason with Some r -> ": " ^ r | None -> ""))
       entries
   end
+
+(* migrate init: seed a pin onto unpinned ("unknown") tests. Safe only when the
+   file typechecks against the live module — then its values are valid by
+   definition, so "adopt current" is correct. A file that does NOT typecheck is
+   an unpinned-but-drifted case that needs real migration, not a seed, so we
+   refuse it. Mechanically this is read|write over the seedable files: reading
+   stamps the live signature into every test's tested_scope, and writing emits
+   the pin (and the snapshot) from it. *)
+let init_file ~sig_dir test_file =
+  let parsed = parse_tests_textually (File.contents test_file) in
+  if not (List.exists (fun pt -> pt.pt_pin = None) parsed) then `Nothing_to_seed
+  else
+    let unpinned = List.length (List.filter (fun pt -> pt.pt_pin = None) parsed) in
+    let options = Global.enforce_options ~input_src:(Global.FileName test_file) () in
+    let path_to_build, include_dirs = lookup_include_dirs options in
+    match
+      try `Ok (import_catala_tests (read_program include_dirs path_to_build options))
+      with e -> `Err (Printexc.to_string e)
+    with
+    | `Err msg -> `Cannot_seed msg
+    | `Ok [] -> `Cannot_seed "no tests recovered"
+    | `Ok tests ->
+      let dir = Option.value ~default:(Filename.dirname test_file) sig_dir in
+      List.iter
+        (fun (t : O.test) -> write_sig_snapshot dir t.tested_scope)
+        tests;
+      let lang = Catala_utils.Cli.file_lang test_file in
+      File.with_out_channel test_file (fun oc ->
+          let ppf = Format.formatter_of_out_channel oc in
+          emit_test_list ppf lang tests;
+          Format.pp_print_flush ppf ());
+      `Seeded unpinned
+
+let migrate_init sig_dir path _options =
+  collect_catala_files path
+  |> List.iter (fun test_file ->
+         match init_file ~sig_dir test_file with
+         | `Nothing_to_seed -> ()
+         | `Seeded n ->
+           Printf.printf "seeded %s (%d pin%s)\n" test_file n
+             (if n = 1 then "" else "s")
+         | `Cannot_seed _ ->
+           Printf.printf
+             "skipped %s: does not typecheck against the live module (needs \
+              migration, not a seed)\n"
+             test_file)
 
 let serialize_inputs (scope_input : Yojson.Safe.t option) =
   let scope_input =

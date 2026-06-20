@@ -10,6 +10,7 @@ function cleanup(){
     rm -rf _sig_stub
     rm -rf _sig_snap
     rm -rf _migrate
+    rm -rf _init
 }
 
 trap cleanup EXIT
@@ -141,3 +142,40 @@ DIR_STATES=$( ( cd _migrate && catala testcase migrate status --json . 2>/dev/nu
   | jq -r '[.[].state] | sort | join(",")' )
 [ "$DIR_STATES" = "Stale,Unknown" ] \
   || { echo "FAIL(migrate): dir mode states = '$DIR_STATES' (expected Stale,Unknown)"; exit 1; }
+
+# ============================================================================
+# migrate init: seed pins onto unpinned tests that typecheck; refuse drifted.
+# Own project (_init) so it doesn't perturb the status triage above.
+# ============================================================================
+rm -rf _init && mkdir -p _init
+catala testcase list-scopes opttup.catala_en \
+  | catala testcase stub --output-dir _init --language en
+catala testcase read test_opttup.catala_en \
+  | catala testcase write --language en > _init/s.catala_en
+sed -i '/testcase.sig/d' _init/s.catala_en   # make it unpinned
+printf '[project]\ninclude_dirs = ["."]\n' > _init/clerk.toml
+( cd _init && clerk start >/dev/null 2>&1 )
+
+# seed: unpinned + typechecks -> stamps the live pin and the snapshot
+( cd _init && catala testcase migrate init s.catala_en >/dev/null 2>&1 )
+grep -q "#\[testcase.sig = \"OptTup.Calc@$LS_HASH\"\]" _init/s.catala_en \
+  || { echo "FAIL(init): pin not seeded into unpinned test"; exit 1; }
+[ -f "_init/OptTup.Calc@$LS_HASH.sig.json" ] \
+  || { echo "FAIL(init): snapshot not written by init"; exit 1; }
+( cd _init && catala testcase migrate status s.catala_en 2>/dev/null ) | grep -q '^fresh:   1' \
+  || { echo "FAIL(init): seeded test is not Fresh"; exit 1; }
+
+# idempotent: re-running init on a now-pinned file adds no second pin
+( cd _init && catala testcase migrate init s.catala_en >/dev/null 2>&1 )
+[ "$(grep -c 'testcase.sig' _init/s.catala_en)" -eq 1 ] \
+  || { echo "FAIL(init): re-init duplicated the pin"; exit 1; }
+
+# refuse: an unpinned test that no longer typechecks (drift) is left untouched
+catala testcase read test_opttup.catala_en \
+  | catala testcase write --language en > _init/r.catala_en
+sed -i '/testcase.sig/d' _init/r.catala_en
+sed -i 's/input pair content/input pair2 content/' _init/OptTup.catala_en
+( cd _init && clerk start >/dev/null 2>&1 )
+( cd _init && catala testcase migrate init r.catala_en >/dev/null 2>&1 )
+[ "$(grep -c 'testcase.sig' _init/r.catala_en)" -eq 0 ] \
+  || { echo "FAIL(init): drifted unpinned test must be left untouched"; exit 1; }

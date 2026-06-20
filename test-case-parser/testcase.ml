@@ -151,12 +151,23 @@ let cmd_migrate_status =
       $ migrate_path
       $ Cli.Flags.Global.flags)
 
+let cmd_migrate_init =
+  Cmd.v
+    Cmd.(
+      info "init"
+        ~doc:
+          "Seed a #[testcase.sig] pin (and snapshot) onto unpinned tests under \
+           the given file or directory, for tests that still typecheck against \
+           the live module. Tests that do not typecheck are left untouched.")
+    Term.(
+      const Lib.migrate_init $ sig_dir $ migrate_path $ Cli.Flags.Global.flags)
+
 let cmd_migrate =
   Cmd.group
     Cmd.(
       info "migrate"
         ~doc:"Signature-drift migration pipeline for testcases.")
-    [ cmd_migrate_status ]
+    [ cmd_migrate_status; cmd_migrate_init ]
 
 let cmd_list_scopes =
   Cmd.v
