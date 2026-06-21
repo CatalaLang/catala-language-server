@@ -347,11 +347,19 @@ let none_money () : O.runtime_value =
 let mv ?(renames = []) old_typ new_typ v =
   L.migrate_value `En renames ~old_typ ~new_typ ~path:"x" v
 
-let has act ns = List.exists (fun (n : L.mig_note) -> n.L.action = act) ns
-let has_relabel ns =
+let has out ns = List.exists (fun (n : L.step) -> n.L.outcome = out) ns
+let has_rename ns =
   List.exists
-    (fun (n : L.mig_note) ->
-      match n.L.action with L.A_relabel _ -> true | _ -> false)
+    (fun (n : L.step) ->
+      match n.L.outcome with L.Resolved (L.Renamed _) -> true | _ -> false)
+    ns
+(* a hard block (needs a decision/transform), distinct from a mere NeedsValue *)
+let has_decision ns =
+  List.exists
+    (fun (n : L.step) ->
+      match n.L.outcome with
+      | L.NeedsResolving (L.NeedsDecision _) -> true
+      | _ -> false)
     ns
 
 let test_apply_struct () =
@@ -367,8 +375,8 @@ let test_apply_struct () =
                         [ "first", rvi 7; "second", rvm 300 ]); attrs = [] }
   in
   check "rename relabels + preserves values" (v = expected);
-  check "rename not blocked" (not (L.mig_blocked ns));
-  check "rename emits relabel note" (has_relabel ns);
+  check "rename not blocked" (not (L.needs_attention ns));
+  check "rename emits relabel note" (has_rename ns);
   (* add field: synthesized default, flagged, not blocked *)
   let od = O.TStruct (sdecl "Pair" [ "first", O.TInt ]) in
   let nd = O.TStruct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ]) in
@@ -381,8 +389,8 @@ let test_apply_struct () =
                         [ "first", rvi 7; "second", { value = O.Unset; attrs = [] } ]); attrs = [] }
   in
   check "add field left Unset (not fabricated)" (v = expected);
-  check "add field flagged A_added" (has L.A_added ns);
-  check "add field not blocked" (not (L.mig_blocked ns));
+  check "add field flagged NeedsValue" (has (L.NeedsResolving L.NeedsValue) ns);
+  check "add field needs no decision (just a value)" (not (has_decision ns));
   (* drop field: noted *)
   let od = O.TStruct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ]) in
   let nd = O.TStruct (sdecl "Pair" [ "first", O.TInt ]) in
@@ -390,25 +398,25 @@ let test_apply_struct () =
     { value = O.Struct (sdecl "Pair" [], [ "first", rvi 7; "second", rvm 9 ]); attrs = [] }
   in
   let _, ns = mv od nd value in
-  check "drop field flagged A_drop" (has L.A_drop ns)
+  check "drop field flagged Dropped" (has (L.Resolved L.Dropped) ns)
 
 let test_apply_option () =
   (* wrap T -> option T *)
   let v, ns = mv O.TMoney (O.TOption O.TMoney) (rvm 100) in
   check "wrap produces Present" (v = some_money 100);
-  check "wrap flagged" (has L.A_wrap ns && not (L.mig_blocked ns));
+  check "wrap flagged" (has (L.Resolved L.Wrapped) ns && not (L.needs_attention ns));
   (* unwrap a Present *)
   let v, ns = mv (O.TOption O.TMoney) O.TMoney (some_money 100) in
   check "unwrap Present yields payload" (v = rvm 100);
-  check "unwrap flagged" (has L.A_unwrap ns && not (L.mig_blocked ns));
+  check "unwrap flagged" (has (L.Resolved L.Unwrapped) ns && not (L.needs_attention ns));
   (* unwrap an Absent is blocked (no value to recover) *)
   let _, ns = mv (O.TOption O.TMoney) O.TMoney (none_money ()) in
-  check "unwrap Absent blocked" (L.mig_blocked ns)
+  check "unwrap Absent blocked" (L.needs_attention ns)
 
 let test_apply_blocked () =
   (* scalar coerce is never auto *)
   let _, ns = mv O.TInt O.TMoney (rvi 5) in
-  check "int->money coerce blocked" (L.mig_blocked ns);
+  check "int->money coerce blocked" (L.needs_attention ns);
   (* a removed enum variant can't be auto-mapped *)
   let ctors = [ "Yes", Some O.TRat; "No", None ] in
   let oe = O.TEnum { enum_name = "Choice"; constructors = ctors; ctor_attrs = [] } in
@@ -418,13 +426,13 @@ let test_apply_blocked () =
                       ("Yes", Some { value = O.Decimal 1.5; attrs = [] })); attrs = [] }
   in
   let _, ns = mv oe ne yesv in
-  check "removed enum variant blocked" (L.mig_blocked ns);
+  check "removed enum variant blocked" (L.needs_attention ns);
   (* a surviving variant is kept, not blocked *)
   let nov : O.runtime_value =
     { value = O.Enum ({ enum_name = "Choice"; constructors = ctors; ctor_attrs = [] }, ("No", None)); attrs = [] }
   in
   let _, ns = mv oe oe nov in
-  check "surviving enum variant not blocked" (not (L.mig_blocked ns))
+  check "surviving enum variant not blocked" (not (L.needs_attention ns))
 
 let test_apply_record () =
   let nv, ns =
@@ -435,8 +443,8 @@ let test_apply_record () =
   in
   check "record keeps surviving input" (List.assoc "a" nv = rvi 1);
   check "record adds new input as Unset" (List.assoc "c" nv = { O.value = O.Unset; attrs = [] });
-  check "record flags add + drop" (has L.A_added ns && has L.A_drop ns);
-  check "record not blocked" (not (L.mig_blocked ns));
+  check "record flags add + drop" (has (L.NeedsResolving L.NeedsValue) ns && has (L.Resolved L.Dropped) ns);
+  check "record needs no decision (only an added value)" (not (has_decision ns));
   (* signature_renames feeds the rename map apply consumes *)
   check "signature_renames detects the struct rename"
     (L.signature_renames sd_base sd_rename = [ "M.Pair", "M.Pair2" ])

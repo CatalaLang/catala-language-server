@@ -1134,29 +1134,40 @@ let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
 (* === apply (slice a): structured value rewrite ============================
 
    Pure. Fold a (renames + old-type/new-type) correspondence onto a recovered
-   value tree (`runtime_value`), applying ONLY the auto tiers: nominal relabel,
-   drop, option wrap/unwrap, and recursing structurally; an ADDED field/input is
-   left `Unset` and flagged (its value is the user's to provide, not ours to
-   fabricate — see [A_added]). Anything
-   else — scalar coerce, a removed/renamed enum variant, tuple arity change,
-   struct<->enum — is left as an explicit `A_blocked` note: loud, never a silent
-   guess. `apply` (slice b: recover -> rewrite -> write -> verify) consumes this;
-   here we only build and unit-test the rewrite. Renames are `(old,new)` nominal
-   name pairs, as produced by `signature_renames` from `sig_diff`. *)
+   value tree (`runtime_value`), applying ONLY the auto tiers (the [Resolved]
+   outcomes): nominal relabel, drop, option wrap/unwrap, recursing structurally.
+   An ADDED field/input is left `Unset` and flagged `NeedsValue` (its value is the
+   user's to provide, not ours to fabricate). Anything else — scalar coerce, a
+   removed/renamed enum variant, tuple arity change, struct<->enum — is left a
+   `NeedsDecision` note: loud, never a silent guess. The [NeedsResolving] outcomes
+   are exactly the plan layer's worklist. `apply` (slice b: recover -> rewrite ->
+   write -> verify) consumes this; here we only build and unit-test the rewrite.
+   Renames are `(old,new)` nominal name pairs, from `signature_renames`. *)
 
-type mig_action =
-  | A_keep
-  | A_relabel of string * string (* nominal name old -> new *)
-  | A_wrap
-  | A_unwrap
-  | A_drop
-  | A_added (* a new field/input: left Unset, needs a user-provided value *)
-  | A_blocked of string (* reason; needs a human decision *)
+(* What the rewrite did at one location. A [Resolved] outcome was handled
+   automatically (informational); a [NeedsResolving] one is the plan's worklist —
+   the human (via the plan layer) must finish it. A location kept verbatim emits
+   no step (no news is good news). *)
+type resolved =
+  | Renamed of string * string (* nominal type relabel applied *)
+  | Wrapped (* T -> option T *)
+  | Unwrapped (* option T -> T *)
+  | Dropped (* field/input removed *)
 
-type mig_note = { path : string; action : mig_action }
+type needs_resolving =
+  | NeedsValue (* a new field/input: left Unset, the user must supply a value *)
+  | NeedsDecision of string
+      (* couldn't auto-migrate: <reason> — needs a default, a choice, or a
+         user-supplied transform *)
 
-let mig_blocked notes =
-  List.exists (function { action = A_blocked _; _ } -> true | _ -> false) notes
+type outcome = Resolved of resolved | NeedsResolving of needs_resolving
+type step = { path : string; outcome : outcome }
+
+(* Does the rewrite leave anything for the human/plan to finish? *)
+let needs_attention (steps : step list) =
+  List.exists
+    (fun s -> match s.outcome with NeedsResolving _ -> true | _ -> false)
+    steps
 
 let is_option = function O.TOption _ -> true | _ -> false
 
@@ -1183,8 +1194,11 @@ let rec migrate_value
     ~(old_typ : O.typ)
     ~(new_typ : O.typ)
     ~(path : string)
-    (v : O.runtime_value) : O.runtime_value * mig_note list =
-  let note action = { path; action } in
+    (v : O.runtime_value) : O.runtime_value * step list =
+  let blocked reason = { path; outcome = NeedsResolving (NeedsDecision reason) } in
+  let did r = { path; outcome = Resolved r } in
+  let added_at p = { path = p; outcome = NeedsResolving NeedsValue } in
+  let dropped_at p = { path = p; outcome = Resolved Dropped } in
   let same_nominal o n =
     String.equal o n
     || List.exists (fun (a, b) -> String.equal a o && String.equal b n) renames
@@ -1216,7 +1230,7 @@ let rec migrate_value
           attrs = v.attrs;
         },
         ns )
-    | _ -> v, [ note (A_blocked "expected an option value") ])
+    | _ -> v, [ blocked "expected an option value" ])
   | a, TOption b when not (is_option a) ->
     (* wrap: T -> option T *)
     let inner, ns =
@@ -1229,7 +1243,7 @@ let rec migrate_value
               ((get_lang_strings lang).present, Some inner) );
         attrs = v.attrs;
       },
-      note A_wrap :: ns )
+      did Wrapped :: ns )
   | TOption a, b when not (is_option b) -> (
     (* unwrap: option T -> T *)
     match v.value with
@@ -1237,10 +1251,10 @@ let rec migrate_value
       let p', ns =
         migrate_value lang renames ~old_typ:a ~new_typ:b ~path p
       in
-      p', note A_unwrap :: ns
+      p', did Unwrapped :: ns
     | O.Enum (_, (_, None)) ->
-      v, [ note (A_blocked "cannot unwrap an Absent option") ]
-    | _ -> v, [ note (A_blocked "expected an option value") ])
+      v, [ blocked "cannot unwrap an Absent option" ]
+    | _ -> v, [ blocked "expected an option value" ])
   | TArray a, TArray b -> (
     match v.value with
     | O.Array elems ->
@@ -1253,10 +1267,10 @@ let rec migrate_value
       in
       ( { value = O.Array (Array.of_list elems'); attrs = v.attrs },
         List.concat ns )
-    | _ -> v, [ note (A_blocked "expected an array value") ])
+    | _ -> v, [ blocked "expected an array value" ])
   | TTuple oas, TTuple nbs -> (
     if List.length oas <> List.length nbs then
-      v, [ note (A_blocked "tuple arity changed") ]
+      v, [ blocked "tuple arity changed" ]
     else
       match v.value with
       | O.Array elems when Array.length elems = List.length oas ->
@@ -1269,22 +1283,21 @@ let rec migrate_value
         in
         ( { value = O.Array (Array.of_list elems'); attrs = v.attrs },
           List.concat ns )
-      | _ -> v, [ note (A_blocked "malformed tuple value") ])
+      | _ -> v, [ blocked "malformed tuple value" ])
   | TStruct od, TStruct nd -> (
     if not (same_nominal od.struct_name nd.struct_name) then
       ( v,
         [
-          note
-            (A_blocked
-               (Printf.sprintf "type changed: %s -> %s" od.struct_name
-                  nd.struct_name));
+          blocked
+            (Printf.sprintf "type changed: %s -> %s" od.struct_name
+               nd.struct_name);
         ] )
     else
       match v.value with
       | O.Struct (_, vfields) ->
         let relabel =
           if String.equal od.struct_name nd.struct_name then []
-          else [ note (A_relabel (od.struct_name, nd.struct_name)) ]
+          else [ did (Renamed (od.struct_name, nd.struct_name)) ]
         in
         let new_fields, notes =
           List.fold_left
@@ -1301,27 +1314,26 @@ let rec migrate_value
                 acc @ [ fname, fv' ], ns @ fns
               | _ ->
                 ( acc @ [ fname, { O.value = O.Unset; attrs = [] } ],
-                  ns @ [ { path = fpath; action = A_added } ] ))
+                  ns @ [ added_at fpath ] ))
             ([], []) nd.fields
         in
         let dropped =
           List.filter_map
             (fun (fname, _) ->
               if List.mem_assoc fname nd.fields then None
-              else Some { path = path ^ "." ^ fname; action = A_drop })
+              else Some (dropped_at (path ^ "." ^ fname)))
             vfields
         in
         { value = O.Struct (nd, new_fields); attrs = v.attrs },
         relabel @ notes @ dropped
-      | _ -> v, [ note (A_blocked "expected a struct value") ])
+      | _ -> v, [ blocked "expected a struct value" ])
   | TEnum od, TEnum nd -> (
     if not (same_nominal od.enum_name nd.enum_name) then
       ( v,
         [
-          note
-            (A_blocked
-               (Printf.sprintf "type changed: %s -> %s" od.enum_name
-                  nd.enum_name));
+          blocked
+            (Printf.sprintf "type changed: %s -> %s" od.enum_name
+               nd.enum_name);
         ] )
     else
       match v.value with
@@ -1330,9 +1342,8 @@ let rec migrate_value
         | None ->
           ( v,
             [
-              note
-                (A_blocked
-                   (Printf.sprintf "enum variant %s removed or renamed" ctor));
+              blocked
+                (Printf.sprintf "enum variant %s removed or renamed" ctor);
             ] )
         | Some new_payty -> (
           let old_payty = Option.join (List.assoc_opt ctor od.constructors) in
@@ -1348,21 +1359,18 @@ let rec migrate_value
           | _ ->
             ( v,
               [
-                note
-                  (A_blocked
-                     (Printf.sprintf "enum variant %s payload shape changed"
-                        ctor));
+                blocked
+                  (Printf.sprintf "enum variant %s payload shape changed" ctor);
               ] )))
-      | _ -> v, [ note (A_blocked "expected an enum value") ])
+      | _ -> v, [ blocked "expected an enum value" ])
   | _ ->
     if old_typ = new_typ then v, []
     else
       ( v,
         [
-          note
-            (A_blocked
-               (Printf.sprintf "needs explicit migration: %s -> %s"
-                  (tystr old_typ) (tystr new_typ)));
+          blocked
+            (Printf.sprintf "needs explicit migration: %s -> %s"
+               (tystr old_typ) (tystr new_typ));
         ] )
 
 (* Migrate a whole input/output record (name -> value) given the old and new
@@ -1374,7 +1382,7 @@ let migrate_record
     ~(old_fields : (string * O.typ) list)
     ~(new_fields : (string * O.typ) list)
     ~(values : (string * O.runtime_value) list) :
-    (string * O.runtime_value) list * mig_note list =
+    (string * O.runtime_value) list * step list =
   let migrated =
     List.map
       (fun (name, nt) ->
@@ -1386,14 +1394,14 @@ let migrate_record
           (name, v'), ns
         | _ ->
           ( (name, { O.value = O.Unset; attrs = [] }),
-            [ { path = name; action = A_added } ] ))
+            [ { path = name; outcome = NeedsResolving NeedsValue } ] ))
       new_fields
   in
   let dropped =
     List.filter_map
       (fun (name, _) ->
         if List.mem_assoc name new_fields then None
-        else Some { path = name; action = A_drop })
+        else Some { path = name; outcome = Resolved Dropped })
       values
   in
   List.map fst migrated, List.concat_map snd migrated @ dropped
