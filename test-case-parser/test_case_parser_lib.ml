@@ -1135,7 +1135,9 @@ let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
 
    Pure. Fold a (renames + old-type/new-type) correspondence onto a recovered
    value tree (`runtime_value`), applying ONLY the auto tiers: nominal relabel,
-   add+default, drop, option wrap/unwrap, and recursing structurally. Anything
+   drop, option wrap/unwrap, and recursing structurally; an ADDED field/input is
+   left `Unset` and flagged (its value is the user's to provide, not ours to
+   fabricate — see [A_added]). Anything
    else — scalar coerce, a removed/renamed enum variant, tuple arity change,
    struct<->enum — is left as an explicit `A_blocked` note: loud, never a silent
    guess. `apply` (slice b: recover -> rewrite -> write -> verify) consumes this;
@@ -1148,7 +1150,7 @@ type mig_action =
   | A_wrap
   | A_unwrap
   | A_drop
-  | A_default (* synthesized default for an added field/input *)
+  | A_added (* a new field/input: left Unset, needs a user-provided value *)
   | A_blocked of string (* reason; needs a human decision *)
 
 type mig_note = { path : string; action : mig_action }
@@ -1298,8 +1300,8 @@ let rec migrate_value
                 in
                 acc @ [ fname, fv' ], ns @ fns
               | _ ->
-                ( acc @ [ fname, generate_default_value lang nft ],
-                  ns @ [ { path = fpath; action = A_default } ] ))
+                ( acc @ [ fname, { O.value = O.Unset; attrs = [] } ],
+                  ns @ [ { path = fpath; action = A_added } ] ))
             ([], []) nd.fields
         in
         let dropped =
@@ -1383,8 +1385,8 @@ let migrate_record
           in
           (name, v'), ns
         | _ ->
-          ( (name, generate_default_value lang nt),
-            [ { path = name; action = A_default } ] ))
+          ( (name, { O.value = O.Unset; attrs = [] }),
+            [ { path = name; action = A_added } ] ))
       new_fields
   in
   let dropped =

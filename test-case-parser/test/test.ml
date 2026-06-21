@@ -338,7 +338,6 @@ let test_sig_diff_mechanical () =
 
 let rvi n : O.runtime_value = { value = O.Integer n; attrs = [] }
 let rvm n : O.runtime_value = { value = O.Money n; attrs = [] }
-let rvb b : O.runtime_value = { value = O.Bool b; attrs = [] }
 let sdecl name fields : O.struct_declaration = { struct_name = name; fields }
 let some_money m : O.runtime_value =
   { value = O.Enum (L.mk_optional_enum_decl `En O.TMoney, ("Present", Some (rvm m))); attrs = [] }
@@ -379,10 +378,10 @@ let test_apply_struct () =
   let v, ns = mv od nd value in
   let expected : O.runtime_value =
     { value = O.Struct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ],
-                        [ "first", rvi 7; "second", rvm 0 ]); attrs = [] }
+                        [ "first", rvi 7; "second", { value = O.Unset; attrs = [] } ]); attrs = [] }
   in
-  check "add field defaults" (v = expected);
-  check "add field flagged A_default" (has L.A_default ns);
+  check "add field left Unset (not fabricated)" (v = expected);
+  check "add field flagged A_added" (has L.A_added ns);
   check "add field not blocked" (not (L.mig_blocked ns));
   (* drop field: noted *)
   let od = O.TStruct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ]) in
@@ -435,8 +434,8 @@ let test_apply_record () =
       ~values:[ "a", rvi 1; "b", rvm 5 ]
   in
   check "record keeps surviving input" (List.assoc "a" nv = rvi 1);
-  check "record adds new input as default" (List.assoc "c" nv = rvb false);
-  check "record flags add + drop" (has L.A_default ns && has L.A_drop ns);
+  check "record adds new input as Unset" (List.assoc "c" nv = { O.value = O.Unset; attrs = [] });
+  check "record flags add + drop" (has L.A_added ns && has L.A_drop ns);
   check "record not blocked" (not (L.mig_blocked ns));
   (* signature_renames feeds the rename map apply consumes *)
   check "signature_renames detects the struct rename"
