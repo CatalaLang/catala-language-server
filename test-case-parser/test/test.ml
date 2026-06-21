@@ -420,7 +420,21 @@ let test_apply_option () =
   let unset : O.runtime_value = { value = O.Unset; attrs = [] } in
   let v, ns = mv O.TMoney (O.TOption O.TMoney) unset in
   check "impossible (Unset) preserved verbatim across wrap, unflagged"
-    (v = unset && ns = [])
+    (v = unset && ns = []);
+  (* and NESTED: an impossible struct field survives a struct migration verbatim,
+     contributing no worklist item (only the rename note remains) *)
+  let od = O.TStruct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ]) in
+  let nd = O.TStruct (sdecl "Cover" [ "first", O.TInt; "second", O.TMoney ]) in
+  let value : O.runtime_value =
+    { value = O.Struct (sdecl "Pair" [], [ "first", rvi 7; "second", unset ]); attrs = [] }
+  in
+  let v, ns = mv ~renames:[ "Pair", "Cover" ] od nd value in
+  let expected : O.runtime_value =
+    { value = O.Struct (sdecl "Cover" [ "first", O.TInt; "second", O.TMoney ],
+                        [ "first", rvi 7; "second", unset ]); attrs = [] }
+  in
+  check "nested impossible preserved through struct rename" (v = expected);
+  check "nested impossible adds no worklist item" (not (L.needs_attention ns))
 
 let test_apply_blocked () =
   (* scalar coerce is never auto *)
