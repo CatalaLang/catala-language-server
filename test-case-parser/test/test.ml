@@ -387,7 +387,7 @@ let test_apply_struct () =
   let v, ns = mv od nd value in
   let expected : O.runtime_value =
     { value = O.Struct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ],
-                        [ "first", rvi 7; "second", { value = O.Unset; attrs = [] } ]); attrs = [] }
+                        [ "first", rvi 7; "second", { value = O.Unset; attrs = [ O.Todo ] } ]); attrs = [] }
   in
   check "add field left Unset (not fabricated)" (v = expected);
   check "add field flagged NeedsValue" (has (M.NeedsResolving M.NeedsValue) ns);
@@ -413,7 +413,7 @@ let test_apply_option () =
   (* unwrap an Absent: no value to carry over -> a hole to fill, like an added
      field (NeedsValue, not a hard NeedsDecision) *)
   let v, ns = mv (O.TOption O.TMoney) O.TMoney (none_money ()) in
-  check "unwrap Absent -> Unset hole" (v = { value = O.Unset; attrs = [] });
+  check "unwrap Absent -> Unset hole (todo)" (v = { value = O.Unset; attrs = [ O.Todo ] });
   check "unwrap Absent needs a value, not a decision"
     (has (M.NeedsResolving M.NeedsValue) ns && not (has_decision ns));
   (* a deliberate `impossible` (Unset) is ⊥, valid at any type, so it is
@@ -467,7 +467,7 @@ let test_apply_record () =
       ()
   in
   check "record keeps surviving input" (List.assoc "a" nv = rvi 1);
-  check "record adds new input as Unset" (List.assoc "c" nv = { O.value = O.Unset; attrs = [] });
+  check "record adds new input as Unset (todo)" (List.assoc "c" nv = { O.value = O.Unset; attrs = [ O.Todo ] });
   check "record flags add + drop" (has (M.NeedsResolving M.NeedsValue) ns && has (M.Resolved M.Dropped) ns);
   check "record needs no decision (only an added value)" (not (has_decision ns));
   (* signature_renames feeds the rename map apply consumes *)

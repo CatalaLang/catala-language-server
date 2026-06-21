@@ -93,6 +93,10 @@ type attr_def = [
   | Uid of string
   | ArrayItemLabel of string
   | Description of string
+  | Todo
+    (* Migration left this slot for the user to fill: an unfilled `impossible`
+       (an added input, or an unwrapped Absent). Distinguishes a hole-to-fill
+       from a deliberate `impossible`; emitted as #[testcase.todo]. *)
   ] <ocaml repr="classic">
 
 type runtime_value = {

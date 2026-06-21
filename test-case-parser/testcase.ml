@@ -345,6 +345,12 @@ let register () =
   @@ fun ~pos:_ value ->
   match value with
   | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.SigPin s)
-  | _ -> failwith "unexpected signature pin")
+  | _ -> failwith "unexpected signature pin");
+  (* Value-less marker on a value: migration left this slot to fill. *)
+  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["todo"]
+     ~contexts:(function
+     | Desugared.Name_resolution.Expression _ -> true
+     | _ -> false)
+  @@ fun ~pos:_ _value -> Some Test_case_parser_lib.Todo)
 
 let () = register ()

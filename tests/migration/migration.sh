@@ -178,19 +178,36 @@ echo "$DRY" | grep -qi 'NEEDS VALUE' \
 [ "$(md5sum _migrate/t.catala_en | cut -d' ' -f1)" = "$BEFORE" ] \
   || { echo "FAIL(apply): --dry-run modified the file"; exit 1; }
 
-# real apply: rewrites, re-pins, leaves the hole as `impossible`, verifies.
+# real apply: rewrites, re-pins, marks the added input #[testcase.todo], verifies.
 APPLY=$( cd _migrate && catala testcase migrate apply t.catala_en 2>/dev/null )
 echo "$APPLY" | grep -qi 'verified against live' \
   || { echo "FAIL(apply): expected 'verified against live'; got:"; echo "$APPLY"; exit 1; }
-# the added input is written as a readable `impossible` hole
-grep -q 'definition .*pair2 .*equals impossible' _migrate/t.catala_en \
-  || { echo "FAIL(apply): pair2 hole not written as impossible"; exit 1; }
+# the added input (pair2) is written as an `impossible` hole carrying #[testcase.todo]
+grep -qE 'pair2.*#\[testcase.todo\]|#\[testcase.todo\].*$' _migrate/t.catala_en \
+  || { echo "FAIL(apply): #[testcase.todo] marker not written on the hole"; exit 1; }
+grep -q 'definition .*pair2 ' _migrate/t.catala_en \
+  || { echo "FAIL(apply): pair2 hole not written"; exit 1; }
+# the marker round-trips through read into the value's attrs
+( cd _migrate && catala testcase read t.catala_en 2>/dev/null ) \
+  | jq -e '.[0].test_inputs.pair2.value.value.attrs | index("Todo")' >/dev/null \
+  || { echo "FAIL(apply): #[testcase.todo] did not round-trip through read"; exit 1; }
 # a recovered value survived the migration (maybe_amount was not touched)
 grep -q 'definition calc.maybe_amount equals Present content' _migrate/t.catala_en \
   || { echo "FAIL(apply): a recovered value did not survive the migration"; exit 1; }
 # and the migrated test is now Fresh against live
 [ "$(state t.catala_en)" = "Fresh" ] \
   || { echo "FAIL(apply): migrated test is not Fresh"; exit 1; }
+
+# NeedsDecision is a hard stop: a scalar retype must leave the test STALE
+# (untouched), preserving the old value as the future transform's input.
+cp _migrate/OptTup.catala_en _migrate/OptTup.dbak
+sed -i 's/input maybe_amount content optional of money/input maybe_amount content optional of decimal/' _migrate/OptTup.catala_en
+( cd _migrate && clerk start >/dev/null 2>&1 )
+DEC=$( cd _migrate && catala testcase migrate apply t.catala_en 2>/dev/null )
+echo "$DEC" | grep -qi 'left STALE' \
+  || { echo "FAIL(apply): NeedsDecision must leave the test stale; got:"; echo "$DEC"; exit 1; }
+mv _migrate/OptTup.dbak _migrate/OptTup.catala_en
+( cd _migrate && clerk start >/dev/null 2>&1 )
 
 # ============================================================================
 # migrate init: seed pins onto unpinned tests that typecheck; refuse drifted.

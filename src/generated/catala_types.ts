@@ -95,6 +95,7 @@ export type AttrDef =
 | { kind: 'Uid'; value: string }
 | { kind: 'ArrayItemLabel'; value: string }
 | { kind: 'Description'; value: string }
+| { kind: 'Todo' }
 
 export type RuntimeValue = {
   value: RuntimeValueRaw;
@@ -574,25 +575,38 @@ export function writeAttrDef(x: AttrDef, context: any = x): any {
       return ['ArrayItemLabel', _atd_write_string(x.value, x)]
     case 'Description':
       return ['Description', _atd_write_string(x.value, x)]
+    case 'Todo':
+      return 'Todo'
   }
 }
 
 export function readAttrDef(x: any, context: any = x): AttrDef {
-  _atd_check_json_tuple(2, x, context)
-  switch (x[0]) {
-    case 'TestDescription':
-      return { kind: 'TestDescription', value: _atd_read_string(x[1], x) }
-    case 'TestTitle':
-      return { kind: 'TestTitle', value: _atd_read_string(x[1], x) }
-    case 'Uid':
-      return { kind: 'Uid', value: _atd_read_string(x[1], x) }
-    case 'ArrayItemLabel':
-      return { kind: 'ArrayItemLabel', value: _atd_read_string(x[1], x) }
-    case 'Description':
-      return { kind: 'Description', value: _atd_read_string(x[1], x) }
-    default:
-      _atd_bad_json('AttrDef', x, context)
-      throw new Error('impossible')
+  if (typeof x === 'string') {
+    switch (x) {
+      case 'Todo':
+        return { kind: 'Todo' }
+      default:
+        _atd_bad_json('AttrDef', x, context)
+        throw new Error('impossible')
+    }
+  }
+  else {
+    _atd_check_json_tuple(2, x, context)
+    switch (x[0]) {
+      case 'TestDescription':
+        return { kind: 'TestDescription', value: _atd_read_string(x[1], x) }
+      case 'TestTitle':
+        return { kind: 'TestTitle', value: _atd_read_string(x[1], x) }
+      case 'Uid':
+        return { kind: 'Uid', value: _atd_read_string(x[1], x) }
+      case 'ArrayItemLabel':
+        return { kind: 'ArrayItemLabel', value: _atd_read_string(x[1], x) }
+      case 'Description':
+        return { kind: 'Description', value: _atd_read_string(x[1], x) }
+      default:
+        _atd_bad_json('AttrDef', x, context)
+        throw new Error('impossible')
+    }
   }
 }
 

@@ -354,6 +354,12 @@ let needs_attention (steps : step list) =
 
 let is_option = function O.TOption _ -> true | _ -> false
 
+(* The value written into a NeedsValue hole: a readable `impossible` carrying the
+   #[testcase.todo] marker, so it is distinguishable from a deliberate `impossible`
+   and queryable (gate / editor). NeedsDecision holes are NOT written this way —
+   `apply` leaves those tests stale (§ apply), preserving the old value. *)
+let unset_hole : O.runtime_value = { O.value = O.Unset; attrs = [ O.Todo ] }
+
 let rec tystr : O.typ -> string = function
   | TBool -> "bool"
   | TInt -> "int"
@@ -449,7 +455,7 @@ let rec migrate_value
     | O.Enum (_, (_, None)) ->
       (* unwrapping an Absent: the field is now mandatory but there is no value
          to carry over — leave a hole for the user, exactly like an added field. *)
-      { value = O.Unset; attrs = v.attrs }, [ added_at path ]
+      unset_hole, [ added_at path ]
     | _ -> v, [ blocked "expected an option value" ])
   | TArray a, TArray b -> (
     match v.value with
@@ -509,7 +515,7 @@ let rec migrate_value
                 in
                 acc @ [ fname, fv' ], ns @ fns
               | _ ->
-                ( acc @ [ fname, { O.value = O.Unset; attrs = [] } ],
+                ( acc @ [ fname, unset_hole ],
                   ns @ [ added_at fpath ] ))
             ([], []) nd.fields
         in
@@ -597,7 +603,7 @@ let migrate_record
         | _ ->
           if added_is_hole then
             Some
-              ( (name, { O.value = O.Unset; attrs = [] }),
+              ( (name, unset_hole),
                 [ { path = name; outcome = NeedsResolving NeedsValue } ] )
           else None)
       new_fields
@@ -1234,20 +1240,31 @@ let migrate_apply dry_run sig_dir path _options =
                    Printf.printf "%s  (%s -> %s)\n" base
                      (scope_signature_pin old_sd) (scope_signature_pin new_sd);
                    List.iter (fun s -> print_endline (pp_step s)) all_steps;
-                   let n_holes =
-                     List.length
-                       (List.filter
-                          (fun (s : step) ->
-                            match s.outcome with
-                            | NeedsResolving _ -> true
-                            | _ -> false)
-                          all_steps)
+                   let count pred = List.length (List.filter pred all_steps) in
+                   let n_todo =
+                     count (fun (s : step) ->
+                         s.outcome = NeedsResolving NeedsValue)
+                   in
+                   let n_decisions =
+                     count (fun (s : step) ->
+                         match s.outcome with
+                         | NeedsResolving (NeedsDecision _) -> true
+                         | _ -> false)
                    in
                    if dry_run then
                      Printf.printf
-                       "  (dry-run: no files written; %d item(s) need \
-                        attention)\n"
-                       n_holes
+                       "  (dry-run: no files written; %d to fill, %d need a \
+                        decision)\n"
+                       n_todo n_decisions
+                   else if n_decisions > 0 then
+                     (* A NeedsDecision slot can't be written without destroying
+                        the old value it needs as a transform input. Leave the
+                        whole test STALE (untouched): old values stay intact and
+                        re-recoverable, and the gate keeps flagging it. *)
+                     Printf.printf
+                       "  left STALE: %d item(s) need a decision (a transform) — \
+                        not writing, old values preserved\n"
+                       n_decisions
                    else begin
                      let new_tests = List.map fst migrated in
                      write_sig_snapshot dir new_sd;
@@ -1259,9 +1276,10 @@ let migrate_apply dry_run sig_dir path _options =
                      | Ok () ->
                        Printf.printf
                          "  written + re-pinned; verified against live%s\n"
-                         (if n_holes > 0 then
-                            Printf.sprintf " (%d hole(s) left as `impossible`)"
-                              n_holes
+                         (if n_todo > 0 then
+                            Printf.sprintf
+                              " (%d slot(s) to fill, marked #[testcase.todo])"
+                              n_todo
                           else "")
                      | Error e ->
                        Printf.printf

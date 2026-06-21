@@ -313,6 +313,7 @@ type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
 type Pos.attr += ArrayItemLabel of string
 type Pos.attr += SigPin of string
+type Pos.attr += Todo
 
 let rec get_value : type a.
     Global.backend_lang -> decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
@@ -322,6 +323,7 @@ let rec get_value : type a.
     Pos.get_attrs pos (function
       | Uid s -> Some (O.Uid s)
       | ArrayItemLabel s -> Some (O.ArrayItemLabel s)
+      | Todo -> Some O.Todo
       | _ -> None)
   in
   let value =
@@ -1208,6 +1210,7 @@ let print_attrs ppf (attrs : O.attr_def list) =
       | Uid s -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s
       | ArrayItemLabel s ->
         fprintf ppf "#[testcase.array_item_label = \"%s\"]@\n" s
+      | Todo -> fprintf ppf "#[testcase.todo]@\n"
       (* TODO error out if we come across TestDescription or TestTitle? *)
       | _ -> ())
     ppf attrs
@@ -1310,11 +1313,17 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
 
 let print_catala_value_opt ~lang ppf (t_in : O.test_io) =
   let typ = t_in.typ in
+  (* Print any attrs (e.g. the #[testcase.todo] migration marker) even on an
+     Unset hole — the earlier code dropped them with the wildcard. *)
   match t_in.O.value, typ with
-  | Some { value = { value = O.Unset; _ }; _ }, TArray _ | None, TArray _ ->
+  | Some { value = ({ value = O.Unset; _ } as rv); _ }, TArray _ ->
+    print_attrs ppf rv.attrs;
     Format.fprintf ppf "[]"
-  | Some { value = { value = O.Unset; _ }; _ }, _ | None, _ ->
+  | None, TArray _ -> Format.fprintf ppf "[]"
+  | Some { value = ({ value = O.Unset; _ } as rv); _ }, _ ->
+    print_attrs ppf rv.attrs;
     Format.fprintf ppf "impossible"
+  | None, _ -> Format.fprintf ppf "impossible"
   | Some { value; _ }, typ -> print_catala_value ~typ:(Some typ) ~lang ppf value
 
 (* === Stub module synthesis (for migration value recovery) ===
