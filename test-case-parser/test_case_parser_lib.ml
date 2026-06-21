@@ -1386,28 +1386,37 @@ let rec migrate_value
                (tystr old_typ) (tystr new_typ));
         ] ))
 
-(* Migrate a whole input/output record (name -> value) given the old and new
-   typed fields. Added fields get a synthesized default (flagged); dropped
-   fields are noted. *)
+(* Migrate a whole record (name -> value) given the old and new typed fields.
+   A field present old+new with a value is rewritten; a dropped field is noted.
+   A NEW field with no carried value depends on [added_is_hole]:
+   - INPUTS ([added_is_hole=true], the default): a regular input must be provided,
+     so it becomes a readable `Unset` flagged `NeedsValue` (the user's to fill).
+   - OUTPUTS ([added_is_hole=false]): an output is an *assertion*, optional by
+     nature — a new (or never-asserted) output is simply omitted, no hole, no
+     step. Only a previously-asserted output whose type changed is flagged. *)
 let migrate_record
     lang
     (renames : (string * string) list)
     ~(old_fields : (string * O.typ) list)
     ~(new_fields : (string * O.typ) list)
-    ~(values : (string * O.runtime_value) list) :
-    (string * O.runtime_value) list * step list =
+    ~(values : (string * O.runtime_value) list)
+    ?(added_is_hole = true)
+    () : (string * O.runtime_value) list * step list =
   let migrated =
-    List.map
+    List.filter_map
       (fun (name, nt) ->
         match List.assoc_opt name old_fields, List.assoc_opt name values with
         | Some ot, Some v ->
           let v', ns =
             migrate_value lang renames ~old_typ:ot ~new_typ:nt ~path:name v
           in
-          (name, v'), ns
+          Some ((name, v'), ns)
         | _ ->
-          ( (name, { O.value = O.Unset; attrs = [] }),
-            [ { path = name; outcome = NeedsResolving NeedsValue } ] ))
+          if added_is_hole then
+            Some
+              ( (name, { O.value = O.Unset; attrs = [] }),
+                [ { path = name; outcome = NeedsResolving NeedsValue } ] )
+          else None)
       new_fields
   in
   let dropped =
@@ -3220,6 +3229,192 @@ let migrate_diff old_file new_file sig_dir path _options =
                           header ();
                           List.iter (fun l -> Printf.printf "  %s\n" l) d
                         end)))
+
+(* ============================================================================
+   migrate apply (slice b): recover -> rewrite -> report -> write -> verify.
+
+   For a STALE test (pin != live, snapshot present): synthesize the OLD module as
+   a stub from the committed snapshot, read the test against ONLY that stub (so
+   `> Using M` resolves to the old signature, not the drifted live one) to recover
+   the old VALUES; run the pure rewrite (migrate_record) against (old, live); emit
+   the migrated test (re-pinned, new snapshot), leaving holes as a readable
+   `Unset`; then VERIFY by reading the result back against the LIVE module. With
+   --dry-run, stop after the report (no files touched).
+   ============================================================================ *)
+
+(* Recover the old tests (with their values) by reading [test_file] against a
+   throwaway stub synthesized from [old_sd]. The stub is the ONLY include, so the
+   drifted live module is not consulted; stdlib still comes from the project build. *)
+let recover_old_tests ~test_file ~(old_sd : O.scope_def) :
+    (O.test list, string) result =
+  let lang = Catala_utils.Cli.file_lang test_file in
+  let ext = match lang with `Fr -> "catala_fr" | `En -> "catala_en" | _ -> "catala" in
+  let tmp = Filename.temp_dir "catala_mig_" "" in
+  let finally () =
+    (try Array.iter (fun f -> Sys.remove (Filename.concat tmp f)) (Sys.readdir tmp)
+     with _ -> ());
+    try Sys.rmdir tmp with _ -> ()
+  in
+  Fun.protect ~finally @@ fun () ->
+  List.iter
+    (fun (modname, src) ->
+      let p = Filename.concat tmp (Printf.sprintf "%s.%s" modname ext) in
+      File.with_out_channel p (fun oc -> output_string oc src))
+    (stub_modules lang old_sd);
+  let content = File.contents test_file in
+  let options =
+    Global.enforce_options ~input_src:(Global.Contents (content, test_file)) ()
+  in
+  let path_to_build, _ = lookup_include_dirs options in
+  try Ok (import_catala_tests (read_program [ Global.raw_file tmp ] path_to_build options))
+  with e -> Error (Printexc.to_string e)
+
+(* The values present in an input/output record (skip the unfilled ones). *)
+let record_values (io_list : (string * O.test_io) list) :
+    (string * O.runtime_value) list =
+  List.filter_map
+    (fun (n, (io : O.test_io)) ->
+      match io.value with Some vd -> Some (n, vd.value) | None -> None)
+    io_list
+
+(* Rebuild a typed input/output record from migrated values + the new types. *)
+let rebuild_record (new_fields : (string * O.typ) list)
+    (vals : (string * O.runtime_value) list) : (string * O.test_io) list =
+  List.map
+    (fun (n, typ) ->
+      let value =
+        match List.assoc_opt n vals with
+        | Some rv -> Some { O.value = rv; pos = None }
+        | None -> None
+      in
+      n, { O.typ; value })
+    new_fields
+
+(* Migrate one recovered test old -> new; returns the migrated test + the steps. *)
+let apply_to_test ~lang old_sd new_sd (t : O.test) : O.test * step list =
+  let renames = signature_renames old_sd new_sd in
+  let in_typs sd = List.map (fun (n, (si : O.scope_input)) -> n, si.typ) sd.O.inputs in
+  let tag pre = List.map (fun (s : step) -> { s with path = pre ^ s.path }) in
+  let new_in_vals, in_steps =
+    migrate_record lang renames ~old_fields:(in_typs old_sd)
+      ~new_fields:(in_typs new_sd) ~values:(record_values t.test_inputs) ()
+  in
+  let new_out_vals, out_steps =
+    migrate_record lang renames ~old_fields:old_sd.O.outputs
+      ~new_fields:new_sd.O.outputs ~values:(record_values t.test_outputs)
+      ~added_is_hole:false ()
+  in
+  let new_test =
+    {
+      t with
+      O.tested_scope = new_sd;
+      test_inputs = rebuild_record (in_typs new_sd) new_in_vals;
+      test_outputs = rebuild_record new_sd.O.outputs new_out_vals;
+      sig_pin = Some (scope_signature_pin new_sd);
+    }
+  in
+  new_test, tag "in." in_steps @ tag "out." out_steps
+
+let pp_step (s : step) : string =
+  match s.outcome with
+  | Resolved (Renamed (a, b)) -> Printf.sprintf "  rename  %s: %s -> %s" s.path a b
+  | Resolved Wrapped -> Printf.sprintf "  wrap    %s" s.path
+  | Resolved Unwrapped -> Printf.sprintf "  unwrap  %s" s.path
+  | Resolved Dropped -> Printf.sprintf "  drop    %s" s.path
+  | NeedsResolving NeedsValue ->
+    Printf.sprintf "  NEEDS VALUE     %s  (left unset)" s.path
+  | NeedsResolving (NeedsDecision r) ->
+    Printf.sprintf "  NEEDS DECISION  %s: %s" s.path r
+
+(* Verify a (written) test file typechecks against the LIVE project. *)
+let reads_against_live test_file : (unit, string) result =
+  let options = Global.enforce_options ~input_src:(Global.FileName test_file) () in
+  let path_to_build, include_dirs = lookup_include_dirs options in
+  try
+    ignore (import_catala_tests (read_program include_dirs path_to_build options));
+    Ok ()
+  with e -> Error (Printexc.to_string e)
+
+let migrate_apply dry_run sig_dir path _options =
+  collect_catala_files path
+  |> List.iter (fun test_file ->
+         let base = Filename.basename test_file in
+         let parsed = parse_tests_textually (File.contents test_file) in
+         let pinned =
+           List.filter_map
+             (fun pt ->
+               match pt.pt_pin, pt.pt_target with
+               | Some pin, Some target -> Some (pin, target)
+               | _ -> None)
+             parsed
+         in
+         match pinned with
+         | [] -> ()
+         | (pin, target) :: _ ->
+           let skip msg = Printf.printf "%s: %s\n" base msg in
+           let module_name, scope_base = split_target target in
+           let dir = Option.value ~default:(Filename.dirname test_file) sig_dir in
+           let snap = File.(dir / (pin ^ ".sig.json")) in
+           if not (File.exists snap) then
+             skip
+               (Printf.sprintf "snapshot %s missing — cannot recover"
+                  (Filename.basename snap))
+           else (
+             match live_scope_def ~test_file ~module_name ~scope_base with
+             | Error reason ->
+               skip (Printf.sprintf "cannot resolve live signature: %s" reason)
+             | Ok new_sd ->
+               let old_sd = scope_def_of_file snap in
+               if String.equal (scope_signature_hash old_sd)
+                    (scope_signature_hash new_sd)
+               then () (* fresh — nothing to migrate *)
+               else (
+                 match recover_old_tests ~test_file ~old_sd with
+                 | Error e -> skip (Printf.sprintf "value recovery failed: %s" e)
+                 | Ok old_tests ->
+                   let lang = Catala_utils.Cli.file_lang test_file in
+                   let migrated =
+                     List.map (apply_to_test ~lang old_sd new_sd) old_tests
+                   in
+                   let all_steps = List.concat_map snd migrated in
+                   Printf.printf "%s  (%s -> %s)\n" base
+                     (scope_signature_pin old_sd) (scope_signature_pin new_sd);
+                   List.iter (fun s -> print_endline (pp_step s)) all_steps;
+                   let n_holes =
+                     List.length
+                       (List.filter
+                          (fun (s : step) ->
+                            match s.outcome with
+                            | NeedsResolving _ -> true
+                            | _ -> false)
+                          all_steps)
+                   in
+                   if dry_run then
+                     Printf.printf
+                       "  (dry-run: no files written; %d item(s) need \
+                        attention)\n"
+                       n_holes
+                   else begin
+                     let new_tests = List.map fst migrated in
+                     write_sig_snapshot dir new_sd;
+                     File.with_out_channel test_file (fun oc ->
+                         let ppf = Format.formatter_of_out_channel oc in
+                         emit_test_list ppf lang new_tests;
+                         Format.pp_print_flush ppf ());
+                     match reads_against_live test_file with
+                     | Ok () ->
+                       Printf.printf
+                         "  written + re-pinned; verified against live%s\n"
+                         (if n_holes > 0 then
+                            Printf.sprintf " (%d hole(s) left as `impossible`)"
+                              n_holes
+                          else "")
+                     | Error e ->
+                       Printf.printf
+                         "  WARNING: written but does NOT read back against \
+                          live: %s\n"
+                         e
+                   end)))
 
 let serialize_inputs (scope_input : Yojson.Safe.t option) =
   let scope_input =

@@ -164,6 +164,35 @@ DIR_STATES=$( ( cd _migrate && catala testcase migrate status --json . 2>/dev/nu
   || { echo "FAIL(migrate): dir mode states = '$DIR_STATES' (expected Stale,Unknown)"; exit 1; }
 
 # ============================================================================
+# migrate apply: recover -> rewrite -> write -> verify. The live drift here is
+# `pair` (tuple input) renamed to `pair2`; input renames are not auto-grouped, so
+# the old `pair` value is dropped and `pair2` is a NeedsValue hole left as
+# `impossible`. The other recovered values must survive, and the result must be
+# Fresh + read back against live.
+# ----------------------------------------------------------------------------
+# dry-run reports the hole and writes NOTHING.
+BEFORE=$(md5sum _migrate/t.catala_en | cut -d' ' -f1)
+DRY=$( cd _migrate && catala testcase migrate apply --dry-run t.catala_en 2>/dev/null )
+echo "$DRY" | grep -qi 'NEEDS VALUE' \
+  || { echo "FAIL(apply): dry-run should report a NEEDS VALUE hole; got:"; echo "$DRY"; exit 1; }
+[ "$(md5sum _migrate/t.catala_en | cut -d' ' -f1)" = "$BEFORE" ] \
+  || { echo "FAIL(apply): --dry-run modified the file"; exit 1; }
+
+# real apply: rewrites, re-pins, leaves the hole as `impossible`, verifies.
+APPLY=$( cd _migrate && catala testcase migrate apply t.catala_en 2>/dev/null )
+echo "$APPLY" | grep -qi 'verified against live' \
+  || { echo "FAIL(apply): expected 'verified against live'; got:"; echo "$APPLY"; exit 1; }
+# the added input is written as a readable `impossible` hole
+grep -q 'definition .*pair2 .*equals impossible' _migrate/t.catala_en \
+  || { echo "FAIL(apply): pair2 hole not written as impossible"; exit 1; }
+# a recovered value survived the migration (maybe_amount was not touched)
+grep -q 'definition calc.maybe_amount equals Present content' _migrate/t.catala_en \
+  || { echo "FAIL(apply): a recovered value did not survive the migration"; exit 1; }
+# and the migrated test is now Fresh against live
+[ "$(state t.catala_en)" = "Fresh" ] \
+  || { echo "FAIL(apply): migrated test is not Fresh"; exit 1; }
+
+# ============================================================================
 # migrate init: seed pins onto unpinned tests that typecheck; refuse drifted.
 # Own project (_init) so it doesn't perturb the status triage above.
 # ============================================================================

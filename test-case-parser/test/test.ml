@@ -463,6 +463,7 @@ let test_apply_record () =
       ~old_fields:[ "a", O.TInt; "b", O.TMoney ]
       ~new_fields:[ "a", O.TInt; "c", O.TBool ]
       ~values:[ "a", rvi 1; "b", rvm 5 ]
+      ()
   in
   check "record keeps surviving input" (List.assoc "a" nv = rvi 1);
   check "record adds new input as Unset" (List.assoc "c" nv = { O.value = O.Unset; attrs = [] });

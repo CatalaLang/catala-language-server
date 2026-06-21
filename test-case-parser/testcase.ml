@@ -222,12 +222,44 @@ let cmd_migrate_diff =
       $ diff_path
       $ Cli.Flags.Global.flags)
 
+let with_dry_run =
+  Arg.(
+    value
+    & flag
+    & info ["dry-run"]
+        ~doc:
+          "Report the migration plan without writing anything (recover + rewrite \
+           + show the per-field steps).")
+
+let apply_path =
+  Arg.(
+    required
+    & pos 0 (some string) None
+    & info [] ~docv:"PATH" ~doc:"Test file or directory to migrate.")
+
+let cmd_migrate_apply =
+  Cmd.v
+    Cmd.(
+      info "apply"
+        ~doc:
+          "Migrate stale tests to the live signature: recover the old values \
+           from the committed snapshot, rewrite them old->new, re-pin, and \
+           verify the result reads back against the live module. Holes the \
+           migration cannot fill (added inputs, non-mechanical changes) are left \
+           as `impossible` and reported. Use --dry-run to preview.")
+    Term.(
+      const Lib.migrate_apply
+      $ with_dry_run
+      $ sig_dir
+      $ apply_path
+      $ Cli.Flags.Global.flags)
+
 let cmd_migrate =
   Cmd.group
     Cmd.(
       info "migrate"
         ~doc:"Signature-drift migration pipeline for testcases.")
-    [ cmd_migrate_status; cmd_migrate_init; cmd_migrate_diff ]
+    [ cmd_migrate_status; cmd_migrate_init; cmd_migrate_diff; cmd_migrate_apply ]
 
 let cmd_list_scopes =
   Cmd.v
