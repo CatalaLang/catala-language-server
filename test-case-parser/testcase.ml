@@ -165,7 +165,7 @@ let cmd_migrate_status =
           "Triage the tests under the given file or directory by signature \
            drift, bucketing each into fresh / stale / unknown / blocked.")
     Term.(
-      const Lib.migrate_status
+      const Test_migration.migrate_status
       $ with_check
       $ with_json
       $ sig_dir
@@ -181,7 +181,7 @@ let cmd_migrate_init =
            the given file or directory, for tests that still typecheck against \
            the live module. Tests that do not typecheck are left untouched.")
     Term.(
-      const Lib.migrate_init $ sig_dir $ migrate_path $ Cli.Flags.Global.flags)
+      const Test_migration.migrate_init $ sig_dir $ migrate_path $ Cli.Flags.Global.flags)
 
 let diff_old =
   Arg.(
@@ -215,7 +215,7 @@ let cmd_migrate_diff =
            pinned test's snapshot against the live signature; or pass --old and \
            --new to compare two scope_def JSON files directly.")
     Term.(
-      const Lib.migrate_diff
+      const Test_migration.migrate_diff
       $ diff_old
       $ diff_new
       $ sig_dir
@@ -248,7 +248,7 @@ let cmd_migrate_apply =
            migration cannot fill (added inputs, non-mechanical changes) are left \
            as `impossible` and reported. Use --dry-run to preview.")
     Term.(
-      const Lib.migrate_apply
+      const Test_migration.migrate_apply
       $ with_dry_run
       $ sig_dir
       $ apply_path

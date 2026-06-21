@@ -1,5 +1,5 @@
 (test
  (name test)
  (package catala-lsp)
- (libraries test_case_parser_lib tezt)
+ (libraries test_case_parser_lib test_migration tezt)
  (modules test))

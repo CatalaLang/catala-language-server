@@ -5,17 +5,25 @@
  (flags
   (:standard -open Catala_types_atd)))
 
+(library
+ (name test_migration)
+ (modules test_migration)
+ (libraries catala.driver catala.clerk_lib catala_types_atd test_case_parser_lib)
+ (flags
+  (:standard -open Catala_types_atd)))
+
 (executable
  (name testcase)
  (modes plugin)
  (modules testcase)
- (libraries yojson atdgen-runtime test_case_parser_lib)
+ (libraries yojson atdgen-runtime test_case_parser_lib test_migration)
  (embed_in_plugin_libraries
   otoml
   catala.clerk_lib
   atdgen-runtime
   catala_types_atd
-  test_case_parser_lib))
+  test_case_parser_lib
+  test_migration))
 
 (install
  (files

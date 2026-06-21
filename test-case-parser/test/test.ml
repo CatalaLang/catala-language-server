@@ -5,6 +5,7 @@
 
 module L = Test_case_parser_lib
 module O = Test_case_parser_lib.O
+module M = Test_migration
 
 let check name cond = if not cond then failwith ("check failed: " ^ name)
 
@@ -179,19 +180,19 @@ let sample =
    ```\n"
 
 let test_parse () =
-  let ts = L.parse_tests_textually sample in
+  let ts = M.parse_tests_textually sample in
   check "two test scopes" (List.length ts = 2);
   let t1 = List.nth ts 0 and t2 = List.nth ts 1 in
-  check_eq "t1 scope" ~expected:"T1" ~actual:t1.L.pt_test_scope;
+  check_eq "t1 scope" ~expected:"T1" ~actual:t1.M.pt_test_scope;
   check_eq "t1 target" ~expected:"M.Calc"
-    ~actual:(Option.value ~default:"?" t1.L.pt_target);
+    ~actual:(Option.value ~default:"?" t1.M.pt_target);
   check_eq "t1 pin" ~expected:"M.Calc@abc123"
-    ~actual:(Option.value ~default:"" t1.L.pt_pin);
-  check_eq "t2 scope" ~expected:"T2" ~actual:t2.L.pt_test_scope;
-  check "t2 has no pin" (t2.L.pt_pin = None);
+    ~actual:(Option.value ~default:"" t1.M.pt_pin);
+  check_eq "t2 scope" ~expected:"T2" ~actual:t2.M.pt_test_scope;
+  check "t2 has no pin" (t2.M.pt_pin = None);
   (* unpinned test still recovers its tested scope textually *)
   check_eq "t2 target" ~expected:"M.Other"
-    ~actual:(Option.value ~default:"?" t2.L.pt_target)
+    ~actual:(Option.value ~default:"?" t2.M.pt_target)
 
 (* a non-test scope (no testui marker) must be ignored *)
 let test_parse_ignores_non_test () =
@@ -201,19 +202,19 @@ let test_parse_ignores_non_test () =
     \  output x content integer\n\
      ```\n"
   in
-  check "no test scopes" (L.parse_tests_textually src = [])
+  check "no test scopes" (M.parse_tests_textually src = [])
 
 let test_helpers () =
   check_eq "first_quoted" ~expected:"hi"
-    ~actual:(Option.value ~default:"" (L.first_quoted "x = \"hi\" y"));
+    ~actual:(Option.value ~default:"" (M.first_quoted "x = \"hi\" y"));
   check_eq "qualified_scope_token" ~expected:"M.Calc"
     ~actual:
       (Option.value ~default:"?"
-         (L.qualified_scope_token "  output c scope M.Calc"));
+         (M.qualified_scope_token "  output c scope M.Calc"));
   check "qualified rejects single ident"
-    (L.qualified_scope_token "output c content integer" = None);
+    (M.qualified_scope_token "output c content integer" = None);
   check_eq "pin_hash" ~expected:"abc123"
-    ~actual:(Option.value ~default:"" (L.pin_hash "M.Calc@abc123"))
+    ~actual:(Option.value ~default:"" (M.pin_hash "M.Calc@abc123"))
 
 (* ---- classification decision table (the corner cases) ------------------- *)
 
@@ -230,7 +231,7 @@ let test_helpers () =
 let test_classify () =
   let state ?(snap = false) pin live =
     fst
-      (L.classify_decision ~pin_hash:pin ~live ~snapshot_present:snap
+      (M.classify_decision ~pin_hash:pin ~live ~snapshot_present:snap
          ~snapshot_basename:"M.S@h.sig.json")
   in
   check "unknown (no pin)" (state None (Ok "h") = `Unknown);
@@ -244,14 +245,14 @@ let test_classify () =
     = `Blocked);
   (* the live-resolution reason is passed through verbatim on Blocked *)
   let _, reason =
-    L.classify_decision ~pin_hash:(Some "h") ~live:(Error "boom")
+    M.classify_decision ~pin_hash:(Some "h") ~live:(Error "boom")
       ~snapshot_present:false ~snapshot_basename:"x"
   in
   check_eq "blocked reason passthrough" ~expected:"boom"
     ~actual:(Option.value ~default:"" reason);
   (* missing-snapshot reason names the snapshot file *)
   let _, reason2 =
-    L.classify_decision ~pin_hash:(Some "h") ~live:(Ok "h2")
+    M.classify_decision ~pin_hash:(Some "h") ~live:(Ok "h2")
       ~snapshot_present:false ~snapshot_basename:"M.S@h.sig.json"
   in
   check_eq "missing-snapshot reason" ~expected:"missing snapshot M.S@h.sig.json"
@@ -260,8 +261,8 @@ let test_classify () =
 (* ---- structured signature diff ------------------------------------------ *)
 
 let cm = L.canonical_model
-let sdiff a b = L.sig_diff (cm a) (cm b)
-let ppdiff a b = L.pp_sig_diff (cm a) (cm b) (sdiff a b)
+let sdiff a b = M.sig_diff (cm a) (cm b)
+let ppdiff a b = M.pp_sig_diff (cm a) (cm b) (sdiff a b)
 
 (* a scope_def variant helper: map over inputs by name *)
 let map_input name f sd =
@@ -345,20 +346,20 @@ let none_money () : O.runtime_value =
   { value = O.Enum (L.mk_optional_enum_decl `En O.TMoney, ("Absent", None)); attrs = [] }
 
 let mv ?(renames = []) old_typ new_typ v =
-  L.migrate_value `En renames ~old_typ ~new_typ ~path:"x" v
+  M.migrate_value `En renames ~old_typ ~new_typ ~path:"x" v
 
-let has out ns = List.exists (fun (n : L.step) -> n.L.outcome = out) ns
+let has out ns = List.exists (fun (n : M.step) -> n.M.outcome = out) ns
 let has_rename ns =
   List.exists
-    (fun (n : L.step) ->
-      match n.L.outcome with L.Resolved (L.Renamed _) -> true | _ -> false)
+    (fun (n : M.step) ->
+      match n.M.outcome with M.Resolved (M.Renamed _) -> true | _ -> false)
     ns
 (* a hard block (needs a decision/transform), distinct from a mere NeedsValue *)
 let has_decision ns =
   List.exists
-    (fun (n : L.step) ->
-      match n.L.outcome with
-      | L.NeedsResolving (L.NeedsDecision _) -> true
+    (fun (n : M.step) ->
+      match n.M.outcome with
+      | M.NeedsResolving (M.NeedsDecision _) -> true
       | _ -> false)
     ns
 
@@ -375,7 +376,7 @@ let test_apply_struct () =
                         [ "first", rvi 7; "second", rvm 300 ]); attrs = [] }
   in
   check "rename relabels + preserves values" (v = expected);
-  check "rename not blocked" (not (L.needs_attention ns));
+  check "rename not blocked" (not (M.needs_attention ns));
   check "rename emits relabel note" (has_rename ns);
   (* add field: synthesized default, flagged, not blocked *)
   let od = O.TStruct (sdecl "Pair" [ "first", O.TInt ]) in
@@ -389,7 +390,7 @@ let test_apply_struct () =
                         [ "first", rvi 7; "second", { value = O.Unset; attrs = [] } ]); attrs = [] }
   in
   check "add field left Unset (not fabricated)" (v = expected);
-  check "add field flagged NeedsValue" (has (L.NeedsResolving L.NeedsValue) ns);
+  check "add field flagged NeedsValue" (has (M.NeedsResolving M.NeedsValue) ns);
   check "add field needs no decision (just a value)" (not (has_decision ns));
   (* drop field: noted *)
   let od = O.TStruct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ]) in
@@ -398,23 +399,23 @@ let test_apply_struct () =
     { value = O.Struct (sdecl "Pair" [], [ "first", rvi 7; "second", rvm 9 ]); attrs = [] }
   in
   let _, ns = mv od nd value in
-  check "drop field flagged Dropped" (has (L.Resolved L.Dropped) ns)
+  check "drop field flagged Dropped" (has (M.Resolved M.Dropped) ns)
 
 let test_apply_option () =
   (* wrap T -> option T *)
   let v, ns = mv O.TMoney (O.TOption O.TMoney) (rvm 100) in
   check "wrap produces Present" (v = some_money 100);
-  check "wrap flagged" (has (L.Resolved L.Wrapped) ns && not (L.needs_attention ns));
+  check "wrap flagged" (has (M.Resolved M.Wrapped) ns && not (M.needs_attention ns));
   (* unwrap a Present *)
   let v, ns = mv (O.TOption O.TMoney) O.TMoney (some_money 100) in
   check "unwrap Present yields payload" (v = rvm 100);
-  check "unwrap flagged" (has (L.Resolved L.Unwrapped) ns && not (L.needs_attention ns));
+  check "unwrap flagged" (has (M.Resolved M.Unwrapped) ns && not (M.needs_attention ns));
   (* unwrap an Absent: no value to carry over -> a hole to fill, like an added
      field (NeedsValue, not a hard NeedsDecision) *)
   let v, ns = mv (O.TOption O.TMoney) O.TMoney (none_money ()) in
   check "unwrap Absent -> Unset hole" (v = { value = O.Unset; attrs = [] });
   check "unwrap Absent needs a value, not a decision"
-    (has (L.NeedsResolving L.NeedsValue) ns && not (has_decision ns));
+    (has (M.NeedsResolving M.NeedsValue) ns && not (has_decision ns));
   (* a deliberate `impossible` (Unset) is ⊥, valid at any type, so it is
      preserved verbatim across a type change — NOT wrapped to Present, NOT flagged *)
   let unset : O.runtime_value = { value = O.Unset; attrs = [] } in
@@ -434,12 +435,12 @@ let test_apply_option () =
                         [ "first", rvi 7; "second", unset ]); attrs = [] }
   in
   check "nested impossible preserved through struct rename" (v = expected);
-  check "nested impossible adds no worklist item" (not (L.needs_attention ns))
+  check "nested impossible adds no worklist item" (not (M.needs_attention ns))
 
 let test_apply_blocked () =
   (* scalar coerce is never auto *)
   let _, ns = mv O.TInt O.TMoney (rvi 5) in
-  check "int->money coerce blocked" (L.needs_attention ns);
+  check "int->money coerce blocked" (M.needs_attention ns);
   (* a removed enum variant can't be auto-mapped *)
   let ctors = [ "Yes", Some O.TRat; "No", None ] in
   let oe = O.TEnum { enum_name = "Choice"; constructors = ctors; ctor_attrs = [] } in
@@ -449,17 +450,17 @@ let test_apply_blocked () =
                       ("Yes", Some { value = O.Decimal 1.5; attrs = [] })); attrs = [] }
   in
   let _, ns = mv oe ne yesv in
-  check "removed enum variant blocked" (L.needs_attention ns);
+  check "removed enum variant blocked" (M.needs_attention ns);
   (* a surviving variant is kept, not blocked *)
   let nov : O.runtime_value =
     { value = O.Enum ({ enum_name = "Choice"; constructors = ctors; ctor_attrs = [] }, ("No", None)); attrs = [] }
   in
   let _, ns = mv oe oe nov in
-  check "surviving enum variant not blocked" (not (L.needs_attention ns))
+  check "surviving enum variant not blocked" (not (M.needs_attention ns))
 
 let test_apply_record () =
   let nv, ns =
-    L.migrate_record `En []
+    M.migrate_record `En []
       ~old_fields:[ "a", O.TInt; "b", O.TMoney ]
       ~new_fields:[ "a", O.TInt; "c", O.TBool ]
       ~values:[ "a", rvi 1; "b", rvm 5 ]
@@ -467,22 +468,22 @@ let test_apply_record () =
   in
   check "record keeps surviving input" (List.assoc "a" nv = rvi 1);
   check "record adds new input as Unset" (List.assoc "c" nv = { O.value = O.Unset; attrs = [] });
-  check "record flags add + drop" (has (L.NeedsResolving L.NeedsValue) ns && has (L.Resolved L.Dropped) ns);
+  check "record flags add + drop" (has (M.NeedsResolving M.NeedsValue) ns && has (M.Resolved M.Dropped) ns);
   check "record needs no decision (only an added value)" (not (has_decision ns));
   (* signature_renames feeds the rename map apply consumes *)
   check "signature_renames detects the struct rename"
-    (L.signature_renames sd_base sd_rename = [ "M.Pair", "M.Pair2" ])
+    (M.signature_renames sd_base sd_rename = [ "M.Pair", "M.Pair2" ])
 
 (* the isolation helper: keep only the tested module's import line *)
 let test_line_mentions_module () =
   check "plain import"
-    (L.line_mentions_module ~module_name:"OptTup" "> Using OptTup");
+    (M.line_mentions_module ~module_name:"OptTup" "> Using OptTup");
   check "aliased import"
-    (L.line_mentions_module ~module_name:"OptTup" "> Using OptTup as O");
+    (M.line_mentions_module ~module_name:"OptTup" "> Using OptTup as O");
   check "not a substring match"
-    (not (L.line_mentions_module ~module_name:"Tax" "> Using TaxHelper"));
+    (not (M.line_mentions_module ~module_name:"Tax" "> Using TaxHelper"));
   check "unrelated import"
-    (not (L.line_mentions_module ~module_name:"Tax" "> Using Helper"))
+    (not (M.line_mentions_module ~module_name:"Tax" "> Using Helper"))
 
 let () =
   let reg title f =
