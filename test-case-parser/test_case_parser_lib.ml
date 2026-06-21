@@ -1203,6 +1203,14 @@ let rec migrate_value
     String.equal o n
     || List.exists (fun (a, b) -> String.equal a o && String.equal b n) renames
   in
+  (* A pre-existing hole short-circuits the type walk: [Unset] = "not yet
+     provided", so whatever the type change, the result is still a hole the user
+     must fill (NeedsValue). [NotOverridden] (a context var's "use the scope
+     default") is a valid, type-agnostic state — keep it. *)
+  match v.value with
+  | O.Unset -> v, [ added_at path ]
+  | O.NotOverridden -> v, []
+  | _ -> (
   match old_typ, new_typ with
   | TOption a, TOption b -> (
     (* option -> option: keep the present/absent shape, retype the payload. *)
@@ -1253,7 +1261,9 @@ let rec migrate_value
       in
       p', did Unwrapped :: ns
     | O.Enum (_, (_, None)) ->
-      v, [ blocked "cannot unwrap an Absent option" ]
+      (* unwrapping an Absent: the field is now mandatory but there is no value
+         to carry over — leave a hole for the user, exactly like an added field. *)
+      { value = O.Unset; attrs = v.attrs }, [ added_at path ]
     | _ -> v, [ blocked "expected an option value" ])
   | TArray a, TArray b -> (
     match v.value with
@@ -1371,7 +1381,7 @@ let rec migrate_value
           blocked
             (Printf.sprintf "needs explicit migration: %s -> %s"
                (tystr old_typ) (tystr new_typ));
-        ] )
+        ] ))
 
 (* Migrate a whole input/output record (name -> value) given the old and new
    typed fields. Added fields get a synthesized default (flagged); dropped

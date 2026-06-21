@@ -409,9 +409,17 @@ let test_apply_option () =
   let v, ns = mv (O.TOption O.TMoney) O.TMoney (some_money 100) in
   check "unwrap Present yields payload" (v = rvm 100);
   check "unwrap flagged" (has (L.Resolved L.Unwrapped) ns && not (L.needs_attention ns));
-  (* unwrap an Absent is blocked (no value to recover) *)
-  let _, ns = mv (O.TOption O.TMoney) O.TMoney (none_money ()) in
-  check "unwrap Absent blocked" (L.needs_attention ns)
+  (* unwrap an Absent: no value to carry over -> a hole to fill, like an added
+     field (NeedsValue, not a hard NeedsDecision) *)
+  let v, ns = mv (O.TOption O.TMoney) O.TMoney (none_money ()) in
+  check "unwrap Absent -> Unset hole" (v = { value = O.Unset; attrs = [] });
+  check "unwrap Absent needs a value, not a decision"
+    (has (L.NeedsResolving L.NeedsValue) ns && not (has_decision ns));
+  (* a pre-existing Unset stays a hole whatever the type op *)
+  let unset : O.runtime_value = { value = O.Unset; attrs = [] } in
+  let v, ns = mv O.TMoney (O.TOption O.TMoney) unset in
+  check "Unset short-circuits to NeedsValue"
+    (v = unset && has (L.NeedsResolving L.NeedsValue) ns)
 
 let test_apply_blocked () =
   (* scalar coerce is never auto *)
