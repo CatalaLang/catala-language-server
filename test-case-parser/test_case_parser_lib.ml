@@ -1203,13 +1203,16 @@ let rec migrate_value
     String.equal o n
     || List.exists (fun (a, b) -> String.equal a o && String.equal b n) renames
   in
-  (* A pre-existing hole short-circuits the type walk: [Unset] = "not yet
-     provided", so whatever the type change, the result is still a hole the user
-     must fill (NeedsValue). [NotOverridden] (a context var's "use the scope
-     default") is a valid, type-agnostic state — keep it. *)
+  (* Bottom / type-agnostic values short-circuit the type walk and are preserved
+     VERBATIM: [Unset] is `impossible` (⊥), which typechecks at any type, so it
+     survives any type change as-is (NOT wrapped to `Present content impossible`)
+     — a deliberate `impossible` is a complete value, not a hole, so it is not
+     flagged. [NotOverridden] (a context var's "use the scope default") is
+     likewise a valid type-agnostic state. (A hole the MIGRATION itself creates —
+     an added field, or unwrapping an Absent — is flagged NeedsValue at that site;
+     a pre-existing Unset is the runner's concern, not the migration's.) *)
   match v.value with
-  | O.Unset -> v, [ added_at path ]
-  | O.NotOverridden -> v, []
+  | O.Unset | O.NotOverridden -> v, []
   | _ -> (
   match old_typ, new_typ with
   | TOption a, TOption b -> (

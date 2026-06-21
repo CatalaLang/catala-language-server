@@ -415,11 +415,12 @@ let test_apply_option () =
   check "unwrap Absent -> Unset hole" (v = { value = O.Unset; attrs = [] });
   check "unwrap Absent needs a value, not a decision"
     (has (L.NeedsResolving L.NeedsValue) ns && not (has_decision ns));
-  (* a pre-existing Unset stays a hole whatever the type op *)
+  (* a deliberate `impossible` (Unset) is ⊥, valid at any type, so it is
+     preserved verbatim across a type change — NOT wrapped to Present, NOT flagged *)
   let unset : O.runtime_value = { value = O.Unset; attrs = [] } in
   let v, ns = mv O.TMoney (O.TOption O.TMoney) unset in
-  check "Unset short-circuits to NeedsValue"
-    (v = unset && has (L.NeedsResolving L.NeedsValue) ns)
+  check "impossible (Unset) preserved verbatim across wrap, unflagged"
+    (v = unset && ns = [])
 
 let test_apply_blocked () =
   (* scalar coerce is never auto *)
