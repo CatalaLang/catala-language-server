@@ -1131,6 +1131,279 @@ let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
   in
   { value; attrs = [] }
 
+(* === apply (slice a): structured value rewrite ============================
+
+   Pure. Fold a (renames + old-type/new-type) correspondence onto a recovered
+   value tree (`runtime_value`), applying ONLY the auto tiers: nominal relabel,
+   add+default, drop, option wrap/unwrap, and recursing structurally. Anything
+   else — scalar coerce, a removed/renamed enum variant, tuple arity change,
+   struct<->enum — is left as an explicit `A_blocked` note: loud, never a silent
+   guess. `apply` (slice b: recover -> rewrite -> write -> verify) consumes this;
+   here we only build and unit-test the rewrite. Renames are `(old,new)` nominal
+   name pairs, as produced by `signature_renames` from `sig_diff`. *)
+
+type mig_action =
+  | A_keep
+  | A_relabel of string * string (* nominal name old -> new *)
+  | A_wrap
+  | A_unwrap
+  | A_drop
+  | A_default (* synthesized default for an added field/input *)
+  | A_blocked of string (* reason; needs a human decision *)
+
+type mig_note = { path : string; action : mig_action }
+
+let mig_blocked notes =
+  List.exists (function { action = A_blocked _; _ } -> true | _ -> false) notes
+
+let is_option = function O.TOption _ -> true | _ -> false
+
+let rec tystr : O.typ -> string = function
+  | TBool -> "bool"
+  | TInt -> "int"
+  | TRat -> "rat"
+  | TMoney -> "money"
+  | TDate -> "date"
+  | TDuration -> "duration"
+  | TUnit -> "unit"
+  | TUnset -> "unset"
+  | TOption t -> "option(" ^ tystr t ^ ")"
+  | TArray t -> "array(" ^ tystr t ^ ")"
+  | TTuple l -> "tuple(" ^ String.concat "," (List.map tystr l) ^ ")"
+  | TArrow _ -> "arrow"
+  | TStruct d -> "@" ^ d.struct_name
+  | TEnum d -> "@" ^ d.enum_name
+
+(* Rewrite [v] (of type [old_typ]) to [new_typ]. *)
+let rec migrate_value
+    lang
+    (renames : (string * string) list)
+    ~(old_typ : O.typ)
+    ~(new_typ : O.typ)
+    ~(path : string)
+    (v : O.runtime_value) : O.runtime_value * mig_note list =
+  let note action = { path; action } in
+  let same_nominal o n =
+    String.equal o n
+    || List.exists (fun (a, b) -> String.equal a o && String.equal b n) renames
+  in
+  match old_typ, new_typ with
+  | TOption a, TOption b -> (
+    (* option -> option: keep the present/absent shape, retype the payload. *)
+    match v.value with
+    | O.Enum (odecl, (ctor, None)) ->
+      let retype (c, t) = c, Option.map (fun _ -> b) t in
+      ( {
+          value =
+            O.Enum
+              ( { odecl with constructors = List.map retype odecl.constructors },
+                (ctor, None) );
+          attrs = v.attrs;
+        },
+        [] )
+    | O.Enum (odecl, (ctor, Some p)) ->
+      let p', ns =
+        migrate_value lang renames ~old_typ:a ~new_typ:b ~path:(path ^ "?") p
+      in
+      let retype (c, t) = c, Option.map (fun _ -> b) t in
+      ( {
+          value =
+            O.Enum
+              ( { odecl with constructors = List.map retype odecl.constructors },
+                (ctor, Some p') );
+          attrs = v.attrs;
+        },
+        ns )
+    | _ -> v, [ note (A_blocked "expected an option value") ])
+  | a, TOption b when not (is_option a) ->
+    (* wrap: T -> option T *)
+    let inner, ns =
+      migrate_value lang renames ~old_typ:a ~new_typ:b ~path v
+    in
+    ( {
+        value =
+          O.Enum
+            ( mk_optional_enum_decl lang b,
+              ((get_lang_strings lang).present, Some inner) );
+        attrs = v.attrs;
+      },
+      note A_wrap :: ns )
+  | TOption a, b when not (is_option b) -> (
+    (* unwrap: option T -> T *)
+    match v.value with
+    | O.Enum (_, (_, Some p)) ->
+      let p', ns =
+        migrate_value lang renames ~old_typ:a ~new_typ:b ~path p
+      in
+      p', note A_unwrap :: ns
+    | O.Enum (_, (_, None)) ->
+      v, [ note (A_blocked "cannot unwrap an Absent option") ]
+    | _ -> v, [ note (A_blocked "expected an option value") ])
+  | TArray a, TArray b -> (
+    match v.value with
+    | O.Array elems ->
+      let elems', ns =
+        Array.to_list elems
+        |> List.mapi (fun i e ->
+               migrate_value lang renames ~old_typ:a ~new_typ:b
+                 ~path:(Printf.sprintf "%s[%d]" path i) e)
+        |> List.split
+      in
+      ( { value = O.Array (Array.of_list elems'); attrs = v.attrs },
+        List.concat ns )
+    | _ -> v, [ note (A_blocked "expected an array value") ])
+  | TTuple oas, TTuple nbs -> (
+    if List.length oas <> List.length nbs then
+      v, [ note (A_blocked "tuple arity changed") ]
+    else
+      match v.value with
+      | O.Array elems when Array.length elems = List.length oas ->
+        let elems', ns =
+          List.combine (List.combine oas nbs) (Array.to_list elems)
+          |> List.mapi (fun i ((oa, nb), e) ->
+                 migrate_value lang renames ~old_typ:oa ~new_typ:nb
+                   ~path:(Printf.sprintf "%s(%d)" path i) e)
+          |> List.split
+        in
+        ( { value = O.Array (Array.of_list elems'); attrs = v.attrs },
+          List.concat ns )
+      | _ -> v, [ note (A_blocked "malformed tuple value") ])
+  | TStruct od, TStruct nd -> (
+    if not (same_nominal od.struct_name nd.struct_name) then
+      ( v,
+        [
+          note
+            (A_blocked
+               (Printf.sprintf "type changed: %s -> %s" od.struct_name
+                  nd.struct_name));
+        ] )
+    else
+      match v.value with
+      | O.Struct (_, vfields) ->
+        let relabel =
+          if String.equal od.struct_name nd.struct_name then []
+          else [ note (A_relabel (od.struct_name, nd.struct_name)) ]
+        in
+        let new_fields, notes =
+          List.fold_left
+            (fun (acc, ns) (fname, nft) ->
+              let fpath = path ^ "." ^ fname in
+              match
+                List.assoc_opt fname od.fields, List.assoc_opt fname vfields
+              with
+              | Some oft, Some fv ->
+                let fv', fns =
+                  migrate_value lang renames ~old_typ:oft ~new_typ:nft
+                    ~path:fpath fv
+                in
+                acc @ [ fname, fv' ], ns @ fns
+              | _ ->
+                ( acc @ [ fname, generate_default_value lang nft ],
+                  ns @ [ { path = fpath; action = A_default } ] ))
+            ([], []) nd.fields
+        in
+        let dropped =
+          List.filter_map
+            (fun (fname, _) ->
+              if List.mem_assoc fname nd.fields then None
+              else Some { path = path ^ "." ^ fname; action = A_drop })
+            vfields
+        in
+        { value = O.Struct (nd, new_fields); attrs = v.attrs },
+        relabel @ notes @ dropped
+      | _ -> v, [ note (A_blocked "expected a struct value") ])
+  | TEnum od, TEnum nd -> (
+    if not (same_nominal od.enum_name nd.enum_name) then
+      ( v,
+        [
+          note
+            (A_blocked
+               (Printf.sprintf "type changed: %s -> %s" od.enum_name
+                  nd.enum_name));
+        ] )
+    else
+      match v.value with
+      | O.Enum (_, (ctor, payopt)) -> (
+        match List.assoc_opt ctor nd.constructors with
+        | None ->
+          ( v,
+            [
+              note
+                (A_blocked
+                   (Printf.sprintf "enum variant %s removed or renamed" ctor));
+            ] )
+        | Some new_payty -> (
+          let old_payty = Option.join (List.assoc_opt ctor od.constructors) in
+          match payopt, new_payty, old_payty with
+          | None, None, _ ->
+            { value = O.Enum (nd, (ctor, None)); attrs = v.attrs }, []
+          | Some p, Some npt, Some opt ->
+            let p', pns =
+              migrate_value lang renames ~old_typ:opt ~new_typ:npt
+                ~path:(path ^ ":" ^ ctor) p
+            in
+            { value = O.Enum (nd, (ctor, Some p')); attrs = v.attrs }, pns
+          | _ ->
+            ( v,
+              [
+                note
+                  (A_blocked
+                     (Printf.sprintf "enum variant %s payload shape changed"
+                        ctor));
+              ] )))
+      | _ -> v, [ note (A_blocked "expected an enum value") ])
+  | _ ->
+    if old_typ = new_typ then v, []
+    else
+      ( v,
+        [
+          note
+            (A_blocked
+               (Printf.sprintf "needs explicit migration: %s -> %s"
+                  (tystr old_typ) (tystr new_typ)));
+        ] )
+
+(* Migrate a whole input/output record (name -> value) given the old and new
+   typed fields. Added fields get a synthesized default (flagged); dropped
+   fields are noted. *)
+let migrate_record
+    lang
+    (renames : (string * string) list)
+    ~(old_fields : (string * O.typ) list)
+    ~(new_fields : (string * O.typ) list)
+    ~(values : (string * O.runtime_value) list) :
+    (string * O.runtime_value) list * mig_note list =
+  let migrated =
+    List.map
+      (fun (name, nt) ->
+        match List.assoc_opt name old_fields, List.assoc_opt name values with
+        | Some ot, Some v ->
+          let v', ns =
+            migrate_value lang renames ~old_typ:ot ~new_typ:nt ~path:name v
+          in
+          (name, v'), ns
+        | _ ->
+          ( (name, generate_default_value lang nt),
+            [ { path = name; action = A_default } ] ))
+      new_fields
+  in
+  let dropped =
+    List.filter_map
+      (fun (name, _) ->
+        if List.mem_assoc name new_fields then None
+        else Some { path = name; action = A_drop })
+      values
+  in
+  List.map fst migrated, List.concat_map snd migrated @ dropped
+
+(* Nominal renames between two signatures, for [migrate_value]/[migrate_record].
+   Derived from the same advisory detection that powers `migrate diff`. *)
+let signature_renames (old_sd : O.scope_def) (new_sd : O.scope_def) :
+    (string * string) list =
+  let oc = canonical_model old_sd and nc = canonical_model new_sd in
+  detect_renames oc nc (structural_diff oc nc)
+  |> List.map (fun (_, o, n) -> o, n)
+
 let patch_paths
     (modl : ModuleName.t)
     ({ tested_scope; test_inputs; test_outputs; _ } as test : O.test) =

@@ -334,6 +334,114 @@ let test_sig_diff_mechanical () =
   check_eq "ctx flip" ~expected:"~ input flag: ctx -> inp"
     ~actual:(String.concat " | " (ppdiff sd_base sd_ctxflip))
 
+(* ---- apply (slice a): structured value rewrite -------------------------- *)
+
+let rvi n : O.runtime_value = { value = O.Integer n; attrs = [] }
+let rvm n : O.runtime_value = { value = O.Money n; attrs = [] }
+let rvb b : O.runtime_value = { value = O.Bool b; attrs = [] }
+let sdecl name fields : O.struct_declaration = { struct_name = name; fields }
+let some_money m : O.runtime_value =
+  { value = O.Enum (L.mk_optional_enum_decl `En O.TMoney, ("Present", Some (rvm m))); attrs = [] }
+let none_money () : O.runtime_value =
+  { value = O.Enum (L.mk_optional_enum_decl `En O.TMoney, ("Absent", None)); attrs = [] }
+
+let mv ?(renames = []) old_typ new_typ v =
+  L.migrate_value `En renames ~old_typ ~new_typ ~path:"x" v
+
+let has act ns = List.exists (fun (n : L.mig_note) -> n.L.action = act) ns
+let has_relabel ns =
+  List.exists
+    (fun (n : L.mig_note) ->
+      match n.L.action with L.A_relabel _ -> true | _ -> false)
+    ns
+
+let test_apply_struct () =
+  (* rename: relabel the struct, values preserved, not blocked *)
+  let od = O.TStruct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ]) in
+  let nd = O.TStruct (sdecl "Cover" [ "first", O.TInt; "second", O.TMoney ]) in
+  let value : O.runtime_value =
+    { value = O.Struct (sdecl "Pair" [], [ "first", rvi 7; "second", rvm 300 ]); attrs = [] }
+  in
+  let v, ns = mv ~renames:[ "Pair", "Cover" ] od nd value in
+  let expected : O.runtime_value =
+    { value = O.Struct (sdecl "Cover" [ "first", O.TInt; "second", O.TMoney ],
+                        [ "first", rvi 7; "second", rvm 300 ]); attrs = [] }
+  in
+  check "rename relabels + preserves values" (v = expected);
+  check "rename not blocked" (not (L.mig_blocked ns));
+  check "rename emits relabel note" (has_relabel ns);
+  (* add field: synthesized default, flagged, not blocked *)
+  let od = O.TStruct (sdecl "Pair" [ "first", O.TInt ]) in
+  let nd = O.TStruct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ]) in
+  let value : O.runtime_value =
+    { value = O.Struct (sdecl "Pair" [], [ "first", rvi 7 ]); attrs = [] }
+  in
+  let v, ns = mv od nd value in
+  let expected : O.runtime_value =
+    { value = O.Struct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ],
+                        [ "first", rvi 7; "second", rvm 0 ]); attrs = [] }
+  in
+  check "add field defaults" (v = expected);
+  check "add field flagged A_default" (has L.A_default ns);
+  check "add field not blocked" (not (L.mig_blocked ns));
+  (* drop field: noted *)
+  let od = O.TStruct (sdecl "Pair" [ "first", O.TInt; "second", O.TMoney ]) in
+  let nd = O.TStruct (sdecl "Pair" [ "first", O.TInt ]) in
+  let value : O.runtime_value =
+    { value = O.Struct (sdecl "Pair" [], [ "first", rvi 7; "second", rvm 9 ]); attrs = [] }
+  in
+  let _, ns = mv od nd value in
+  check "drop field flagged A_drop" (has L.A_drop ns)
+
+let test_apply_option () =
+  (* wrap T -> option T *)
+  let v, ns = mv O.TMoney (O.TOption O.TMoney) (rvm 100) in
+  check "wrap produces Present" (v = some_money 100);
+  check "wrap flagged" (has L.A_wrap ns && not (L.mig_blocked ns));
+  (* unwrap a Present *)
+  let v, ns = mv (O.TOption O.TMoney) O.TMoney (some_money 100) in
+  check "unwrap Present yields payload" (v = rvm 100);
+  check "unwrap flagged" (has L.A_unwrap ns && not (L.mig_blocked ns));
+  (* unwrap an Absent is blocked (no value to recover) *)
+  let _, ns = mv (O.TOption O.TMoney) O.TMoney (none_money ()) in
+  check "unwrap Absent blocked" (L.mig_blocked ns)
+
+let test_apply_blocked () =
+  (* scalar coerce is never auto *)
+  let _, ns = mv O.TInt O.TMoney (rvi 5) in
+  check "int->money coerce blocked" (L.mig_blocked ns);
+  (* a removed enum variant can't be auto-mapped *)
+  let ctors = [ "Yes", Some O.TRat; "No", None ] in
+  let oe = O.TEnum { enum_name = "Choice"; constructors = ctors; ctor_attrs = [] } in
+  let ne = O.TEnum { enum_name = "Choice"; constructors = [ "No", None ]; ctor_attrs = [] } in
+  let yesv : O.runtime_value =
+    { value = O.Enum ({ enum_name = "Choice"; constructors = ctors; ctor_attrs = [] },
+                      ("Yes", Some { value = O.Decimal 1.5; attrs = [] })); attrs = [] }
+  in
+  let _, ns = mv oe ne yesv in
+  check "removed enum variant blocked" (L.mig_blocked ns);
+  (* a surviving variant is kept, not blocked *)
+  let nov : O.runtime_value =
+    { value = O.Enum ({ enum_name = "Choice"; constructors = ctors; ctor_attrs = [] }, ("No", None)); attrs = [] }
+  in
+  let _, ns = mv oe oe nov in
+  check "surviving enum variant not blocked" (not (L.mig_blocked ns))
+
+let test_apply_record () =
+  let nv, ns =
+    L.migrate_record `En []
+      ~old_fields:[ "a", O.TInt; "b", O.TMoney ]
+      ~new_fields:[ "a", O.TInt; "c", O.TBool ]
+      ~values:[ "a", rvi 1; "b", rvm 5 ]
+  in
+  check "record keeps surviving input" (List.assoc "a" nv = rvi 1);
+  check "record adds new input as default" (List.assoc "c" nv = rvb false);
+  check "record flags add + drop" (has L.A_default ns && has L.A_drop ns);
+  check "record not blocked" (not (L.mig_blocked ns));
+  (* signature_renames feeds the rename map apply consumes *)
+  check "signature_renames detects the struct rename"
+    (L.signature_renames sd_base sd_rename = [ "M.Pair", "M.Pair2" ])
+
 (* the isolation helper: keep only the tested module's import line *)
 let test_line_mentions_module () =
   check "plain import"
@@ -362,5 +470,9 @@ let () =
   reg "sig_diff empty iff hash equal" test_sig_diff_invariant;
   reg "sig_diff rename collapses" test_sig_diff_rename_collapses;
   reg "sig_diff mechanical nodes" test_sig_diff_mechanical;
+  reg "apply: struct rename/add/drop" test_apply_struct;
+  reg "apply: option wrap/unwrap" test_apply_option;
+  reg "apply: blocked (coerce, removed variant)" test_apply_blocked;
+  reg "apply: record add/drop + rename map" test_apply_record;
   reg "import-line module matching" test_line_mentions_module;
   Tezt.Test.run ()
