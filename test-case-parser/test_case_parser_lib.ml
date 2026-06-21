@@ -2664,7 +2664,7 @@ let live_scope_def ~test_file ~module_name ~scope_base =
                  module_name)
           | Some sc -> Ok (get_scope_def prg sc ~tested_module:mn))
       with
-      | Message.CompilerError _ ->
+      | Message.CompilerError _ | Message.CompilerErrors _ ->
         if not build_ready then
           Error "project not built — run `clerk start` first"
         else
