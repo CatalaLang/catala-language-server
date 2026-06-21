@@ -257,6 +257,83 @@ let test_classify () =
   check_eq "missing-snapshot reason" ~expected:"missing snapshot M.S@h.sig.json"
     ~actual:(Option.value ~default:"" reason2)
 
+(* ---- structured signature diff ------------------------------------------ *)
+
+let cm = L.canonical_model
+let sdiff a b = L.sig_diff (cm a) (cm b)
+let ppdiff a b = L.pp_sig_diff (cm a) (cm b) (sdiff a b)
+
+(* a scope_def variant helper: map over inputs by name *)
+let map_input name f sd =
+  {
+    sd with
+    O.inputs =
+      List.map (fun (n, si) -> if String.equal n name then n, f si else n, si)
+        sd.O.inputs;
+  }
+
+let pair2_struct : O.typ =
+  O.TStruct
+    { struct_name = "Pair2"; fields = [ "first", O.TInt; "second", O.TMoney ] }
+
+(* same as sd_base but the Pair struct is renamed to Pair2 everywhere *)
+let sd_rename =
+  { sd_base with outputs = [ "combo", O.TTuple [ choice_enum; O.TOption pair2_struct ] ] }
+
+let sd_add_input =
+  { sd_base with inputs = ("extra", { O.typ = O.TBool; is_context = false }) :: sd_base.inputs }
+
+let sd_drop_input =
+  { sd_base with inputs = List.filter (fun (n, _) -> n <> "flag") sd_base.inputs }
+
+let sd_retype =
+  map_input "maybe_amount" (fun si -> { si with O.typ = O.TOption O.TInt }) sd_base
+
+let sd_ctxflip = map_input "flag" (fun si -> { si with O.is_context = false }) sd_base
+
+let test_sig_diff_invariant () =
+  (* THE lock: sig_diff is empty iff the hashes are equal. Cover identity and
+     every change kind, including a mixed rename+add. *)
+  let sd_mixed = { sd_add_input with outputs = sd_rename.outputs } in
+  let pairs =
+    [
+      "identity", sd_base, sd_base;
+      "rename", sd_base, sd_rename;
+      "add input", sd_base, sd_add_input;
+      "drop input", sd_base, sd_drop_input;
+      "retype", sd_base, sd_retype;
+      "ctx flip", sd_base, sd_ctxflip;
+      "mixed rename+add", sd_base, sd_mixed;
+    ]
+  in
+  List.iter
+    (fun (name, a, b) ->
+      let empty = sdiff a b = [] in
+      let hash_eq = String.equal (h a) (h b) in
+      check
+        (Printf.sprintf "invariant (%s): diff=[] <=> hash= (diff_empty=%b hash_eq=%b)"
+           name empty hash_eq)
+        (empty = hash_eq))
+    pairs
+
+let test_sig_diff_rename_collapses () =
+  (* a struct rename touches a reference site AND the def, yet collapses to one
+     advisory rename node — the whole point of the structured diff. *)
+  check_eq "rename collapses to one line"
+    ~expected:"rename struct M.Pair -> M.Pair2"
+    ~actual:(String.concat " | " (ppdiff sd_base sd_rename));
+  check "rename is exactly one node" (List.length (sdiff sd_base sd_rename) = 1)
+
+let test_sig_diff_mechanical () =
+  check_eq "add input" ~expected:"+ input extra: bool"
+    ~actual:(String.concat " | " (ppdiff sd_base sd_add_input));
+  check_eq "drop input" ~expected:"- input flag: bool (ctx)"
+    ~actual:(String.concat " | " (ppdiff sd_base sd_drop_input));
+  check_eq "retype input" ~expected:"~ input maybe_amount: option(money) -> option(int)"
+    ~actual:(String.concat " | " (ppdiff sd_base sd_retype));
+  check_eq "ctx flip" ~expected:"~ input flag: ctx -> inp"
+    ~actual:(String.concat " | " (ppdiff sd_base sd_ctxflip))
+
 (* the isolation helper: keep only the tested module's import line *)
 let test_line_mentions_module () =
   check "plain import"
@@ -282,5 +359,8 @@ let () =
   reg "parser ignores non-test scopes" test_parse_ignores_non_test;
   reg "textual helpers" test_helpers;
   reg "classification decision table" test_classify;
+  reg "sig_diff empty iff hash equal" test_sig_diff_invariant;
+  reg "sig_diff rename collapses" test_sig_diff_rename_collapses;
+  reg "sig_diff mechanical nodes" test_sig_diff_mechanical;
   reg "import-line module matching" test_line_mentions_module;
   Tezt.Test.run ()

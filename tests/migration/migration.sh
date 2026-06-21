@@ -99,6 +99,10 @@ state() { # state() FILE -> prints the first entry's state
 [ "$(state t.catala_en)" = "Fresh" ] \
   || { echo "FAIL(migrate): expected Fresh for pinned, undrifted test"; exit 1; }
 
+# gate (Step 0): --check passes (exit 0) when nothing is stale/blocked
+( cd _migrate && catala testcase migrate status --check t.catala_en >/dev/null 2>&1 ) \
+  || { echo "FAIL(gate): --check must pass on a fresh suite"; exit 1; }
+
 # unknown: a test with no #[testcase.sig] pin
 grep -v 'testcase.sig' _migrate/t.catala_en > _migrate/u.catala_en
 [ "$(state u.catala_en)" = "Unknown" ] \
@@ -112,12 +116,18 @@ sed -i 's/input pair content/input pair2 content/' _migrate/OptTup.catala_en
 [ "$(state t.catala_en)" = "Stale" ] \
   || { echo "FAIL(migrate): expected Stale after drift with snapshot present"; exit 1; }
 
-# migrate diff: the canonical diff of the snapshot vs live shows the rename
+# gate (Step 0): --check now fails (exit 1) because a test is stale
+if ( cd _migrate && catala testcase migrate status --check t.catala_en >/dev/null 2>&1 ); then
+  echo "FAIL(gate): --check must fail when a test is stale"; exit 1
+fi
+
+# migrate diff: the structured canonical diff of the snapshot vs live shows the
+# input rename as a removed + added pair (input renames are not auto-grouped).
 DIFF=$( cd _migrate && catala testcase migrate diff t.catala_en 2>/dev/null )
-echo "$DIFF" | grep -q '^[[:space:]]*- in pair inp tuple(int,money)$' \
-  || { echo "FAIL(diff): expected '- in pair ...' line; got:"; echo "$DIFF"; exit 1; }
-echo "$DIFF" | grep -q '^[[:space:]]*+ in pair2 inp tuple(int,money)$' \
-  || { echo "FAIL(diff): expected '+ in pair2 ...' line; got:"; echo "$DIFF"; exit 1; }
+echo "$DIFF" | grep -q '^[[:space:]]*- input pair: tuple(int,money)$' \
+  || { echo "FAIL(diff): expected '- input pair ...' line; got:"; echo "$DIFF"; exit 1; }
+echo "$DIFF" | grep -q '^[[:space:]]*+ input pair2: tuple(int,money)$' \
+  || { echo "FAIL(diff): expected '+ input pair2 ...' line; got:"; echo "$DIFF"; exit 1; }
 
 # blocked: same drift but the pinned snapshot is gone -> not recoverable
 mv _migrate/OptTup.Calc@*.sig.json _migrate/_hidden.sig.json

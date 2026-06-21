@@ -141,6 +141,16 @@ let with_json =
   Arg.(
     value & flag & info ["json"] ~doc:"Output machine-readable JSON instead of a report.")
 
+let with_check =
+  Arg.(
+    value
+    & flag
+    & info ["check"]
+        ~doc:
+          "Gate mode: exit non-zero if any test is stale or blocked (drift or \
+           corruption). Unpinned (unknown) tests only warn. Intended as a CI \
+           freshness gate.")
+
 let migrate_path =
   Arg.(
     required
@@ -156,6 +166,7 @@ let cmd_migrate_status =
            drift, bucketing each into fresh / stale / unknown / blocked.")
     Term.(
       const Lib.migrate_status
+      $ with_check
       $ with_json
       $ sig_dir
       $ migrate_path

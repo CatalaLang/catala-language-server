@@ -528,8 +528,56 @@ let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
 
 let sig_scheme_version = "v1"
 
-let scope_signature_canonical (sd : O.scope_def) : string =
-  let buf = Buffer.create 1024 in
+(* A type REFERENCE: the structural skeleton with nominal types (struct/enum)
+   reduced to their qualified NAME only. Inline bodies are dropped here and live
+   once in the def-set ([cs_structs]/[cs_enums]); recursion is thereby broken.
+   [string_of_cref] renders exactly the canonical reference syntax, so the diff
+   and the hash agree on what a "type" is. *)
+type cref =
+  | RBool
+  | RInt
+  | RRat
+  | RMoney
+  | RDate
+  | RDuration
+  | RUnit
+  | RUnset
+  | ROption of cref
+  | RArray of cref
+  | RTuple of cref list
+  | RArrow of cref list * cref
+  | RNominal of string (* qualified struct/enum name *)
+
+let rec string_of_cref = function
+  | RBool -> "bool"
+  | RInt -> "int"
+  | RRat -> "rat"
+  | RMoney -> "money"
+  | RDate -> "date"
+  | RDuration -> "duration"
+  | RUnit -> "unit"
+  | RUnset -> "unset"
+  | ROption t -> "option(" ^ string_of_cref t ^ ")"
+  | RArray t -> "array(" ^ string_of_cref t ^ ")"
+  | RTuple tl -> "tuple(" ^ String.concat "," (List.map string_of_cref tl) ^ ")"
+  | RArrow (tl, t) ->
+    "arrow("
+    ^ String.concat "," (List.map string_of_cref tl)
+    ^ "->" ^ string_of_cref t ^ ")"
+  | RNominal n -> "@" ^ n
+
+(* The canonical model of a scope's I/O contract: the navigable form the text
+   projection renders and the structured diff walks. Same data, two consumers. *)
+type csig = {
+  cs_module : string;
+  cs_name : string;
+  cs_inputs : (string * (bool * cref)) list; (* name -> (is_context, type) *)
+  cs_outputs : (string * cref) list;
+  cs_structs : (string * (string * cref) list) list; (* name -> fields *)
+  cs_enums : (string * (string * cref option) list) list; (* name -> ctors *)
+}
+
+let canonical_model (sd : O.scope_def) : csig =
   (* `list-scopes` of a module leaves the scope's OWN locally-declared types
      unqualified ("Pair"), but a test importing that module sees them qualified
      ("Mod.Pair"). Both paths must canonicalize identically for drift detection,
@@ -538,82 +586,402 @@ let scope_signature_canonical (sd : O.scope_def) : string =
     if String.equal sd.module_name "" || String.contains name '.' then name
     else sd.module_name ^ "." ^ name
   in
-  let structs : (string, (string * O.typ) list) Hashtbl.t = Hashtbl.create 16 in
-  let enums : (string, (string * O.typ option) list) Hashtbl.t =
+  let structs : (string, (string * cref) list) Hashtbl.t = Hashtbl.create 16 in
+  let enums : (string, (string * cref option) list) Hashtbl.t =
     Hashtbl.create 16
   in
-  let rec collect (t : O.typ) : unit =
+  let rec cref_of (t : O.typ) : cref =
     match t with
-    | TBool | TInt | TRat | TMoney | TDate | TDuration | TUnit | TUnset -> ()
-    | TOption t | TArray t -> collect t
-    | TTuple tl -> List.iter collect tl
-    | TArrow (tl, t) ->
-      List.iter collect tl;
-      collect t
+    | TBool -> RBool
+    | TInt -> RInt
+    | TRat -> RRat
+    | TMoney -> RMoney
+    | TDate -> RDate
+    | TDuration -> RDuration
+    | TUnit -> RUnit
+    | TUnset -> RUnset
+    | TOption t -> ROption (cref_of t)
+    | TArray t -> RArray (cref_of t)
+    | TTuple tl -> RTuple (List.map cref_of tl)
+    | TArrow (tl, t) -> RArrow (List.map cref_of tl, cref_of t)
     | TStruct { struct_name; fields } ->
-      let struct_name = qualify struct_name in
-      if not (Hashtbl.mem structs struct_name) then begin
-        Hashtbl.add structs struct_name fields;
-        List.iter (fun (_, t) -> collect t) fields
-      end
+      let n = qualify struct_name in
+      (* Reserve the name before recursing so a self-referential field
+         terminates (it sees [mem] and returns the bare reference). *)
+      if not (Hashtbl.mem structs n) then begin
+        Hashtbl.add structs n [];
+        Hashtbl.replace structs n
+          (List.map (fun (f, t) -> f, cref_of t) fields)
+      end;
+      RNominal n
     | TEnum { enum_name; constructors; _ } ->
-      let enum_name = qualify enum_name in
-      if not (Hashtbl.mem enums enum_name) then begin
-        Hashtbl.add enums enum_name constructors;
-        List.iter (fun (_, t) -> Option.iter collect t) constructors
-      end
+      let n = qualify enum_name in
+      if not (Hashtbl.mem enums n) then begin
+        Hashtbl.add enums n [];
+        Hashtbl.replace enums n
+          (List.map (fun (c, t) -> c, Option.map cref_of t) constructors)
+      end;
+      RNominal n
   in
-  let rec ref_of (t : O.typ) : string =
-    match t with
-    | TBool -> "bool"
-    | TInt -> "int"
-    | TRat -> "rat"
-    | TMoney -> "money"
-    | TDate -> "date"
-    | TDuration -> "duration"
-    | TUnit -> "unit"
-    | TUnset -> "unset"
-    | TOption t -> "option(" ^ ref_of t ^ ")"
-    | TArray t -> "array(" ^ ref_of t ^ ")"
-    | TTuple tl -> "tuple(" ^ String.concat "," (List.map ref_of tl) ^ ")"
-    | TArrow (tl, t) ->
-      "arrow(" ^ String.concat "," (List.map ref_of tl) ^ "->" ^ ref_of t ^ ")"
-    | TStruct { struct_name; _ } -> "@" ^ qualify struct_name
-    | TEnum { enum_name; _ } -> "@" ^ qualify enum_name
+  let cs_inputs =
+    List.map
+      (fun (n, (si : O.scope_input)) -> n, (si.is_context, cref_of si.typ))
+      sd.inputs
   in
+  let cs_outputs = List.map (fun (n, t) -> n, cref_of t) sd.outputs in
+  let to_list tbl = Hashtbl.fold (fun k v acc -> (k, v) :: acc) tbl [] in
+  {
+    cs_module = sd.module_name;
+    cs_name = sd.name;
+    cs_inputs;
+    cs_outputs;
+    cs_structs = to_list structs;
+    cs_enums = to_list enums;
+  }
+
+(* Render the canonical model to its deterministic text. Sort order is the
+   contract: names sorted everywhere, tuple element order preserved, enums
+   before structs. This text is the hash preimage. *)
+let canonical_text (cs : csig) : string =
+  let buf = Buffer.create 1024 in
   let by_name (a, _) (b, _) = String.compare a b in
-  List.iter (fun (_, (si : O.scope_input)) -> collect si.typ) sd.inputs;
-  List.iter (fun (_, t) -> collect t) sd.outputs;
+  let r = string_of_cref in
   Buffer.add_string buf (Printf.sprintf "sig/%s\n" sig_scheme_version);
-  Buffer.add_string buf (Printf.sprintf "scope %s.%s\n" sd.module_name sd.name);
-  List.sort by_name sd.inputs
-  |> List.iter (fun (name, (si : O.scope_input)) ->
-       Buffer.add_string buf
-         (Printf.sprintf "in %s %s %s\n" name
-            (if si.is_context then "ctx" else "inp")
-            (ref_of si.typ)));
-  List.sort by_name sd.outputs
-  |> List.iter (fun (name, t) ->
-       Buffer.add_string buf (Printf.sprintf "out %s %s\n" name (ref_of t)));
-  let names tbl = Hashtbl.fold (fun k _ acc -> k :: acc) tbl [] |> List.sort String.compare in
-  names enums
-  |> List.iter (fun name ->
-       Buffer.add_string buf (Printf.sprintf "def enum %s\n" name);
-       Hashtbl.find enums name
-       |> List.sort by_name
-       |> List.iter (fun (ctor, t) ->
-            Buffer.add_string buf
-              (Printf.sprintf "  ctor %s %s\n" ctor
-                 (match t with None -> "-" | Some t -> ref_of t))));
-  names structs
-  |> List.iter (fun name ->
-       Buffer.add_string buf (Printf.sprintf "def struct %s\n" name);
-       Hashtbl.find structs name
-       |> List.sort by_name
-       |> List.iter (fun (fld, t) ->
-            Buffer.add_string buf
-              (Printf.sprintf "  field %s %s\n" fld (ref_of t))));
+  Buffer.add_string buf (Printf.sprintf "scope %s.%s\n" cs.cs_module cs.cs_name);
+  List.sort by_name cs.cs_inputs
+  |> List.iter (fun (name, (ctx, cr)) ->
+         Buffer.add_string buf
+           (Printf.sprintf "in %s %s %s\n" name
+              (if ctx then "ctx" else "inp")
+              (r cr)));
+  List.sort by_name cs.cs_outputs
+  |> List.iter (fun (name, cr) ->
+         Buffer.add_string buf (Printf.sprintf "out %s %s\n" name (r cr)));
+  List.sort by_name cs.cs_enums
+  |> List.iter (fun (name, ctors) ->
+         Buffer.add_string buf (Printf.sprintf "def enum %s\n" name);
+         List.sort by_name ctors
+         |> List.iter (fun (ctor, p) ->
+                Buffer.add_string buf
+                  (Printf.sprintf "  ctor %s %s\n" ctor
+                     (match p with None -> "-" | Some cr -> r cr))));
+  List.sort by_name cs.cs_structs
+  |> List.iter (fun (name, fields) ->
+         Buffer.add_string buf (Printf.sprintf "def struct %s\n" name);
+         List.sort by_name fields
+         |> List.iter (fun (fld, cr) ->
+                Buffer.add_string buf
+                  (Printf.sprintf "  field %s %s\n" fld (r cr))));
   Buffer.contents buf
+
+let scope_signature_canonical (sd : O.scope_def) : string =
+  canonical_text (canonical_model sd)
+
+(* === Structured signature diff (for migration plan/apply) ===================
+
+   A SCHEMA diff: two signatures (not two values), keyed by a location into the
+   contract. Distinct from the value-level [compute_diff] below, which compares
+   two values of ONE fixed type; here the type itself changes. The model is
+   navigable so [apply] can later lower each node onto the recovered value tree.
+
+   Lock invariant (unit-tested): [sig_diff a b = [] iff hash a = hash b]. The
+   structural pass alone guarantees it; the rename pass only REGROUPS nodes
+   (a detected rename always injects a [Renamed] node), so it can never turn a
+   non-empty diff empty. Rename detection is therefore advisory — wrong guesses
+   cost readability, never totality. *)
+
+type sdiff_loc =
+  | LScope (* scope identity (module.name) *)
+  | LInput of string
+  | LOutput of string
+  | LStruct of string (* a struct def, by qualified name *)
+  | LEnum of string
+  | LField of string * string (* struct name, field name *)
+  | LCtor of string * string (* enum name, ctor name *)
+
+type sdiff_change =
+  | Added
+  | Removed
+  | Retyped of cref * cref
+  | CtxFlip of bool * bool (* old is_context, new is_context *)
+  | PayloadChanged of cref option * cref option (* enum ctor payload *)
+  | Renamed of string (* this def renamed to <new qualified name> *)
+
+type sdiff_node = sdiff_loc * sdiff_change
+
+(* Deterministic ordering: group ctors under their enum, fields under their
+   struct; inputs, then outputs, then enums, then structs (mirrors the text). *)
+let loc_sort_key = function
+  | LScope -> "0"
+  | LInput n -> "1 " ^ n
+  | LOutput n -> "2 " ^ n
+  | LEnum n -> "3 " ^ n ^ " "
+  | LCtor (e, c) -> "3 " ^ e ^ "  " ^ c
+  | LStruct n -> "4 " ^ n ^ " "
+  | LField (s, f) -> "4 " ^ s ^ "  " ^ f
+
+(* One comparable atom per canonical line: [key] is the equality oracle (equal
+   key <=> equal canonical line), [cref]/[ctx] carry structured detail. *)
+type atom = { key : string; cref : cref option; ctx : bool option }
+
+let atoms_of (cs : csig) : (sdiff_loc * atom) list =
+  let a ?cref ?ctx key = { key; cref; ctx } in
+  let scope = [ LScope, a (cs.cs_module ^ "." ^ cs.cs_name) ] in
+  let inputs =
+    List.map
+      (fun (n, (ctx, cr)) ->
+        ( LInput n,
+          a ~cref:cr ~ctx
+            ((if ctx then "ctx " else "inp ") ^ string_of_cref cr) ))
+      cs.cs_inputs
+  in
+  let outputs =
+    List.map (fun (n, cr) -> LOutput n, a ~cref:cr (string_of_cref cr)) cs.cs_outputs
+  in
+  let enums =
+    List.concat_map
+      (fun (e, ctors) ->
+        (LEnum e, a "enum")
+        :: List.map
+             (fun (c, p) ->
+               ( LCtor (e, c),
+                 {
+                   key = (match p with None -> "-" | Some cr -> string_of_cref cr);
+                   cref = p;
+                   ctx = None;
+                 } ))
+             ctors)
+      cs.cs_enums
+  in
+  let structs =
+    List.concat_map
+      (fun (s, fields) ->
+        (LStruct s, a "struct")
+        :: List.map
+             (fun (f, cr) -> LField (s, f), a ~cref:cr (string_of_cref cr))
+             fields)
+      cs.cs_structs
+  in
+  scope @ inputs @ outputs @ enums @ structs
+
+(* Exact, total structural diff over the canonical atoms. *)
+let structural_diff (old_cs : csig) (new_cs : csig) : sdiff_node list =
+  let oa = atoms_of old_cs and na = atoms_of new_cs in
+  let locs =
+    List.sort_uniq
+      (fun x y -> String.compare (loc_sort_key x) (loc_sort_key y))
+      (List.map fst oa @ List.map fst na)
+  in
+  List.concat_map
+    (fun loc ->
+      match List.assoc_opt loc oa, List.assoc_opt loc na with
+      | Some _, None -> [ loc, Removed ]
+      | None, Some _ -> [ loc, Added ]
+      | None, None -> []
+      | Some o, Some n when String.equal o.key n.key -> []
+      | Some o, Some n -> (
+        (* both present, content differs *)
+        match loc with
+        | LInput _ ->
+          let ctx_node =
+            match o.ctx, n.ctx with
+            | Some a, Some b when a <> b -> [ loc, CtxFlip (a, b) ]
+            | _ -> []
+          in
+          let ty_node =
+            match o.cref, n.cref with
+            | Some a, Some b when a <> b -> [ loc, Retyped (a, b) ]
+            | _ -> []
+          in
+          ctx_node @ ty_node
+        | LCtor _ -> [ loc, PayloadChanged (o.cref, n.cref) ]
+        | _ -> (
+          match o.cref, n.cref with
+          | Some a, Some b -> [ loc, Retyped (a, b) ]
+          | _ -> [ loc, Removed ] (* unreachable: def markers have a constant key *)
+          )))
+    locs
+
+(* Rewrite a nominal name / a reference under a rename map. *)
+let rename_name sigma n =
+  match List.find_opt (fun (_, o, _) -> String.equal o n) sigma with
+  | Some (_, _, nw) -> nw
+  | None -> n
+
+let rec rename_cref sigma = function
+  | RNominal n -> RNominal (rename_name sigma n)
+  | ROption c -> ROption (rename_cref sigma c)
+  | RArray c -> RArray (rename_cref sigma c)
+  | RTuple cs -> RTuple (List.map (rename_cref sigma) cs)
+  | RArrow (cs, c) -> RArrow (List.map (rename_cref sigma) cs, rename_cref sigma c)
+  | leaf -> leaf
+
+let apply_rename_csig sigma (cs : csig) : csig =
+  {
+    cs with
+    cs_inputs =
+      List.map (fun (n, (ctx, cr)) -> n, (ctx, rename_cref sigma cr)) cs.cs_inputs;
+    cs_outputs = List.map (fun (n, cr) -> n, rename_cref sigma cr) cs.cs_outputs;
+    cs_structs =
+      List.map
+        (fun (n, fs) ->
+          ( rename_name sigma n,
+            List.map (fun (f, cr) -> f, rename_cref sigma cr) fs ))
+        cs.cs_structs;
+    cs_enums =
+      List.map
+        (fun (n, cts) ->
+          ( rename_name sigma n,
+            List.map (fun (c, p) -> c, Option.map (rename_cref sigma) p) cts ))
+        cs.cs_enums;
+  }
+
+(* Advisory rename detection. A def present only in [old] and one present only
+   in [new], of the same KIND, are a rename candidate when their bodies match
+   after blanking every still-unmatched nominal name (so a rename whose body
+   references another rename still pairs). Only UNIQUE matches are taken — an
+   ambiguous shape stays an honest add+remove pair. *)
+let detect_renames (old_cs : csig) (new_cs : csig) (base : sdiff_node list) :
+    ([ `Struct | `Enum ] * string * string) list =
+  let removed kind =
+    List.filter_map
+      (function
+        | LStruct n, Removed when kind = `Struct -> Some n
+        | LEnum n, Removed when kind = `Enum -> Some n
+        | _ -> None)
+      base
+  in
+  let added kind =
+    List.filter_map
+      (function
+        | LStruct n, Added when kind = `Struct -> Some n
+        | LEnum n, Added when kind = `Enum -> Some n
+        | _ -> None)
+      base
+  in
+  let pending =
+    removed `Struct @ added `Struct @ removed `Enum @ added `Enum
+  in
+  let rec blank = function
+    | RNominal n -> RNominal (if List.mem n pending then "?" else n)
+    | ROption c -> ROption (blank c)
+    | RArray c -> RArray (blank c)
+    | RTuple cs -> RTuple (List.map blank cs)
+    | RArrow (cs, c) -> RArrow (List.map blank cs, blank c)
+    | leaf -> leaf
+  in
+  let struct_body cs n =
+    List.assoc n cs.cs_structs
+    |> List.map (fun (f, cr) -> f ^ ":" ^ string_of_cref (blank cr))
+    |> List.sort String.compare |> String.concat ";"
+  in
+  let enum_body cs n =
+    List.assoc n cs.cs_enums
+    |> List.map (fun (c, p) ->
+           c ^ ":"
+           ^ (match p with None -> "-" | Some cr -> string_of_cref (blank cr)))
+    |> List.sort String.compare |> String.concat ";"
+  in
+  let pair_unique kind body_old body_new =
+    let rem = removed kind and add = added kind in
+    List.filter_map
+      (fun o ->
+        let bo = body_old o in
+        match List.filter (fun n -> String.equal (body_new n) bo) add with
+        | [ n ] ->
+          (* unique on the added side; also require uniqueness on removed side *)
+          if List.length (List.filter (fun o' -> String.equal (body_old o') bo) rem) = 1
+          then Some (kind, o, n)
+          else None
+        | _ -> None)
+      rem
+  in
+  pair_unique `Struct (struct_body old_cs) (struct_body new_cs)
+  @ pair_unique `Enum (enum_body old_cs) (enum_body new_cs)
+
+let sig_diff (old_cs : csig) (new_cs : csig) : sdiff_node list =
+  let base = structural_diff old_cs new_cs in
+  match detect_renames old_cs new_cs base with
+  | [] -> base
+  | renames ->
+    let sigma = renames in
+    (* Apply the renames to OLD, then re-diff: nodes explained purely by the
+       rename vanish, leaving the residual real changes. Prepend one Renamed
+       node per detected rename. *)
+    let residual = structural_diff (apply_rename_csig sigma old_cs) new_cs in
+    let rename_nodes =
+      List.map
+        (fun (kind, o, n) ->
+          (match kind with `Struct -> LStruct o | `Enum -> LEnum o), Renamed n)
+        renames
+    in
+    rename_nodes @ residual
+
+(* Render a structured diff to human lines (one per node). *)
+let pp_sig_diff (old_cs : csig) (new_cs : csig) (nodes : sdiff_node list) :
+    string list =
+  let r = string_of_cref in
+  let popt = function None -> "-" | Some cr -> r cr in
+  let field_cref cs s f =
+    match List.assoc_opt s cs.cs_structs with
+    | Some fs -> Option.map r (List.assoc_opt f fs)
+    | None -> None
+  in
+  let ctor_payload cs e c =
+    match List.assoc_opt e cs.cs_enums with
+    | Some cts -> ( match List.assoc_opt c cts with Some p -> Some p | None -> None)
+    | None -> None
+  in
+  let input cs n =
+    match List.assoc_opt n cs.cs_inputs with
+    | Some (ctx, cr) -> r cr ^ if ctx then " (ctx)" else ""
+    | None -> "?"
+  in
+  let output cs n = match List.assoc_opt n cs.cs_outputs with Some cr -> r cr | None -> "?" in
+  List.map
+    (fun (loc, ch) ->
+      match loc, ch with
+      | LStruct o, Renamed n -> Printf.sprintf "rename struct %s -> %s" o n
+      | LEnum o, Renamed n -> Printf.sprintf "rename enum %s -> %s" o n
+      | LScope, _ ->
+        Printf.sprintf "scope: %s.%s -> %s.%s" old_cs.cs_module old_cs.cs_name
+          new_cs.cs_module new_cs.cs_name
+      | LInput n, Added -> Printf.sprintf "+ input %s: %s" n (input new_cs n)
+      | LInput n, Removed -> Printf.sprintf "- input %s: %s" n (input old_cs n)
+      | LInput n, Retyped (a, b) -> Printf.sprintf "~ input %s: %s -> %s" n (r a) (r b)
+      | LInput n, CtxFlip (a, b) ->
+        Printf.sprintf "~ input %s: %s -> %s" n
+          (if a then "ctx" else "inp")
+          (if b then "ctx" else "inp")
+      | LOutput n, Added -> Printf.sprintf "+ output %s: %s" n (output new_cs n)
+      | LOutput n, Removed -> Printf.sprintf "- output %s: %s" n (output old_cs n)
+      | LOutput n, Retyped (a, b) -> Printf.sprintf "~ output %s: %s -> %s" n (r a) (r b)
+      | LStruct n, Added -> Printf.sprintf "+ struct %s" n
+      | LStruct n, Removed -> Printf.sprintf "- struct %s" n
+      | LEnum n, Added -> Printf.sprintf "+ enum %s" n
+      | LEnum n, Removed -> Printf.sprintf "- enum %s" n
+      | LField (s, f), Added ->
+        Printf.sprintf "+ field %s.%s: %s" s f
+          (Option.value ~default:"?" (field_cref new_cs s f))
+      | LField (s, f), Removed ->
+        Printf.sprintf "- field %s.%s: %s" s f
+          (Option.value ~default:"?" (field_cref old_cs s f))
+      | LField (s, f), Retyped (a, b) ->
+        Printf.sprintf "~ field %s.%s: %s -> %s" s f (r a) (r b)
+      | LCtor (e, c), Added ->
+        Printf.sprintf "+ ctor %s.%s%s" e c
+          (match ctor_payload new_cs e c with
+          | Some (Some cr) -> ": " ^ r cr
+          | _ -> "")
+      | LCtor (e, c), Removed ->
+        Printf.sprintf "- ctor %s.%s%s" e c
+          (match ctor_payload old_cs e c with
+          | Some (Some cr) -> ": " ^ r cr
+          | _ -> "")
+      | LCtor (e, c), PayloadChanged (a, b) ->
+        Printf.sprintf "~ ctor %s.%s: %s -> %s" e c (popt a) (popt b)
+      | _ -> "?" (* unreachable: def markers don't retype, CtxFlip is input-only *))
+    nodes
 
 let scope_signature_hash (sd : O.scope_def) : string =
   Digest.to_hex (Digest.string (scope_signature_canonical sd))
@@ -2389,7 +2757,7 @@ let state_label = function
   | `Unknown -> "unknown"
   | `Blocked -> "blocked"
 
-let migrate_status json sig_dir path _options =
+let migrate_status check json sig_dir path _options =
   let files = collect_catala_files path in
   let entries =
     List.concat_map
@@ -2399,9 +2767,9 @@ let migrate_status json sig_dir path _options =
         |> List.map (classify_test ~sig_dir ~test_file))
       files
   in
+  let count st = List.length (List.filter (fun e -> e.O.state = st) entries) in
   if json then write_stdout J.write_sig_status entries
   else begin
-    let count st = List.length (List.filter (fun e -> e.O.state = st) entries) in
     Printf.printf "fresh:   %d\nstale:   %d\nunknown: %d\nblocked: %d\n"
       (count `Fresh) (count `Stale) (count `Unknown) (count `Blocked);
     List.iter
@@ -2411,6 +2779,18 @@ let migrate_status json sig_dir path _options =
             e.target_scope e.test_scope (Filename.basename e.file)
             (match e.reason with Some r -> ": " ^ r | None -> ""))
       entries
+  end;
+  (* Gate mode: a drifted (stale) or corrupted (blocked) test fails the build.
+     Unpinned (unknown) tests only warn — they predate the pin and need a
+     `migrate init`, not a red build. *)
+  if check then begin
+    let bad = count `Stale + count `Blocked in
+    if bad > 0 then begin
+      if json then
+        Printf.eprintf "migrate: %d test(s) stale/blocked — run `migrate diff`\n"
+          bad;
+      exit 1
+    end
   end
 
 (* migrate init: seed a pin onto unpinned ("unknown") tests. Safe only when the
@@ -2465,36 +2845,10 @@ let migrate_init sig_dir path _options =
    for you; --old/--new compares two scope_def JSON files directly.
    ============================================================================ *)
 
-(* Minimal LCS line diff of two canonical projections; emits only the changed
-   lines ("- " removed, "+ " added), common lines elided. *)
-let diff_canonical (old_c : string) (new_c : string) : string list =
-  let a = Array.of_list (String.split_on_char '\n' old_c)
-  and b = Array.of_list (String.split_on_char '\n' new_c) in
-  let n = Array.length a and m = Array.length b in
-  let dp = Array.make_matrix (n + 1) (m + 1) 0 in
-  for i = n - 1 downto 0 do
-    for j = m - 1 downto 0 do
-      dp.(i).(j) <-
-        (if String.equal a.(i) b.(j) then 1 + dp.(i + 1).(j + 1)
-         else max dp.(i + 1).(j) dp.(i).(j + 1))
-    done
-  done;
-  let out = ref [] in
-  let i = ref 0 and j = ref 0 in
-  while !i < n && !j < m do
-    if String.equal a.(!i) b.(!j) then begin incr i; incr j end
-    else if dp.(!i + 1).(!j) >= dp.(!i).(!j + 1) then begin
-      out := ("- " ^ a.(!i)) :: !out;
-      incr i
-    end
-    else begin
-      out := ("+ " ^ b.(!j)) :: !out;
-      incr j
-    end
-  done;
-  while !i < n do out := ("- " ^ a.(!i)) :: !out; incr i done;
-  while !j < m do out := ("+ " ^ b.(!j)) :: !out; incr j done;
-  List.rev !out
+(* Structured canonical diff of two scope_defs, rendered to human lines. *)
+let diff_scope_defs (old_sd : O.scope_def) (new_sd : O.scope_def) : string list =
+  let old_cs = canonical_model old_sd and new_cs = canonical_model new_sd in
+  pp_sig_diff old_cs new_cs (sig_diff old_cs new_cs)
 
 let scope_def_of_file f =
   match parse_scope_defs (File.contents f) with
@@ -2505,11 +2859,7 @@ let migrate_diff old_file new_file sig_dir path _options =
   match old_file, new_file with
   | Some o, Some n ->
     (* explicit: diff two scope_def JSON files directly *)
-    let d =
-      diff_canonical
-        (scope_signature_canonical (scope_def_of_file o))
-        (scope_signature_canonical (scope_def_of_file n))
-    in
+    let d = diff_scope_defs (scope_def_of_file o) (scope_def_of_file n) in
     if d = [] then print_endline "no difference" else List.iter print_endline d
   | _ ->
     let path =
@@ -2549,11 +2899,7 @@ let migrate_diff old_file new_file sig_dir path _options =
                         Printf.printf "  (cannot resolve live signature: %s)\n"
                           reason
                       | Ok live ->
-                        let d =
-                          diff_canonical
-                            (scope_signature_canonical (scope_def_of_file snap))
-                            (scope_signature_canonical live)
-                        in
+                        let d = diff_scope_defs (scope_def_of_file snap) live in
                         if d <> [] then begin
                           header ();
                           List.iter (fun l -> Printf.printf "  %s\n" l) d
