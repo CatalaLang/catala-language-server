@@ -1299,6 +1299,12 @@ let toml_as_array = function
 let toml_str k t =
   match toml_assoc k t with Some (Otoml.TomlString s) -> Some s | _ -> None
 
+let toml_strs k t =
+  match toml_assoc k t with
+  | Some (Otoml.TomlArray l) ->
+    List.filter_map (function Otoml.TomlString s -> Some s | _ -> None) l
+  | _ -> []
+
 let toml_migrations content =
   let toml = Otoml.Parser.from_string content in
   match toml_assoc "migration" toml with Some v -> toml_as_array v | None -> []
@@ -1306,11 +1312,16 @@ let toml_migrations content =
 (* The human's decisions, for `apply --plan` to execute. One per cluster:
    the confirmed renames (the rename map override) and the fills that carry a
    value (raw Catala text, to be parsed against live). Transforms are step 2. *)
+(* One transform decision: which slot(s) it produces, which old field(s) it
+   consumes, and the Catala scope that computes it (a real fn, not "?"). *)
+type plan_xf = { xf_produces : string list; xf_consumes : string list; xf_fn : string }
+
 type plan_decisions = {
   pd_file : string;
   pd_scope : string;
   pd_renames : (string * string) list; (* confirmed (from, to) *)
   pd_fills : (string * string) list; (* path, value-text (value present only) *)
+  pd_transforms : plan_xf list; (* transforms with a real fn supplied *)
 }
 
 let parse_plan_decisions_string (content : string) : plan_decisions list =
@@ -1333,11 +1344,26 @@ let parse_plan_decisions_string (content : string) : plan_decisions list =
             | _ -> None)
           (arr "fill")
       in
+      let transforms =
+        List.filter_map
+          (fun t ->
+            match toml_str "fn" t with
+            | Some fn when String.trim fn <> "" && String.trim fn <> "?" ->
+              Some
+                {
+                  xf_produces = toml_strs "produces" t;
+                  xf_consumes = toml_strs "consumes" t;
+                  xf_fn = String.trim fn;
+                }
+            | _ -> None)
+          (arr "transform")
+      in
       {
         pd_file = Option.value ~default:"?" (toml_str "file" m);
         pd_scope = Option.value ~default:"?" (toml_str "scope" m);
         pd_renames = renames;
         pd_fills = fills;
+        pd_transforms = transforms;
       })
     (toml_migrations content)
 
@@ -1352,17 +1378,20 @@ let toplevel_input_fill path =
    typechecking — an ill-typed fill surfaces as a read error (a feature, not a
    crash). [target] is the tested scope token exactly as written in the test, so
    an aliased `> Using M as O` import still resolves. *)
+(* The `> Using …` header lines of a test file (so a synthesized probe resolves
+   the same modules, aliases included). *)
+let test_headers test_file =
+  File.contents test_file
+  |> String.split_on_char '\n'
+  |> List.filter (fun l ->
+         let l = String.trim l in
+         String.length l > 0 && l.[0] = '>')
+
 let parse_fill_values ~target ~test_file (fills : (string * string) list) :
     ((string * O.runtime_value) list, string) result =
   if fills = [] then Ok []
   else
-    let headers =
-      File.contents test_file
-      |> String.split_on_char '\n'
-      |> List.filter (fun l ->
-             let l = String.trim l in
-             String.length l > 0 && l.[0] = '>')
-    in
+    let headers = test_headers test_file in
     let defs =
       List.map
         (fun (n, v) -> Printf.sprintf "  definition probe.%s equals %s" n v)
@@ -1407,6 +1436,133 @@ let fill_holes (parsed : (string * O.runtime_value) list)
       t.test_inputs
   in
   { t with test_inputs = inputs }, steps
+
+(* ── Transforms (NeedsDecision step 2) ──────────────────────────────────────
+   A transform is a Catala SCOPE (in a module on the include path, by convention
+   `migrations/`) whose inputs are named after the consumed old fields and whose
+   single output `result` is the new value. We run it through the existing
+   interpreter: feed the recovered old values (rendered as Catala literals) into a
+   probe testing scope, run it, and lift `result` back as the new runtime_value.
+   The transform is just *more Catala*, evaluated by Catala — no new engine. (This
+   slice covers top-level input slots; nested/multi-produce is future.) *)
+
+(* Render a recovered value to Catala literal text, for splicing into a probe. *)
+let value_to_text ~lang ~(typ : O.typ) (rv : O.runtime_value) : string =
+  let buf = Buffer.create 64 in
+  let ppf = Format.formatter_of_buffer buf in
+  print_catala_value ~typ:(Some typ) ~lang ppf { rv with O.attrs = [] };
+  Format.pp_print_flush ppf ();
+  String.trim (Buffer.contents buf)
+
+(* Run transform scope [fn] over [inputs] (transform-input-name -> old value
+   text), returning its `result` output as the new value. The compiler typechecks
+   the call, so a transform whose body or signature is wrong surfaces as Error. *)
+let run_transform ~test_file ~headers ~(fn : string)
+    (inputs : (string * string) list) : (O.runtime_value, string) result =
+  let tmod =
+    match String.index_opt fn '.' with
+    | Some i -> String.sub fn 0 i
+    | None -> fn
+  in
+  let defs =
+    List.map (fun (n, txt) -> Printf.sprintf "  definition t.%s equals %s" n txt) inputs
+    |> String.concat "\n"
+  in
+  let content =
+    String.concat "\n" headers
+    ^ Printf.sprintf
+        "\n> Using %s\n\n```catala-metadata\n#[test]\n#[testcase.testui]\n\
+         declaration scope Migrate_xf_probe:\n  output t scope %s\n```\n\n\
+         ```catala\nscope Migrate_xf_probe:\n%s\n```\n"
+        tmod fn defs
+  in
+  let options =
+    Global.enforce_options ~input_src:(Global.Contents (content, test_file)) ()
+  in
+  try
+    (* include_dirs = [] => retrieve_program resolves the project from [options] *)
+    let tr = compute_test_run [] options "Migrate_xf_probe" in
+    match List.assoc_opt "result" tr.O.test.test_outputs with
+    | Some ({ value = Some vd; _ } : O.test_io) -> Ok vd.value
+    | _ -> Error (Printf.sprintf "transform %s produced no `result` output" fn)
+  with
+  | Message.CompilerError _ | Message.CompilerErrors _ ->
+    (* Transforms run the interpreter, which loads the project's COMPILED runtime
+       (.cmxs) — typecheck alone is not enough. The usual cause is an unbuilt
+       project; the convention is one `result` output named after the scope. *)
+    Error
+      (Printf.sprintf
+         "%s did not compile/run — check the transform exists with an input per \
+          consumed field and an `output result`, and that the project's runtime \
+          is built (transforms use the interpreter)"
+         fn)
+  | e -> Error (Printexc.to_string e)
+
+(* Place a transform result into its produced top-level input slot, overwriting
+   the blocked old value the rewrite left there. Single-produce only for now. *)
+let place_produces (produces : string list) (rv : O.runtime_value) (t : O.test) :
+    O.test =
+  match produces with
+  | [ p ] -> (
+    match toplevel_input_fill p with
+    | Some name ->
+      {
+        t with
+        test_inputs =
+          List.map
+            (fun (n, (io : O.test_io)) ->
+              if String.equal n name then
+                n, { io with value = Some { O.value = rv; pos = None } }
+              else n, io)
+            t.test_inputs;
+      }
+    | None -> t)
+  | _ -> t
+
+(* Execute the plan's transforms across every test of the cluster. A transform is
+   applied only if it succeeds for ALL tests (so the slot it produces is uniformly
+   resolved); the produced paths of such transforms are returned as "resolved" (to
+   subtract from the NeedsDecision count), the rest as errors. *)
+let apply_transforms ~test_file ~lang ~headers ~(old_sd : O.scope_def)
+    (transforms : plan_xf list)
+    (pairs : (O.test * (O.test * step list)) list) :
+    (O.test * (O.test * step list)) list * string list * string list =
+  let in_typs =
+    List.map (fun (n, (si : O.scope_input)) -> n, si.typ) old_sd.O.inputs
+  in
+  List.fold_left
+    (fun (pairs, resolved, errs) (xf : plan_xf) ->
+      let one (ot, _) =
+        let inputs =
+          List.filter_map
+            (fun c ->
+              match toplevel_input_fill c with
+              | None -> None
+              | Some name -> (
+                match
+                  List.assoc_opt name ot.O.test_inputs, List.assoc_opt name in_typs
+                with
+                | Some ({ value = Some vd; _ } : O.test_io), Some oty ->
+                  Some (name, value_to_text ~lang ~typ:oty vd.value)
+                | _ -> None))
+            xf.xf_consumes
+        in
+        run_transform ~test_file ~headers ~fn:xf.xf_fn inputs
+      in
+      let results = List.map one pairs in
+      match List.find_map (function Error e -> Some e | Ok _ -> None) results with
+      | Some e ->
+        pairs, resolved, errs @ [ Printf.sprintf "%s: %s" xf.xf_fn e ]
+      | None ->
+        let rvs = List.map Result.get_ok results in
+        let pairs' =
+          List.map2
+            (fun (ot, (mt, steps)) rv ->
+              ot, (place_produces xf.xf_produces rv mt, steps))
+            pairs rvs
+        in
+        pairs', resolved @ xf.xf_produces, errs)
+    (pairs, [], []) transforms
 
 let migrate_apply dry_run plan sig_dir path _options =
   let decisions =
@@ -1454,6 +1610,21 @@ let migrate_apply dry_run plan sig_dir path _options =
                | Error e -> [], Some e)
            in
            let migrated = List.map (fill_holes parsed_fills) migrated in
+           (* Run the plan's transforms (NeedsDecision step 2) over the recovered
+              old values, placing each result into its produced slot. A slot whose
+              transform ran is no longer a blocking decision. *)
+           let migrated, resolved_produces, xf_errs =
+             match cluster with
+             | Some d when d.pd_transforms <> [] ->
+               let headers = test_headers test_file in
+               let pairs, resolved, errs =
+                 apply_transforms ~test_file ~lang ~headers ~old_sd
+                   d.pd_transforms
+                   (List.combine old_tests migrated)
+               in
+               List.map snd pairs, resolved, errs
+             | _ -> migrated, [], []
+           in
            let all_steps = List.concat_map snd migrated in
            Printf.printf "%s  (%s -> %s)\n" base (scope_signature_pin old_sd)
              (scope_signature_pin new_sd);
@@ -1465,33 +1636,45 @@ let migrate_apply dry_run plan sig_dir path _options =
                   %s\n"
                  e)
              fill_err;
+           List.iter
+             (fun e ->
+               Printf.printf
+                 "  WARNING: transform failed, slot left for a decision: %s\n" e)
+             xf_errs;
            let count pred = List.length (List.filter pred all_steps) in
            let is_needs_value (s : step) = s.outcome = NeedsResolving NeedsValue in
+           let is_decision (s : step) =
+             match s.outcome with
+             | NeedsResolving (NeedsDecision _) -> true
+             | _ -> false
+           in
+           (* a NeedsDecision is resolved once a transform produced its slot *)
+           let n_xf =
+             count (fun s -> is_decision s && List.mem s.path resolved_produces)
+           in
            let n_decisions =
-             count (fun (s : step) ->
-                 match s.outcome with
-                 | NeedsResolving (NeedsDecision _) -> true
-                 | _ -> false)
+             count (fun s ->
+                 is_decision s && not (List.mem s.path resolved_produces))
            in
            let filled_paths = List.map (fun (n, _) -> "in." ^ n) parsed_fills in
            let n_filled =
              count (fun s -> is_needs_value s && List.mem s.path filled_paths)
            in
            let n_todo = count is_needs_value - n_filled in
-           let filled_note =
-             if n_filled > 0 then Printf.sprintf " %d filled from plan;" n_filled
-             else ""
+           let plan_note =
+             (if n_filled > 0 then Printf.sprintf " %d filled from plan;" n_filled
+              else "")
+             ^ if n_xf > 0 then Printf.sprintf " %d transformed;" n_xf else ""
            in
            if dry_run then
              Printf.printf
                "  (dry-run: no files written;%s %d to fill, %d need a decision)\n"
-               filled_note n_todo n_decisions
+               plan_note n_todo n_decisions
            else if n_decisions > 0 then
-             (* A NeedsDecision slot can't be written without destroying the old
-                value it needs as a transform input. Leave the whole test STALE
-                (untouched): old values stay intact and re-recoverable, and the
-                gate keeps flagging it. (Transforms are resolved in a later
-                slice; the plan's fn is not executed here.) *)
+             (* A NeedsDecision slot that no transform resolved can't be written
+                without destroying the old value it needs as a transform input.
+                Leave the whole test STALE (untouched): old values stay intact and
+                re-recoverable, and the gate keeps flagging it. *)
              Printf.printf
                "  left STALE: %d item(s) need a decision (a transform) — not \
                 writing, old values preserved\n"
@@ -1509,7 +1692,9 @@ let migrate_apply dry_run plan sig_dir path _options =
              match reads_against_live test_file with
              | Ok () ->
                Printf.printf "  written + re-pinned; verified against live%s%s\n"
-                 (if n_filled > 0 then Printf.sprintf " (%d filled from plan)" n_filled
+                 (if n_filled > 0 || n_xf > 0 then
+                    Printf.sprintf " (%d filled, %d transformed from plan)" n_filled
+                      n_xf
                   else "")
                  (if n_todo > 0 then
                     Printf.sprintf

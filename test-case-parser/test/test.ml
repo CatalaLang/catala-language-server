@@ -564,7 +564,14 @@ let test_plan_decisions () =
           { M.pf_path = "in.rate"; pf_type = "rat" };
           { M.pf_path = "in.k"; pf_type = "int" };
         ];
-      pc_transforms = [];
+      pc_transforms =
+        [
+          {
+            M.ptr_produces = [ "in.amount" ];
+            ptr_consumes = [ "in.amount" ];
+            ptr_reason = "money -> int";
+          };
+        ];
     }
   in
   let edited =
@@ -575,12 +582,17 @@ let test_plan_decisions () =
     (* give in.rate a value; leave in.k a hole *)
     |> replace_once ~sub:"type = \"rat\"\n  todo = true"
          ~by:"type = \"rat\"\n  value = \"3.5\""
+    (* supply the transform fn *)
+    |> replace_once ~sub:"fn = \"?\"" ~by:"fn = \"Migrations.Amount_v2\""
   in
   match M.parse_plan_decisions_string edited with
   | [ d ] ->
     check "only confirmed renames survive" (d.M.pd_renames = [ "M.A", "M.B" ]);
     check "only fills with a value are decisions"
       (d.M.pd_fills = [ "in.rate", "3.5" ]);
+    check "transform with a real fn is a decision"
+      (List.map (fun (x : M.plan_xf) -> x.M.xf_fn, x.M.xf_produces) d.M.pd_transforms
+      = [ "Migrations.Amount_v2", [ "in.amount" ] ]);
     check "file/scope carried" (d.M.pd_file = "t.catala_en" && d.M.pd_scope = "OptTup.Calc")
   | _ -> check "decisions: exactly one cluster" false
 

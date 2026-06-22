@@ -18,6 +18,7 @@ function cleanup(){
     rm -rf _migrate
     rm -rf _init
     rm -rf _applyplan
+    rm -rf _xform
 }
 
 trap cleanup EXIT
@@ -310,8 +311,8 @@ grep -q 'path = "in.rate"' _applyplan/plan.toml \
   || { echo "FAIL(apply-plan): rate not listed as a fill"; exit 1; }
 sed -i 's/  todo = true/  value = "3.5"/' _applyplan/plan.toml
 AP=$( cd _applyplan && catala testcase migrate apply --plan plan.toml t.catala_en 2>/dev/null )
-echo "$AP" | grep -qi 'filled from plan' \
-  || { echo "FAIL(apply-plan): expected 'filled from plan'; got:"; echo "$AP"; exit 1; }
+echo "$AP" | grep -qiE '1 filled' \
+  || { echo "FAIL(apply-plan): expected '1 filled'; got:"; echo "$AP"; exit 1; }
 echo "$AP" | grep -qi 'verified against live' \
   || { echo "FAIL(apply-plan): result must verify against live; got:"; echo "$AP"; exit 1; }
 grep -q 'definition .*rate equals 3.5' _applyplan/t.catala_en \
@@ -329,3 +330,82 @@ sed -i 's/  todo = true/  value = "not a number"/' _applyplan/plan.toml
 BAD=$( cd _applyplan && catala testcase migrate apply --dry-run --plan plan.toml t.catala_en 2>/dev/null )
 echo "$BAD" | grep -qi 'did not parse' \
   || { echo "FAIL(apply-plan): ill-typed fill must be reported; got:"; echo "$BAD"; exit 1; }
+
+# ============================================================================
+# migrate apply --plan + TRANSFORM: a NeedsDecision (scalar retype) resolved by a
+# Catala scope. Uses the REAL module (bodies, so it compiles to a runnable
+# runtime) plus a Migrations module; the transform runs through the interpreter,
+# so the project's OCaml runtime must be built first (clerk run warms it).
+# ============================================================================
+rm -rf _xform && mkdir -p _xform
+cp opttup.catala_en _xform/OptTup.catala_en
+printf '[project]\ninclude_dirs = ["."]\n' > _xform/clerk.toml
+# OLD shape: add input rate:decimal; a test that fills it; pin + snapshot
+sed -i 's/\(input pair content (integer, money)\)/\1\n  input rate content decimal/' _xform/OptTup.catala_en
+sed 's/#\[testcase.sig[^]]*\]//' test_opttup.catala_en > _xform/src.catala_en
+sed -i 's/\(definition calc.pair equals (7, \$3.00)\)/\1\n  definition calc.rate equals 3.5/' _xform/src.catala_en
+( cd _xform && clerk start >/dev/null 2>&1 )
+( cd _xform && catala testcase read src.catala_en | catala testcase write --language en --sig-dir . > t.catala_en )
+# DRIFT: retype rate decimal -> money (a NeedsDecision)
+sed -i 's/input rate content decimal/input rate content money/' _xform/OptTup.catala_en
+# the transform: input named after the consumed field, single `result` output
+cat > _xform/migrations.catala_en <<'EOF'
+> Module Migrations
+
+```catala-metadata
+declaration scope Rate_v2:
+  input rate content decimal
+  output result content money
+```
+
+```catala
+scope Rate_v2:
+  definition result equals $1.00 * rate
+```
+EOF
+( cd _xform && clerk start >/dev/null 2>&1 )
+[ "$( ( cd _xform && catala testcase migrate status --json t.catala_en 2>/dev/null ) | jq -r '.[0].state' )" = "Stale" ] \
+  || { echo "FAIL(xform): expected Stale after retype"; exit 1; }
+cp _xform/t.catala_en _xform/t.stale.bak   # src no longer typechecks post-retype; keep the stale test
+# build the OCaml runtime (.cmxs) the interpreter needs, via a warmup run
+cat > _xform/warmup.catala_en <<'EOF'
+> Using OptTup
+> Using Migrations
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+declaration scope Warmup:
+  output t scope Migrations.Rate_v2
+```
+
+```catala
+scope Warmup:
+  definition t.rate equals 3.5
+```
+EOF
+( cd _xform && clerk run warmup.catala_en >/dev/null 2>&1 ) \
+  || { echo "FAIL(xform): warmup build/run failed"; exit 1; }
+# plan, point the transform at the scope, apply
+( cd _xform && catala testcase migrate plan -o plan.toml t.catala_en 2>/dev/null )
+grep -q 'reason = "needs explicit migration: rat -> money"' _xform/plan.toml \
+  || { echo "FAIL(xform): retype not listed as a transform"; cat _xform/plan.toml; exit 1; }
+sed -i 's/  fn = "?"/  fn = "Migrations.Rate_v2"/' _xform/plan.toml
+XF=$( cd _xform && catala testcase migrate apply --plan plan.toml t.catala_en 2>/dev/null )
+echo "$XF" | grep -qi 'transformed from plan' \
+  || { echo "FAIL(xform): expected 'transformed from plan'; got:"; echo "$XF"; exit 1; }
+# 3.5 (decimal) became $3.50 (money), placed into the slot
+grep -q 'definition calc.rate equals \$3.50' _xform/t.catala_en \
+  || { echo "FAIL(xform): transform result not written ($3.50 expected)"; grep rate _xform/t.catala_en; exit 1; }
+[ "$( ( cd _xform && catala testcase migrate status --json t.catala_en 2>/dev/null ) | jq -r '.[0].state' )" = "Fresh" ] \
+  || { echo "FAIL(xform): transformed test is not Fresh"; exit 1; }
+
+# a transform pointing at a non-existent scope: reported, slot left a decision (stale).
+cp _xform/t.stale.bak _xform/t.catala_en   # the still-stale (decimal-pinned) test
+( cd _xform && catala testcase migrate plan -o plan.toml t.catala_en 2>/dev/null )
+sed -i 's/  fn = "?"/  fn = "Migrations.Does_not_exist"/' _xform/plan.toml
+BADXF=$( cd _xform && catala testcase migrate apply --plan plan.toml t.catala_en 2>/dev/null )
+echo "$BADXF" | grep -qi 'transform failed' \
+  || { echo "FAIL(xform): bad transform fn must be reported; got:"; echo "$BADXF"; exit 1; }
+echo "$BADXF" | grep -qi 'left STALE' \
+  || { echo "FAIL(xform): failed transform must leave the test stale; got:"; echo "$BADXF"; exit 1; }

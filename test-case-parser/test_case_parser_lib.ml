@@ -2011,7 +2011,11 @@ let run_with_inputs
   let test = O.{ test with test_outputs } in
   write_stdout J.write_test_run O.{ test; assert_failures; diffs = [] }
 
-let run_test include_dirs options testing_scope =
+(* Run a testing scope and RETURN the run result (outputs lifted to
+   runtime_values, plus the assertion/diff verdict) instead of printing it.
+   [run_test] is this + [write_stdout]; the migration transform runner reuses the
+   computed value directly. *)
+let compute_test_run include_dirs options testing_scope : O.test_run =
   let desugared_prg, naming_ctx, testing_scope_name, dcalc_prg =
     retrieve_program include_dirs options testing_scope
   in
@@ -2027,8 +2031,7 @@ let run_test include_dirs options testing_scope =
   let result_struct, failed_asserts =
     interpret_program dcalc_prg testing_scope_name build_term
   in
-  let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
-      =
+  let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct =
     match result_struct with
     | EStruct { fields; _ }, _ -> (
       match StructField.Map.choose fields with
@@ -2064,8 +2067,11 @@ let run_test include_dirs options testing_scope =
     |> List.map (proj_diff (get_value dcalc_prg.lang dcalc_prg.decl_ctx))
   in
   let assert_failures = not (failed_asserts = []) in
-  let test_run = { O.test; O.assert_failures; O.diffs } in
-  write_stdout J.write_test_run test_run
+  O.{ test; assert_failures; diffs }
+
+let run_test include_dirs options testing_scope =
+  write_stdout J.write_test_run
+    (compute_test_run include_dirs options testing_scope)
 
 let run_test_cmd include_dirs options test_scope_name scope_input_opt =
   match scope_input_opt with
