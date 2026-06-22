@@ -60,8 +60,7 @@ let protect ~on_error f =
     let e = match e with Fun.Finally_raised e -> e | e -> e in
     match e with
     | Catala_utils.Message.CompilerError er -> Error [er]
-    | Catala_utils.Message.CompilerErrors er_and_bt_l ->
-      Error (List.map fst er_and_bt_l)
+    | Catala_utils.Message.CompilerErrors er_l -> Error er_l
     | Failed_to_load_interface mod_use ->
       let lsp_err = module_usage_error mod_use in
       on_error lsp_err;

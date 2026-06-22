@@ -93,7 +93,7 @@ let lex_line (doc : document_state) ~content (pos : Position.t) =
         | Message.CompilerErrors l ->
           Log.warn (fun m ->
               List.iter
-                (fun (c, _) ->
+                (fun c ->
                   m "lexing exception: %t" (fun ppf ->
                       Message.Content.emit ~ppf c Error))
                 l)
