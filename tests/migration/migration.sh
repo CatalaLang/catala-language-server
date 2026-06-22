@@ -163,6 +163,15 @@ DIR_STATES=$( ( cd _migrate && catala testcase migrate status --json . 2>/dev/nu
 [ "$DIR_STATES" = "Stale,Unknown" ] \
   || { echo "FAIL(migrate): dir mode states = '$DIR_STATES' (expected Stale,Unknown)"; exit 1; }
 
+# one-hash-per-scope: a second test of the same scope at a different pin is a
+# half-migrated cluster ("split"). Throwaway file, removed right after.
+cp _migrate/t.catala_en _migrate/tsplit.catala_en
+sed -i 's/Calc_rich/Calc_split/; s/@[0-9a-f]\{32\}/@ffffffffffffffffffffffffffffffff/' _migrate/tsplit.catala_en
+( cd _migrate && catala testcase migrate status . 2>/dev/null ) \
+  | grep -qE '^  split +OptTup.Calc +2 distinct pins' \
+  || { echo "FAIL(split): two pins for one scope not reported as split"; exit 1; }
+rm -f _migrate/tsplit.catala_en
+
 # ============================================================================
 # migrate plan: emit the editable TOML worklist for the same `pair`->`pair2`
 # drift, then track progress against it. The input rename is not auto-grouped,

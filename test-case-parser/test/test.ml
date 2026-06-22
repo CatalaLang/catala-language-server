@@ -543,6 +543,37 @@ let test_plan_roundtrip () =
     check "plan: transform resolved by fn" (p.M.pp_transforms = (1, 1))
   | _ -> check "plan: one cluster after edits" false
 
+(* the steady-state "one hash per scope" invariant: a scope whose tests carry
+   more than one distinct pin is a half-migrated cluster. *)
+let test_split_scopes () =
+  let e scope pin : O.sig_status_entry =
+    {
+      O.file = "f";
+      test_scope = "T";
+      target_scope = scope;
+      state = `Fresh;
+      pin;
+      live = None;
+      reason = None;
+    }
+  in
+  (* all tests of A agree; B is split; C is unpinned (ignored) *)
+  let entries =
+    [
+      e "A" (Some "h1");
+      e "A" (Some "h1");
+      e "B" (Some "h1");
+      e "B" (Some "h2");
+      e "C" None;
+    ]
+  in
+  check "only the split scope is reported"
+    (M.split_scopes entries = [ "B", [ "h1"; "h2" ] ]);
+  check "no split when every pin agrees"
+    (M.split_scopes [ e "A" (Some "h1"); e "A" (Some "h1") ] = []);
+  check "unpinned tests never make a split"
+    (M.split_scopes [ e "A" (Some "h1"); e "A" None ] = [])
+
 let () =
   let reg title f =
     Tezt.Test.register ~__FILE__ ~title ~tags:[ "unit"; "migration" ] (fun () ->
@@ -566,4 +597,5 @@ let () =
   reg "apply: record add/drop + rename map" test_apply_record;
   reg "import-line module matching" test_line_mentions_module;
   reg "plan: emit/parse round-trip + progress" test_plan_roundtrip;
+  reg "status: one-hash-per-scope (split detection)" test_split_scopes;
   Tezt.Test.run ()

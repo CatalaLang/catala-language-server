@@ -942,6 +942,27 @@ let state_label = function
   | `Unknown -> "unknown"
   | `Blocked -> "blocked"
 
+(* Steady-state invariant: all tests of one scope share one pinned hash. More
+   than one distinct hash for a scope means the cluster was migrated in part
+   (some tests moved, some didn't) — a mid-migration state, never a committed
+   one. Returns the "split" scopes (>1 distinct pin), scope-sorted, each with its
+   distinct hashes (encounter order). Pure, so it is unit-tested directly. *)
+let split_scopes (entries : O.sig_status_entry list) : (string * string list) list
+    =
+  List.fold_left
+    (fun acc (e : O.sig_status_entry) ->
+      match e.pin with
+      | None -> acc
+      | Some h ->
+        let prev = try List.assoc e.target_scope acc with Not_found -> [] in
+        if List.mem h prev then acc
+        else
+          (e.target_scope, h :: prev) :: List.remove_assoc e.target_scope acc)
+    [] entries
+  |> List.filter (fun (_, hs) -> List.length hs > 1)
+  |> List.map (fun (s, hs) -> s, List.rev hs)
+  |> List.sort (fun (a, _) (b, _) -> String.compare a b)
+
 let migrate_status check json sig_dir path _options =
   let files = collect_catala_files path in
   let entries =
@@ -953,6 +974,7 @@ let migrate_status check json sig_dir path _options =
       files
   in
   let count st = List.length (List.filter (fun e -> e.O.state = st) entries) in
+  let split_scopes = split_scopes entries in
   if json then write_stdout J.write_sig_status entries
   else begin
     Printf.printf "fresh:   %d\nstale:   %d\nunknown: %d\nblocked: %d\n"
@@ -963,17 +985,27 @@ let migrate_status check json sig_dir path _options =
           Printf.printf "  %-8s %s  %s (%s)%s\n" (state_label e.state)
             e.target_scope e.test_scope (Filename.basename e.file)
             (match e.reason with Some r -> ": " ^ r | None -> ""))
-      entries
+      entries;
+    List.iter
+      (fun (scope, hs) ->
+        Printf.printf "  split    %s  %d distinct pins (%s) — cluster part-migrated\n"
+          scope (List.length hs)
+          (String.concat ", " (List.map (fun h -> String.sub h 0 8) hs)))
+      split_scopes
   end;
-  (* Gate mode: a drifted (stale) or corrupted (blocked) test fails the build.
-     Unpinned (unknown) tests only warn — they predate the pin and need a
-     `migrate init`, not a red build. *)
+  (* Gate mode: a drifted (stale) or corrupted (blocked) test fails the build, as
+     does a split scope (a half-migrated cluster is not a steady state). Unpinned
+     (unknown) tests only warn — they predate the pin and need a `migrate init`,
+     not a red build. *)
   if check then begin
-    let bad = count `Stale + count `Blocked in
+    let bad = count `Stale + count `Blocked + List.length split_scopes in
     if bad > 0 then begin
       if json then
-        Printf.eprintf "migrate: %d test(s) stale/blocked — run `migrate diff`\n"
-          bad;
+        Printf.eprintf
+          "migrate: %d test(s) stale/blocked + %d split scope(s) — run `migrate \
+           diff`\n"
+          (count `Stale + count `Blocked)
+          (List.length split_scopes);
       exit 1
     end
   end
