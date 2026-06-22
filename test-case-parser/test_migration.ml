@@ -1195,95 +1195,402 @@ let reads_against_live test_file : (unit, string) result =
     Ok ()
   with e -> Error (Printexc.to_string e)
 
+(* The shared front half of every migration verb: locate the pinned tested scope
+   of [test_file], resolve its live signature, and — if drifted — recover the old
+   values and run the pure rewrite. Both [apply] (write) and [plan] (emit a
+   worklist) consume this; only the back half differs. *)
+type prep =
+  | Not_pinned (* no pinned test in the file: silently ignore *)
+  | Fresh (* pin = live: nothing to migrate *)
+  | Skip of string (* couldn't prepare: reason (snapshot/resolve/recover) *)
+  | Ready of {
+      old_sd : O.scope_def;
+      new_sd : O.scope_def;
+      migrated : (O.test * step list) list;
+      lang : Global.backend_lang;
+    }
+
+let prepare_file ~sig_dir test_file : prep =
+  let parsed = parse_tests_textually (File.contents test_file) in
+  let pinned =
+    List.filter_map
+      (fun pt ->
+        match pt.pt_pin, pt.pt_target with
+        | Some pin, Some target -> Some (pin, target)
+        | _ -> None)
+      parsed
+  in
+  match pinned with
+  | [] -> Not_pinned
+  | (pin, target) :: _ ->
+    let module_name, scope_base = split_target target in
+    let dir = Option.value ~default:(Filename.dirname test_file) sig_dir in
+    let snap = File.(dir / (pin ^ ".sig.json")) in
+    if not (File.exists snap) then
+      Skip
+        (Printf.sprintf "snapshot %s missing — cannot recover"
+           (Filename.basename snap))
+    else (
+      match live_scope_def ~test_file ~module_name ~scope_base with
+      | Error reason ->
+        Skip (Printf.sprintf "cannot resolve live signature: %s" reason)
+      | Ok new_sd ->
+        let old_sd = scope_def_of_file snap in
+        if
+          String.equal (scope_signature_hash old_sd)
+            (scope_signature_hash new_sd)
+        then Fresh
+        else (
+          match recover_old_tests ~test_file ~old_sd with
+          | Error e -> Skip (Printf.sprintf "value recovery failed: %s" e)
+          | Ok old_tests ->
+            let lang = Catala_utils.Cli.file_lang test_file in
+            let migrated =
+              List.map (apply_to_test ~lang old_sd new_sd) old_tests
+            in
+            Ready { old_sd; new_sd; migrated; lang }))
+
 let migrate_apply dry_run sig_dir path _options =
   collect_catala_files path
   |> List.iter (fun test_file ->
          let base = Filename.basename test_file in
-         let parsed = parse_tests_textually (File.contents test_file) in
-         let pinned =
-           List.filter_map
-             (fun pt ->
-               match pt.pt_pin, pt.pt_target with
-               | Some pin, Some target -> Some (pin, target)
-               | _ -> None)
-             parsed
-         in
-         match pinned with
-         | [] -> ()
-         | (pin, target) :: _ ->
-           let skip msg = Printf.printf "%s: %s\n" base msg in
-           let module_name, scope_base = split_target target in
-           let dir = Option.value ~default:(Filename.dirname test_file) sig_dir in
-           let snap = File.(dir / (pin ^ ".sig.json")) in
-           if not (File.exists snap) then
-             skip
-               (Printf.sprintf "snapshot %s missing — cannot recover"
-                  (Filename.basename snap))
-           else (
-             match live_scope_def ~test_file ~module_name ~scope_base with
-             | Error reason ->
-               skip (Printf.sprintf "cannot resolve live signature: %s" reason)
-             | Ok new_sd ->
-               let old_sd = scope_def_of_file snap in
-               if String.equal (scope_signature_hash old_sd)
-                    (scope_signature_hash new_sd)
-               then () (* fresh — nothing to migrate *)
-               else (
-                 match recover_old_tests ~test_file ~old_sd with
-                 | Error e -> skip (Printf.sprintf "value recovery failed: %s" e)
-                 | Ok old_tests ->
-                   let lang = Catala_utils.Cli.file_lang test_file in
-                   let migrated =
-                     List.map (apply_to_test ~lang old_sd new_sd) old_tests
-                   in
-                   let all_steps = List.concat_map snd migrated in
-                   Printf.printf "%s  (%s -> %s)\n" base
-                     (scope_signature_pin old_sd) (scope_signature_pin new_sd);
-                   List.iter (fun s -> print_endline (pp_step s)) all_steps;
-                   let count pred = List.length (List.filter pred all_steps) in
-                   let n_todo =
-                     count (fun (s : step) ->
-                         s.outcome = NeedsResolving NeedsValue)
-                   in
-                   let n_decisions =
-                     count (fun (s : step) ->
-                         match s.outcome with
-                         | NeedsResolving (NeedsDecision _) -> true
-                         | _ -> false)
-                   in
-                   if dry_run then
-                     Printf.printf
-                       "  (dry-run: no files written; %d to fill, %d need a \
-                        decision)\n"
-                       n_todo n_decisions
-                   else if n_decisions > 0 then
-                     (* A NeedsDecision slot can't be written without destroying
-                        the old value it needs as a transform input. Leave the
-                        whole test STALE (untouched): old values stay intact and
-                        re-recoverable, and the gate keeps flagging it. *)
-                     Printf.printf
-                       "  left STALE: %d item(s) need a decision (a transform) — \
-                        not writing, old values preserved\n"
-                       n_decisions
-                   else begin
-                     let new_tests = List.map fst migrated in
-                     write_sig_snapshot dir new_sd;
-                     File.with_out_channel test_file (fun oc ->
-                         let ppf = Format.formatter_of_out_channel oc in
-                         emit_test_list ppf lang new_tests;
-                         Format.pp_print_flush ppf ());
-                     match reads_against_live test_file with
-                     | Ok () ->
-                       Printf.printf
-                         "  written + re-pinned; verified against live%s\n"
-                         (if n_todo > 0 then
-                            Printf.sprintf
-                              " (%d slot(s) to fill, marked #[testcase.todo])"
-                              n_todo
-                          else "")
-                     | Error e ->
-                       Printf.printf
-                         "  WARNING: written but does NOT read back against \
-                          live: %s\n"
-                         e
-                   end)))
+         match prepare_file ~sig_dir test_file with
+         | Not_pinned | Fresh -> ()
+         | Skip msg -> Printf.printf "%s: %s\n" base msg
+         | Ready { old_sd; new_sd; migrated; lang } ->
+           let all_steps = List.concat_map snd migrated in
+           Printf.printf "%s  (%s -> %s)\n" base (scope_signature_pin old_sd)
+             (scope_signature_pin new_sd);
+           List.iter (fun s -> print_endline (pp_step s)) all_steps;
+           let count pred = List.length (List.filter pred all_steps) in
+           let n_todo =
+             count (fun (s : step) -> s.outcome = NeedsResolving NeedsValue)
+           in
+           let n_decisions =
+             count (fun (s : step) ->
+                 match s.outcome with
+                 | NeedsResolving (NeedsDecision _) -> true
+                 | _ -> false)
+           in
+           if dry_run then
+             Printf.printf
+               "  (dry-run: no files written; %d to fill, %d need a decision)\n"
+               n_todo n_decisions
+           else if n_decisions > 0 then
+             (* A NeedsDecision slot can't be written without destroying the old
+                value it needs as a transform input. Leave the whole test STALE
+                (untouched): old values stay intact and re-recoverable, and the
+                gate keeps flagging it. *)
+             Printf.printf
+               "  left STALE: %d item(s) need a decision (a transform) — not \
+                writing, old values preserved\n"
+               n_decisions
+           else begin
+             let new_tests = List.map fst migrated in
+             let dir =
+               Option.value ~default:(Filename.dirname test_file) sig_dir
+             in
+             write_sig_snapshot dir new_sd;
+             File.with_out_channel test_file (fun oc ->
+                 let ppf = Format.formatter_of_out_channel oc in
+                 emit_test_list ppf lang new_tests;
+                 Format.pp_print_flush ppf ());
+             match reads_against_live test_file with
+             | Ok () ->
+               Printf.printf "  written + re-pinned; verified against live%s\n"
+                 (if n_todo > 0 then
+                    Printf.sprintf
+                      " (%d slot(s) to fill, marked #[testcase.todo])" n_todo
+                  else "")
+             | Error e ->
+               Printf.printf
+                 "  WARNING: written but does NOT read back against live: %s\n" e
+           end)
+
+(* ============================================================================
+   migrate plan: the migration as an editable, persistent artifact (TOML).
+
+   `apply` does everything FORCED automatically; the plan is where the human
+   answers the few things that aren't: confirm/reject a suggested rename, give a
+   value to a new input (or leave a #[testcase.todo] hole), and point a
+   NeedsDecision at a Catala transform. One plan groups every drifted cluster
+   under PATH; it is the durable progress ledger (replacing the by-hand
+   spreadsheet) — `migrate plan` regenerates the worklist, `migrate status
+   --plan` shows resolution progress, and (later) `apply --plan` consumes it.
+
+   The four sections mirror the rewrite's [outcome] ADT:
+     auto       <- Resolved   (applied automatically; shown for review only)
+     [[rename]] <- Resolved (Renamed)      confirm = true | false
+     [[fill]]   <- NeedsValue               value = "..."  | todo = true
+     [[transform]] <- NeedsDecision         fn = "Mod.fn"  | "?"  (still pending)
+   ============================================================================ *)
+
+type plan_rename = { pr_kind : string; pr_from : string; pr_to : string }
+type plan_fill = { pf_path : string; pf_type : string }
+
+type plan_transform = {
+  ptr_produces : string list;
+  ptr_consumes : string list;
+  ptr_reason : string;
+}
+
+type plan_cluster = {
+  pc_file : string;
+  pc_scope : string;
+  pc_from : string;
+  pc_to : string;
+  pc_auto : string list;
+  pc_renames : plan_rename list;
+  pc_fills : plan_fill list;
+  pc_transforms : plan_transform list;
+}
+
+(* Strip the "@<hash>" tail of a pin to get the bare "<Module>.<Scope>". *)
+let scope_of_pin p =
+  match String.index_opt p '@' with Some k -> String.sub p 0 k | None -> p
+
+let build_plan_cluster ~sig_dir test_file : plan_cluster option =
+  match prepare_file ~sig_dir test_file with
+  | Not_pinned | Fresh | Skip _ -> None
+  | Ready { old_sd; new_sd; migrated; _ } ->
+    let all_steps = List.concat_map snd migrated in
+    let auto_str path = function
+      | Renamed (a, b) -> Printf.sprintf "rename %s: %s -> %s" path a b
+      | Wrapped -> "wrap " ^ path
+      | Unwrapped -> "unwrap " ^ path
+      | Dropped -> "drop " ^ path
+    in
+    (* Steps repeat across the cluster's tests; the plan is cluster-wide, so
+       collapse each worklist item to one row (sorted, deduped). *)
+    let auto =
+      List.filter_map
+        (fun (s : step) ->
+          match s.outcome with Resolved r -> Some (auto_str s.path r) | _ -> None)
+        all_steps
+      |> List.sort_uniq String.compare
+    in
+    (* Type hint for a fill row: easy for a top-level in./out. field. *)
+    let fill_type path =
+      match String.split_on_char '.' path with
+      | [ "in"; name ] -> (
+        match List.assoc_opt name new_sd.O.inputs with
+        | Some (si : O.scope_input) -> tystr si.typ
+        | None -> "")
+      | [ "out"; name ] -> (
+        match List.assoc_opt name new_sd.O.outputs with
+        | Some t -> tystr t
+        | None -> "")
+      | _ -> ""
+    in
+    let fills =
+      List.filter_map
+        (fun (s : step) ->
+          if s.outcome = NeedsResolving NeedsValue then Some s.path else None)
+        all_steps
+      |> List.sort_uniq String.compare
+      |> List.map (fun path -> { pf_path = path; pf_type = fill_type path })
+    in
+    let transforms =
+      List.filter_map
+        (fun (s : step) ->
+          match s.outcome with
+          | NeedsResolving (NeedsDecision r) -> Some (s.path, r)
+          | _ -> None)
+        all_steps
+      |> List.sort_uniq compare
+      |> List.map (fun (path, reason) ->
+             {
+               ptr_produces = [ path ];
+               ptr_consumes = [ path ];
+               (* default: the same slot; the dev widens if the transform reads
+                  more of the old record *)
+               ptr_reason = reason;
+             })
+    in
+    let renames =
+      let oc = canonical_model old_sd and nc = canonical_model new_sd in
+      detect_renames oc nc (structural_diff oc nc)
+      |> List.map (fun (k, o, n) ->
+             {
+               pr_kind = (match k with `Struct -> "struct" | `Enum -> "enum");
+               pr_from = o;
+               pr_to = n;
+             })
+    in
+    Some
+      {
+        pc_file = test_file;
+        pc_scope = scope_of_pin (scope_signature_pin new_sd);
+        pc_from = scope_signature_pin old_sd;
+        pc_to = scope_signature_pin new_sd;
+        pc_auto = auto;
+        pc_renames = renames;
+        pc_fills = fills;
+        pc_transforms = transforms;
+      }
+
+let toml_of_clusters (clusters : plan_cluster list) : Otoml.t =
+  let s x = Otoml.TomlString x in
+  let arr_str l = Otoml.TomlArray (List.map s l) in
+  let rename_tbl r =
+    Otoml.TomlTable
+      [
+        "kind", s r.pr_kind;
+        "from", s r.pr_from;
+        "to", s r.pr_to;
+        "confirm", Otoml.TomlBoolean true;
+      ]
+  in
+  let fill_tbl f =
+    Otoml.TomlTable
+      [ "path", s f.pf_path; "type", s f.pf_type; "todo", Otoml.TomlBoolean true ]
+  in
+  let transform_tbl t =
+    Otoml.TomlTable
+      [
+        "produces", arr_str t.ptr_produces;
+        "consumes", arr_str t.ptr_consumes;
+        "reason", s t.ptr_reason;
+        "fn", s "?";
+      ]
+  in
+  let cluster_tbl c =
+    Otoml.TomlTable
+      [
+        "file", s c.pc_file;
+        "scope", s c.pc_scope;
+        "from", s c.pc_from;
+        "to", s c.pc_to;
+        "auto", arr_str c.pc_auto;
+        "rename", Otoml.TomlTableArray (List.map rename_tbl c.pc_renames);
+        "fill", Otoml.TomlTableArray (List.map fill_tbl c.pc_fills);
+        "transform", Otoml.TomlTableArray (List.map transform_tbl c.pc_transforms);
+      ]
+  in
+  Otoml.TomlTable
+    [ "migration", Otoml.TomlTableArray (List.map cluster_tbl clusters) ]
+
+let plan_header =
+  "# Migration plan — generated by `catala testcase migrate plan`.\n\
+   # Resolve the open work, then re-run `migrate status --plan <this-file>` to\n\
+   # track progress (and, later, `migrate apply --plan <this-file>` to write).\n\
+   #   auto        applied automatically — review only, do not edit\n\
+   #   [[rename]]  set confirm = false to reject a suggested rename\n\
+   #   [[fill]]    add  value = \"...\"  for a new input, or leave todo = true\n\
+   #   [[transform]]  set  fn = \"Module.scope\"  (write it in migrations/)\n\n"
+
+let plan_to_string (clusters : plan_cluster list) : string =
+  plan_header ^ Otoml.Printer.to_string (toml_of_clusters clusters)
+
+let migrate_plan out sig_dir path _options =
+  let clusters =
+    collect_catala_files path |> List.filter_map (build_plan_cluster ~sig_dir)
+  in
+  if clusters = [] then
+    prerr_endline "migrate plan: nothing to migrate (all fresh, or unpinned)"
+  else
+    let text = plan_to_string clusters in
+    match out with
+    | None -> print_string text
+    | Some f ->
+      File.with_out_channel f (fun oc -> output_string oc text);
+      let n = List.length clusters in
+      Printf.eprintf "wrote %s (%d cluster%s)\n" f n (if n = 1 then "" else "s")
+
+(* ============================================================================
+   migrate status --plan: progress against a plan (the spreadsheet's progress
+   bar). A row is RESOLVED when it no longer needs human attention:
+     rename     confirm is a bool (we always emit it pre-confirmed)
+     fill       a non-empty value = "..."  (todo = true alone is still pending)
+     transform  fn set to something other than "?"
+   With --check, exit non-zero while any fill/transform is still pending (the
+   `?`-worklist gate).
+   ============================================================================ *)
+
+type plan_progress = {
+  pp_scope : string;
+  pp_file : string;
+  pp_renames : int * int; (* done, total *)
+  pp_fills : int * int;
+  pp_transforms : int * int;
+}
+
+let parse_plan_progress_string (content : string) : plan_progress list =
+  let table_assoc k = function
+    | Otoml.TomlTable kvs | Otoml.TomlInlineTable kvs -> List.assoc_opt k kvs
+    | _ -> None
+  in
+  let as_array = function
+    | Otoml.TomlArray l | Otoml.TomlTableArray l -> l
+    | _ -> []
+  in
+  let str_field k t =
+    match table_assoc k t with Some (Otoml.TomlString s) -> Some s | _ -> None
+  in
+  let count_done done_p l = List.length (List.filter done_p l), List.length l in
+  let toml = Otoml.Parser.from_string content in
+  let migs = match table_assoc "migration" toml with Some v -> as_array v | None -> [] in
+  List.map
+    (fun m ->
+      let arr k = match table_assoc k m with Some v -> as_array v | None -> [] in
+      let rename_done t =
+        match table_assoc "confirm" t with
+        | Some (Otoml.TomlBoolean _) -> true
+        | _ -> false
+      in
+      let fill_done t =
+        match str_field "value" t with
+        | Some v -> String.trim v <> ""
+        | None -> false
+      in
+      let transform_done t =
+        match str_field "fn" t with
+        | Some v -> String.trim v <> "" && String.trim v <> "?"
+        | None -> false
+      in
+      {
+        pp_scope = Option.value ~default:"?" (str_field "scope" m);
+        pp_file = Option.value ~default:"?" (str_field "file" m);
+        pp_renames = count_done rename_done (arr "rename");
+        pp_fills = count_done fill_done (arr "fill");
+        pp_transforms = count_done transform_done (arr "transform");
+      })
+    migs
+
+let parse_plan_progress plan_file : plan_progress list =
+  parse_plan_progress_string (File.contents plan_file)
+
+let report_plan_progress ~check plan_file =
+  let progs = parse_plan_progress plan_file in
+  let pending_of p =
+    let pend (d, t) = t - d in
+    pend p.pp_fills + pend p.pp_transforms
+  in
+  List.iter
+    (fun p ->
+      let d (a, _) = a and t (_, b) = b in
+      let total = t p.pp_renames + t p.pp_fills + t p.pp_transforms in
+      let done_ = d p.pp_renames + d p.pp_fills + d p.pp_transforms in
+      Printf.printf "%s  (%s)  %d/%d resolved\n" p.pp_scope
+        (Filename.basename p.pp_file) done_ total;
+      Printf.printf "  renames     %d/%d\n" (d p.pp_renames) (t p.pp_renames);
+      let pend (a, b) = b - a in
+      Printf.printf "  fills       %d/%d%s\n" (d p.pp_fills) (t p.pp_fills)
+        (if pend p.pp_fills > 0 then
+           Printf.sprintf "   (%d still #[testcase.todo])" (pend p.pp_fills)
+         else "");
+      Printf.printf "  transforms  %d/%d%s\n" (d p.pp_transforms)
+        (t p.pp_transforms)
+        (if pend p.pp_transforms > 0 then
+           Printf.sprintf "   (%d awaiting a Catala fn)" (pend p.pp_transforms)
+         else ""))
+    progs;
+  let pending = List.fold_left (fun a p -> a + pending_of p) 0 progs in
+  if check && pending > 0 then exit 1
+
+(* `migrate status`: drift triage by default, or — with --plan FILE — progress
+   against that plan. (Dispatcher; [migrate_status] above is the triage half.) *)
+let migrate_status_cmd check json plan sig_dir path options =
+  match plan with
+  | Some plan_file -> report_plan_progress ~check plan_file
+  | None -> migrate_status check json sig_dir path options

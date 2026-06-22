@@ -485,6 +485,64 @@ let test_line_mentions_module () =
   check "unrelated import"
     (not (M.line_mentions_module ~module_name:"Tax" "> Using Helper"))
 
+(* the migration plan: emit -> parse round-trip, and the progress oracle
+   (rename pre-confirmed; a fill with no value / a transform with fn="?" pending;
+   a filled value / a real fn resolved). *)
+let replace_once ~sub ~by s =
+  match M.find_sub ~sub s with
+  | None -> failwith ("replace_once: substring not found: " ^ sub)
+  | Some i ->
+    String.sub s 0 i ^ by
+    ^ String.sub s (i + String.length sub)
+        (String.length s - i - String.length sub)
+
+let test_plan_roundtrip () =
+  let cluster =
+    {
+      M.pc_file = "t.catala_en";
+      pc_scope = "OptTup.Calc";
+      pc_from = "OptTup.Calc@aaa";
+      pc_to = "OptTup.Calc@bbb";
+      pc_auto = [ "wrap in.x"; "drop in.legacy" ];
+      pc_renames = [ { M.pr_kind = "struct"; pr_from = "M.A"; pr_to = "M.B" } ];
+      pc_fills =
+        [
+          { M.pf_path = "in.rate"; pf_type = "rat" };
+          { M.pf_path = "in.k"; pf_type = "int" };
+        ];
+      pc_transforms =
+        [
+          {
+            M.ptr_produces = [ "in.amount" ];
+            ptr_consumes = [ "in.amount" ];
+            ptr_reason = "money -> int";
+          };
+        ];
+    }
+  in
+  let emitted = M.plan_to_string [ cluster ] in
+  (match M.parse_plan_progress_string emitted with
+  | [ p ] ->
+    check "plan: scope parsed" (p.M.pp_scope = "OptTup.Calc");
+    check "plan: rename pre-confirmed" (p.M.pp_renames = (1, 1));
+    check "plan: fills start pending" (p.M.pp_fills = (0, 2));
+    check "plan: transform starts pending (fn=?)" (p.M.pp_transforms = (0, 1))
+  | _ -> check "plan: exactly one cluster" false);
+  (* resolve one fill (a value) and the transform (a real fn), as a human would *)
+  let resolved =
+    emitted
+    (* the in.rate fill specifically (the bare "todo = true" also occurs in the
+       header comment, so anchor on the field above it) *)
+    |> replace_once ~sub:"type = \"rat\"\n  todo = true"
+         ~by:"type = \"rat\"\n  value = \"3.5\""
+    |> replace_once ~sub:"fn = \"?\"" ~by:"fn = \"Migrations.amount_v2\""
+  in
+  match M.parse_plan_progress_string resolved with
+  | [ p ] ->
+    check "plan: one fill resolved by value" (p.M.pp_fills = (1, 2));
+    check "plan: transform resolved by fn" (p.M.pp_transforms = (1, 1))
+  | _ -> check "plan: one cluster after edits" false
+
 let () =
   let reg title f =
     Tezt.Test.register ~__FILE__ ~title ~tags:[ "unit"; "migration" ] (fun () ->
@@ -507,4 +565,5 @@ let () =
   reg "apply: blocked (coerce, removed variant)" test_apply_blocked;
   reg "apply: record add/drop + rename map" test_apply_record;
   reg "import-line module matching" test_line_mentions_module;
+  reg "plan: emit/parse round-trip + progress" test_plan_roundtrip;
   Tezt.Test.run ()

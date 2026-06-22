@@ -8,7 +8,8 @@
 (library
  (name test_migration)
  (modules test_migration)
- (libraries catala.driver catala.clerk_lib catala_types_atd test_case_parser_lib)
+ (libraries otoml catala.driver catala.clerk_lib catala_types_atd
+   test_case_parser_lib)
  (flags
   (:standard -open Catala_types_atd)))
 

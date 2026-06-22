@@ -164,6 +164,36 @@ DIR_STATES=$( ( cd _migrate && catala testcase migrate status --json . 2>/dev/nu
   || { echo "FAIL(migrate): dir mode states = '$DIR_STATES' (expected Stale,Unknown)"; exit 1; }
 
 # ============================================================================
+# migrate plan: emit the editable TOML worklist for the same `pair`->`pair2`
+# drift, then track progress against it. The input rename is not auto-grouped,
+# so the plan drops `pair` (auto) and lists `pair2` as a fill to resolve.
+# ============================================================================
+( cd _migrate && catala testcase migrate plan -o plan.toml t.catala_en 2>/dev/null )
+PLAN=_migrate/plan.toml
+[ -f "$PLAN" ] || { echo "FAIL(plan): plan file not written"; exit 1; }
+grep -q 'path = "in.pair2"' "$PLAN" \
+  || { echo "FAIL(plan): added input pair2 not listed as a fill; got:"; cat "$PLAN"; exit 1; }
+grep -qE 'auto = \[.*drop in.pair' "$PLAN" \
+  || { echo "FAIL(plan): dropped input pair not in the auto block; got:"; cat "$PLAN"; exit 1; }
+
+# status --plan: the fill is pending; --check fails the gate while it is open.
+( cd _migrate && catala testcase migrate status --plan plan.toml t.catala_en 2>/dev/null ) \
+  | grep -qE 'fills +0/1' \
+  || { echo "FAIL(plan): status --plan should show fills 0/1"; exit 1; }
+if ( cd _migrate && catala testcase migrate status --check --plan plan.toml t.catala_en >/dev/null 2>&1 ); then
+  echo "FAIL(plan): --check --plan should fail while a fill is pending"; exit 1
+fi
+
+# resolve the fill (give it a value) -> progress advances, the gate passes.
+sed -i 's/  todo = true/  value = "(1, $2.00)"/' "$PLAN"
+( cd _migrate && catala testcase migrate status --plan plan.toml t.catala_en 2>/dev/null ) \
+  | grep -qE 'fills +1/1' \
+  || { echo "FAIL(plan): status --plan should show fills 1/1 after editing"; exit 1; }
+( cd _migrate && catala testcase migrate status --check --plan plan.toml t.catala_en >/dev/null 2>&1 ) \
+  || { echo "FAIL(plan): --check --plan should pass once the fill is resolved"; exit 1; }
+rm -f "$PLAN"
+
+# ============================================================================
 # migrate apply: recover -> rewrite -> write -> verify. The live drift here is
 # `pair` (tuple input) renamed to `pair2`; input renames are not auto-grouped, so
 # the old `pair` value is dropped and `pair2` is a NeedsValue hole left as

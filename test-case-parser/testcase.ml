@@ -157,17 +157,29 @@ let migrate_path =
     & pos 0 (some string) None
     & info [] ~docv:"PATH" ~doc:"Test file or directory to triage.")
 
+let status_plan =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["plan"] ~docv:"FILE"
+        ~doc:
+          "Instead of drift triage, report resolution progress against the \
+           given migration plan (as produced by $(b,migrate plan)). With \
+           --check, exit non-zero while any fill/transform is still pending.")
+
 let cmd_migrate_status =
   Cmd.v
     Cmd.(
       info "status"
         ~doc:
           "Triage the tests under the given file or directory by signature \
-           drift, bucketing each into fresh / stale / unknown / blocked.")
+           drift, bucketing each into fresh / stale / unknown / blocked. With \
+           --plan FILE, report progress against a migration plan instead.")
     Term.(
-      const Test_migration.migrate_status
+      const Test_migration.migrate_status_cmd
       $ with_check
       $ with_json
+      $ status_plan
       $ sig_dir
       $ migrate_path
       $ Cli.Flags.Global.flags)
@@ -254,12 +266,43 @@ let cmd_migrate_apply =
       $ apply_path
       $ Cli.Flags.Global.flags)
 
+let plan_out =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["o"; "output"] ~docv:"FILE"
+        ~doc:"Write the plan to FILE (default: stdout).")
+
+let cmd_migrate_plan =
+  Cmd.v
+    Cmd.(
+      info "plan"
+        ~doc:
+          "Emit an editable migration plan (TOML) for the stale tests under \
+           PATH: one cluster per drifted scope, listing the automatic changes \
+           (review only), the suggested renames (confirm/reject), the new \
+           inputs to fill, and the changes needing a Catala transform. The \
+           plan is the durable progress ledger — edit it, track it with \
+           $(b,migrate status --plan), and (later) apply it.")
+    Term.(
+      const Test_migration.migrate_plan
+      $ plan_out
+      $ sig_dir
+      $ apply_path
+      $ Cli.Flags.Global.flags)
+
 let cmd_migrate =
   Cmd.group
     Cmd.(
       info "migrate"
         ~doc:"Signature-drift migration pipeline for testcases.")
-    [ cmd_migrate_status; cmd_migrate_init; cmd_migrate_diff; cmd_migrate_apply ]
+    [
+      cmd_migrate_status;
+      cmd_migrate_init;
+      cmd_migrate_diff;
+      cmd_migrate_plan;
+      cmd_migrate_apply;
+    ]
 
 let cmd_list_scopes =
   Cmd.v
