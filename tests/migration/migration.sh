@@ -17,6 +17,7 @@ function cleanup(){
     rm -rf _sig_snap
     rm -rf _migrate
     rm -rf _init
+    rm -rf _applyplan
 }
 
 trap cleanup EXIT
@@ -284,3 +285,47 @@ sed -i 's/input pair content/input pair2 content/' _init/OptTup.catala_en
 ( cd _init && catala testcase migrate init r.catala_en >/dev/null 2>&1 )
 [ "$(grep -c 'testcase.sig' _init/r.catala_en)" -eq 0 ] \
   || { echo "FAIL(init): drifted unpinned test must be left untouched"; exit 1; }
+
+# ============================================================================
+# migrate apply --plan: consume the human's decisions. Own project (_applyplan)
+# so it doesn't perturb the triage above. Drift = a new input (`rate`); the plan
+# supplies its value, and apply --plan writes that value (not a #[testcase.todo]
+# hole) and verifies. An ill-typed fill is refused (warned, left a hole).
+# ============================================================================
+rm -rf _applyplan && mkdir -p _applyplan
+catala testcase list-scopes opttup.catala_en \
+  | catala testcase stub --output-dir _applyplan --language en
+catala testcase read test_opttup.catala_en \
+  | catala testcase write --language en --sig-dir _applyplan > _applyplan/t.catala_en
+printf '[project]\ninclude_dirs = ["."]\n' > _applyplan/clerk.toml
+# drift: add an input `rate content decimal`
+sed -i 's/\(input pair content (integer, money)\)/\1\n  input rate content decimal/' _applyplan/OptTup.catala_en
+( cd _applyplan && clerk start >/dev/null 2>&1 )
+[ "$( ( cd _applyplan && catala testcase migrate status --json t.catala_en 2>/dev/null ) | jq -r '.[0].state' )" = "Stale" ] \
+  || { echo "FAIL(apply-plan): expected Stale after adding an input"; exit 1; }
+
+# plan lists `rate` as a fill; fill it with a value, then apply --plan.
+( cd _applyplan && catala testcase migrate plan -o plan.toml t.catala_en 2>/dev/null )
+grep -q 'path = "in.rate"' _applyplan/plan.toml \
+  || { echo "FAIL(apply-plan): rate not listed as a fill"; exit 1; }
+sed -i 's/  todo = true/  value = "3.5"/' _applyplan/plan.toml
+AP=$( cd _applyplan && catala testcase migrate apply --plan plan.toml t.catala_en 2>/dev/null )
+echo "$AP" | grep -qi 'filled from plan' \
+  || { echo "FAIL(apply-plan): expected 'filled from plan'; got:"; echo "$AP"; exit 1; }
+echo "$AP" | grep -qi 'verified against live' \
+  || { echo "FAIL(apply-plan): result must verify against live; got:"; echo "$AP"; exit 1; }
+grep -q 'definition .*rate equals 3.5' _applyplan/t.catala_en \
+  || { echo "FAIL(apply-plan): filled value not written into the test"; exit 1; }
+grep -q 'testcase.todo' _applyplan/t.catala_en \
+  && { echo "FAIL(apply-plan): a filled slot must not keep a #[testcase.todo] marker"; exit 1; }
+[ "$( ( cd _applyplan && catala testcase migrate status --json t.catala_en 2>/dev/null ) | jq -r '.[0].state' )" = "Fresh" ] \
+  || { echo "FAIL(apply-plan): migrated test is not Fresh"; exit 1; }
+
+# an ill-typed fill is refused: warn, write nothing, leave the hole.
+catala testcase read test_opttup.catala_en \
+  | catala testcase write --language en --sig-dir _applyplan > _applyplan/t.catala_en
+( cd _applyplan && catala testcase migrate plan -o plan.toml t.catala_en 2>/dev/null )
+sed -i 's/  todo = true/  value = "not a number"/' _applyplan/plan.toml
+BAD=$( cd _applyplan && catala testcase migrate apply --dry-run --plan plan.toml t.catala_en 2>/dev/null )
+echo "$BAD" | grep -qi 'did not parse' \
+  || { echo "FAIL(apply-plan): ill-typed fill must be reported; got:"; echo "$BAD"; exit 1; }

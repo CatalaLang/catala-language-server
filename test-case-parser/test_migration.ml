@@ -1183,8 +1183,10 @@ let rebuild_record (new_fields : (string * O.typ) list)
     new_fields
 
 (* Migrate one recovered test old -> new; returns the migrated test + the steps. *)
-let apply_to_test ~lang old_sd new_sd (t : O.test) : O.test * step list =
-  let renames = signature_renames old_sd new_sd in
+let apply_to_test ~lang ?renames old_sd new_sd (t : O.test) : O.test * step list =
+  let renames =
+    match renames with Some r -> r | None -> signature_renames old_sd new_sd
+  in
   let in_typs sd = List.map (fun (n, (si : O.scope_input)) -> n, si.typ) sd.O.inputs in
   let tag pre = List.map (fun (s : step) -> { s with path = pre ^ s.path }) in
   let new_in_vals, in_steps =
@@ -1236,9 +1238,11 @@ type prep =
   | Fresh (* pin = live: nothing to migrate *)
   | Skip of string (* couldn't prepare: reason (snapshot/resolve/recover) *)
   | Ready of {
+      target : string; (* "<Module>.<Scope>" as written in the test (alias-safe) *)
       old_sd : O.scope_def;
       new_sd : O.scope_def;
-      migrated : (O.test * step list) list;
+      old_tests : O.test list; (* recovered values, for re-running under a plan *)
+      migrated : (O.test * step list) list; (* under the auto rename map *)
       lang : Global.backend_lang;
     }
 
@@ -1280,39 +1284,214 @@ let prepare_file ~sig_dir test_file : prep =
             let migrated =
               List.map (apply_to_test ~lang old_sd new_sd) old_tests
             in
-            Ready { old_sd; new_sd; migrated; lang }))
+            Ready { target; old_sd; new_sd; old_tests; migrated; lang }))
 
-let migrate_apply dry_run sig_dir path _options =
+(* Minimal navigation over the parsed plan (we control the format, so match the
+   raw constructors directly rather than pull in otoml's path API). *)
+let toml_assoc k = function
+  | Otoml.TomlTable kvs | Otoml.TomlInlineTable kvs -> List.assoc_opt k kvs
+  | _ -> None
+
+let toml_as_array = function
+  | Otoml.TomlArray l | Otoml.TomlTableArray l -> l
+  | _ -> []
+
+let toml_str k t =
+  match toml_assoc k t with Some (Otoml.TomlString s) -> Some s | _ -> None
+
+let toml_migrations content =
+  let toml = Otoml.Parser.from_string content in
+  match toml_assoc "migration" toml with Some v -> toml_as_array v | None -> []
+
+(* The human's decisions, for `apply --plan` to execute. One per cluster:
+   the confirmed renames (the rename map override) and the fills that carry a
+   value (raw Catala text, to be parsed against live). Transforms are step 2. *)
+type plan_decisions = {
+  pd_file : string;
+  pd_scope : string;
+  pd_renames : (string * string) list; (* confirmed (from, to) *)
+  pd_fills : (string * string) list; (* path, value-text (value present only) *)
+}
+
+let parse_plan_decisions_string (content : string) : plan_decisions list =
+  List.map
+    (fun m ->
+      let arr k = match toml_assoc k m with Some v -> toml_as_array v | None -> [] in
+      let renames =
+        List.filter_map
+          (fun t ->
+            match toml_assoc "confirm" t, toml_str "from" t, toml_str "to" t with
+            | Some (Otoml.TomlBoolean true), Some f, Some tto -> Some (f, tto)
+            | _ -> None)
+          (arr "rename")
+      in
+      let fills =
+        List.filter_map
+          (fun t ->
+            match toml_str "path" t, toml_str "value" t with
+            | Some p, Some v when String.trim v <> "" -> Some (p, v)
+            | _ -> None)
+          (arr "fill")
+      in
+      {
+        pd_file = Option.value ~default:"?" (toml_str "file" m);
+        pd_scope = Option.value ~default:"?" (toml_str "scope" m);
+        pd_renames = renames;
+        pd_fills = fills;
+      })
+    (toml_migrations content)
+
+(* A plan fill targets a top-level input when its path is exactly "in.<name>"
+   (nested fills and output fills are not placed by step 1; they stay holes). *)
+let toplevel_input_fill path =
+  match String.split_on_char '.' path with [ "in"; name ] -> Some name | _ -> None
+
+(* Parse top-level input fills (raw Catala value text) into typed runtime_values
+   by reading a synthesized probe test against the LIVE module: a throwaway test
+   scope that sets only the filled inputs. The compiler does the parsing AND the
+   typechecking — an ill-typed fill surfaces as a read error (a feature, not a
+   crash). [target] is the tested scope token exactly as written in the test, so
+   an aliased `> Using M as O` import still resolves. *)
+let parse_fill_values ~target ~test_file (fills : (string * string) list) :
+    ((string * O.runtime_value) list, string) result =
+  if fills = [] then Ok []
+  else
+    let headers =
+      File.contents test_file
+      |> String.split_on_char '\n'
+      |> List.filter (fun l ->
+             let l = String.trim l in
+             String.length l > 0 && l.[0] = '>')
+    in
+    let defs =
+      List.map
+        (fun (n, v) -> Printf.sprintf "  definition probe.%s equals %s" n v)
+        fills
+      |> String.concat "\n"
+    in
+    let content =
+      String.concat "\n" headers
+      ^ "\n\n```catala-metadata\n#[test]\n#[testcase.testui]\n\
+         declaration scope Migrate_fill_probe:\n  output probe scope " ^ target
+      ^ "\n```\n\n```catala\nscope Migrate_fill_probe:\n" ^ defs ^ "\n```\n"
+    in
+    let options =
+      Global.enforce_options ~input_src:(Global.Contents (content, test_file)) ()
+    in
+    let path_to_build, include_dirs = lookup_include_dirs options in
+    try
+      match import_catala_tests (read_program include_dirs path_to_build options) with
+      | [] -> Error "fill probe produced no test"
+      | t :: _ ->
+        Ok
+          (List.filter_map
+             (fun (n, _) ->
+               match List.assoc_opt n t.O.test_inputs with
+               | Some ({ value = Some vd; _ } : O.test_io) -> Some (n, vd.value)
+               | _ -> None)
+             fills)
+    with e -> Error (Printexc.to_string e)
+
+(* Drop the parsed fill value into each test's matching hole (a top-level input
+   left Unset by the rewrite). Only fills an actual hole — never overwrites a
+   recovered value. *)
+let fill_holes (parsed : (string * O.runtime_value) list)
+    ((t, steps) : O.test * step list) : O.test * step list =
+  let inputs =
+    List.map
+      (fun (name, (io : O.test_io)) ->
+        match List.assoc_opt name parsed, io.value with
+        | Some rv, Some { O.value = { O.value = O.Unset; _ }; _ } ->
+          name, { io with value = Some { O.value = rv; pos = None } }
+        | _ -> name, io)
+      t.test_inputs
+  in
+  { t with test_inputs = inputs }, steps
+
+let migrate_apply dry_run plan sig_dir path _options =
+  let decisions =
+    match plan with
+    | None -> []
+    | Some f -> parse_plan_decisions_string (File.contents f)
+  in
   collect_catala_files path
   |> List.iter (fun test_file ->
          let base = Filename.basename test_file in
          match prepare_file ~sig_dir test_file with
          | Not_pinned | Fresh -> ()
          | Skip msg -> Printf.printf "%s: %s\n" base msg
-         | Ready { old_sd; new_sd; migrated; lang } ->
+         | Ready { target; old_sd; new_sd; old_tests; migrated; lang } ->
+           (* Find this file's plan cluster (if any). Under a plan, the confirmed
+              renames REPLACE the auto-detected map, so re-run the rewrite. *)
+           let cluster =
+             List.find_opt
+               (fun d -> String.equal (Filename.basename d.pd_file) base)
+               decisions
+           in
+           let migrated =
+             match cluster with
+             | Some d ->
+               List.map
+                 (apply_to_test ~lang ~renames:d.pd_renames old_sd new_sd)
+                 old_tests
+             | None -> migrated
+           in
+           (* Parse the plan's top-level input fills against live, then place
+              them into the holes. An unparseable fill is reported and left a
+              hole (never written broken). *)
+           let parsed_fills, fill_err =
+             match cluster with
+             | None -> [], None
+             | Some d -> (
+               let kv =
+                 List.filter_map
+                   (fun (p, v) ->
+                     Option.map (fun n -> n, v) (toplevel_input_fill p))
+                   d.pd_fills
+               in
+               match parse_fill_values ~target ~test_file kv with
+               | Ok parsed -> parsed, None
+               | Error e -> [], Some e)
+           in
+           let migrated = List.map (fill_holes parsed_fills) migrated in
            let all_steps = List.concat_map snd migrated in
            Printf.printf "%s  (%s -> %s)\n" base (scope_signature_pin old_sd)
              (scope_signature_pin new_sd);
            List.iter (fun s -> print_endline (pp_step s)) all_steps;
+           Option.iter
+             (fun e ->
+               Printf.printf
+                 "  WARNING: plan fill value(s) did not parse, left as holes: \
+                  %s\n"
+                 e)
+             fill_err;
            let count pred = List.length (List.filter pred all_steps) in
-           let n_todo =
-             count (fun (s : step) -> s.outcome = NeedsResolving NeedsValue)
-           in
+           let is_needs_value (s : step) = s.outcome = NeedsResolving NeedsValue in
            let n_decisions =
              count (fun (s : step) ->
                  match s.outcome with
                  | NeedsResolving (NeedsDecision _) -> true
                  | _ -> false)
            in
+           let filled_paths = List.map (fun (n, _) -> "in." ^ n) parsed_fills in
+           let n_filled =
+             count (fun s -> is_needs_value s && List.mem s.path filled_paths)
+           in
+           let n_todo = count is_needs_value - n_filled in
+           let filled_note =
+             if n_filled > 0 then Printf.sprintf " %d filled from plan;" n_filled
+             else ""
+           in
            if dry_run then
              Printf.printf
-               "  (dry-run: no files written; %d to fill, %d need a decision)\n"
-               n_todo n_decisions
+               "  (dry-run: no files written;%s %d to fill, %d need a decision)\n"
+               filled_note n_todo n_decisions
            else if n_decisions > 0 then
              (* A NeedsDecision slot can't be written without destroying the old
                 value it needs as a transform input. Leave the whole test STALE
                 (untouched): old values stay intact and re-recoverable, and the
-                gate keeps flagging it. *)
+                gate keeps flagging it. (Transforms are resolved in a later
+                slice; the plan's fn is not executed here.) *)
              Printf.printf
                "  left STALE: %d item(s) need a decision (a transform) — not \
                 writing, old values preserved\n"
@@ -1329,7 +1508,9 @@ let migrate_apply dry_run sig_dir path _options =
                  Format.pp_print_flush ppf ());
              match reads_against_live test_file with
              | Ok () ->
-               Printf.printf "  written + re-pinned; verified against live%s\n"
+               Printf.printf "  written + re-pinned; verified against live%s%s\n"
+                 (if n_filled > 0 then Printf.sprintf " (%d filled from plan)" n_filled
+                  else "")
                  (if n_todo > 0 then
                     Printf.sprintf
                       " (%d slot(s) to fill, marked #[testcase.todo])" n_todo
@@ -1548,20 +1729,9 @@ type plan_progress = {
 }
 
 let parse_plan_progress_string (content : string) : plan_progress list =
-  let table_assoc k = function
-    | Otoml.TomlTable kvs | Otoml.TomlInlineTable kvs -> List.assoc_opt k kvs
-    | _ -> None
-  in
-  let as_array = function
-    | Otoml.TomlArray l | Otoml.TomlTableArray l -> l
-    | _ -> []
-  in
-  let str_field k t =
-    match table_assoc k t with Some (Otoml.TomlString s) -> Some s | _ -> None
-  in
+  let table_assoc = toml_assoc and as_array = toml_as_array and str_field = toml_str in
   let count_done done_p l = List.length (List.filter done_p l), List.length l in
-  let toml = Otoml.Parser.from_string content in
-  let migs = match table_assoc "migration" toml with Some v -> as_array v | None -> [] in
+  let migs = toml_migrations content in
   List.map
     (fun m ->
       let arr k = match table_assoc k m with Some v -> as_array v | None -> [] in

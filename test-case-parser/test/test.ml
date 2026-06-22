@@ -543,6 +543,47 @@ let test_plan_roundtrip () =
     check "plan: transform resolved by fn" (p.M.pp_transforms = (1, 1))
   | _ -> check "plan: one cluster after edits" false
 
+(* apply --plan reads back the human's decisions: confirmed renames (the map
+   override) and fills that carry a value. confirm=false drops the rename; a fill
+   with no value yields no decision (stays a hole). *)
+let test_plan_decisions () =
+  let cluster =
+    {
+      M.pc_file = "t.catala_en";
+      pc_scope = "OptTup.Calc";
+      pc_from = "OptTup.Calc@aaa";
+      pc_to = "OptTup.Calc@bbb";
+      pc_auto = [];
+      pc_renames =
+        [
+          { M.pr_kind = "struct"; pr_from = "M.A"; pr_to = "M.B" };
+          { M.pr_kind = "enum"; pr_from = "M.E"; pr_to = "M.F" };
+        ];
+      pc_fills =
+        [
+          { M.pf_path = "in.rate"; pf_type = "rat" };
+          { M.pf_path = "in.k"; pf_type = "int" };
+        ];
+      pc_transforms = [];
+    }
+  in
+  let edited =
+    M.plan_to_string [ cluster ]
+    (* reject the enum rename *)
+    |> replace_once ~sub:"to = \"M.F\"\n  confirm = true"
+         ~by:"to = \"M.F\"\n  confirm = false"
+    (* give in.rate a value; leave in.k a hole *)
+    |> replace_once ~sub:"type = \"rat\"\n  todo = true"
+         ~by:"type = \"rat\"\n  value = \"3.5\""
+  in
+  match M.parse_plan_decisions_string edited with
+  | [ d ] ->
+    check "only confirmed renames survive" (d.M.pd_renames = [ "M.A", "M.B" ]);
+    check "only fills with a value are decisions"
+      (d.M.pd_fills = [ "in.rate", "3.5" ]);
+    check "file/scope carried" (d.M.pd_file = "t.catala_en" && d.M.pd_scope = "OptTup.Calc")
+  | _ -> check "decisions: exactly one cluster" false
+
 (* the steady-state "one hash per scope" invariant: a scope whose tests carry
    more than one distinct pin is a half-migrated cluster. *)
 let test_split_scopes () =
@@ -597,5 +638,6 @@ let () =
   reg "apply: record add/drop + rename map" test_apply_record;
   reg "import-line module matching" test_line_mentions_module;
   reg "plan: emit/parse round-trip + progress" test_plan_roundtrip;
+  reg "plan: decisions (confirmed renames + valued fills)" test_plan_decisions;
   reg "status: one-hash-per-scope (split detection)" test_split_scopes;
   Tezt.Test.run ()

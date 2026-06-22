@@ -249,6 +249,17 @@ let apply_path =
     & pos 0 (some string) None
     & info [] ~docv:"PATH" ~doc:"Test file or directory to migrate.")
 
+let apply_plan =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["plan"] ~docv:"FILE"
+        ~doc:
+          "Consume a migration plan (from $(b,migrate plan)): apply its \
+           confirmed renames and write its filled-in input values, instead of \
+           the auto defaults. Slots left as holes stay #[testcase.todo]; tests \
+           still needing a transform are left stale.")
+
 let cmd_migrate_apply =
   Cmd.v
     Cmd.(
@@ -258,10 +269,12 @@ let cmd_migrate_apply =
            from the committed snapshot, rewrite them old->new, re-pin, and \
            verify the result reads back against the live module. Holes the \
            migration cannot fill (added inputs, non-mechanical changes) are left \
-           as `impossible` and reported. Use --dry-run to preview.")
+           as `impossible` and reported. With --plan, take the human's \
+           decisions from a plan file. Use --dry-run to preview.")
     Term.(
       const Test_migration.migrate_apply
       $ with_dry_run
+      $ apply_plan
       $ sig_dir
       $ apply_path
       $ Cli.Flags.Global.flags)
