@@ -335,7 +335,7 @@ echo "$BAD" | grep -qi 'did not parse' \
 # migrate apply --plan + TRANSFORM: a NeedsDecision (scalar retype) resolved by a
 # Catala scope. Uses the REAL module (bodies, so it compiles to a runnable
 # runtime) plus a Migrations module; the transform runs through the interpreter,
-# so the project's OCaml runtime must be built first (clerk run warms it).
+# so `apply` builds the project's OCaml runtime itself (via clerk) first.
 # ============================================================================
 rm -rf _xform && mkdir -p _xform
 cp opttup.catala_en _xform/OptTup.catala_en
@@ -367,26 +367,8 @@ EOF
 [ "$( ( cd _xform && catala testcase migrate status --json t.catala_en 2>/dev/null ) | jq -r '.[0].state' )" = "Stale" ] \
   || { echo "FAIL(xform): expected Stale after retype"; exit 1; }
 cp _xform/t.catala_en _xform/t.stale.bak   # src no longer typechecks post-retype; keep the stale test
-# build the OCaml runtime (.cmxs) the interpreter needs, via a warmup run
-cat > _xform/warmup.catala_en <<'EOF'
-> Using OptTup
-> Using Migrations
-
-```catala-metadata
-#[test]
-#[testcase.testui]
-declaration scope Warmup:
-  output t scope Migrations.Rate_v2
-```
-
-```catala
-scope Warmup:
-  definition t.rate equals 3.5
-```
-EOF
-( cd _xform && clerk run warmup.catala_en >/dev/null 2>&1 ) \
-  || { echo "FAIL(xform): warmup build/run failed"; exit 1; }
-# plan, point the transform at the scope, apply
+# plan, point the transform at the scope, apply. `apply` builds the OCaml
+# runtime (.cmxs) the interpreter needs itself, via clerk — no warmup.
 ( cd _xform && catala testcase migrate plan -o plan.toml t.catala_en 2>/dev/null )
 grep -q 'reason = "needs explicit migration: rat -> money"' _xform/plan.toml \
   || { echo "FAIL(xform): retype not listed as a transform"; cat _xform/plan.toml; exit 1; }

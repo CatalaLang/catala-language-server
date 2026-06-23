@@ -1446,11 +1446,12 @@ let fill_holes (parsed : (string * O.runtime_value) list)
    The transform is just *more Catala*, evaluated by Catala — no new engine. (This
    slice covers top-level input slots; nested/multi-produce is future.) *)
 
-(* Render a recovered value to Catala literal text, for splicing into a probe. *)
-let value_to_text ~lang ~(typ : O.typ) (rv : O.runtime_value) : string =
+(* Render a value to Catala text (for splicing into a probe, or showing a diff).
+   [typ] guides nicer formatting when known; None is fine for display. *)
+let value_to_text ~lang ?typ (rv : O.runtime_value) : string =
   let buf = Buffer.create 64 in
   let ppf = Format.formatter_of_buffer buf in
-  print_catala_value ~typ:(Some typ) ~lang ppf { rv with O.attrs = [] };
+  print_catala_value ~typ ~lang ppf { rv with O.attrs = [] };
   Format.pp_print_flush ppf ();
   String.trim (Buffer.contents buf)
 
@@ -1564,7 +1565,105 @@ let apply_transforms ~test_file ~lang ~headers ~(old_sd : O.scope_def)
         pairs', resolved @ xf.xf_produces, errs)
     (pairs, [], []) transforms
 
-let migrate_apply dry_run plan sig_dir path _options =
+(* ── Rerun diagnostic (read-only second gate) ───────────────────────────────
+   After a test is migrated (Fresh, inputs shape-fitted), RUN it and show where
+   the asserted outputs and the freshly-computed ones diverge. Purely a
+   diagnostic: it NEVER writes an output. A moved assertion is usually legitimate
+   (a filled/defaulted input flowed through, or the modeller changed logic) and is
+   the tester's call to re-enter by hand — recomputing expectations automatically
+   would make the test assert whatever the code says (a dead test). Like
+   transforms, running interprets, so it needs the project's built runtime. *)
+let render_path (segs : O.path_segment list) : string =
+  match segs with
+  | [] -> "(output)"
+  | _ ->
+    String.concat ""
+      (List.map
+         (function
+           | `StructField f -> "." ^ f
+           | `ListIndex i -> Printf.sprintf "[%d]" i
+           | `TupleIndex i -> Printf.sprintf "(%d)" i
+           | `EnumPayload c -> ":" ^ c)
+         segs)
+
+let rerun_report ~lang test_file =
+  let scopes =
+    parse_tests_textually (File.contents test_file)
+    |> List.map (fun (pt : parsed_test) -> pt.pt_test_scope)
+  in
+  List.iter
+    (fun scope ->
+      let options =
+        Global.enforce_options ~input_src:(Global.FileName test_file) ()
+      in
+      match try Ok (compute_test_run [] options scope) with e -> Error e with
+      | Error (Message.CompilerError _ | Message.CompilerErrors _) ->
+        Printf.printf
+          "  rerun %s: could not run (interpreting needs the project's built \
+           runtime)\n"
+          scope
+      | Error e -> Printf.printf "  rerun %s: could not run (%s)\n" scope (Printexc.to_string e)
+      | Ok tr ->
+        if tr.O.diffs = [] && not tr.O.assert_failures then
+          Printf.printf "  rerun %s: green (outputs unchanged)\n" scope
+        else begin
+          Printf.printf
+            "  rerun %s: %d assertion(s) moved%s — review by hand (not rewritten)\n"
+            scope (List.length tr.O.diffs)
+            (if tr.O.assert_failures then "; an assertion failed" else "");
+          List.iter
+            (fun (d : O.diff) ->
+              Printf.printf "      %s: expected %s  ->  now computes %s\n"
+                (render_path d.O.path)
+                (value_to_text ~lang d.O.expected)
+                (value_to_text ~lang d.O.actual))
+            tr.O.diffs
+        end)
+    scopes
+
+(* ── Build integration ──────────────────────────────────────────────────────
+   Interpreting (transforms, rerun) loads the project's COMPILED runtime (.cmxs),
+   not just the typechecked program — so before any interpret step we drive the
+   real build pipeline (clerk) for the modules involved, rather than relying on a
+   hand "warmup" or a typecheck-only `clerk start`. *)
+let module_of_fn fn =
+  match String.index_opt fn '.' with
+  | Some i -> String.sub fn 0 i
+  | None -> fn
+
+(* Module names the test imports (`> Using X [as Y]` -> X). *)
+let imported_modules test_file =
+  test_headers test_file
+  |> List.filter_map (fun l ->
+         match
+           String.trim l
+           |> String.map (fun c -> if c = '\t' then ' ' else c)
+           |> String.split_on_char ' '
+           |> List.filter (fun s -> s <> "")
+         with
+         | ">" :: "Using" :: m :: _ -> Some m
+         | _ -> None)
+
+(* Build the .cmxs the interpreter will load (the test's imports + any transform
+   modules), via clerk. Best-effort: failures surface at the interpret step with
+   a clear message. Runs in the current directory (the usual project root). *)
+let ensure_built ~test_file ~(extra_modules : string list) : unit =
+  let modules =
+    List.sort_uniq String.compare (imported_modules test_file @ extra_modules)
+  in
+  let targets =
+    List.map (fun m -> Printf.sprintf "_build/ocaml/%s.cmxs" m) modules
+  in
+  if targets <> [] then begin
+    let rc =
+      Clerk_lib.Clerk_cli.run_command_line ("clerk" :: "build" :: targets)
+    in
+    if rc <> 0 then
+      Printf.eprintf
+        "  (clerk build exited %d — transforms/rerun may fail to interpret)\n" rc
+  end
+
+let migrate_apply dry_run rerun plan sig_dir path _options =
   let decisions =
     match plan with
     | None -> []
@@ -1573,17 +1672,28 @@ let migrate_apply dry_run plan sig_dir path _options =
   collect_catala_files path
   |> List.iter (fun test_file ->
          let base = Filename.basename test_file in
+         (* Find this file's plan cluster (if any). Under a plan, the confirmed
+            renames REPLACE the auto-detected map, so re-run the rewrite. *)
+         let cluster =
+           List.find_opt
+             (fun d -> String.equal (Filename.basename d.pd_file) base)
+             decisions
+         in
+         (* If an interpret step lies ahead (transforms or --rerun), build the
+            project's runtime FIRST — before prepare_file, whose live-signature
+            resolution also needs the typecheck that `clerk build` produces. *)
+         let xf_modules =
+           match cluster with
+           | Some d ->
+             List.map (fun (x : plan_xf) -> module_of_fn x.xf_fn) d.pd_transforms
+           | None -> []
+         in
+         if rerun || xf_modules <> [] then
+           ensure_built ~test_file ~extra_modules:xf_modules;
          match prepare_file ~sig_dir test_file with
          | Not_pinned | Fresh -> ()
          | Skip msg -> Printf.printf "%s: %s\n" base msg
          | Ready { target; old_sd; new_sd; old_tests; migrated; lang } ->
-           (* Find this file's plan cluster (if any). Under a plan, the confirmed
-              renames REPLACE the auto-detected map, so re-run the rewrite. *)
-           let cluster =
-             List.find_opt
-               (fun d -> String.equal (Filename.basename d.pd_file) base)
-               decisions
-           in
            let migrated =
              match cluster with
              | Some d ->
@@ -1626,9 +1736,19 @@ let migrate_apply dry_run plan sig_dir path _options =
              | _ -> migrated, [], []
            in
            let all_steps = List.concat_map snd migrated in
+           let filled_paths = List.map (fun (n, _) -> "in." ^ n) parsed_fills in
            Printf.printf "%s  (%s -> %s)\n" base (scope_signature_pin old_sd)
              (scope_signature_pin new_sd);
-           List.iter (fun s -> print_endline (pp_step s)) all_steps;
+           (* A hole the plan filled / a decision a transform resolved is no
+              longer open: show it as done, not as the stale NEEDS line. *)
+           List.iter
+             (fun s ->
+               if List.mem s.path filled_paths then
+                 Printf.printf "  filled    %s  (from plan)\n" s.path
+               else if List.mem s.path resolved_produces then
+                 Printf.printf "  transform %s  (from plan)\n" s.path
+               else print_endline (pp_step s))
+             all_steps;
            Option.iter
              (fun e ->
                Printf.printf
@@ -1656,7 +1776,6 @@ let migrate_apply dry_run plan sig_dir path _options =
              count (fun s ->
                  is_decision s && not (List.mem s.path resolved_produces))
            in
-           let filled_paths = List.map (fun (n, _) -> "in." ^ n) parsed_fills in
            let n_filled =
              count (fun s -> is_needs_value s && List.mem s.path filled_paths)
            in
@@ -1699,7 +1818,9 @@ let migrate_apply dry_run plan sig_dir path _options =
                  (if n_todo > 0 then
                     Printf.sprintf
                       " (%d slot(s) to fill, marked #[testcase.todo])" n_todo
-                  else "")
+                  else "");
+               (* read-only second gate: only meaningful with no holes left *)
+               if rerun && n_todo = 0 then rerun_report ~lang test_file
              | Error e ->
                Printf.printf
                  "  WARNING: written but does NOT read back against live: %s\n" e

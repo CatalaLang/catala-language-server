@@ -260,6 +260,18 @@ let apply_plan =
            the auto defaults. Slots left as holes stay #[testcase.todo]; tests \
            still needing a transform are left stale.")
 
+let with_rerun =
+  Arg.(
+    value
+    & flag
+    & info ["rerun"]
+        ~doc:
+          "After migrating a test (and only if no holes remain), RUN it and show \
+           where the asserted outputs diverge from the freshly-computed ones. \
+           Read-only diagnostic: it never rewrites an output (recomputing \
+           expectations would make tests tautological). Interpreting needs the \
+           project's built runtime.")
+
 let cmd_migrate_apply =
   Cmd.v
     Cmd.(
@@ -270,10 +282,12 @@ let cmd_migrate_apply =
            verify the result reads back against the live module. Holes the \
            migration cannot fill (added inputs, non-mechanical changes) are left \
            as `impossible` and reported. With --plan, take the human's \
-           decisions from a plan file. Use --dry-run to preview.")
+           decisions from a plan file. Use --dry-run to preview, --rerun for the \
+           read-only output diagnostic.")
     Term.(
       const Test_migration.migrate_apply
       $ with_dry_run
+      $ with_rerun
       $ apply_plan
       $ sig_dir
       $ apply_path
