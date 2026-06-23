@@ -185,7 +185,9 @@ export async function activate(
       const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
       if (dap_path) {
         const server = net.createServer((socket) => {
-          const adapter = spawn(dap_path, []);
+          const adapter = spawn(dap_path, [], {
+            shell: process.platform === 'win32',
+          });
           adapter.stdout.pipe(socket);
           socket.pipe(adapter.stdin);
           const output = vscode.window.createOutputChannel('Debugger Output');
@@ -230,7 +232,10 @@ export async function activate(
     getConfig('lspServerPath')
   );
   if (lsp_path) {
-    const run: Executable = { command: lsp_path };
+    const run: Executable = {
+      command: lsp_path,
+      options: process.platform === 'win32' ? { shell: true } : undefined,
+    };
     const serverOptions: ServerOptions = { run, debug: run };
     const clientOptions: LanguageClientOptions = {
       markdown: { isTrusted: true, supportHtml: true },

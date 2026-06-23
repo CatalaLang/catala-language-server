@@ -259,7 +259,7 @@ export async function showExceptions(args: ExceptionsArgs): Promise<void> {
           variable,
           '--output-format=json',
         ],
-        { cwd }
+        { cwd, shell: process.platform === 'win32' }
       );
       proc.stdout.on('data', (data: Buffer) => {
         jsonOutput += data.toString();

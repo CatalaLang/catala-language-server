@@ -123,6 +123,7 @@ async function clerkRunTest(
   return new Promise((resolve) => {
     const proc = spawn(clerkPath, args, {
       ...(cwd && { cwd }),
+      shell: process.platform === 'win32',
     });
     cancellation.onCancellationRequested((_) => {
       proc.kill(2);
