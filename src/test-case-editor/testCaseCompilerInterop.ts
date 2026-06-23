@@ -20,7 +20,7 @@ import path from 'path';
 import { clerkPath, catalaPath } from '../shared/util_client';
 
 function getCwd(bufferPath: string): string | undefined {
-  return workspace.getWorkspaceFolder(Uri.parse(bufferPath))?.uri?.fsPath;
+  return workspace.getWorkspaceFolder(Uri.file(bufferPath))?.uri?.fsPath;
 }
 
 type ExecOptions = { input?: string; cwd?: string };
