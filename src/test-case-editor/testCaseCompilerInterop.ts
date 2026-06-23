@@ -35,7 +35,11 @@ function execBinary(
   try {
     return {
       ok: true,
-      output: execFileSync(bin, args, { encoding: 'utf8', ...opts }),
+      output: execFileSync(bin, args, {
+        encoding: 'utf8',
+        shell: process.platform === 'win32',
+        ...opts,
+      }),
     };
   } catch (error) {
     const stderr = (error as SpawnSyncReturns<Buffer | string>).stderr;
