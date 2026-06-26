@@ -114,9 +114,12 @@ export function runTestScope(
    * (note that not all these questions are related to the `runTestScope` function,
    * these could be handled externally as well)
    */
-  const inputArgs = inputs
-    ? ['--input', JSON.stringify(writeTestInputs(inputs))]
-    : [];
+  // Pass the input over stdin (`--input=-`), not inline: large generated inputs
+  // (tens of KB) overflow the Windows command-line limit and fail with ENAMETOOLONG.
+  const inputJson = inputs
+    ? JSON.stringify(writeTestInputs(inputs))
+    : undefined;
+  const inputArgs = inputs ? ['--input=-'] : [];
   const args = [
     'testcase',
     'run',
@@ -141,7 +144,10 @@ export function runTestScope(
   }
   // Here we *do* want to fail on asserts, as we catch failures through
   // the `register_lsp_error_notifier` hook.
-  const execResult = execBinary(catalaPath, args, { ...(cwd && { cwd }) });
+  const execResult = execBinary(catalaPath, args, {
+    ...(cwd && { cwd }),
+    ...(inputJson !== undefined && { input: inputJson }),
+  });
   if (!execResult.ok) {
     window.showErrorMessage(execResult.stderr);
     return { kind: 'Error', value: execResult.stderr };
