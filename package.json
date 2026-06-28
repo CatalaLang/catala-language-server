@@ -200,7 +200,7 @@
       "properties": {
         "catala.enableCustomTestCaseEditor": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Enable the custom test case editor for Catala test files"
         },
         "catala-lsp.trace.server": {
