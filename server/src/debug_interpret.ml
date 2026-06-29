@@ -173,7 +173,13 @@ let rec runtime_to_val : type d r.
       (* Some case *)
       let* e = runtime_to_val ctx m ty (Obj.field o 0) in
       Lwt.return
-        (EInj { name = ConstantNames.option_enum; cons = ConstantNames.some_constr; e }, m)
+        ( EInj
+            {
+              name = ConstantNames.option_enum;
+              cons = ConstantNames.some_constr;
+              e;
+            },
+          m )
   | TClosureEnv ->
     (* By construction, a closure environment can only be consumed from the same
        scope where it was built (compiled or not) ; for this reason, we can
@@ -433,27 +439,7 @@ let evaluate_operator
     match op, args with
     | Length, [(EArray es, _)] ->
       Lwt.return (ELit (LInt (Runtime.integer_of_int (List.length es))))
-    | Log (entry, infos), [(e, m)] when Global.options.trace <> None -> (
-      let rtinfos = List.map Uid.MarkedString.to_string infos in
-      match entry with
-      | BeginCall -> Lwt.return (Runtime.log_begin_call rtinfos e)
-      | EndCall -> Lwt.return (Runtime.log_end_call rtinfos e)
-      | PosRecordIfTrueBool ->
-        (match e with
-        | ELit (LBool b) ->
-          Runtime.log_decision_taken (Expr.pos_to_runtime pos) b |> ignore
-        | _ -> ());
-        Lwt.return e
-      | VarDef def ->
-        Lwt.return
-          (Mark.remove
-             (Runtime.log_variable_definition rtinfos
-                {
-                  Runtime.io_input = def.log_io_input;
-                  io_output = def.log_io_output;
-                }
-                (Expr.embed_value ctx) (e, m))))
-    | Log _, [(e', _)] -> Lwt.return e'
+    | Tag _, [(e', _)] -> Lwt.return e'
     | (FromClosureEnv | ToClosureEnv), [e'] ->
       (* [FromClosureEnv] and [ToClosureEnv] are just there to bypass the need
          for existential types when typing code after closure conversion. There
@@ -511,7 +497,12 @@ let evaluate_operator
           x0 xn
       in
       Lwt.return
-        (EInj { name = ConstantNames.option_enum; cons = ConstantNames.some_constr; e = r })
+        (EInj
+           {
+             name = ConstantNames.option_enum;
+             cons = ConstantNames.some_constr;
+             e = r;
+           })
     | Concat, [(EArray es1, _); (EArray es2, _)] ->
       Lwt.return (EArray (es1 @ es2))
     | Filter, [f; (EArray es, _)] ->
@@ -548,7 +539,12 @@ let evaluate_operator
               es
           in
           Lwt.return
-            (EInj { name = ConstantNames.option_enum; cons = ConstantNames.some_constr; e }))
+            (EInj
+               {
+                 name = ConstantNames.option_enum;
+                 cons = ConstantNames.some_constr;
+                 e;
+               }))
         (function
           | Not_found ->
             Lwt.return
@@ -578,7 +574,7 @@ let evaluate_operator
           weighted
       in
       Lwt.return (EArray (List.map fst sorted))
-    | ( ( Length | Log _ | Eq | Map | Map2 | Concat | Filter | Fold | Reduce
+    | ( ( Length | Tag _ | Eq | Map | Map2 | Concat | Filter | Fold | Reduce
         | Find | Sort _ ),
         _ ) ->
       err ()
