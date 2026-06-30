@@ -929,11 +929,23 @@ class catala_lsp_server =
         let all_symbols = DQ.lookup_document_symbols doc in
         Lwt.return_some (`SymbolInformation all_symbols)
 
-    method! on_req_code_lens ~notify_back:_ ~id:_ ~uri ~workDoneToken:_
+    method! on_req_code_lens ~notify_back ~id:_ ~uri ~workDoneToken:_
         ~partialResultToken:_ _doc_state : CodeLens.t list Lwt.t =
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_nil
       else
+        (* check explain plugin availability on first use *)
+        let* () =
+          match !DQ.explain_plugin_available with
+          | Some _ -> Lwt.return_unit
+          | None ->
+            let* available =
+              Utils.check_catala_plugin_availability ~notify_back
+                ~plugin:"explain"
+            in
+            DQ.explain_plugin_available := Some available;
+            Lwt.return_unit
+        in
         let* r =
           let*? doc, _ =
             retrieve_existing_document_when_ready doc_id server_state
