@@ -506,7 +506,9 @@ export async function initTests(
     const run: vscode.TestRun = ctrl.createTestRun(request);
     const testFiles =
       request.include
-        ?.map(({ uri }) => uri?.path)
+        // fsPath, not path: clerk needs the OS path ("c:\\...") — uri.path is the
+        // URI form ("/c:/...") which clerk rejects ("no source file matching").
+        ?.map(({ uri }) => uri?.fsPath)
         ?.filter((p) => p !== undefined) ?? [];
     const testsToRun = getAllTestsToRun(ctrl, request);
     // Mark all tests as started before calling 'clerk test'
