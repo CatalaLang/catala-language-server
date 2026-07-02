@@ -406,10 +406,15 @@ function updateTestItemWithClerkResult(
   } else {
     const messages = scopeTest.errors.map((error) => {
       const msg = new vscode.TestMessage(error.message);
-      msg.location = new vscode.Location(
-        vscode.Uri.parse(error.location.file),
-        error.location.range
-      );
+      if (error.location) {
+        // Uri.file, not Uri.parse: error.location.file is an OS path ("c:\\...")
+        // and Uri.parse would read the drive as a scheme, so VS Code fails to
+        // open the editor at the failure location.
+        msg.location = new vscode.Location(
+          vscode.Uri.file(error.location.file),
+          error.location.range
+        );
+      }
       return msg;
     });
     if (scopeTest.scope_name == 'compilation')

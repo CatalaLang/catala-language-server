@@ -160,8 +160,10 @@ async function debugScope(args?: RunArgs): Promise<void> {
   if (args) {
     const file = args.uri;
     const scope = args.scope;
+    // Uri.file, not Uri.parse: args.uri is an OS path (see runScope/getCwd);
+    // Uri.parse would read the Windows drive as a scheme and miss the folder.
     const workspace = vscode.workspace.getWorkspaceFolder(
-      vscode.Uri.parse(file)
+      vscode.Uri.file(file)
     );
     const config: vscode.DebugConfiguration = {
       type: 'catala-debugger',
