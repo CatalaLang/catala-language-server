@@ -8,6 +8,9 @@ import { LanguageClient } from 'vscode-languageclient/node';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
 import { logger } from './extension/logger';
 import * as net from 'net';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 import { spawn } from 'child_process';
 import {
   exceptionsViewProvider,
@@ -108,7 +111,22 @@ async function runScope(args?: RunArgs): Promise<void> {
     const termName = `${args.scope} execution`;
     vscode.window.terminals.find((t) => t.name === termName)?.dispose();
     const term = vscode.window.createTerminal({ name: termName, cwd });
-    const extra_args = inputs ? ['--input', `'${JSON.stringify(inputs)}'`] : [];
+    let extra_args: string[] = [];
+    if (inputs) {
+      if (process.platform === 'win32') {
+        // Inline JSON is mangled by cmd/PowerShell (single quotes are a
+        // POSIX-ism; the inner double quotes get stripped) and stdin isn't
+        // available for an interactive terminal, so write it to a temp file and
+        // pass --input=<file>. Stable per-scope name: overwritten each run, no
+        // accumulation.
+        const safe = args.scope.replace(/[^A-Za-z0-9_.-]/g, '_');
+        const tmp = path.join(os.tmpdir(), `catala-inputs-${safe}.json`);
+        fs.writeFileSync(tmp, JSON.stringify(inputs));
+        extra_args = [`--input="${tmp}"`];
+      } else {
+        extra_args = ['--input', `'${JSON.stringify(inputs)}'`];
+      }
+    }
     term.show();
     term.sendText(
       [clerkPath, 'run', args.uri, '--scope', args.scope, ...extra_args].join(
