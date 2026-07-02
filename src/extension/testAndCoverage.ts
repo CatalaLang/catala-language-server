@@ -1,7 +1,6 @@
 import type { LanguageClient } from 'vscode-languageclient/node';
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
-import { sep } from 'path';
 import { clerkPath, getCwd } from '../shared/util_client';
 import type { CatalaEntrypoint } from './lspRequests';
 import { listEntrypoints } from './lspRequests';
@@ -327,7 +326,9 @@ function populateTestItems(
   const cwd = getCwd(path);
   if (cwd) {
     const cwd_uri = vscode.Uri.file(cwd);
-    const file_path = uri.path.replace(cwd_uri.path + sep, '').split(sep);
+    // URI paths use '/' on every platform (Uri.file lowercases the drive and
+    // forward-slashes it), so split on '/', not path.sep (which is '\' on Windows).
+    const file_path = uri.path.replace(cwd_uri.path + '/', '').split('/');
     const first_id_uri = vscode.Uri.joinPath(cwd_uri, file_path[0]);
     const item: vscode.TestItem =
       ctrl.items.get(first_id_uri.path) ??
