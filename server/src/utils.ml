@@ -110,7 +110,13 @@ let lookup_catala_format_config_path (notify_back : Jsonrpc2.notify_back) =
   let* _req_id =
     notify_back#send_request (WorkspaceConfiguration param) (fun e ->
         match e with
-        | Ok (`String x :: _) ->
+        | Ok (`String x :: _) when x <> "" ->
+          (* An explicit non-empty path wins. VS Code reports an *unset*
+             `catala.catalaFormatPath` as an empty string (its schema default),
+             not null, so a bare `Some x` would hand `""` to callers: the
+             availability probe builds argv [|""|] and fails to spawn, wrongly
+             reporting formatting as unavailable even though it works. Treat ""
+             as "not configured" (None) so callers fall back to "catala-format". *)
           Lwt.wakeup w (Some x);
           Lwt.return_unit
         | Ok _ | Error _ ->
