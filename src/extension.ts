@@ -114,6 +114,12 @@ async function runScope(args?: RunArgs): Promise<void> {
       // (cmd.exe would need the opposite escaping).
       ...(process.platform === 'win32' && { shellPath: 'powershell.exe' }),
     });
+    // Single-quote a shell argument so spaces in paths survive. PowerShell
+    // escapes an embedded quote by doubling it; POSIX shells by '\''.
+    const sq = (s: string): string =>
+      process.platform === 'win32'
+        ? `'${s.replace(/'/g, "''")}'`
+        : `'${s.replace(/'/g, "'\\''")}'`;
     let extra_args: string[] = [];
     if (inputs) {
       const json = JSON.stringify(inputs);
@@ -127,9 +133,14 @@ async function runScope(args?: RunArgs): Promise<void> {
     }
     term.show();
     term.sendText(
-      [clerkPath, 'run', args.uri, '--scope', args.scope, ...extra_args].join(
-        ' '
-      )
+      [
+        clerkPath,
+        'run',
+        sq(args.uri),
+        '--scope',
+        args.scope,
+        ...extra_args,
+      ].join(' ')
     );
   }
 }
