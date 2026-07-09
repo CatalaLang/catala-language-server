@@ -326,8 +326,7 @@ function populateTestItems(
   const cwd = getCwd(path);
   if (cwd) {
     const cwd_uri = vscode.Uri.file(cwd);
-    // URI paths use '/' on every platform (Uri.file lowercases the drive and
-    // forward-slashes it), so split on '/', not path.sep (which is '\' on Windows).
+    // URI paths always use '/', even on Windows — not path.sep.
     const file_path = uri.path.replace(cwd_uri.path + '/', '').split('/');
     const first_id_uri = vscode.Uri.joinPath(cwd_uri, file_path[0]);
     const item: vscode.TestItem =
@@ -407,9 +406,7 @@ function updateTestItemWithClerkResult(
     const messages = scopeTest.errors.map((error) => {
       const msg = new vscode.TestMessage(error.message);
       if (error.location) {
-        // Uri.file, not Uri.parse: error.location.file is an OS path ("c:\\...")
-        // and Uri.parse would read the drive as a scheme, so VS Code fails to
-        // open the editor at the failure location.
+        // Uri.file, not Uri.parse: error.location.file is an OS path.
         msg.location = new vscode.Location(
           vscode.Uri.file(error.location.file),
           error.location.range
@@ -511,8 +508,7 @@ export async function initTests(
     const run: vscode.TestRun = ctrl.createTestRun(request);
     const testFiles =
       request.include
-        // fsPath, not path: clerk needs the OS path ("c:\\...") — uri.path is the
-        // URI form ("/c:/...") which clerk rejects ("no source file matching").
+        // fsPath, not path: clerk needs the OS path, not the URI form.
         ?.map(({ uri }) => uri?.fsPath)
         ?.filter((p) => p !== undefined) ?? [];
     const testsToRun = getAllTestsToRun(ctrl, request);
