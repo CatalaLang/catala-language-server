@@ -99,6 +99,13 @@ export function getCwd(bufferPath: string): string | undefined {
     ?.fsPath;
 }
 
+// The CLI helpers spawn with shell:true on Windows so a bare 'clerk'/'catala'
+// resolves via PATHEXT; cmd.exe then word-splits and Node does not quote argv,
+// so double-quote any argument containing whitespace (e.g. a spaced path).
+export function shellArg(a: string): string {
+  return process.platform === 'win32' && /\s/.test(a) ? `"${a}"` : a;
+}
+
 export function hasResourceUri(x: unknown): x is { resourceUri: vscode.Uri } {
   if (!x || typeof x !== 'object') return false;
   const ru = (x as { resourceUri?: unknown }).resourceUri;

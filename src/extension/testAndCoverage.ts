@@ -1,7 +1,7 @@
 import type { LanguageClient } from 'vscode-languageclient/node';
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
-import { clerkPath, getCwd } from '../shared/util_client';
+import { clerkPath, getCwd, shellArg } from '../shared/util_client';
 import type { CatalaEntrypoint } from './lspRequests';
 import { listEntrypoints } from './lspRequests';
 import {
@@ -120,9 +120,10 @@ async function clerkRunTest(
     .concat(with_coverage ? ['--code-coverage'] : [])
     .concat(paths);
   return new Promise((resolve) => {
-    const proc = spawn(clerkPath, args, {
+    const useShell = process.platform === 'win32';
+    const proc = spawn(clerkPath, useShell ? args.map(shellArg) : args, {
       ...(cwd && { cwd }),
-      shell: process.platform === 'win32',
+      shell: useShell,
     });
     cancellation.onCancellationRequested((_) => {
       proc.kill(2);

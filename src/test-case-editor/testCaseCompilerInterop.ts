@@ -17,7 +17,7 @@ import {
 import { logger } from '../extension/logger';
 import { Uri, window, workspace } from 'vscode';
 import path from 'path';
-import { clerkPath, catalaPath } from '../shared/util_client';
+import { clerkPath, catalaPath, shellArg } from '../shared/util_client';
 
 function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.file(bufferPath))?.uri?.fsPath;
@@ -33,11 +33,12 @@ function execBinary(
 ): ExecResult {
   logger.log(`Running ${bin} ${args.join(' ')}`);
   try {
+    const useShell = process.platform === 'win32';
     return {
       ok: true,
-      output: execFileSync(bin, args, {
+      output: execFileSync(bin, useShell ? args.map(shellArg) : args, {
         encoding: 'utf8',
-        shell: process.platform === 'win32',
+        shell: useShell,
         ...opts,
       }),
     };
