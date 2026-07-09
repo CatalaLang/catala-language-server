@@ -250,9 +250,7 @@ export function generate(
 export function serializeInputs(
   inputs: TestInputs
 ): { kind: 'Ok'; json: JSON } | { kind: 'Error'; message: string } {
-  // Pass the JSON over stdin (--input=-), not inline: with shell:true on Windows
-  // cmd.exe re-parses the argument and mangles the JSON's quotes ("argument is
-  // neither a file nor a valid JSON value"). Mirrors runTestScope/parseTestFile.
+  // JSON over stdin (--input=-): the Windows shell mangles it as an inline arg.
   const args = ['testcase', 'serialize-inputs', '--input=-'];
   const execResult = execBinary(catalaPath, args, {
     input: JSON.stringify(writeTestInputs(inputs)),

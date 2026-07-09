@@ -94,9 +94,7 @@ logger.log(`catala command: ${catalaPath}`);
 logger.log(`clerk command: ${clerkPath}`);
 
 export function getCwd(bufferPath: string): string | undefined {
-  // Uri.file, not Uri.parse: bufferPath is an OS path, and Uri.parse would read
-  // the Windows drive ("c:\\...") as a URI scheme, yielding a bogus Uri that
-  // never matches a workspace folder.
+  // Uri.file, not Uri.parse: bufferPath is an OS path.
   return vscode.workspace.getWorkspaceFolder(vscode.Uri.file(bufferPath))?.uri
     ?.fsPath;
 }
