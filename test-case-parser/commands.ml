@@ -65,6 +65,7 @@ let get_scope_test
     test_inputs;
     description;
     title;
+    variables = [];
   }
 
 (* --- *)
@@ -316,6 +317,16 @@ let error_mixed_ownership (unowned : string list) =
     (Format.pp_print_list ~pp_sep:Format.pp_print_cut Format.pp_print_string)
     unowned
 
+let parse_expected_variable (s : string) :
+    (string * O.runtime_value option) option =
+  match String.index_opt s ':' with
+  | None -> Some (String.trim s, None)
+  | Some i ->
+    let name = String.trim (String.sub s 0 i) in
+    let value = String.trim (String.sub s (i + 1) (String.length s - i - 1)) in
+    if value = "" then Some (name, None)
+    else Some (name, Some (Model.runtime_value_of_string value))
+
 let get_catala_test (prg, naming_ctx) testing_scope_name =
   let testing_scope =
     ScopeName.Map.find testing_scope_name prg.I.program_root.module_scopes
@@ -481,12 +492,17 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
         var_str, { test_out with O.value })
       base_test.test_outputs
   in
-  { base_test with O.test_inputs; test_outputs; description; title }
+  let variables =
+    Pos.get_attrs info (function
+      | ExpectedVariable s -> parse_expected_variable s
+      | _ -> None)
+  in
+  { base_test with O.test_inputs; test_outputs; description; title; variables }
 
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
-let read_test include_dirs (options : Global.options) buffer_path =
+let read_test include_dirs (options : Global.options) buffer_path scope_filter =
   let path_to_build, include_dirs =
     if include_dirs = [] then lookup_include_dirs ?buffer_path options
     else ".", include_dirs
@@ -497,6 +513,12 @@ let read_test include_dirs (options : Global.options) buffer_path =
     error_mixed_ownership (List.map ScopeName.to_string unowned)
   | _ -> ());
   let tests = import_catala_tests prg in
+  let tests =
+    match scope_filter with
+    | None -> tests
+    | Some scope ->
+      List.filter (fun (t : O.test) -> t.O.testing_scope = scope) tests
+  in
   match check_tests_fit tests with
   | Ok () -> write_stdout J.write_test_list tests
   | Error problems ->

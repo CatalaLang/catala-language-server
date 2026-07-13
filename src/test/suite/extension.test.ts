@@ -26,7 +26,8 @@ suite('Extension Test Suite', () => {
     // free, and it has to be disposed either way.
     const disposable = TestCaseEditorProvider.register(
       context,
-      resultController
+      resultController,
+      'codicon.css'
     );
     assert.ok(disposable);
     disposable.dispose();

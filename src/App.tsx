@@ -2,6 +2,7 @@ import { type ReactElement } from 'react';
 import { IntlProvider } from 'react-intl';
 import TestFileEditor from './test-case-editor/TestFileEditor';
 import ScopeInputEditor from './scope-editor/ScopeInputEditor';
+import TraceEditor from './trace-editor/TraceEditor';
 
 import { type WebviewApi } from 'vscode-webview';
 
@@ -54,6 +55,16 @@ export function GeneralTestsUi({ language, vscode }: Props): ReactElement {
   return (
     <IntlProvider locale={language} messages={messages} defaultLocale="en">
       <GeneralTests vscode={vscode} />
+    </IntlProvider>
+  );
+}
+
+export function TraceApp({ language, vscode }: Props): ReactElement {
+  const messages = allMessages[language] || enMessages;
+
+  return (
+    <IntlProvider locale={language} messages={messages} defaultLocale="en">
+      <TraceEditor vscode={vscode} />
     </IntlProvider>
   );
 }

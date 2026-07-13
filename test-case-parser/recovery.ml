@@ -453,6 +453,7 @@ let read_partial_test_one
         Option.value ~default:""
           (surface_attr_string ["test_title"]
              (Mark.get scope_decl.scope_decl_name));
+      variables = [];
     }
 
 (* Each test independently: one failure must not lose the others. *)

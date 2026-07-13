@@ -214,6 +214,7 @@ type Pos.attr += Uid of string
 type Pos.attr += TestDescription of string
 type Pos.attr += TestTitle of string
 type Pos.attr += ArrayItemLabel of string
+type Pos.attr += ExpectedVariable of string
 
 let rec get_value : type a.
     Global.backend_lang -> decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
@@ -753,6 +754,80 @@ let print_catala_value_opt ~lang ppf (t_in : O.test_io) =
     Format.fprintf ppf "impossible"
   | Some { value; _ }, typ -> print_catala_value ~typ:(Some typ) ~lang ppf value
 
+let string_of_runtime_value ~lang (v : O.runtime_value) : string =
+  match v.O.value with
+  | O.Bool b -> if b then "true" else "false"
+  | O.Integer i -> string_of_int i
+  | O.Decimal f ->
+    let s = Printf.sprintf "%.12f" f in
+    let len = ref (String.length s) in
+    while !len > 1 && s.[!len - 1] = '0' do
+      decr len
+    done;
+    let s = String.sub s 0 !len in
+    if s.[String.length s - 1] = '.' then s ^ "0" else s
+  | O.Money m -> (
+    let major = abs m / 100 and minor = abs m mod 100 in
+    let sign = if m < 0 then "-" else "" in
+    match lang with
+    | `En -> Printf.sprintf "%s$%d.%02d" sign major minor
+    | _ -> Printf.sprintf "%s%d,%02d €" sign major minor)
+  | O.Date { year; month; day } ->
+    Printf.sprintf "%04d-%02d-%02d" year month day
+  | O.Duration { years; months; days } ->
+    Printf.sprintf "%dy %dm %dd" years months days
+  | O.Enum (_, (ctor, _)) -> ctor
+  | _ -> ""
+
+let runtime_value_of_string (s : string) : O.runtime_value =
+  let enum ctor =
+    O.Enum
+      ( { O.enum_name = "Optional"; constructors = []; ctor_attrs = [] },
+        (ctor, None) )
+  in
+  let money_of s =
+    let mk n =
+      match
+        float_of_string_opt
+          (String.trim (String.map (function ',' -> '.' | c -> c) n))
+      with
+      | Some f -> Some (O.Money (int_of_float (Float.round (f *. 100.))))
+      | None -> None
+    in
+    if String.contains s '$' then
+      mk (String.concat "" (String.split_on_char '$' s))
+    else
+      let euro = "€" in
+      let ls = String.length s and le = String.length euro in
+      if ls >= le && String.sub s (ls - le) le = euro then
+        mk (String.sub s 0 (ls - le))
+      else None
+  in
+  let scan fmt f = try Some (Scanf.sscanf s fmt f) with _ -> None in
+  let raw =
+    match s with
+    | "true" -> O.Bool true
+    | "false" -> O.Bool false
+    | "Absent" | "--" -> enum "Absent"
+    | s -> (
+      match money_of s with
+      | Some m -> m
+      | None -> (
+        match int_of_string_opt s with
+        | Some i -> O.Integer i
+        | None -> (
+          match scan "%d-%d-%d%!" (fun y m d -> y, m, d) with
+          | Some (year, month, day) -> O.Date { year; month; day }
+          | None -> (
+            match scan "%dy %dm %dd%!" (fun y m d -> y, m, d) with
+            | Some (years, months, days) -> O.Duration { years; months; days }
+            | None -> (
+              match float_of_string_opt s with
+              | Some f -> O.Decimal f
+              | None -> enum s)))))
+  in
+  { O.value = raw; attrs = [] }
+
 let write_catala_test ppf t lang =
   let open Format in
   let open O in
@@ -768,6 +843,16 @@ let write_catala_test ppf t lang =
   fprintf ppf "#[testcase.test_description = %s]@\n"
     (String.quote t.description);
   fprintf ppf "#[testcase.test_title = %s]@\n" (String.quote t.title);
+  List.iter
+    (fun (var, value) ->
+      let payload =
+        match value with
+        | None -> var
+        | Some v ->
+          Printf.sprintf "%s: %s" var (string_of_runtime_value ~lang v)
+      in
+      fprintf ppf "#[testcase.variable = %s]@\n" (String.quote payload))
+    t.variables;
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;

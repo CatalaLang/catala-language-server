@@ -61,10 +61,12 @@ let cmd_read =
           "Read the existing tests from the given catala test file, and print \
            them to stdout in JSON.")
     Term.(
-      const (fun a b c -> Project.guarded (fun () -> Commands.read_test a b c))
+      const (fun a b c d ->
+          Project.guarded (fun () -> Commands.read_test a b c d))
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
-      $ buffer_path)
+      $ buffer_path
+      $ Cli.Flags.ex_scope_opt)
 
 let cmd_rebuild =
   Cmd.v
@@ -192,13 +194,21 @@ let register () =
   match value with
   | Shared_ast.String (s, _pos) -> Some (Model.TestTitle s)
   | _ -> failwith "unexpected test title");
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-    ~contexts:(function
-    | Desugared.Name_resolution.Expression _ -> true
-    | _ -> false)
+  (Driver.Plugin.register_attribute ~plugin:"testcase"
+     ~path:["array_item_label"] ~contexts:(function
+     | Desugared.Name_resolution.Expression _ -> true
+     | _ -> false)
   @@ fun ~pos:_ value ->
   match value with
   | Shared_ast.String (s, _pos) -> Some (Model.ArrayItemLabel s)
-  | _ -> failwith "unexpected array item label"
+  | _ -> failwith "unexpected array item label");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["variable"]
+    ~contexts:(function
+    | Desugared.Name_resolution.ScopeDecl -> true
+    | _ -> false)
+  @@ fun ~pos:_ value ->
+  match value with
+  | Shared_ast.String (s, _pos) -> Some (Model.ExpectedVariable s)
+  | _ -> failwith "unexpected variable label"
 
 let () = register ()
