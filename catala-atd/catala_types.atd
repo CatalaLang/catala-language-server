@@ -120,6 +120,7 @@ type test = {
   tested_scope: scope_def;
   test_inputs: test_inputs;
   test_outputs: test_outputs;
+  variables: (string * runtime_value option) list <json repr="object"> <ts repr="map">;
   description: string;
   title: string;
 }

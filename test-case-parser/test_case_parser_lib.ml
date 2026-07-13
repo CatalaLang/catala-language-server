@@ -17,6 +17,55 @@ open Shared_ast
 module I = Desugared.Ast
 module O = Catala_types_t
 module J = Catala_types_j
+module S = Surface.Ast
+
+type Pos.attr += TestUi
+type Pos.attr += Uid of string
+type Pos.attr += TestDescription of string
+type Pos.attr += TestTitle of string
+type Pos.attr += ArrayItemLabel of string
+type Pos.attr += ExpectedVariable of string
+
+let register_attributes () =
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
+    ~contexts:(function
+      | Desugared.Name_resolution.Expression _ -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (Uid s)
+      | _ -> failwith "unexpected UID value");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ _value -> Some TestUi);
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (TestDescription s)
+      | _ -> failwith "unexpected test description");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (TestTitle s)
+      | _ -> failwith "unexpected test title");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
+    ~contexts:(function
+      | Desugared.Name_resolution.Expression _ -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (ArrayItemLabel s)
+      | _ -> failwith "unexpected array item label");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["variable"]
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ value ->
+       match value with
+       | Shared_ast.String (s, _pos) -> Some (ExpectedVariable s)
+       | _ -> failwith "unexpected variable label")
 
 let to_relative (p : File.t) = File.make_relative_to ~dir:(Sys.getcwd ()) p
 
@@ -330,12 +379,6 @@ and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
     in
     { O.enum_name; constructors; ctor_attrs }
 
-type Pos.attr += TestUi
-type Pos.attr += Uid of string
-type Pos.attr += TestDescription of string
-type Pos.attr += TestTitle of string
-type Pos.attr += ArrayItemLabel of string
-
 let rec get_value : type a.
     Global.backend_lang -> decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun lang decl_ctx e ->
@@ -591,6 +634,7 @@ let get_scope_test
     tested_scope;
     test_outputs;
     test_inputs;
+    variables = [];
     description;
     title;
   }
@@ -815,6 +859,88 @@ let get_test_scopes prg =
       && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
   |> ScopeName.Map.keys
 
+let string_of_runtime_value ~lang (v : O.runtime_value) : string =
+  match v.O.value with
+  | O.Bool b -> if b then "true" else "false"
+  | O.Integer i -> string_of_int i
+  | O.Decimal f ->
+    let s = Printf.sprintf "%.12f" f in
+    let len = ref (String.length s) in
+    while !len > 1 && s.[!len - 1] = '0' do
+      decr len
+    done;
+    let s = String.sub s 0 !len in
+    if s.[String.length s - 1] = '.' then s ^ "0" else s
+  | O.Money m ->
+    let major = abs m / 100 and minor = abs m mod 100 in
+    let sign = if m < 0 then "-" else "" in
+    (match lang with
+    | `En -> Printf.sprintf "%s$%d.%02d" sign major minor
+    | _ -> Printf.sprintf "%s%d,%02d €" sign major minor)
+  | O.Date { year; month; day } -> Printf.sprintf "%04d-%02d-%02d" year month day
+  | O.Duration { years; months; days } ->
+    Printf.sprintf "%dy %dm %dd" years months days
+  | O.Enum (_, (ctor, _)) -> ctor
+  | _ -> ""
+
+let runtime_value_of_string (s : string) : O.runtime_value =
+  let enum ctor =
+    O.Enum
+      ({ O.enum_name = "Optional"; constructors = []; ctor_attrs = [] }, (ctor, None))
+  in
+  let money_of s =
+    let mk n =
+      match
+        float_of_string_opt
+          (String.trim (String.map (function ',' -> '.' | c -> c) n))
+      with
+      | Some f -> Some (O.Money (int_of_float (Float.round (f *. 100.))))
+      | None -> None
+    in
+    if String.contains s '$' then
+      mk (String.concat "" (String.split_on_char '$' s))
+    else
+      let euro = "€" in
+      let ls = String.length s and le = String.length euro in
+      if ls >= le && String.sub s (ls - le) le = euro then
+        mk (String.sub s 0 (ls - le))
+      else None
+  in
+  let scan fmt f = try Some (Scanf.sscanf s fmt f) with _ -> None in
+  let raw =
+    match s with
+    | "true" -> O.Bool true
+    | "false" -> O.Bool false
+    | "Absent" | "--" -> enum "Absent"
+    | s -> (
+      match money_of s with
+      | Some m -> m
+      | None -> (
+        match int_of_string_opt s with
+        | Some i -> O.Integer i
+        | None -> (
+          match scan "%d-%d-%d%!" (fun y m d -> (y, m, d)) with
+          | Some (year, month, day) -> O.Date { year; month; day }
+          | None -> (
+            match scan "%dy %dm %dd%!" (fun y m d -> (y, m, d)) with
+            | Some (years, months, days) -> O.Duration { years; months; days }
+            | None -> (
+              match float_of_string_opt s with
+              | Some f -> O.Decimal f
+              | None -> enum s)))))
+  in
+  { O.value = raw; attrs = [] }
+
+let parse_expected_variable (s : string) :
+    (string * O.runtime_value option) option =
+  match String.index_opt s ':' with
+  | None -> Some (String.trim s, None)
+  | Some i ->
+    let name = String.trim (String.sub s 0 i) in
+    let value = String.trim (String.sub s (i + 1) (String.length s - i - 1)) in
+    if value = "" then Some (name, None)
+    else Some (name, Some (runtime_value_of_string value))
+
 let get_catala_test (prg, naming_ctx) testing_scope_name =
   let testing_scope =
     ScopeName.Map.find testing_scope_name prg.I.program_root.module_scopes
@@ -966,18 +1092,29 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
         var_str, { test_out with O.value })
       base_test.test_outputs
   in
-  { base_test with O.test_inputs; test_outputs; description; title }
+  let variables =
+    Pos.get_attrs info (function
+        | ExpectedVariable s -> parse_expected_variable s
+        | _ -> None)
+  in
+  { base_test with O.test_inputs; test_outputs; variables; description; title }
 
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
-let read_test include_dirs (options : Global.options) buffer_path =
+let read_test include_dirs (options : Global.options) buffer_path scope_filter =
   let path_to_build, include_dirs =
     if include_dirs = [] then lookup_include_dirs ?buffer_path options
     else ".", include_dirs
   in
   let prg = read_program include_dirs path_to_build options in
   let tests = import_catala_tests prg in
+  let tests =
+    match scope_filter with
+    | None -> tests
+    | Some scope ->
+      List.filter (fun (t : O.test) -> t.O.testing_scope = scope) tests
+  in
   write_stdout J.write_test_list tests
 
 type duration_units = { day : string; month : string; year : string }
@@ -1163,6 +1300,15 @@ let write_catala_test ppf t lang =
   fprintf ppf "#[testcase.test_description = %s]@\n"
     (String.quote t.description);
   fprintf ppf "#[testcase.test_title = %s]@\n" (String.quote t.title);
+  List.iter
+    (fun (var, value) ->
+      let payload =
+        match value with
+        | None -> var
+        | Some v -> Printf.sprintf "%s: %s" var (string_of_runtime_value ~lang v)
+      in
+      fprintf ppf "#[testcase.variable = %s]@\n" (String.quote payload))
+    t.variables;
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;

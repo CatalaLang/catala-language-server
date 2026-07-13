@@ -2,6 +2,8 @@ import type { ChangeEvent } from 'react';
 import { type ReactElement, useEffect, useRef } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
+  type Option,
+  type RuntimeValue,
   type Test,
   type TestInputs,
   type TestRunResults,
@@ -9,8 +11,15 @@ import {
 } from '../generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
+import ExpectedVariablesEditor from './ExpectedVariablesEditor';
 import { type TestRunStatus } from './TestFileEditor';
+import {
+  type TraceElement,
+  type TraceValue,
+  traceValueToRuntime,
+} from '../trace-editor/traceUtils';
 import { confirm } from '../messaging/confirm';
+import { getVsCodeApi } from '../shared/webviewApi';
 import {
   hasUnsetInTest,
   scrollToFirstInvalidOrUnset,
@@ -27,6 +36,9 @@ type Props = {
     results?: TestRunResults;
     stale?: boolean;
   };
+  trace?: TraceElement[];
+  /** When false, the trace is not run and the expected-variable catalog is hidden. */
+  runTrace?: boolean;
   onDiffResolved(scope: string, path: PathSegment[]): void;
   onInvalidateDiffs(scope: string, pathPrefix: PathSegment[]): void;
 };
@@ -65,6 +77,21 @@ export default function TestEditor(props: Props): ReactElement {
     );
   }
 
+  function onVariablesChange(next: Map<string, TraceValue | null>): void {
+    const variables: Map<string, Option<RuntimeValue>> = new Map();
+    next.forEach((value, name) => {
+      if (value === null) {
+        variables.set(name, null);
+      } else {
+        const rv = traceValueToRuntime(value);
+        if (rv !== undefined) {
+          variables.set(name, { value: { value: rv, attrs: [] } });
+        }
+      }
+    });
+    props.onTestChange({ ...props.test, variables }, false);
+  }
+
   const expectedSectionRef = useRef<HTMLDivElement>(null);
   // Scope for searching the first '.value-editor.invalid' or '.value-editor.unset' before running; used to scroll into view
   const unsetElementRef = useRef<HTMLDivElement>(null);
@@ -99,6 +126,14 @@ export default function TestEditor(props: Props): ReactElement {
       if (!confirmed) return;
     }
     props.onTestRun(props.test.testing_scope);
+  };
+
+  const openTraceEditor = (): void => {
+    getVsCodeApi().postMessage({
+      kind: 'openTraceEditor',
+      scope: props.test.testing_scope,
+      trace: props.trace,
+    });
   };
 
   const resetWithUnsetCheck = async (): Promise<void> => {
@@ -166,6 +201,12 @@ export default function TestEditor(props: Props): ReactElement {
             onTestInputsChange={onTestInputsChange}
           />
         </div>
+        <ExpectedVariablesEditor
+          test={props.test}
+          trace={props.trace}
+          runTrace={props.runTrace}
+          onChange={onVariablesChange}
+        />
         <div
           className="test-section"
           id={expectedAnchorId}
@@ -195,6 +236,13 @@ export default function TestEditor(props: Props): ReactElement {
                   className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
                 ></span>{' '}
                 {intl.formatMessage({ id: 'testEditor.runTest' })}
+              </button>
+              <button
+                className="button-action-dvp body-b3"
+                title="Open the trace editor for this test"
+                onClick={openTraceEditor}
+              >
+                <span className="codicon codicon-graph"></span> Trace
               </button>
             </div>
             <div className="test-result">

@@ -321,3 +321,14 @@
 .context-var-reset-btn:hover {
   opacity: 1;
 }
+
+/* Expected variables section: value + remove button row */
+.expected-variable-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expected-variable-value {
+  flex: 1;
+}

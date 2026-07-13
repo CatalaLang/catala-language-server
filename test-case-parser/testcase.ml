@@ -52,7 +52,8 @@ let cmd_read =
       const Lib.read_test
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
-      $ buffer_path)
+      $ buffer_path
+      $ Cli.Flags.ex_scope_opt)
 
 let cmd_run =
   Cmd.v
@@ -114,44 +115,6 @@ let register () =
       cmd_list_scopes;
       cmd_serialize_inputs;
     ];
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
-     ~contexts:(function
-     | Desugared.Name_resolution.Expression _ -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.Uid s)
-  | _ -> failwith "unexpected UID value");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
-     ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with _ -> Some Test_case_parser_lib.TestUi);
-  (Driver.Plugin.register_attribute ~plugin:"testcase"
-     ~path:["test_description"] ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestDescription s)
-  | _ -> failwith "unexpected test description");
-
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
-     ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestTitle s)
-  | _ -> failwith "unexpected test title");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-     ~contexts:(function
-     | Desugared.Name_resolution.Expression _ -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.ArrayItemLabel s)
-  | _ -> failwith "unexpected array item label")
+  Lib.register_attributes ()
 
 let () = register ()
