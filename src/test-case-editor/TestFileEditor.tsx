@@ -16,6 +16,25 @@ import { pathEquals, isPathPrefix } from '../diff/highlight';
 import type { WebviewApi } from 'vscode-webview';
 import { setVsCodeApi } from '../shared/webviewApi';
 import { resolveConfirmResult } from '../messaging/confirm';
+import type { TraceElement } from '../trace-editor/traceUtils';
+
+/**
+ * Hand-written message (outside the ATD DownMessage protocol) carrying the
+ * trace computed by running a test's scope with tracing.
+ */
+type TraceMessage = {
+  kind: 'trace';
+  scope: string;
+  trace: TraceElement[];
+};
+
+function isTraceMessage(data: unknown): data is TraceMessage {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    (data as { kind?: unknown }).kind === 'trace'
+  );
+}
 
 // Note:
 //
@@ -60,6 +79,8 @@ export default function TestFileEditor({
 }: Props): ReactElement {
   const [state, setState] = useState(contents);
   const [testRunState, setTestRunState] = useState<TestRunState>({});
+  // Trace computed per test scope (from running the scope with tracing).
+  const [traces, setTraces] = useState<Record<string, TraceElement[]>>({});
   useEffect(() => {
     setVsCodeApi(vscode);
   }, [vscode]);
@@ -208,6 +229,13 @@ export default function TestFileEditor({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
+      // Intercept the hand-written trace message before the strict ATD
+      // `readDownMessage`, which would reject its unknown kind.
+      if (isTraceMessage(event.data)) {
+        const { scope, trace } = event.data;
+        setTraces((prev) => ({ ...prev, [scope]: trace }));
+        return;
+      }
       const message = readDownMessage(event.data);
       switch (message.kind) {
         case 'Update':
@@ -288,6 +316,7 @@ export default function TestFileEditor({
               onTestRun={onTestRun}
               onTestOutputsReset={onTestOutputsReset}
               runState={testRunState[test.testing_scope]}
+              trace={traces[test.testing_scope]}
               onDiffResolved={onDiffResolved}
               onInvalidateDiffs={onInvalidateDiffs}
             />

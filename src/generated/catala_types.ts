@@ -120,6 +120,7 @@ export type Test = {
   tested_scope: ScopeDef;
   test_inputs: TestInputs;
   test_outputs: TestOutputs;
+  variables: Map<string, Option<RuntimeValue>>;
   description: string;
   title: string;
 }
@@ -641,6 +642,7 @@ export function writeTest(x: Test, context: any = x): any {
     'tested_scope': _atd_write_required_field('Test', 'tested_scope', writeScopeDef, x.tested_scope, x),
     'test_inputs': _atd_write_required_field('Test', 'test_inputs', writeTestInputs, x.test_inputs, x),
     'test_outputs': _atd_write_required_field('Test', 'test_outputs', writeTestOutputs, x.test_outputs, x),
+    'variables': _atd_write_required_field('Test', 'variables', _atd_write_assoc_map_to_object(_atd_write_option(writeRuntimeValue)), x.variables, x),
     'description': _atd_write_required_field('Test', 'description', _atd_write_string, x.description, x),
     'title': _atd_write_required_field('Test', 'title', _atd_write_string, x.title, x),
   };
@@ -652,6 +654,7 @@ export function readTest(x: any, context: any = x): Test {
     tested_scope: _atd_read_required_field('Test', 'tested_scope', readScopeDef, x['tested_scope'], x),
     test_inputs: _atd_read_required_field('Test', 'test_inputs', readTestInputs, x['test_inputs'], x),
     test_outputs: _atd_read_required_field('Test', 'test_outputs', readTestOutputs, x['test_outputs'], x),
+    variables: _atd_read_required_field('Test', 'variables', _atd_read_assoc_object_into_map(_atd_read_option(readRuntimeValue)), x['variables'], x),
     description: _atd_read_required_field('Test', 'description', _atd_read_string, x['description'], x),
     title: _atd_read_required_field('Test', 'title', _atd_read_string, x['title'], x),
   };

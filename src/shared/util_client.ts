@@ -5,10 +5,22 @@ import { execFileSync } from 'child_process';
 import path from 'path';
 import { logger } from '../extension/logger';
 
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export type RunArgs = {
   uri: string;
   scope: string;
   inputs?: JSON;
+  withTrace?: boolean;
+  traceOutputFile?: string;
+  headless?: boolean;
+  buildDir?: string;
 };
 
 var warned = false;

@@ -6,8 +6,18 @@ import type {
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
+import {
+  TraceEditorProvider,
+  initReadTestCache,
+} from './extension/traceEditorProvider';
+import { initTraceCache } from './trace-editor/traceRunner';
+// Emitted to dist as `codicon.css`; linked into the trace-editor webview so the
+// vscode-elements icon component can find the Codicons font.
+import codiconsCssPath from '@vscode/codicons/dist/codicon.css?url';
 import { logger } from './extension/logger';
 import * as net from 'net';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { spawn } from 'child_process';
 import {
   exceptionsViewProvider,
@@ -100,12 +110,58 @@ async function selectScope(with_inputs: boolean): Promise<RunArgs | undefined> {
   }
 }
 
+function asyncRun(
+  command: string,
+  args: string[],
+  cwd: string | undefined
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const options = cwd ? { cwd } : undefined;
+    const proc = spawn(command, args, options);
+    proc.stdout.on('data', (data: Buffer) => {
+      logger.log(data.toString());
+    });
+    proc.stderr.on('data', (data: Buffer) => {
+      logger.log(data.toString());
+    });
+    proc.on('error', reject);
+    proc.on('close', () => resolve());
+  });
+}
+
 async function runScope(args?: RunArgs): Promise<void> {
   const inputs = args?.inputs;
   args ??= await selectScope(inputs ? true : false);
-  if (args) {
-    const cwd = getCwd(args.uri);
-    const termName = `${args.scope} execution`;
+  if (!args) {
+    return;
+  }
+  const cwd = getCwd(args.uri);
+  const inputArgs = inputs ? ['--input', `'${JSON.stringify(inputs)}'`] : [];
+
+  let traceOutputFile = args.traceOutputFile;
+  if (args.withTrace && traceOutputFile === undefined) {
+    traceOutputFile = join(tmpdir(), `${args.scope}_trace.json`);
+  }
+  const traceArgs =
+    args.withTrace && traceOutputFile !== undefined
+      ? ['--trace', traceOutputFile]
+      : [];
+  const buildDirArgs = args.buildDir ? ['--build-dir', args.buildDir] : [];
+
+  const clerkArgs = [
+    'run',
+    args.uri,
+    '--scope',
+    args.scope,
+    ...inputArgs,
+    ...traceArgs,
+    ...buildDirArgs,
+  ];
+
+  if (args.headless) {
+    await asyncRun(clerkPath, clerkArgs, cwd);
+  } else {
+    const termName = `${args.scope} ${args.withTrace ? 'trace' : 'execution'}`;
     vscode.window.terminals.find((t) => t.name === termName)?.dispose();
     const term = vscode.window.createTerminal({
       name: termName,
@@ -140,6 +196,7 @@ async function runScope(args?: RunArgs): Promise<void> {
         '--scope',
         args.scope,
         ...extra_args,
+        ...clerkArgs,
       ].join(' ')
     );
   }
@@ -208,6 +265,9 @@ async function debugScope(args?: RunArgs): Promise<void> {
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
+  // Enable the persistent trace / read-test caches (stored under global storage).
+  initTraceCache(context.globalStorageUri.fsPath);
+  initReadTestCache(context.globalStorageUri.fsPath);
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
@@ -299,8 +359,35 @@ export async function activate(
     await Promise.all([client.start(), initTests(context, client)]);
   }
 
-  // Always register the custom editor provider
-  context.subscriptions.push(TestCaseEditorProvider.register(context));
+  // Always register the custom editor providers
+  context.subscriptions.push(
+    TestCaseEditorProvider.register(context, codiconsCssPath)
+  );
+  context.subscriptions.push(
+    TraceEditorProvider.register(context, () => client, codiconsCssPath)
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.openWithTraceEditor',
+      async (arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+        const uri =
+          arg instanceof vscode.Uri
+            ? arg
+            : hasResourceUri(arg)
+              ? arg.resourceUri
+              : vscode.window.activeTextEditor?.document.uri;
+        if (!uri) {
+          return;
+        }
+        await vscode.commands.executeCommand(
+          'vscode.openWith',
+          uri,
+          TraceEditorProvider.viewType
+        );
+      }
+    )
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(

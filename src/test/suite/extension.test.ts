@@ -10,7 +10,7 @@ suite('Extension Test Suite', () => {
 
   test('Extension registers successfully', () => {
     const context = {} as vscode.ExtensionContext; // Mock context
-    const disposable = TestCaseEditorProvider.register(context);
+    const disposable = TestCaseEditorProvider.register(context, 'codicon.css');
     assert.ok(disposable);
     disposable.dispose();
   });
