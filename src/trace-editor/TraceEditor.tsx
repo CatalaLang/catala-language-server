@@ -141,7 +141,6 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
       </div>
     );
   }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <h2>

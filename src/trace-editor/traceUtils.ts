@@ -66,10 +66,10 @@ export type TraceTest = {
   title: string;
 };
 
-export const OPTIONAL_PRESENT = new Set(['Present', 'Présent', 'Obecny']);
-export const OPTIONAL_ABSENT = new Set(['Absent', 'Nieobecny']);
+const OPTIONAL_PRESENT = new Set(['Present', 'Présent', 'Obecny']);
+const OPTIONAL_ABSENT = new Set(['Absent', 'Nieobecny']);
 
-export function traceValueFromJson(value: JsonValue): TraceValue | undefined {
+function traceValueFromJson(value: JsonValue): TraceValue | undefined {
   if (typeof value === 'boolean') {
     return { kind: 'bool', value };
   }
@@ -337,7 +337,7 @@ export function traceValueEqual(a: TraceValue, b: TraceValue): boolean {
   }
 }
 
-export function traceElementFromJson(e: JsonValue): TraceElement | null {
+function traceElementFromJson(e: JsonValue): TraceElement | null {
   if (
     e === null ||
     typeof e !== 'object' ||

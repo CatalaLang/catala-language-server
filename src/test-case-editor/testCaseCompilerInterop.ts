@@ -1,6 +1,7 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
   ScopeDefList,
+  ScopeTestResult,
   TestGenerateResults,
   TestInputs,
 } from '../generated/catala_types';
@@ -15,13 +16,9 @@ import {
   type TestRunResults,
 } from '../generated/catala_types';
 import { logger } from '../extension/logger';
-import { Uri, window, workspace } from 'vscode';
+import { window } from 'vscode';
 import path from 'path';
-import { clerkPath, catalaPath, shellArg } from '../shared/util_client';
-
-function getCwd(bufferPath: string): string | undefined {
-  return workspace.getWorkspaceFolder(Uri.file(bufferPath))?.uri?.fsPath;
-}
+import { clerkPath, catalaPath, getCwd, shellArg } from '../shared/util_client';
 
 type ExecOptions = { input?: string; cwd?: string };
 type ExecResult = { ok: true; output: string } | { ok: false; stderr: string };
@@ -110,6 +107,12 @@ export function atdToCatala(tests: TestList, lang: string): string {
   return result.output;
 }
 
+// Outcome of running a scope test: either a successful `ScopeTestResult`,
+// or a failure carrying an error message.
+export type ScopeRunResult =
+  | { kind: 'Success'; value: ScopeTestResult }
+  | { kind: 'Failed'; value: string };
+
 export function runTestScope(
   filename: string,
   testScope: string,
@@ -142,15 +145,13 @@ export function runTestScope(
   if (cwd) {
     const relFilename = path.relative(cwd, filename);
     //compile dependencies (hack), do not fail on asserts
-    const clerkResult = execBinary(
-      clerkPath,
-      ['run', '-c--no-fail-on-assert', relFilename],
-      { cwd }
-    );
-    if (!clerkResult.ok) {
-      window.showErrorMessage(clerkResult.stderr);
-      return { kind: 'Error', value: clerkResult.stderr };
-    }
+    execBinary(clerkPath, ['run', '-c--no-fail-on-assert', relFilename], {
+      cwd,
+    });
+    // if (!clerkResult.ok) {
+    //   window.showErrorMessage(clerkResult.stderr);
+    //   return { kind: 'Error', value: clerkResult.stderr };
+    // }
   }
   // Here we *do* want to fail on asserts, as we catch failures through
   // the `register_lsp_error_notifier` hook.

@@ -9,6 +9,7 @@ import { type WebviewApi } from 'vscode-webview';
 import frMessages from './locales/fr.json';
 import enMessages from './locales/en.json';
 import plMessages from './locales/pl.json';
+import GeneralTests from './GeneralTests';
 
 type Messages = Record<string, string>;
 
@@ -44,6 +45,16 @@ export function InputApp({ language, vscode, scopename }: Props): ReactElement {
         vscode={vscode}
         scopename={scopename ?? ''}
       />
+    </IntlProvider>
+  );
+}
+
+export function GeneralTestsUi({ language, vscode }: Props): ReactElement {
+  const messages = allMessages[language] || enMessages;
+
+  return (
+    <IntlProvider locale={language} messages={messages} defaultLocale="en">
+      <GeneralTests vscode={vscode} />
     </IntlProvider>
   );
 }

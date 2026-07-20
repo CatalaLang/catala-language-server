@@ -1,0 +1,290 @@
+.test-item {
+  border: solid 0.2em;
+  border-radius: 0.5em;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 4em;
+  padding: 2em 1em 2em 1em;
+  overflow-x: auto;
+  /* remplit la hauteur de la cellule Grid → toutes les cartes d'une rangée ont la même hauteur */
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.test-item.justFailed {
+  background-color: color-mix(
+    in srgb,
+    var(--vscode-errorForeground) 25%,
+    transparent
+  );
+}
+
+.test-item .test-item-header {
+  position: relative;
+  display: flex;
+}
+
+.test-item .test-item-header .test-number {
+  font-size: 2em;
+  margin-left: auto;
+}
+
+.test-item .test-item-header .test-title {
+  font-size: 2em;
+}
+
+.test-descr {
+  white-space: pre-wrap;
+}
+
+.test-list .test-descr-hidden {
+  display: block;
+  max-height: 3em;
+  overflow-y: hidden;
+}
+
+.test-list td.descr-column {
+  cursor: pointer;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.test-list td.descr-column .codicon {
+  margin-left: auto;
+}
+
+.test-item .test-descr {
+  font-size: 1.7em;
+}
+
+.separation-line {
+  border: 0.2em solid;
+}
+
+/* Pousse la ligne de séparation (et donc le footer qui suit) vers le bas :
+   comme les cartes ont la même hauteur, séparation + footer sont toujours
+   à la même hauteur d'une carte à l'autre. */
+.test-item .separation-line {
+  margin-top: auto;
+}
+
+.test-item .footer {
+  display: flex;
+  gap: 0.7em;
+  align-items: center;
+  font-size: 2em;
+}
+
+.test-item .footer .run-icon {
+  margin-left: auto;
+  font-size: 1.5em;
+}
+
+.run-icon {
+  border-radius: 15%;
+  font-size: 2em;
+  color: green;
+  transition: background-color 50ms ease-in-out;
+}
+
+.run-icon:hover {
+  cursor: pointer;
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.open-text {
+  padding: 0.2em;
+  border-radius: 15%;
+  transition: background-color 50ms ease-in-out;
+}
+
+.select-test-print .refresh-box {
+  cursor: pointer;
+  margin-left: auto;
+  padding: 0.2em 0.2em 0em 0.2em;
+  border-radius: 15%;
+  transition: background-color 50ms ease-in-out;
+}
+
+.select-test-print .refresh-box:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.select-test-print .refresh.codicon {
+  font-size: 2em;
+}
+
+.open-gui {
+  padding: 0.2em;
+  border-radius: 15%;
+  transition: background-color 50ms ease-in-out;
+}
+
+.open-text:hover {
+  cursor: pointer;
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.open-gui:hover {
+  cursor: pointer;
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.select-test-print {
+  display: flex;
+  align-items: center;
+  gap: 2em;
+}
+
+.pp-button {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  font-size: 1.2em;
+  padding: 0.5em;
+  border: 1px solid;
+}
+
+.pp-button.selected {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.pp-button:hover {
+  cursor: pointer;
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.test-list {
+  border-collapse: collapse;
+  font-family: sans-serif;
+  font-size: 1em;
+  letter-spacing: 1px;
+  overflow-x: auto;
+}
+
+.test-list thead {
+  background-color: var(--vscode-editor-background);
+}
+
+.test-list th,
+.test-list td {
+  padding: 8px 10px;
+}
+
+.test-list td:last-of-type {
+  text-align: center;
+}
+
+.test-list tbody > tr:nth-of-type(even) {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.test-list tbody > tr.justFailed {
+  background-color: color-mix(
+    in srgb,
+    var(--vscode-errorForeground) 25%,
+    transparent
+  );
+}
+
+/* Filter */
+
+.box-filter {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  gap: 1.5em;
+  background-color: var(--vscode-list-hoverBackground);
+  align-items: center;
+  padding: 0.8em;
+}
+
+.filter-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.8em;
+}
+
+.reset-filters {
+  display: inline-flex;
+  gap: 0.4em;
+  white-space: nowrap;
+}
+
+.search-bar {
+  margin-left: auto;
+  align-self: center;
+  zoom: 1.4;
+  min-width: 240px;
+}
+
+.no-tests {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3em;
+  font-size: 2.2em;
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.no-scope {
+  align-items: center;
+  font-size: 2.2em;
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.scope-title {
+  display: inline-block;
+  padding: 0.7em 0.2em 0.7em 0.2em;
+  color: var(--vscode-button-secondaryForeground);
+  background-color: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 5px;
+}
+
+.selected-filter {
+  color: var(--vscode-button-foreground);
+  background-color: var(--vscode-button-background);
+  border-color: var(--vscode-button-background);
+}
+
+.scope-title:hover {
+  cursor: pointer;
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.selected-filter:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.box-filter .scope-filter {
+  /* display: flex; */
+  height: 14em;
+  padding: 2em 0em 2em 0em;
+  /* border-box : le padding est compris dans les 14em → la box-filter ne grandit pas */
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.tests-button {
+  display: flex;
+  gap: 2em;
+  margin-left: auto;
+}
+
+.vscode-button {
+  padding: 0.5em 1em 0.5em 1em;
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.vscode-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}

@@ -44,9 +44,11 @@
   color: var(--stormgray00);
   width: fit-content;
 }
+
 .test-run-success {
   background-color: var(--success);
 }
+
 .test-run-error {
   background-color: var(--error);
 }
@@ -93,6 +95,7 @@
   justify-content: center;
   width: fit-content;
 }
+
 .button-action-dvp .codicon {
   font-size: 14px;
 }
