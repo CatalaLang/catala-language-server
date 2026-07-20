@@ -832,8 +832,9 @@ class catala_lsp_server =
                 let get_prog doc_id =
                   Doc_id.Map.find_opt doc_id open_documents
                   |> function
-                  | Some { last_valid_result = Some { prg; _ }; _ } ->
-                    Lwt.return_some prg
+                  | Some { last_valid_result = Some { prg; desugared; _ }; _ }
+                    ->
+                    Lwt.return_some (prg, desugared.program_root.module_scopes)
                   | _ -> (
                     let*? project_file =
                       Lwt.return
@@ -854,7 +855,9 @@ class catala_lsp_server =
                     in
                     match validation_result with
                     | Skipped | Faulty _ | Partial _ -> Lwt.return_none
-                    | Valid (_, r) -> Lwt.return_some r.prg)
+                    | Valid (_, r) ->
+                      Lwt.return_some
+                        (r.prg, r.desugared.program_root.module_scopes))
                 in
                 list_entrypoints ~get_prog project params)
               all_projects
