@@ -1,5 +1,6 @@
 {
   "command.catala.openWithTestEditor.title": "Open with Catala Test Editor",
+  "command.catala.debugAllTests.title": "Debug Catala tests",
   "command.catala.showExceptions.title": "Show definition tree",
   "command.catala.rescanProjects.title": "Scan all files of every project",
   "command.catala.showExceptionsAtCursor.title": "Show definition tree",
@@ -9,5 +10,6 @@
   "view.catala.help.title": "Help and feedback",
   "view.catala.switches.title": "Catala switches",
   "command.catala.foldCodeBlocks.title": "Fold all Catala code blocks",
-  "command.catala.unfoldCodeBlocks.title": "Unfold all Catala code blocks"
+  "command.catala.unfoldCodeBlocks.title": "Unfold all Catala code blocks",
+  "view.catala.openAllTests.title": "Catala Tests"
 }
