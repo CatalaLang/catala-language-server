@@ -273,6 +273,8 @@ export function runTestScope(
   // Runtime plugins are prepared by the testcase backend itself
   // (`prepare_runtime_plugins`); no clerk invocation is needed here.
   const cwd = getCwd(filename);
+  // Here we *do* want to fail on asserts, as we catch failures through
+  // the `register_lsp_error_notifier` hook.
   const execResult = execBinary(catalaPath, args, {
     ...(cwd && { cwd }),
     ...(inputJson !== undefined && { input: inputJson }),

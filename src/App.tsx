@@ -4,7 +4,10 @@ import ScopeInputEditor from './scope-editor/ScopeInputEditor';
 
 import { type WebviewApi } from 'vscode-webview';
 
+import { IntlProvider } from 'react-intl';
 import { CatalaSettingsProvider } from './shared/useSettings';
+import { allMessages } from './shared/settings';
+import TestOverview from './test-overview/TestOverview';
 
 type Props = {
   language: string;
@@ -29,5 +32,19 @@ export function InputApp({ language, vscode, scopename }: Props): ReactElement {
         scopename={scopename ?? ''}
       />
     </CatalaSettingsProvider>
+  );
+}
+
+// Not CatalaSettingsProvider: the panel's messages are not `DownMessage`s.
+export function GeneralTestsUi({ language, vscode }: Props): ReactElement {
+  const locale = language in allMessages ? language : 'en';
+  return (
+    <IntlProvider
+      locale={locale}
+      messages={allMessages[locale]}
+      defaultLocale="en"
+    >
+      <TestOverview vscode={vscode} />
+    </IntlProvider>
   );
 }
