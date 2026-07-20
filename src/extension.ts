@@ -3,6 +3,7 @@ import type {
   Executable,
   LanguageClientOptions,
   ServerOptions,
+  Command,
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
@@ -24,11 +25,12 @@ import {
   tryBinaryPath,
 } from './shared/util_client';
 import type { RunArgs } from './shared/util_client';
-import { initTests } from './extension/testAndCoverage';
+import { initTests, ResultController } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
 import path from 'path';
+import { TestMacroController } from './extension/TestMacroController';
 
 // `icon` are codicon id, the (id without the `codicon-` prefix).
 // `new vscode.ThemeIcon('github')`
@@ -476,12 +478,18 @@ export async function activate(
     )
   );
 
+  const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
+  // Placeholder to display something while tests are retrieved
+  ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
+
   const lsp_path = resolveBinaryPath(
     'catala-lsp',
     context,
     'main_lsp.exe',
     getConfig('lspServerPath')
   );
+
+  let resultController = new ResultController(context.workspaceState);
   if (lsp_path) {
     const run: Executable = {
       command: lsp_path,
@@ -527,7 +535,34 @@ export async function activate(
       serverOptions,
       clientOptions
     );
-    await Promise.all([client.start(), initTests(context, client)]);
+
+    await client.start();
+
+    let entrypoints = await listEntrypoints(
+      client,
+      [{ kind: 'GUI' }, { kind: 'Test' }],
+      undefined,
+      false,
+      true
+    ).finally(() => ctrl.items.replace([]));
+
+    await initTests(entrypoints, context, client, ctrl, resultController);
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        'catala.debugAllTests',
+        async (_arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+          const macroTestsView = new TestMacroController();
+          macroTestsView.createWebView(
+            client,
+            context,
+            entrypoints,
+            resultController,
+            ctrl
+          );
+        }
+      )
+    );
   }
 
   vscode.commands.registerCommand(
@@ -582,6 +617,24 @@ export async function activate(
     await switchTree.refresh();
   });
 
+  let command: Command = {
+    title: 'General tests view',
+    command: 'catala.debugAllTests',
+  };
+  let catala_tests = new Item({
+    label: 'Open all tests',
+    icon: new vscode.ThemeIcon('beaker'),
+    command,
+  });
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider(
+      'catala.openAllTests',
+      new tree_view([catala_tests])
+    )
+  );
+  logger.log(`Register "Catala Tests" data in th Tree data provider`);
+
   context.subscriptions.push(
     // note: we need to provide the same name here as we added in the package.json file
     vscode.window.registerTreeDataProvider('catala.switches', switchTree)
@@ -620,6 +673,9 @@ export async function activate(
       new tree_view([catala_books, catala_github])
     )
   );
+  logger.log(
+    `Register "Catala Help and feedback" data in th Tree data provider`
+  );
 
   // Always register the custom editor provider
   context.subscriptions.push(TestCaseEditorProvider.register(context));
@@ -634,6 +690,7 @@ export async function activate(
       showExceptionsAtCursor(client)
     )
   );
+  logger.log(`Register "Catala Exception View"`);
 
   // register_memoryFileProvider(context);
 
@@ -654,6 +711,7 @@ export async function activate(
 
   // Ensure the logger is disposed when the extension is deactivated
   context.subscriptions.push({ dispose: () => logger.dispose() });
+  logger.log(`Activate Catala extension`);
 }
 
 export function deactivate(): Thenable<void> | undefined {

@@ -82,19 +82,59 @@ type TestScope = {
   range: vscode.Range;
 };
 
-type TestScopeMap = Array<{
+export type TestScopeMap = Array<{
   path: string;
   scopes: TestScope[];
 }>;
 
-class TestId {
+export class TestId {
   id: string;
   constructor(file: vscode.Uri, scope_name?: string) {
     this.id = scope_name ? `${file.path}:${scope_name}` : `${file.path}`;
   }
 }
 
-class TestMap {
+// Persists the last clerk test run in the workspace state so the General
+// Tests view can recover it after a window reload.
+// NB: the stored value goes through JSON serialization, so any `vscode.Range`
+// it contains is rehydrated as a plain object (not a `vscode.Range` instance).
+// Current consumers only read `file`/`scope_name`/`success`, so this is fine.
+const LAST_TEST_RESULT_KEY = 'catala.lastTestResult';
+
+type ResultType = ClerkScopeTestResult & { date: string };
+
+export class ResultController {
+  constructor(private readonly storage: vscode.Memento) {}
+
+  getResult(testId: TestId): ResultType | undefined {
+    let result: ResultType | undefined = this.storage.get(
+      `${LAST_TEST_RESULT_KEY}:${testId.id}`
+    );
+    return result;
+  }
+
+  refresh(result: ClerkTestRunResult): void {
+    // Fire-and-forget: `update` returns a Thenable we don't need to await.
+    for (const res of result.results['test-results']) {
+      for (const scope_result of res.tests.scopes) {
+        let testId = new TestId(
+          vscode.Uri.file(res.file),
+          scope_result.scope_name
+        );
+        let resultScope: ResultType = {
+          ...scope_result,
+          date: new Date().toLocaleDateString(),
+        };
+        void this.storage.update(
+          `${LAST_TEST_RESULT_KEY}:${testId.id}`,
+          resultScope
+        );
+      }
+    }
+  }
+}
+
+export class TestMap {
   private map: Map<string, vscode.TestItem>;
   constructor() {
     this.map = new Map();
@@ -467,41 +507,19 @@ function testEntrypointsToTestScopeMap(
   });
 }
 
-export async function initTests(
-  context: vscode.ExtensionContext,
-  client: LanguageClient
-): Promise<void> {
-  const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
-  context.subscriptions.push(ctrl);
-  let cwd: string | undefined;
-  let test_map: TestMap = new TestMap();
-  // Placeholder to display something while tests are retrieved
-  ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
+type RunHandler = (
+  request: vscode.TestRunRequest,
+  cancellation: vscode.CancellationToken,
+  with_coverage?: boolean
+) => Promise<void>;
 
-  const updateTestScopes: () => Promise<void> = async () => {
-    const entrypoints = await listEntrypoints(
-      client,
-      [{ kind: 'GUI' }, { kind: 'Test' }],
-      undefined,
-      false,
-      true
-    ).finally(() => ctrl.items.replace([]));
-
-    const test_scopes_map: TestScopeMap =
-      testEntrypointsToTestScopeMap(entrypoints);
-    test_map.clear();
-    test_scopes_map.forEach(({ path, scopes }) =>
-      populateTestItems(ctrl, test_map, path, scopes)
-    );
-    cwd = getCwd(test_scopes_map?.[0]?.path);
-  };
-
-  updateTestScopes();
-
-  ctrl.refreshHandler = async (_token): Promise<void> =>
-    await updateTestScopes();
-
-  const testRunHandler = async (
+export function makeRunHandler(
+  ctrl: vscode.TestController,
+  test_map: TestMap,
+  resultController: ResultController,
+  cwd: string
+): RunHandler {
+  const runHandler = async (
     request: vscode.TestRunRequest,
     cancellation: vscode.CancellationToken,
     with_coverage?: boolean
@@ -517,7 +535,7 @@ export async function initTests(
     testsToRun.forEach((test) => run.started(test));
     try {
       const thread: Promise<ClerkTestRunResult | Error> = clerkRunTest(
-        cwd!,
+        cwd,
         testFiles,
         cancellation,
         with_coverage
@@ -525,6 +543,7 @@ export async function initTests(
       cancellation.onCancellationRequested((_) => run.end());
       const clerk_test_result = await thread;
       if (clerk_test_result instanceof Error) throw clerk_test_result;
+      resultController.refresh(clerk_test_result);
       const { results, code, err_msg } = clerk_test_result;
       if (code != 0 && err_msg != '')
         console.error(`Clerk exit code: ${code}, Output:\n{err_msg}`);
@@ -579,6 +598,57 @@ export async function initTests(
     }
     run.end();
   };
+  return runHandler;
+}
+
+// Signature of the test run handler exposed by `initTests` so other parts
+// (e.g. the General Tests macro controller) can trigger runs directly instead
+// of going through a VS Code command.
+export type TestRunHandler = (
+  request: vscode.TestRunRequest,
+  cancellation: vscode.CancellationToken,
+  with_coverage?: boolean
+) => Promise<void>;
+
+export async function initTests(
+  entrypoints: CatalaEntrypoint[],
+  context: vscode.ExtensionContext,
+  client: LanguageClient,
+  ctrl: vscode.TestController,
+  resultController: ResultController
+): Promise<TestRunHandler> {
+  context.subscriptions.push(ctrl);
+  let cwd: string | undefined;
+  let test_map: TestMap = new TestMap();
+
+  const populateTestController = (entrypoints: CatalaEntrypoint[]): void => {
+    const test_scopes_map: TestScopeMap =
+      testEntrypointsToTestScopeMap(entrypoints);
+    test_map.clear();
+    test_scopes_map.forEach(({ path, scopes }) =>
+      populateTestItems(ctrl, test_map, path, scopes)
+    );
+    cwd = getCwd(test_scopes_map?.[0]?.path);
+  };
+
+  populateTestController(entrypoints);
+
+  const updateTestScopes: () => Promise<void> = async () => {
+    const entrypoints = await listEntrypoints(
+      client,
+      [{ kind: 'GUI' }, { kind: 'Test' }],
+      undefined,
+      false,
+      true
+    );
+
+    populateTestController(entrypoints);
+  };
+
+  ctrl.refreshHandler = async (_token): Promise<void> =>
+    await updateTestScopes();
+
+  const testRunHandler = makeRunHandler(ctrl, test_map, resultController, cwd!);
 
   ctrl.createRunProfile(
     'Run tests',
@@ -628,4 +698,6 @@ export async function initTests(
       }
     )
   );
+
+  return testRunHandler;
 }
