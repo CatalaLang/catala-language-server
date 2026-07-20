@@ -104,7 +104,10 @@ const LAST_TEST_RESULT_KEY = 'catala.lastTestResult';
 type ResultType = ClerkScopeTestResult & { date: string };
 
 export class ResultController {
-  constructor(private readonly storage: vscode.Memento) {}
+  constructor(
+    private readonly storage: vscode.Memento,
+    private readonly language: string
+  ) {}
 
   getResult(testId: TestId): ResultType | undefined {
     let result: ResultType | undefined = this.storage.get(
@@ -114,6 +117,7 @@ export class ResultController {
   }
 
   refresh(result: ClerkTestRunResult): void {
+    this.language;
     // Fire-and-forget: `update` returns a Thenable we don't need to await.
     for (const res of result.results['test-results']) {
       for (const scope_result of res.tests.scopes) {
@@ -123,7 +127,7 @@ export class ResultController {
         );
         let resultScope: ResultType = {
           ...scope_result,
-          date: new Date().toLocaleDateString(),
+          date: new Date().toLocaleDateString('fr'),
         };
         void this.storage.update(
           `${LAST_TEST_RESULT_KEY}:${testId.id}`,
@@ -134,7 +138,6 @@ export class ResultController {
   }
 }
 
-/** @lintignore */
 export class TestMap {
   private map: Map<string, vscode.TestItem>;
   constructor() {
@@ -514,7 +517,6 @@ type RunHandler = (
   with_coverage?: boolean
 ) => Promise<void>;
 
-/** @lintignore */
 export function makeRunHandler(
   ctrl: vscode.TestController,
   test_map: TestMap,
@@ -616,7 +618,7 @@ export type TestRunHandler = (
 ) => Promise<void>;
 
 export async function initTests(
-  entrypoints: CatalaEntrypoint[],
+  entrypoints: Promise<CatalaEntrypoint[]>,
   context: vscode.ExtensionContext,
   client: LanguageClient,
   ctrl: vscode.TestController,
@@ -638,7 +640,7 @@ export async function initTests(
     }
   };
 
-  populateTestController(entrypoints);
+  populateTestController(await entrypoints);
 
   const updateTestScopes: () => Promise<void> = async () => {
     const entrypoints = await listEntrypoints(

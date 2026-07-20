@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { writeUpMessage } from './generated/catala_types';
-import App, { InputApp } from './App';
+import App, { GeneralTestsUi, InputApp } from './App';
 import './styles/index.css';
 import '../node_modules/@vscode/codicons/dist/codicon.css';
 
@@ -20,10 +20,9 @@ export function renderInputScopeUi(language: string, scopename: string): void {
   vscode.postMessage(writeUpMessage({ kind: 'Ready' }));
 }
 
-// Placeholder, to be replaced by the actual macro tests view
 export function renderMacroTestsUi(language: string): void {
   const vscode = acquireVsCodeApi();
   const root = createRoot(document.getElementById('root') as HTMLElement);
-  root.render(createElement('div', null, `Macro tests view (${language})`));
+  root.render(createElement(GeneralTestsUi, { language, vscode }));
   vscode.postMessage(writeUpMessage({ kind: 'Ready' }));
 }

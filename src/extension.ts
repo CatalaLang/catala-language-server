@@ -3,6 +3,7 @@ import type {
   Executable,
   LanguageClientOptions,
   ServerOptions,
+  Command,
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
@@ -23,7 +24,7 @@ import {
   spawnStdout,
   tryBinaryPath,
 } from './shared/util_client';
-import type { RunArgs } from './shared/util_client';
+import type { Binary, RunArgs } from './shared/util_client';
 import { initTests, ResultController } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints, rescanProjects } from './extension/lspRequests';
@@ -33,18 +34,22 @@ import {
   codeBlockRanges,
 } from './extension/catalaFolding';
 import path from 'path';
+import { TestMacroController } from './extension/TestMacroController';
 
 const itemMessagesFR = {
+  generalTestsTitle: 'Vue globale des tests',
   openCatalaBook: 'Ouvrir le manuel de Catala',
   github: 'Ouvrir le répertoire GitHub de Catala',
 };
 
 const itemMessagesEN = {
+  generalTestsTitle: 'General tests view',
   openCatalaBook: 'Open Catala book',
   github: 'Open the Catala GitHub repository',
 };
 
 const itemMessagesPL = {
+  generalTestsTitle: 'Przegląd testów',
   openCatalaBook: 'Otwórz podręcznik Catala',
   github: 'Otwórz repozytorium Catala na GitHubie',
 };
@@ -135,8 +140,6 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
     }
   }
 }
-
-type Binary = { path: string; version?: string };
 
 type Toolchain = {
   catalaPath?: Binary;
@@ -494,6 +497,8 @@ export async function activate(
   );
 
   const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
+  // Placeholder to display something while tests are retrieved
+  ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
 
   const lsp_path = resolveBinaryPath(
     'catala-lsp',
@@ -502,7 +507,9 @@ export async function activate(
     getConfig('lspServerPath')
   );
 
-  let resultController = new ResultController(context.workspaceState);
+  const language = vscode.env.language;
+
+  let resultController = new ResultController(context.workspaceState, language);
   if (lsp_path) {
     const run: Executable = {
       command: lsp_path,
@@ -549,9 +556,7 @@ export async function activate(
       clientOptions
     );
 
-    await client.start();
-
-    let entrypoints = await listEntrypoints(
+    let entrypointsRequest = listEntrypoints(
       client,
       [{ kind: 'GUI' }, { kind: 'Test' }],
       undefined,
@@ -559,7 +564,27 @@ export async function activate(
       true
     ).finally(() => ctrl.items.replace([]));
 
-    await initTests(entrypoints, context, client, ctrl, resultController);
+    initTests(entrypointsRequest, context, client, ctrl, resultController);
+
+    const macroTestsView = new TestMacroController();
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        'catala.debugAllTests',
+        async (_arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+          const columnToShowIn = vscode.window.activeTextEditor
+            ? vscode.window.activeTextEditor.viewColumn
+            : undefined;
+          macroTestsView.show(
+            client,
+            context,
+            entrypointsRequest,
+            resultController,
+            ctrl,
+            columnToShowIn
+          );
+        }
+      )
+    );
   }
 
   vscode.commands.registerCommand(
@@ -616,8 +641,27 @@ export async function activate(
 
   // Can't use Intl to retrieve message from the json, also tried
   // to retrieve it manually but encountered an undefined
-  const language = vscode.env.language;
   const itemMsg = itemMessages[language];
+
+  const titleAllTests = itemMsg['generalTestsTitle'];
+  let command: Command = {
+    title: titleAllTests,
+    command: 'catala.debugAllTests',
+  };
+  let catala_tests = new Item({
+    label: titleAllTests,
+    icon: new vscode.ThemeIcon('beaker'),
+    command,
+  });
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider(
+      'catala.openAllTests',
+      new tree_view([catala_tests])
+    )
+  );
+
+  logger.log(`Register "Catala Tests" data in th Tree data provider`);
 
   context.subscriptions.push(
     // note: we need to provide the same name here as we added in the package.json file
@@ -656,6 +700,9 @@ export async function activate(
       'catala.help',
       new tree_view([catala_books, catala_github])
     )
+  );
+  logger.log(
+    `Register "Catala Help and feedback" data in th Tree data provider`
   );
 
   // Always register the custom editor provider
@@ -699,8 +746,7 @@ export async function activate(
       showExceptionsAtCursor(client)
     )
   );
-
-  // register_memoryFileProvider(context);
+  logger.log(`Register "Catala Exception View"`);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -719,6 +765,7 @@ export async function activate(
 
   // Ensure the logger is disposed when the extension is deactivated
   context.subscriptions.push({ dispose: () => logger.dispose() });
+  logger.log(`Activate Catala extension`);
 }
 
 export function deactivate(): Thenable<void> | undefined {
