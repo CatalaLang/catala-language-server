@@ -36,9 +36,26 @@
           "title": "%view.catala.exceptionsView.name%",
           "icon": "logo.png"
         }
+      ],
+      "activitybar": [
+        {
+          "id": "catala",
+          "title": "Catala",
+          "icon": "./logo_alt.svg"
+        }
       ]
     },
     "views": {
+      "catala": [
+        {
+          "id": "catala.openAllTests",
+          "name": "%view.catala.openAllTests.title%"
+        },
+        {
+          "id": "catala.help",
+          "name": "%view.catala.help.title%"
+        }
+      ],
       "catala-exceptions-panel": [
         {
           "type": "webview",
@@ -72,6 +89,11 @@
         "title": "%command.catala.openWithTestEditor.title%",
         "category": "%category.catala%",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "catala.debugAllTests",
+        "title": "%command.catala.debugAllTests.title%",
+        "category": "%category.catala%"
       },
       {
         "command": "catala.openInputEditor",
@@ -388,18 +410,25 @@
     "knip:exports": "knip --include exports --no-progress"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@floating-ui/react": "^0.27.19",
+    "@mui/material": "^9.1.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/vscode-webview": "^1.57.5",
+    "@vscode-elements/elements": "^2.5.1",
     "@vscode-elements/react-elements": "^2.4.0",
-    "@vscode/codicons": "^0.0.36",
     "command-exists": "^1.2.9",
     "p-queue": "^6.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-intl": "^7.1.9",
+    "react-loading-indicators": "^1.0.1",
     "vscode-languageclient": "^8.0.2"
+  },
+  "overrides": {
+    "react-is": "^18.3.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -416,7 +445,7 @@
     "css-loader": "^7.1.2",
     "eslint": "^9.14.0",
     "glob": "^11.0.3",
-    "husky": "^9.0.11",
+    "husky": "^9.1.7",
     "jsdom": "^25.0.1",
     "knip": "^5.71.0",
     "lint-staged": "^15.2.7",

@@ -1,5 +1,7 @@
 {
   "command.catala.openWithTestEditor.title": "Ouvrir avec l'éditeur de tests Catala",
+  "command.catala.debugAllTests.title": "Debogguer les tests Catala",
+  "view.catala.openAllTests.title": "Ouvrir les tests Catala",
   "command.catala.showExceptions.title": "Afficher l'arbre de définitions",
   "command.catala.showExceptionsAtCursor.title": "Afficher l'arbre de définitions",
   "view.catala.exceptionsView.name": "Arbre de définitions",

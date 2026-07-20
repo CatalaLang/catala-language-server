@@ -570,7 +570,38 @@ class catala_lsp_server =
         (fun { FileEvent.uri; type_ } ->
           let doc_id = Doc_id.of_lsp_uri uri in
           match type_ with
-          | Created -> self#process_saved_document ~notify_back doc_id
+          | Created ->
+            (* If the file is created, we should try to reload its project so
+               that we're not missing any file. *)
+            let* () =
+              St.use_and_update server_state (fun sstate ->
+                  let project =
+                    Projects.lookup_project doc_id sstate.projects
+                  in
+                  let projects =
+                    match project with
+                    | None ->
+                      (* Not finding any project for a new file should not happen *)
+                      (* Let's just log a warning in the console *)
+                      Log.warn (fun m -> m "No project found");
+                      sstate.projects
+                    | Some project ->
+                      (* Found a project for the doc_id, reload the project to
+                         update the existing file, the reload should add the
+                         fresh created file *)
+                      let _reloaded, projects =
+                        Projects.reload_project
+                          ~on_error:(fun (_doc_id, _range, _diagnostic) ->
+                            Log.err (fun m ->
+                                m "Error when calling reload_project"))
+                          project sstate.projects
+                      in
+                      projects
+                  in
+                  (* Update the server_state *)
+                  Lwt.return { sstate with projects })
+            in
+            self#process_saved_document ~notify_back doc_id
           | Changed -> self#process_saved_document ~notify_back doc_id
           | Deleted ->
             let* () = self#on_doc_delete ~notify_back doc_id in
@@ -730,8 +761,9 @@ class catala_lsp_server =
                 let get_prog doc_id =
                   Doc_id.Map.find_opt doc_id open_documents
                   |> function
-                  | Some { last_valid_result = Some { prg; _ }; _ } ->
-                    Lwt.return_some prg
+                  | Some { last_valid_result = Some { prg; desugared; _ }; _ }
+                    ->
+                    Lwt.return_some (prg, desugared.program_root.module_scopes)
                   | _ -> (
                     let*? project_file =
                       Lwt.return
@@ -752,7 +784,9 @@ class catala_lsp_server =
                     in
                     match validation_result with
                     | Skipped | Faulty _ | Partial _ -> Lwt.return_none
-                    | Valid r -> Lwt.return_some r.prg)
+                    | Valid r ->
+                      Lwt.return_some
+                        (r.prg, r.desugared.program_root.module_scopes))
                 in
                 list_entrypoints ~get_prog project params)
               all_projects

@@ -3,6 +3,7 @@ import type {
   Executable,
   LanguageClientOptions,
   ServerOptions,
+  Command,
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
@@ -32,10 +33,83 @@ import {
   resolveBinaryPath,
 } from './shared/util_client';
 import type { RunArgs } from './shared/util_client';
-import { initTests } from './extension/testAndCoverage';
+import { initTests, ResultController } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
+import { TestMacroController } from './test-case-editor/TestMacroController';
+
+// `icon` accepts either a file path (string) or a codicon via
+// `new vscode.ThemeIcon('github')` (id without the `codicon-` prefix).
+type ItemParam = {
+  label: string;
+  descr?: string | undefined;
+  icon?: vscode.ThemeIcon | undefined;
+  command: vscode.Command;
+};
+
+class Item extends vscode.TreeItem {
+  // we'll use the file and line later...
+  readonly descr: string | undefined;
+  readonly icon: vscode.ThemeIcon | undefined;
+  // children represent branches, which are also items
+  public children: Item[] = [];
+
+  // add all members here, file and line we'll need later
+  // the label represent the text which is displayed in the tree
+  // and is passed to the base class
+  constructor(param: ItemParam) {
+    super(param.label, vscode.TreeItemCollapsibleState.None);
+    this.descr = param.descr;
+    this.icon = param.icon;
+    this.command = param.command;
+    this.collapsibleState = vscode.TreeItemCollapsibleState.None;
+  }
+
+  // a public method to add childs, and with additional branches
+  // we want to make the item collabsible
+  public add_child(child: Item): void {
+    this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+    this.children.push(child);
+  }
+}
+
+// 1. we'll export this class and use it in our extension later
+// 2. we need to implement vscode.TreeDataProvider
+export class tree_view implements vscode.TreeDataProvider<Item> {
+  // m_data holds all tree items
+  private switches: Item[] = [];
+  // with the vscode.EventEmitter we can refresh our  tree view
+  private m_onDidChangeTreeData: vscode.EventEmitter<Item | undefined> =
+    new vscode.EventEmitter<Item | undefined>();
+  // and vscode will access the event by using a readonly onDidChangeTreeData (this member has to be named like here, otherwise vscode doesnt update our treeview.
+  readonly onDidChangeTreeData?: vscode.Event<Item | undefined> =
+    this.m_onDidChangeTreeData.event;
+
+  public constructor(switches: Item[]) {
+    this.switches = switches;
+  }
+
+  // we need to implement getTreeItem to receive items from our tree view
+  public getTreeItem(
+    element: Item
+  ): vscode.TreeItem | Thenable<vscode.TreeItem> {
+    const item = new vscode.TreeItem(element.label!, element.collapsibleState);
+    item.description = element.descr;
+    item.iconPath = element.icon;
+    item.command = element.command;
+    return item;
+  }
+
+  // and getChildren
+  public getChildren(element: Item | undefined): vscode.ProviderResult<Item[]> {
+    if (element === undefined) {
+      return this.switches;
+    } else {
+      return element.children;
+    }
+  }
+}
 
 let client: LanguageClient;
 
@@ -313,12 +387,18 @@ export async function activate(
     )
   );
 
+  const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
+  // Placeholder to display something while tests are retrieved
+  ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
+
   const lsp_path = resolveBinaryPath(
     'catala-lsp',
     context,
     'main_lsp.exe',
     getConfig('lspServerPath')
   );
+
+  let resultController = new ResultController(context.workspaceState);
   if (lsp_path) {
     const run: Executable = {
       command: lsp_path,
@@ -356,8 +436,86 @@ export async function activate(
       serverOptions,
       clientOptions
     );
-    await Promise.all([client.start(), initTests(context, client)]);
+
+    await client.start();
+
+    let entrypoints = await listEntrypoints(
+      client,
+      [{ kind: 'GUI' }, { kind: 'Test' }],
+      undefined,
+      false,
+      true
+    ).finally(() => ctrl.items.replace([]));
+
+    await initTests(entrypoints, context, client, ctrl, resultController);
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        'catala.debugAllTests',
+        async (_arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+          const macroTestsView = new TestMacroController();
+          macroTestsView.createWebView(
+            client,
+            context,
+            entrypoints,
+            resultController,
+            ctrl
+          );
+        }
+      )
+    );
   }
+
+  const language = vscode.env.language;
+
+  let command: Command = {
+    title: 'General tests view',
+    command: 'catala.debugAllTests',
+  };
+  let catala_utils = new Item({
+    label: 'Open all tests',
+    icon: new vscode.ThemeIcon('beaker'),
+    command,
+  });
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider(
+      'catala.openAllTests',
+      new tree_view([catala_utils])
+    )
+  );
+
+  let command_books: Command = {
+    title: 'Open Catala book',
+    command: 'vscode.open',
+    arguments: [
+      vscode.Uri.parse(`https://book.catala-lang.org/${language}/0-intro.html`),
+    ],
+  };
+  let catala_books = new Item({
+    label: 'Learn how to do catala',
+    icon: new vscode.ThemeIcon('book'),
+    command: command_books,
+  });
+  catala_books.iconPath;
+
+  let command_github: Command = {
+    title: 'Open Github',
+    command: 'vscode.open',
+    arguments: [vscode.Uri.parse(`https://github.com/CatalaLang/catala`)],
+  };
+  let catala_github = new Item({
+    label: 'Catala Github repository',
+    icon: new vscode.ThemeIcon('github'),
+    command: command_github,
+  });
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider(
+      'catala.help',
+      new tree_view([catala_books, catala_github])
+    )
+  );
 
   // Always register the custom editor providers
   context.subscriptions.push(

@@ -63,9 +63,9 @@ let register_attributes () =
     ~contexts:(function
       | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
     (fun ~pos:_ value ->
-       match value with
-       | Shared_ast.String (s, _pos) -> Some (ExpectedVariable s)
-       | _ -> failwith "unexpected variable label")
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (ExpectedVariable s)
+      | _ -> failwith "unexpected variable label")
 
 let to_relative (p : File.t) = File.make_relative_to ~dir:(Sys.getcwd ()) p
 
@@ -845,13 +845,14 @@ let string_of_runtime_value ~lang (v : O.runtime_value) : string =
     done;
     let s = String.sub s 0 !len in
     if s.[String.length s - 1] = '.' then s ^ "0" else s
-  | O.Money m ->
+  | O.Money m -> (
     let major = abs m / 100 and minor = abs m mod 100 in
     let sign = if m < 0 then "-" else "" in
-    (match lang with
+    match lang with
     | `En -> Printf.sprintf "%s$%d.%02d" sign major minor
     | _ -> Printf.sprintf "%s%d,%02d €" sign major minor)
-  | O.Date { year; month; day } -> Printf.sprintf "%04d-%02d-%02d" year month day
+  | O.Date { year; month; day } ->
+    Printf.sprintf "%04d-%02d-%02d" year month day
   | O.Duration { years; months; days } ->
     Printf.sprintf "%dy %dm %dd" years months days
   | O.Enum (_, (ctor, _)) -> ctor
@@ -860,7 +861,8 @@ let string_of_runtime_value ~lang (v : O.runtime_value) : string =
 let runtime_value_of_string (s : string) : O.runtime_value =
   let enum ctor =
     O.Enum
-      ({ O.enum_name = "Optional"; constructors = []; ctor_attrs = [] }, (ctor, None))
+      ( { O.enum_name = "Optional"; constructors = []; ctor_attrs = [] },
+        (ctor, None) )
   in
   let money_of s =
     let mk n =
@@ -893,10 +895,10 @@ let runtime_value_of_string (s : string) : O.runtime_value =
         match int_of_string_opt s with
         | Some i -> O.Integer i
         | None -> (
-          match scan "%d-%d-%d%!" (fun y m d -> (y, m, d)) with
+          match scan "%d-%d-%d%!" (fun y m d -> y, m, d) with
           | Some (year, month, day) -> O.Date { year; month; day }
           | None -> (
-            match scan "%dy %dm %dd%!" (fun y m d -> (y, m, d)) with
+            match scan "%dy %dm %dd%!" (fun y m d -> y, m, d) with
             | Some (years, months, days) -> O.Duration { years; months; days }
             | None -> (
               match float_of_string_opt s with
@@ -1068,8 +1070,8 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
   in
   let variables =
     Pos.get_attrs info (function
-        | ExpectedVariable s -> parse_expected_variable s
-        | _ -> None)
+      | ExpectedVariable s -> parse_expected_variable s
+      | _ -> None)
   in
   { base_test with O.test_inputs; test_outputs; variables; description; title }
 
@@ -1267,7 +1269,8 @@ let write_catala_test ppf t lang =
       let payload =
         match value with
         | None -> var
-        | Some v -> Printf.sprintf "%s: %s" var (string_of_runtime_value ~lang v)
+        | Some v ->
+          Printf.sprintf "%s: %s" var (string_of_runtime_value ~lang v)
       in
       fprintf ppf "#[testcase.variable = %s]@\n" (String.quote payload))
     t.variables;

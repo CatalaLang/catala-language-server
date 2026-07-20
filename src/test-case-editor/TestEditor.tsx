@@ -129,6 +129,7 @@ export default function TestEditor(props: Props): ReactElement {
   };
 
   const openTraceEditor = (): void => {
+    console.log('Open Trace editor');
     getVsCodeApi().postMessage({
       kind: 'openTraceEditor',
       scope: props.test.testing_scope,

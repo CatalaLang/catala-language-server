@@ -93,12 +93,15 @@ type attr_def = [
   | Uid of string
   | ArrayItemLabel of string
   | Description of string
+  | TestDate of string
   ] <ocaml repr="classic">
 
 type runtime_value = {
   value: runtime_value_raw;
   attrs: attr_def list;
 }
+
+type scope_real_var = { name: string; ?real_value: runtime_value option }
 
 (* Test data *)
 
@@ -125,11 +128,68 @@ type test = {
   title: string;
 }
 
+(* A test as displayed in the 'debug all tests' panel: the test itself
+   (GUI or plain), along with the run metadata that is not intrinsic to
+   the test (which file it lives in and its last run result). *)
+type test_debugger = {
+  filename: string;
+  test: test_entrypoint;
+  ?success: bool option;
+  ?date: string option;
+}
+
 type test_run = {
   test: test;
   assert_failures: bool;
   diffs: diff list;
 }
+
+type file_test = {
+  file: string;
+  tests: string;
+}
+
+type scope_test_result = {
+  scope_name: string;
+  success: bool;
+  errors: string list;
+  time: float;
+}
+
+type inline_test = {
+  cmd: string;
+  success: bool;
+}
+
+type file_tests = {
+  scopes: scope_test_result list;
+  inline_tests <json name="inline-tests"> : inline_test list;
+}
+
+type file_test_result = {
+  file: string;
+  tests: file_tests;
+}
+
+type coverage = {
+  scopes: string list;
+  locations: string list;
+}
+
+type test_result = {
+  test_results <json name="test-results"> : file_test_result list;
+  coverage: coverage;
+}
+
+
+type gui_entrypoint = {
+   scope_tested : string;
+   scope: string;
+   ?title: string option;
+   ?description : string option;
+}
+
+type test_debugger_list = test_debugger list
 
 type test_list = test list
 
@@ -210,38 +270,42 @@ type confirm_result = {
   confirmed: bool;
 }
 
-type up_message = [
-  | Ready
-  | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
-  | OpenInTextEditor
-  | TestRunRequest of test_run_request
-  | TestGenerateRequest of test_generate_request
-  | OpenTestScopePicker
-  | ConfirmRequest of confirm_request
-]
-
-type down_message = [
-  | Update of parse_results
-  | TestRunResults of test_run_results_msg
-  | ConfirmResult of confirm_result
-]
-
-(* List entrypoints *)
-
-type gui_entrypoint = {
-   scope : string;
-   ?title: string option;
-   ?description : string option;
-}
-
-type fonc_test_entrypoint = {
-   scope : string;
+type scope_success = {
+  success: bool;
+  date: string;
 }
 
 type test_entrypoint = [
   | GUI of gui_entrypoint
   | Test of fonc_test_entrypoint
 ]
+
+type up_message = [
+  | Ready
+  | Reload
+  | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
+  | OpenInTextEditor of string option (* filename *)
+  | TestRunRequest of test_run_request
+  | SpecificTestRequest of int list
+  | TestGenerateRequest of test_generate_request
+  | OpenTestScopePicker
+  | ConfirmRequest of confirm_request
+  | OpenInTestEditor of string (* filename *)
+]
+
+type down_message = [
+  | Update of parse_results
+  | TestRunResults of test_run_results_msg
+  | TestScopeResult of (test_entrypoint * scope_success *  int)
+  | ConfirmResult of confirm_result
+  | AllTests of test_debugger_list
+]
+
+(* List entrypoints *)
+
+type fonc_test_entrypoint = {
+   scope : string;
+}
 
 type no_input_scope_entrypoint = {
   scope: string;
