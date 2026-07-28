@@ -394,7 +394,7 @@
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "opam exec -- dune build @lsp; webpack --mode development",
-    "test": "tsc && vscode-test",
+    "test": "tsc -p tsconfig.test.json && vscode-test",
     "webview:test": "node node_modules/vitest/vitest.mjs run",
     "webview:test:watch": "node node_modules/vitest/vitest.mjs",
     "format": "prettier --write .",
