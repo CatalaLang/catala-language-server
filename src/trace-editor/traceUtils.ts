@@ -230,6 +230,16 @@ export function traceValueToRuntime(
       };
       return { kind: 'Enum', value: [decl, ['Absent', null]] };
     }
+    case 'enum': {
+      if (tv.value === undefined) {
+        const decl = {
+          enum_name: tv.ctor,
+          constructors: new Map([[tv.ctor, null]]),
+          ctor_attrs: new Map(),
+        };
+        return { kind: 'Enum', value: [decl, [tv.ctor, null]] };
+      }
+    }
   }
 }
 

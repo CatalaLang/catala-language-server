@@ -57,6 +57,12 @@ function parseAs(kind: string, s: string): TraceValue | undefined {
         value: { years: +m[1], months: +m[2], days: +m[3] },
       };
     }
+    case 'enum': {
+      return {
+        kind: 'enum',
+        ctor: s,
+      };
+    }
     default:
       return undefined;
   }
