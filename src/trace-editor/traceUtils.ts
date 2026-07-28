@@ -230,6 +230,16 @@ export function traceValueToRuntime(
       };
       return { kind: 'Enum', value: [decl, ['Absent', null]] };
     }
+    case 'enum': {
+      if (tv.value === undefined) {
+        const decl = {
+          enum_name: tv.ctor,
+          constructors: new Map([[tv.ctor, null]]),
+          ctor_attrs: new Map(),
+        };
+        return { kind: 'Enum', value: [decl, [tv.ctor, null]] };
+      }
+    }
   }
 }
 
@@ -378,10 +388,6 @@ export function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
 
-export function leafName(name: string): string {
-  return name.slice(name.lastIndexOf('.') + 1);
-}
-
 export function uncapitalize(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
@@ -461,7 +467,7 @@ function traceVariablesAux(
   return acc;
 }
 
-export function traceVariables(trace: TraceElement[]): TraceVariable[] {
+function traceVariables(trace: TraceElement[]): TraceVariable[] {
   return mergeSteps(traceVariablesAux(trace));
 }
 
@@ -481,7 +487,7 @@ export function findTraceValue(
   return undefined;
 }
 
-export function findScope(
+function findScope(
   scope: string,
   variables: TraceVariable[]
 ): Extract<TraceVariable, { kind: 'step' }> | undefined {
@@ -504,10 +510,7 @@ export function traceVariablesForTest(
     const testedScope = findScope(scope, traceVariables(trace));
     if (testedScope !== undefined) {
       variables = testedScope.variables;
-      if (
-        testedScope.value !== undefined &&
-        testedScope.value.kind === 'struct'
-      ) {
+      if (testedScope.value?.kind === 'struct') {
         outputs = testedScope.value.fields;
       } else if (testedScope.value !== undefined) {
         outputs = { output: testedScope.value };
@@ -517,9 +520,7 @@ export function traceVariablesForTest(
   return [variables, outputs];
 }
 
-export function readTraceTestVariables(
-  x: JsonValue
-): Map<string, TraceValue | null> {
+function readTraceTestVariables(x: JsonValue): Map<string, TraceValue | null> {
   const map = new Map<string, TraceValue | null>();
   if (x !== null && typeof x === 'object' && !Array.isArray(x)) {
     const o = x as Record<string, JsonValue>;

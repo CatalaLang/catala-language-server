@@ -23,11 +23,11 @@ import {
 } from './traceUtils';
 import { FormattedMessage, useIntl, type IntlShape } from 'react-intl';
 
-type match = 'match' | 'mismatch' | undefined;
+type Match = 'match' | 'mismatch' | undefined;
 
 type Expected = {
   variables: Map<string, TraceValue | null>;
-  output: Map<string, match>;
+  output: Map<string, Match>;
 };
 
 export type ExpandCommand = { open: boolean; nonce: number };
@@ -393,7 +393,7 @@ function nodeMatchState(
   expected: Expected,
   path: string,
   value: TraceValue
-): match {
+): Match {
   const varExp = expected.variables.get(path);
   if (varExp !== undefined && varExp !== null) {
     return traceValueEqual(varExp, value) ? 'match' : 'mismatch';
@@ -406,7 +406,7 @@ function subtreeHasMismatch(
   childPrefix: string,
   expected: Expected
 ): boolean {
-  const newPrefix = (c: TraceElement) => {
+  const newPrefix = (c: TraceElement): string => {
     if (
       (c.element.kind === 'scope_call' ||
         c.element.kind === 'scope_var' ||
@@ -498,7 +498,7 @@ export default function TraceTreeView({
   let expected: Expected | null = null;
   if (test !== undefined) {
     const [, outputs] = traceVariablesForTest(trace, test.tested_scope.name);
-    const output: Map<string, match> = new Map();
+    const output: Map<string, Match> = new Map();
     for (const [name, io] of test.test_outputs.entries()) {
       const exp = io?.value ? traceValueFromRuntime(io.value.value) : undefined;
       const computed = outputs[name];
