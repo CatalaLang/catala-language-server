@@ -29,7 +29,6 @@ export class TestMacroController {
   tests: TestDebugger[] = [];
 
   private testQueue: PQueue = new PQueue({ concurrency: 1 });
-  private runAllTests: PQueue = new PQueue({ concurrency: 100 });
 
   // We want to restrict shell -> webview messages to instances
   // of DownMessage
