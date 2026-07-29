@@ -21,6 +21,7 @@ export type RunArgs = {
   traceOutputFile?: string;
   headless?: boolean;
   buildDir?: string;
+  ninjaOutput?: string;
 };
 
 var warned = false;
