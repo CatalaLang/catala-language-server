@@ -490,6 +490,7 @@ class catala_lsp_server =
 
     method private process_saved_document
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back) (doc_id : Doc_id.t) =
+      let* () = server_initialized in
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
@@ -500,6 +501,7 @@ class catala_lsp_server =
       self#process_saved_document ~notify_back doc_id
 
     method private document_changed ~notify_back ~new_contents doc_id =
+      let* () = server_initialized in
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
@@ -520,13 +522,16 @@ class catala_lsp_server =
     method on_notif_doc_did_change ~notify_back d
         (_c : TextDocumentContentChangeEvent.t list) ~old_content:_
         ~new_content:new_contents =
+      let* () = server_initialized in
       self#document_changed ~notify_back ~new_contents (Doc_id.of_lsp_uri d.uri)
 
     method! on_notif_doc_did_save ~notify_back d =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri d.textDocument.uri in
       self#process_saved_document ~notify_back doc_id
 
     method private on_doc_delete ~notify_back (doc_id : Doc_id.doc_id) =
+      let* () = server_initialized in
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
@@ -565,6 +570,7 @@ class catala_lsp_server =
           Lwt.return new_state
 
     method private on_notif_did_change_watched_files ~notify_back changes =
+      let* () = server_initialized in
       (* Triggers even on save.. *)
       Lwt_list.iter_p
         (fun { FileEvent.uri; type_ } ->
@@ -802,6 +808,7 @@ class catala_lsp_server =
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
     method private on_doc_did_close ~notify_back:_ (doc_id : Doc_id.t) =
+      let* () = server_initialized in
       if should_ignore doc_id then Lwt.return_unit
       else
         St.use_and_update server_state
@@ -811,10 +818,12 @@ class catala_lsp_server =
         Lwt.return { St.projects; open_documents; module_cache; diagnostics }
 
     method on_notif_doc_did_close ~notify_back d =
+      let* () = server_initialized in
       self#on_doc_did_close ~notify_back (Doc_id.of_lsp_uri d.uri)
 
     method! on_req_completion ~notify_back:_ ~id:_ ~uri ~pos ~ctx:_
         ~workDoneToken:_ ~partialResultToken:_ doc_state =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -830,6 +839,7 @@ class catala_lsp_server =
 
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ _doc_state =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -851,6 +861,7 @@ class catala_lsp_server =
 
     method private on_req_declaration ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Locations.t option t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -870,6 +881,7 @@ class catala_lsp_server =
 
     method private on_req_references ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Location.t list option Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -888,6 +900,7 @@ class catala_lsp_server =
 
     method! on_req_hover ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         _doc_state : Hover.t option Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -904,6 +917,7 @@ class catala_lsp_server =
 
     method private on_req_type_definition ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Locations.t option Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -921,7 +935,7 @@ class catala_lsp_server =
         | `SymbolInformation of SymbolInformation.t list ]
         option
         t =
-      Log.info (fun m -> m "DOCUMENT SYMBOL REQUEST");
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -931,6 +945,7 @@ class catala_lsp_server =
 
     method! on_req_code_lens ~notify_back:_ ~id:_ ~uri ~workDoneToken:_
         ~partialResultToken:_ _doc_state : CodeLens.t list Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_nil
       else
@@ -944,6 +959,7 @@ class catala_lsp_server =
 
     method private on_req_document_formatting ~notify_back
         (params : DocumentFormattingParams.t) : TextEdit.t list option Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri params.textDocument.uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -978,6 +994,7 @@ class catala_lsp_server =
           textDocument : TextDocumentIdentifier.t;
           _;
         } : WorkspaceEdit.t Lwt.t =
+      let* () = server_initialized in
       let empty_response = WorkspaceEdit.create () in
       let doc_id = Doc_id.of_lsp_uri textDocument.uri in
       if should_ignore doc_id then Lwt.return empty_response
