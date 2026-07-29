@@ -156,6 +156,7 @@
   "testEditor.deleteVariable": "Remove expected variable",
   "testEditor.fillComputedVariable": "Fill with computed value ({value})",
   "testEditor.setVariable": "Set expected value to {value}",
+  "testEditor.openTrace": "Ouvrir l'éditeur en mode débogueur pour ce test",
   "trace.viewer.title": "Trace viewer",
   "trace.loading": "Loading…",
   "trace.scope": "Scope",
