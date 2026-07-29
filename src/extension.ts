@@ -453,11 +453,11 @@ export async function activate(
   const language = vscode.env.language;
 
   let command: Command = {
-    title: 'General tests view',
+    title: language == 'fr' ? 'Vue globale des tests' : 'General tests view',
     command: 'catala.debugAllTests',
   };
   let catala_utils = new Item({
-    label: 'Open all tests',
+    label: language == 'fr' ? 'Ouvrir les tests' : 'Open all tests',
     icon: new vscode.ThemeIcon('beaker'),
     command,
   });
@@ -470,26 +470,32 @@ export async function activate(
   );
 
   let command_books: Command = {
-    title: 'Open Catala book',
+    title: language == 'fr' ? 'Ouvrir le livre Catala' : 'Open Catala book',
     command: 'vscode.open',
     arguments: [
       vscode.Uri.parse(`https://book.catala-lang.org/${language}/0-intro.html`),
     ],
   };
   let catala_books = new Item({
-    label: 'Learn how to do catala',
+    label:
+      language == 'fr'
+        ? 'Apprendre à faire du Catala'
+        : 'Learn how to do Catala',
     icon: new vscode.ThemeIcon('book'),
     command: command_books,
   });
   catala_books.iconPath;
 
   let command_github: Command = {
-    title: 'Open Github',
+    title: language == 'fr' ? 'Ouvrir Github' : 'Open Github',
     command: 'vscode.open',
     arguments: [vscode.Uri.parse(`https://github.com/CatalaLang/catala`)],
   };
   let catala_github = new Item({
-    label: 'Catala Github repository',
+    label:
+      language == 'fr'
+        ? 'Répertoire Github Catala'
+        : 'Catala Github repository',
     icon: new vscode.ThemeIcon('github'),
     command: command_github,
   });
