@@ -29,7 +29,6 @@ export class TestMacroController {
   tests: TestDebugger[] = [];
 
   private testQueue: PQueue = new PQueue({ concurrency: 1 });
-  private runAllTests: PQueue = new PQueue({ concurrency: 100 });
 
   // We want to restrict shell -> webview messages to instances
   // of DownMessage
@@ -69,7 +68,6 @@ export class TestMacroController {
         throw new Error(`Unexpected test from ${path}`);
       }
     }
-    logger.log(`Post all tests: ${this.tests.length}`);
     this.postMessageToWebView({ kind: 'AllTests', value: this.tests });
   }
 
