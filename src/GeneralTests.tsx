@@ -660,13 +660,19 @@ function TestsGrid({
   if (filtered == undefined || filtered.length == 0) {
     return (
       <div className="no-tests">
-        <span>
+        <span className="info-text">
           <FormattedMessage
             id="generalTests.noTestsFound"
             defaultMessage="Aucun test trouvé"
           />
-        </span>{' '}
+        </span>
         <AddNewTest vscode={vscode} />
+        <span className="help-text">
+          <FormattedMessage
+            id="generalTests.maybeClerkStart"
+            defaultMessage="Si vous avez des tests dans votre projet mais que ce message persiste cela peut être dû à une installation incomplète de clerk, lancer la commande clerk start à la racine de votre projet pourrait résoudre ce problème"
+          />
+        </span>
       </div>
     );
   }

@@ -426,18 +426,25 @@ export async function activate(
 
     await initTests(entrypoints, context, client, ctrl, resultController);
 
+    const macroTestsView = new TestMacroController();
     context.subscriptions.push(
       vscode.commands.registerCommand(
         'catala.debugAllTests',
         async (_arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
-          const macroTestsView = new TestMacroController();
-          macroTestsView.createWebView(
-            client,
-            context,
-            entrypoints,
-            resultController,
-            ctrl
-          );
+          const columnToShowIn = vscode.window.activeTextEditor
+            ? vscode.window.activeTextEditor.viewColumn
+            : undefined;
+          if (macroTestsView.panel != undefined) {
+            macroTestsView.panel.reveal(columnToShowIn);
+          } else {
+            macroTestsView.createWebView(
+              client,
+              context,
+              entrypoints,
+              resultController,
+              ctrl
+            );
+          }
         }
       )
     );
