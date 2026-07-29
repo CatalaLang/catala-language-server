@@ -588,6 +588,8 @@ export async function activate(
     await switchTree.refresh();
   });
 
+  const language = vscode.env.language;
+
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('catala.settings', new tree_view([]))
   );
@@ -597,29 +599,29 @@ export async function activate(
     vscode.window.registerTreeDataProvider('catala.switches', switchTree)
   );
 
-  const language = vscode.env.language;
-
+  let titleBook = vscode.l10n.t('Open Catala book');
   let command_books: vscode.Command = {
-    title: 'Open Catala book',
+    title: titleBook,
     command: 'vscode.open',
     arguments: [
       vscode.Uri.parse(`https://book.catala-lang.org/${language}/0-intro.html`),
     ],
   };
   let catala_books = new Item({
-    label: 'Learn how to do catala',
+    label: titleBook,
     icon: new vscode.ThemeIcon('book'),
     command: command_books,
   });
-  catala_books.iconPath;
+
+  let titleGithub = vscode.l10n.t('Open the Catala GitHub repository');
 
   let command_github: vscode.Command = {
-    title: 'Open Github',
+    title: titleGithub,
     command: 'vscode.open',
     arguments: [vscode.Uri.parse(`https://github.com/CatalaLang/catala`)],
   };
   let catala_github = new Item({
-    label: 'Catala Github repository',
+    label: titleGithub,
     icon: new vscode.ThemeIcon('github'),
     command: command_github,
   });
