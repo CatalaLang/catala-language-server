@@ -226,9 +226,23 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3em;
   font-size: 2.2em;
   color: var(--vscode-input-placeholderForeground);
+}
+
+.info-text {
+  font-size: 1em;
+  text-align: center;
+}
+
+.help-text {
+  font-size: 0.8em;
+  text-align: center;
+}
+
+.no-tests .info-text,
+.no-tests .help-text {
+  padding: 1em;
 }
 
 .no-scope {

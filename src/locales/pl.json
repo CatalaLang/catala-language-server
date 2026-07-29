@@ -135,6 +135,7 @@
   "generalTests.header.gui": "Edytor Catala",
   "generalTests.associatedTests": "Powiązane testy: {count}",
   "generalTests.noTestsFound": "Nie znaleziono testów",
+  "generalTests.maybeClerkStart": "Jeśli Twój projekt zawiera testy, a ten komunikat nadal się pojawia, przyczyną może być niekompletna instalacja clerk; uruchomienie polecenia clerk start w katalogu głównym projektu może rozwiązać problem",
   "generalTests.noScopeFound": "Nie znaleziono zakresu",
   "generalTests.filters": "Filtry",
   "generalTests.guiOnly": "Tylko testy GUI",

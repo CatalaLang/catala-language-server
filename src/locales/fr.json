@@ -135,6 +135,7 @@
   "generalTests.header.gui": "GUI",
   "generalTests.associatedTests": "{count} tests associés",
   "generalTests.noTestsFound": "Aucun test trouvé",
+  "generalTests.maybeClerkStart": "Si vous avez des tests dans votre projet mais que ce message persiste cela peut être dû à une installation incomplète de clerk, lancer la commande clerk start à la racine de votre projet pourrait résoudre ce problème",
   "generalTests.noScopeFound": "Aucun Champ d'application trouvé",
   "generalTests.filters": "Filtres",
   "generalTests.guiOnly": "Tests GUI uniquement",

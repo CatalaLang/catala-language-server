@@ -123,7 +123,7 @@ export class TestMacroController {
             testController,
             testMap,
             resultController,
-            cwd!
+            cwd
           );
           let ids = typed_msg.value;
           if (ids.length == 0) {
@@ -298,7 +298,7 @@ export class TestMacroController {
       vscode.Uri.joinPath(context.extensionUri, 'dist', 'ui.js')
     );
 
-    const language = 'fr';
+    const language = vscode.env.language;
 
     return `
             <!DOCTYPE html>
