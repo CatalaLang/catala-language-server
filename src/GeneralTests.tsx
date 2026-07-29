@@ -184,7 +184,6 @@ function OpenGUI({
 }: {
   vscode: WebviewApi<unknown>;
   filename: string;
-  success: TestState;
 }): ReactElement {
   return (
     <span
@@ -260,7 +259,7 @@ function TestItem({ vscode, test, num, onRun }: TestItemArg): ReactElement {
           />
         </span>
         {isGui(test) ? (
-          <OpenGUI vscode={vscode} filename={test.filename} success={test} />
+          <OpenGUI vscode={vscode} filename={test.filename} />
         ) : (
           <OpenTextEditor vscode={vscode} filename={test.filename} />
         )}
@@ -364,7 +363,7 @@ function TestLine({
       </td>
       <td>
         {isGui(test) ? (
-          <OpenGUI vscode={vscode} filename={test.filename} success={test} />
+          <OpenGUI vscode={vscode} filename={test.filename} />
         ) : (
           <OpenTextEditor vscode={vscode} filename={test.filename} />
         )}
