@@ -7,10 +7,7 @@ import type {
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
-import {
-  TraceEditorProvider,
-  initReadTestCache,
-} from './extension/traceEditorProvider';
+import { TraceEditorProvider } from './extension/traceEditorProvider';
 import { initTraceCache } from './trace-editor/traceRunner';
 // Emitted to dist as `codicon.css`; linked into the trace-editor webview so the
 // vscode-elements icon component can find the Codicons font.
@@ -383,7 +380,27 @@ async function runScope(args?: RunArgs): Promise<void> {
     return;
   }
   const cwd = getCwd(args.uri);
-  const inputArgs = inputs ? ['--input', `'${JSON.stringify(inputs)}'`] : [];
+  // Single-quote a shell argument so spaces in paths survive. PowerShell
+  // escapes an embedded quote by doubling it; POSIX shells by '\''.
+  const sq = (s: string): string =>
+    args.headless
+      ? s
+      : process.platform === 'win32'
+        ? `'${s.replace(/'/g, "''")}'`
+        : `'${s.replace(/'/g, "'\\''")}'`;
+
+  let inputArgs: string[] = [];
+  if (inputs) {
+    const json = JSON.stringify(inputs);
+    // Single-quote the JSON; on Windows (PowerShell) also backslash-escape the
+    // inner double quotes so they survive the native-command re-parse.
+    const input = args.headless
+      ? json
+      : process.platform === 'win32'
+        ? `'${json.replace(/"/g, '\\"')}'`
+        : `'${json}'`;
+    inputArgs = ['--input', input];
+  }
 
   let traceOutputFile = args.traceOutputFile;
   if (args.withTrace && traceOutputFile === undefined) {
@@ -393,16 +410,20 @@ async function runScope(args?: RunArgs): Promise<void> {
     args.withTrace && traceOutputFile !== undefined
       ? ['--trace', traceOutputFile]
       : [];
-  const buildDirArgs = args.buildDir ? ['--build-dir', args.buildDir] : [];
+  const buildDirArgs = args.buildDir ? ['--build-dir', sq(args.buildDir)] : [];
+  const ninjaOutputArgs = args.ninjaOutput
+    ? ['--ninja-output-file', sq(args.ninjaOutput)]
+    : [];
 
   const clerkArgs = [
     'run',
-    args.uri,
+    sq(args.uri),
     '--scope',
     args.scope,
     ...inputArgs,
     ...traceArgs,
     ...buildDirArgs,
+    ...ninjaOutputArgs,
   ];
 
   if (args.headless) {
@@ -417,35 +438,8 @@ async function runScope(args?: RunArgs): Promise<void> {
       // (cmd.exe would need the opposite escaping).
       ...(process.platform === 'win32' && { shellPath: 'powershell.exe' }),
     });
-    // Single-quote a shell argument so spaces in paths survive. PowerShell
-    // escapes an embedded quote by doubling it; POSIX shells by '\''.
-    const sq = (s: string): string =>
-      process.platform === 'win32'
-        ? `'${s.replace(/'/g, "''")}'`
-        : `'${s.replace(/'/g, "'\\''")}'`;
-    let extra_args: string[] = [];
-    if (inputs) {
-      const json = JSON.stringify(inputs);
-      // Single-quote the JSON; on Windows (PowerShell) also backslash-escape the
-      // inner double quotes so they survive the native-command re-parse.
-      const quoted =
-        process.platform === 'win32'
-          ? `'${json.replace(/"/g, '\\"')}'`
-          : `'${json}'`;
-      extra_args = ['--input', quoted];
-    }
     term.show();
-    term.sendText(
-      [
-        clerkPath,
-        'run',
-        sq(args.uri),
-        '--scope',
-        args.scope,
-        ...extra_args,
-        ...clerkArgs,
-      ].join(' ')
-    );
+    term.sendText([clerkPath, ...clerkArgs].join(' '));
   }
 }
 
@@ -512,9 +506,8 @@ async function debugScope(args?: RunArgs): Promise<void> {
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
-  // Enable the persistent trace / read-test caches (stored under global storage).
+  // Enable the persistent trace cache (stored under global storage).
   initTraceCache(context.globalStorageUri.fsPath);
-  initReadTestCache(context.globalStorageUri.fsPath);
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
