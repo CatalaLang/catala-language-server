@@ -517,13 +517,16 @@ export function makeRunHandler(
   ctrl: vscode.TestController,
   test_map: TestMap,
   resultController: ResultController,
-  cwd: string
+  cwd: string | undefined
 ): RunHandler {
   const runHandler = async (
     request: vscode.TestRunRequest,
     cancellation: vscode.CancellationToken,
     with_coverage?: boolean
   ): Promise<void> => {
+    if (cwd == undefined) {
+      return;
+    }
     const run: vscode.TestRun = ctrl.createTestRun(request);
     const testFiles =
       request.include
@@ -628,7 +631,9 @@ export async function initTests(
     test_scopes_map.forEach(({ path, scopes }) =>
       populateTestItems(ctrl, test_map, path, scopes)
     );
-    cwd = getCwd(test_scopes_map?.[0]?.path);
+    if (test_scopes_map.length > 0) {
+      cwd = getCwd(test_scopes_map[0].path);
+    }
   };
 
   populateTestController(entrypoints);
@@ -648,7 +653,7 @@ export async function initTests(
   ctrl.refreshHandler = async (_token): Promise<void> =>
     await updateTestScopes();
 
-  const testRunHandler = makeRunHandler(ctrl, test_map, resultController, cwd!);
+  const testRunHandler = makeRunHandler(ctrl, test_map, resultController, cwd);
 
   ctrl.createRunProfile(
     'Run tests',

@@ -122,7 +122,7 @@ export class TestMacroController {
             testController,
             testMap,
             resultController,
-            cwd!
+            cwd
           );
           let ids = typed_msg.value;
           if (ids.length == 0) {
