@@ -82,7 +82,7 @@
       {
         "command": "catala.openWithTraceEditor",
         "icon": "$(graph)",
-        "title": "Open with Trace Editor"
+        "title": "%command.catala.openWithTraceEditor.title%"
       },
       {
         "command": "catala.openWithTestEditor",
