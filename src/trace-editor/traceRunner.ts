@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from 'fs';
+import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
@@ -29,40 +29,12 @@ export function readTraceFile(path: string): TraceResult {
   }
 }
 
-export function hashDir(dir: string): string {
-  const h = createHash('sha1');
-  const walk = (d: string): void => {
-    let entries;
-    try {
-      entries = readdirSync(d, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    entries.sort((a, b) => (a.name < b.name ? -1 : 1));
-    for (const e of entries) {
-      const p = join(d, e.name);
-      if (e.isDirectory()) {
-        walk(p);
-      } else {
-        try {
-          const st = statSync(p);
-          h.update(p).update(String(st.size)).update(String(st.mtimeMs));
-        } catch {
-          /* ignore unreadable entries */
-        }
-      }
-    }
-  };
-  walk(dir);
-  return h.digest('hex');
-}
-
 type CacheResult<T> = { scope: string; uri: string; result: T };
 type CacheBucket<T> = { date: number; results: CacheResult<T>[] };
 
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-export class PersistentCache<T, S> {
+class PersistentCache<T, S> {
   private readonly map = new Map<string, CacheBucket<T>>();
 
   constructor(
@@ -92,7 +64,7 @@ export class PersistentCache<T, S> {
         })),
       });
     }
-    this.persist(); // rewrite the file without the pruned buckets
+    this.persist();
   }
 
   private persist(): void {
@@ -129,6 +101,10 @@ export class PersistentCache<T, S> {
     this.map.set(hash, { date: Date.now(), results });
     this.persist();
   }
+
+  delete(hash: string): void {
+    if (this.map.delete(hash)) this.persist();
+  }
 }
 
 let traceCache: PersistentCache<TraceElement[], TraceElement[]> | undefined;
@@ -141,15 +117,43 @@ export function initTraceCache(storageDir: string): void {
   );
 }
 
+const TRACE_NINJA_FILE = join('_build', '_trace', 'clerk.ninja');
+
+function hashNinjaFile(file: string): string {
+  return createHash('sha1').update(readFileSync(file)).digest('hex');
+}
+
+function ninjaUpToDate(cwd: string): boolean {
+  if (!existsSync(join(cwd, TRACE_NINJA_FILE))) return false;
+  try {
+    const out = execFileSync('ninja', ['-f', TRACE_NINJA_FILE, '-n'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return out.includes('no work to do');
+  } catch {
+    return false;
+  }
+}
+
 export async function runTrace(
   uri: string,
   scope: string
 ): Promise<TraceResult> {
-  const traceBuildDir = join(getCwd(uri) ?? dirname(uri), '_build', '_trace');
-  const cached = traceCache?.find(hashDir(traceBuildDir), uri, scope);
-  if (cached !== undefined) {
-    logger.log(`Trace for scope "${scope}" (${uri}) served from cache.`);
-    return { ok: true, trace: cached };
+  const cwd = getCwd(uri) ?? dirname(uri);
+  const ninjaFile = join(cwd, TRACE_NINJA_FILE);
+  if (traceCache && existsSync(ninjaFile)) {
+    const key = hashNinjaFile(ninjaFile);
+    if (ninjaUpToDate(cwd)) {
+      const cached = traceCache.find(key, uri, scope);
+      if (cached !== undefined) {
+        logger.log(`Trace for scope "${scope}" (${uri}) served from cache.`);
+        return { ok: true, trace: cached };
+      }
+    } else {
+      traceCache.delete(key);
+    }
   }
   let tmpDir: string;
   try {
@@ -167,10 +171,11 @@ export async function runTrace(
       headless: true,
       traceOutputFile,
       buildDir: '_build/_trace',
+      ninjaOutput: '_build/_trace/clerk.ninja',
     });
     const result = readTraceFile(traceOutputFile);
-    if (result.ok) {
-      traceCache?.set(hashDir(traceBuildDir), uri, scope, result.trace);
+    if (result.ok && existsSync(ninjaFile)) {
+      traceCache?.set(hashNinjaFile(ninjaFile), uri, scope, result.trace);
     }
     return result;
   } catch (e) {

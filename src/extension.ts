@@ -7,10 +7,7 @@ import type {
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
-import {
-  TraceEditorProvider,
-  initReadTestCache,
-} from './extension/traceEditorProvider';
+import { TraceEditorProvider } from './extension/traceEditorProvider';
 import { initTraceCache } from './trace-editor/traceRunner';
 // Emitted to dist as `codicon.css`; linked into the trace-editor webview so the
 // vscode-elements icon component can find the Codicons font.
@@ -39,8 +36,6 @@ import { listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
 import { TestMacroController } from './test-case-editor/TestMacroController';
 
-// `icon` accepts either a file path (string) or a codicon via
-// `new vscode.ThemeIcon('github')` (id without the `codicon-` prefix).
 type ItemParam = {
   label: string;
   descr?: string | undefined;
@@ -49,15 +44,10 @@ type ItemParam = {
 };
 
 class Item extends vscode.TreeItem {
-  // we'll use the file and line later...
   readonly descr: string | undefined;
   readonly icon: vscode.ThemeIcon | undefined;
-  // children represent branches, which are also items
   public children: Item[] = [];
 
-  // add all members here, file and line we'll need later
-  // the label represent the text which is displayed in the tree
-  // and is passed to the base class
   constructor(param: ItemParam) {
     super(param.label, vscode.TreeItemCollapsibleState.None);
     this.descr = param.descr;
@@ -66,23 +56,16 @@ class Item extends vscode.TreeItem {
     this.collapsibleState = vscode.TreeItemCollapsibleState.None;
   }
 
-  // a public method to add childs, and with additional branches
-  // we want to make the item collabsible
   public add_child(child: Item): void {
     this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
     this.children.push(child);
   }
 }
 
-// 1. we'll export this class and use it in our extension later
-// 2. we need to implement vscode.TreeDataProvider
 export class tree_view implements vscode.TreeDataProvider<Item> {
-  // m_data holds all tree items
   private switches: Item[] = [];
-  // with the vscode.EventEmitter we can refresh our  tree view
   private m_onDidChangeTreeData: vscode.EventEmitter<Item | undefined> =
     new vscode.EventEmitter<Item | undefined>();
-  // and vscode will access the event by using a readonly onDidChangeTreeData (this member has to be named like here, otherwise vscode doesnt update our treeview.
   readonly onDidChangeTreeData?: vscode.Event<Item | undefined> =
     this.m_onDidChangeTreeData.event;
 
@@ -90,7 +73,6 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
     this.switches = switches;
   }
 
-  // we need to implement getTreeItem to receive items from our tree view
   public getTreeItem(
     element: Item
   ): vscode.TreeItem | Thenable<vscode.TreeItem> {
@@ -101,7 +83,6 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
     return item;
   }
 
-  // and getChildren
   public getChildren(element: Item | undefined): vscode.ProviderResult<Item[]> {
     if (element === undefined) {
       return this.switches;
@@ -210,7 +191,27 @@ async function runScope(args?: RunArgs): Promise<void> {
     return;
   }
   const cwd = getCwd(args.uri);
-  const inputArgs = inputs ? ['--input', `'${JSON.stringify(inputs)}'`] : [];
+  // Single-quote a shell argument so spaces in paths survive. PowerShell
+  // escapes an embedded quote by doubling it; POSIX shells by '\''.
+  const sq = (s: string): string =>
+    args.headless
+      ? s
+      : process.platform === 'win32'
+        ? `'${s.replace(/'/g, "''")}'`
+        : `'${s.replace(/'/g, "'\\''")}'`;
+
+  let inputArgs: string[] = [];
+  if (inputs) {
+    const json = JSON.stringify(inputs);
+    // Single-quote the JSON; on Windows (PowerShell) also backslash-escape the
+    // inner double quotes so they survive the native-command re-parse.
+    const input = args.headless
+      ? json
+      : process.platform === 'win32'
+        ? `'${json.replace(/"/g, '\\"')}'`
+        : `'${json}'`;
+    inputArgs = ['--input', input];
+  }
 
   let traceOutputFile = args.traceOutputFile;
   if (args.withTrace && traceOutputFile === undefined) {
@@ -220,16 +221,20 @@ async function runScope(args?: RunArgs): Promise<void> {
     args.withTrace && traceOutputFile !== undefined
       ? ['--trace', traceOutputFile]
       : [];
-  const buildDirArgs = args.buildDir ? ['--build-dir', args.buildDir] : [];
+  const buildDirArgs = args.buildDir ? ['--build-dir', sq(args.buildDir)] : [];
+  const ninjaOutputArgs = args.ninjaOutput
+    ? ['--ninja-output-file', sq(args.ninjaOutput)]
+    : [];
 
   const clerkArgs = [
     'run',
-    args.uri,
+    sq(args.uri),
     '--scope',
     args.scope,
     ...inputArgs,
     ...traceArgs,
     ...buildDirArgs,
+    ...ninjaOutputArgs,
   ];
 
   if (args.headless) {
@@ -244,35 +249,8 @@ async function runScope(args?: RunArgs): Promise<void> {
       // (cmd.exe would need the opposite escaping).
       ...(process.platform === 'win32' && { shellPath: 'powershell.exe' }),
     });
-    // Single-quote a shell argument so spaces in paths survive. PowerShell
-    // escapes an embedded quote by doubling it; POSIX shells by '\''.
-    const sq = (s: string): string =>
-      process.platform === 'win32'
-        ? `'${s.replace(/'/g, "''")}'`
-        : `'${s.replace(/'/g, "'\\''")}'`;
-    let extra_args: string[] = [];
-    if (inputs) {
-      const json = JSON.stringify(inputs);
-      // Single-quote the JSON; on Windows (PowerShell) also backslash-escape the
-      // inner double quotes so they survive the native-command re-parse.
-      const quoted =
-        process.platform === 'win32'
-          ? `'${json.replace(/"/g, '\\"')}'`
-          : `'${json}'`;
-      extra_args = ['--input', quoted];
-    }
     term.show();
-    term.sendText(
-      [
-        clerkPath,
-        'run',
-        sq(args.uri),
-        '--scope',
-        args.scope,
-        ...extra_args,
-        ...clerkArgs,
-      ].join(' ')
-    );
+    term.sendText([clerkPath, ...clerkArgs].join(' '));
   }
 }
 
@@ -339,9 +317,8 @@ async function debugScope(args?: RunArgs): Promise<void> {
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
-  // Enable the persistent trace / read-test caches (stored under global storage).
+  // Enable the persistent trace cache (stored under global storage).
   initTraceCache(context.globalStorageUri.fsPath);
-  initReadTestCache(context.globalStorageUri.fsPath);
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
