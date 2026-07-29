@@ -614,45 +614,106 @@ class catala_lsp_server =
             self#on_doc_did_close ~notify_back doc_id)
         changes
 
-    method private scan_project ~notify_back
+    method private scan_project ~(notify_back : Jsonrpc2.notify_back)
         ({ St.projects; open_documents; module_cache; diagnostics = _ } as
          sstate) =
-      let diagnostics, open_documents =
+      let* progress =
+        let w, r = Lwt.wait () in
+        let init_token = `String "init_progress" in
+        let* _req_id =
+          notify_back#send_request
+            (WorkDoneProgressCreate
+               (WorkDoneProgressCreateParams.create ~token:init_token))
+            (function
+              | Ok () ->
+                let notify_progress tok =
+                  notify_back#send_notification
+                    (Server_notification.WorkDoneProgress
+                       { token = init_token; value = tok })
+                in
+                Lwt.wakeup r (Some notify_progress);
+                Lwt.return_unit
+              | Error _r ->
+                Log.warn (fun m ->
+                    m "could not setup scanning project progress");
+                Lwt.wakeup r None;
+                Lwt.return_unit)
+        in
+        let* k = w in
+        match k with
+        | None -> Lwt.return (fun _ -> Lwt.return_unit)
+        | Some k -> Lwt.return k
+      in
+      let nb_files =
         Projects.Projects.fold
-          (fun project documents ->
+          (fun project acc -> Doc_id.Map.cardinal project.project_files + acc)
+          projects 0
+      in
+      let* () =
+        let begin_token =
+          WorkDoneProgressBegin.create ~cancellable:false
+            ~title:"Catala project scan" ~percentage:100 ()
+        in
+        progress (Progress.Begin begin_token)
+      in
+      let* _, (diagnostics, open_documents) =
+        Projects.Projects.fold
+          (fun project acc ->
             Doc_id.Map.fold
-              (fun doc_id _ (diagnostics, documents) ->
-                if Projects.is_an_included_file doc_id project then
-                  (* We do not consider included files *)
-                  diagnostics, documents
-                else
-                  (* Affected files are necessarily present in the project *)
-                  let project_file =
-                    Option.get @@ Projects.find_file_in_project doc_id project
-                  in
-                  let document =
-                    match Doc_id.Map.find_opt doc_id documents with
-                    | None ->
-                      St.make_document St.Saved doc_id project project_file
-                    | Some document -> document
-                  in
-                  let _is_valid, document, document_diagnostics =
-                    let get_module_content =
-                      Server_state.get_module_content sstate
+              (fun doc_id _ r ->
+                let* n, (diagnostics, documents) = r in
+                let* () =
+                  let progress_token =
+                    let percentage =
+                      Float.round (100. *. (float (succ n) /. float nb_files))
+                      |> int_of_float
+                      |> min 99
                     in
-                    unlocked_process_document ~get_module_content document
-                      open_documents
+                    WorkDoneProgressReport.create ~cancellable:false
+                      ~message:
+                        (Format.asprintf "%d%% %a" percentage Doc_id.format
+                           doc_id)
+                      ~percentage ()
                   in
-                  let new_diagnostics =
-                    merge_diags document_diagnostics diagnostics
-                  in
-                  new_diagnostics, Doc_id.Map.add doc_id document documents)
-              project.project_files documents)
+                  progress (Report progress_token)
+                in
+                let acc =
+                  if Projects.is_an_included_file doc_id project then
+                    (* We do not consider included files *)
+                    diagnostics, documents
+                  else
+                    (* Affected files are necessarily present in the project *)
+                    let project_file =
+                      Option.get @@ Projects.find_file_in_project doc_id project
+                    in
+                    let document =
+                      match Doc_id.Map.find_opt doc_id documents with
+                      | None ->
+                        St.make_document St.Saved doc_id project project_file
+                      | Some document -> document
+                    in
+                    let _is_valid, document, document_diagnostics =
+                      let get_module_content =
+                        Server_state.get_module_content sstate
+                      in
+                      unlocked_process_document ~get_module_content document
+                        open_documents
+                    in
+                    let new_diagnostics =
+                      merge_diags document_diagnostics diagnostics
+                    in
+                    new_diagnostics, Doc_id.Map.add doc_id document documents
+                in
+                Lwt.return (succ n, acc))
+              project.project_files acc)
           projects
-          (Doc_id.Map.empty, open_documents)
+          (Lwt.return (0, (Doc_id.Map.empty, open_documents)))
       in
       let sstate = { St.projects; open_documents; module_cache; diagnostics } in
       let* () = unlocked_send_all_diagnostics ~notify_back sstate in
+      let* () =
+        progress (End (WorkDoneProgressEnd.create ~message:"Scanning done" ()))
+      in
       Lwt.return sstate
 
     method! on_notification_unhandled ~notify_back (n : Client_notification.t) =
