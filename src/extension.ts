@@ -34,6 +34,27 @@ import {
 } from './extension/catalaFolding';
 import path from 'path';
 
+const itemMessagesFR = {
+  openCatalaBook: 'Ouvrir le manuel de Catala',
+  github: 'Ouvrir le répertoire GitHub de Catala',
+};
+
+const itemMessagesEN = {
+  openCatalaBook: 'Open Catala book',
+  github: 'Open the Catala GitHub repository',
+};
+
+const itemMessagesPL = {
+  openCatalaBook: 'Otwórz podręcznik Catala',
+  github: 'Otwórz repozytorium Catala na GitHubie',
+};
+
+const itemMessages: Record<string, Record<string, string>> = {
+  fr: itemMessagesFR,
+  en: itemMessagesEN,
+  pl: itemMessagesPL,
+};
+
 // `icon` are codicon id, the (id without the `codicon-` prefix).
 // `new vscode.ThemeIcon('github')`
 type ItemParam = {
@@ -578,34 +599,39 @@ export async function activate(
     await switchTree.refresh();
   });
 
+  // Can't use Intl to retrieve message from the json, also tried
+  // to retrieve it manually but encountered an undefined
+  const language = vscode.env.language;
+  const itemMsg = itemMessages[language];
+
   context.subscriptions.push(
     // note: we need to provide the same name here as we added in the package.json file
     vscode.window.registerTreeDataProvider('catala.switches', switchTree)
   );
 
-  const language = vscode.env.language;
-
+  let titleBook = itemMsg['openCatalaBook'];
   let command_books: vscode.Command = {
-    title: 'Open Catala book',
+    title: titleBook,
     command: 'vscode.open',
     arguments: [
       vscode.Uri.parse(`https://book.catala-lang.org/${language}/0-intro.html`),
     ],
   };
   let catala_books = new Item({
-    label: 'Learn how to do catala',
+    label: titleBook,
     icon: new vscode.ThemeIcon('book'),
     command: command_books,
   });
-  catala_books.iconPath;
+
+  let titleGithub = itemMsg['github'];
 
   let command_github: vscode.Command = {
-    title: 'Open Github',
+    title: titleGithub,
     command: 'vscode.open',
     arguments: [vscode.Uri.parse(`https://github.com/CatalaLang/catala`)],
   };
   let catala_github = new Item({
-    label: 'Catala Github repository',
+    label: titleGithub,
     icon: new vscode.ThemeIcon('github'),
     command: command_github,
   });
