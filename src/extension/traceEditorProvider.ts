@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
 import type { LanguageClient } from 'vscode-languageclient/node';
 import { listEntrypoints } from './lspRequests';
 import type { CatalaEntrypoint } from './lspRequests';
@@ -12,51 +11,12 @@ import type {
   TraceDownMessage,
   TraceUpMessage,
 } from '../trace-editor/messages';
-import {
-  PersistentCache,
-  hashDir,
-  readTraceFile,
-  runTrace,
-} from '../trace-editor/traceRunner';
+import { readTraceFile, runTrace } from '../trace-editor/traceRunner';
 import type { TraceElement } from '../trace-editor/traceUtils';
-import type { ParseResults, Test } from '../generated/catala_types';
-import {
-  readParseResults,
-  writeParseResults,
-  writeTest,
-} from '../generated/catala_types';
+import type { Test } from '../generated/catala_types';
+import { writeTest } from '../generated/catala_types';
 
 const fileLineCache = new Map<string, string>();
-
-let readTestCache: PersistentCache<ParseResults, unknown> | undefined;
-
-export function initReadTestCache(storageDir: string): void {
-  readTestCache = new PersistentCache<ParseResults, unknown>(
-    join(storageDir, 'read-test-cache.json'),
-    (v) => writeParseResults(v),
-    (v) => readParseResults(v)
-  );
-}
-
-function cachedReadTests(
-  content: string,
-  file: string,
-  lang: string | undefined,
-  scope: string | undefined
-): ParseResults {
-  const cwd = getCwd(file) ?? dirname(file);
-  const hash = hashDir(join(cwd, '_build'));
-  const hit = readTestCache?.find(hash, file, scope ?? '');
-  if (hit !== undefined) {
-    logger.log(
-      `Tests for "${file}"${scope ? ` (scope "${scope}")` : ''} served from cache.`
-    );
-    return hit;
-  }
-  const result = parseTestFile(content, file, lang, scope);
-  readTestCache?.set(hash, file, scope ?? '', result);
-  return result;
-}
 
 function extractLine(file: string, line: number): string | null {
   const key = `${file}:${line}`;
@@ -100,10 +60,23 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
 
   private static readonly pendingInputs = new Map<string, TraceEditorInputs>();
 
+  private static readonly openEditors = new Map<
+    string,
+    {
+      panel: vscode.WebviewPanel;
+      sendInit: (inputs?: TraceEditorInputs) => Promise<void>;
+    }
+  >();
+
   public static openWith(
     uri: vscode.Uri,
     inputs: TraceEditorInputs
   ): Thenable<unknown> {
+    const existing = TraceEditorProvider.openEditors.get(uri.fsPath);
+    if (existing !== undefined) {
+      existing.panel.reveal();
+      return existing.sendInit(inputs);
+    }
     TraceEditorProvider.pendingInputs.set(uri.fsPath, inputs);
     return vscode.commands.executeCommand(
       'vscode.openWith',
@@ -161,69 +134,65 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
       webview.postMessage(message);
     }
 
+    const sendInit = async (ins?: TraceEditorInputs): Promise<void> => {
+      let scopesWithInfo: Map<string, Test | undefined> = new Map();
+      let scope = ins?.scope;
+      if (ins?.test) {
+        const test = ins.test;
+        scope = test.testing_scope;
+        scopesWithInfo = new Map([[test.testing_scope, test]]);
+      } else {
+        const client = this.getClient();
+        if (client) {
+          try {
+            const entrypoints = await listEntrypoints(
+              client,
+              [{ kind: 'Test' }, { kind: 'GUI' }, { kind: 'NoInputScope' }],
+              file,
+              false,
+              true
+            );
+            const scopes = entrypoints.map(scopeName);
+            const lang = file.match(/\.catala_(\w+)/)?.[1];
+            const parsed = parseTestFile(document.getText(), file, lang, scope);
+            if (parsed.kind === 'Results') {
+              scopesWithInfo = new Map(
+                scopes.map((s) => [
+                  s,
+                  parsed.value.find((t) => t.testing_scope == s),
+                ])
+              );
+            } else {
+              scopesWithInfo = new Map(scopes.map((s) => [s, undefined]));
+              logger.log(
+                `Trace editor: could not parse tests (${parsed.kind}).`
+              );
+            }
+          } catch (e) {
+            logger.log(`Trace editor: could not list scopes: ${String(e)}`);
+          }
+        }
+      }
+      postToWebView({
+        kind: 'init',
+        file,
+        cwd: getCwd(file) ?? '',
+        scopes: [...scopesWithInfo].map(([s, test]): [string, JsonValue] => [
+          s,
+          test ? (writeTest(test) as JsonValue) : null,
+        ]),
+        scope,
+        trace: ins?.trace,
+        run: ins?.run,
+      });
+    };
+
     webviewPanel.webview.onDidReceiveMessage(async (raw: unknown) => {
       const message = raw as TraceUpMessage;
       switch (message.kind) {
-        case 'ready': {
-          let scopesWithInfo: Map<string, Test | undefined> = new Map();
-          let scope = inputs?.scope;
-          if (inputs?.test) {
-            const test = inputs.test;
-            scope = test.testing_scope;
-            scopesWithInfo = new Map([[test.testing_scope, test]]);
-          } else {
-            const client = this.getClient();
-            if (client) {
-              try {
-                const entrypoints = await listEntrypoints(
-                  client,
-                  [{ kind: 'Test' }, { kind: 'GUI' }, { kind: 'NoInputScope' }],
-                  file,
-                  false,
-                  true
-                );
-                const scopes = entrypoints.map(scopeName);
-                const lang = file.match(/\.catala_(\w+)/)?.[1];
-                const parsed = cachedReadTests(
-                  document.getText(),
-                  file,
-                  lang,
-                  scope
-                );
-                if (parsed.kind === 'Results') {
-                  scopesWithInfo = new Map(
-                    scopes.map((s) => [
-                      s,
-                      parsed.value.find((t) => t.testing_scope == s),
-                    ])
-                  );
-                } else {
-                  scopesWithInfo = new Map(scopes.map((s) => [s, undefined]));
-                  logger.log(
-                    `Trace editor: could not parse tests (${parsed.kind}).`
-                  );
-                }
-              } catch (e) {
-                logger.log(`Trace editor: could not list scopes: ${String(e)}`);
-              }
-            }
-          }
-          postToWebView({
-            kind: 'init',
-            file,
-            cwd: getCwd(file) ?? '',
-            scopes: [...scopesWithInfo].map(
-              ([s, test]): [string, JsonValue] => [
-                s,
-                test ? (writeTest(test) as JsonValue) : null,
-              ]
-            ),
-            scope,
-            trace: inputs?.trace,
-            run: inputs?.run,
-          });
+        case 'ready':
+          await sendInit(inputs);
           break;
-        }
         case 'run': {
           const scope = message.scope.trim();
           if (!scope) {
@@ -282,6 +251,16 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
           postToWebView({ kind: 'extract', id: message.id, text });
           break;
         }
+      }
+    });
+
+    TraceEditorProvider.openEditors.set(file, {
+      panel: webviewPanel,
+      sendInit,
+    });
+    webviewPanel.onDidDispose(() => {
+      if (TraceEditorProvider.openEditors.get(file)?.panel === webviewPanel) {
+        TraceEditorProvider.openEditors.delete(file);
       }
     });
   }

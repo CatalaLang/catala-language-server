@@ -305,7 +305,6 @@ export class TestCaseEditorProvider
           scopeStr !== undefined && parsed.kind === 'Results'
             ? parsed.value.find((t) => t.testing_scope === scopeStr)
             : undefined;
-        logger.log('Use trace provider to open');
         await TraceEditorProvider.openWith(document.uri, {
           scope: scopeStr,
           test,
