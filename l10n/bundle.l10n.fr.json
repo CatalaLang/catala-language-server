@@ -35,5 +35,7 @@
   "The following settings will be updated:": "Les paramètres suivants seront mis à jour:",
   "Settings changed !": "Paramètres modifiés !",
   "Yes": "Oui",
-  "No": "Non"
+  "No": "Non",
+  "Open Catala book": "Ouvrir le manuel de Catala",
+  "Open the Catala GitHub repository": "Ouvrir le répertoire GitHub de Catala"
 }
