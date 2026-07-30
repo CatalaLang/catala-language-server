@@ -49,18 +49,21 @@
       "catala": [
         {
           "id": "catala.openAllTests",
-          "name": "%view.catala.openAllTests.title%"
+          "name": "%view.catala.openAllTests.title%",
+          "icon": "$(menu)"
         },
         {
           "id": "catala.help",
-          "name": "%view.catala.help.title%"
+          "name": "%view.catala.help.title%",
+          "icon": "$(info)"
         }
       ],
       "catala-exceptions-panel": [
         {
           "type": "webview",
           "id": "catala.exceptionsView",
-          "name": "%view.catala.exceptionsView.name%"
+          "name": "%view.catala.exceptionsView.name%",
+          "icon": "$(graph-line)"
         }
       ]
     },
