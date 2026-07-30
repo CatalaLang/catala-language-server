@@ -144,10 +144,13 @@ export function runTestScope(
   const cwd = getCwd(filename);
   if (cwd) {
     const relFilename = path.relative(cwd, filename);
-    //compile dependencies (hack), do not fail on asserts
-    execBinary(clerkPath, ['run', '-c--no-fail-on-assert', relFilename], {
-      cwd,
-    });
+    // compile dependencies (hack); without --scope clerk only builds what the
+    // file's *test* scopes need. Non-zero exit expected (inputs), ignored.
+    execBinary(
+      clerkPath,
+      ['run', '-c--no-fail-on-assert', '--scope', testScope, relFilename],
+      { cwd }
+    );
     // if (!clerkResult.ok) {
     //   window.showErrorMessage(clerkResult.stderr);
     //   return { kind: 'Error', value: clerkResult.stderr };
