@@ -573,8 +573,14 @@ class catala_lsp_server =
               (fun _doc_id new_diag _ -> Some new_diag)
               new_diagnostics existing_diagnostics
           in
+          let new_open_documents = Doc_id.Map.remove doc_id open_documents in
           let new_state =
-            { St.projects; open_documents; module_cache; diagnostics }
+            {
+              St.projects;
+              open_documents = new_open_documents;
+              module_cache;
+              diagnostics;
+            }
           in
           let* () = unlocked_send_all_diagnostics ~notify_back new_state in
           Lwt.return new_state
