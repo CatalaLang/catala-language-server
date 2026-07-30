@@ -507,8 +507,25 @@ class catala_lsp_server =
         @@ fun () -> process_saved_file ~notify_back server_state doc_id
 
     method on_notif_doc_did_open ~notify_back d ~content:_ =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri d.uri in
-      self#process_saved_document ~notify_back doc_id
+      if should_ignore doc_id then Lwt.return_unit
+      else
+        protect_project_not_found
+        @@ fun () ->
+        St.use_and_update server_state
+        @@ fun ({ open_documents; _ } as sstate) ->
+        if Doc_id.Map.mem doc_id open_documents then
+          (* Document exists: it should have been processed, do nothing. *)
+          Lwt.return sstate
+        else
+          let new_state = unlocked_process_file St.Saved doc_id sstate in
+          let* () =
+            unlocked_send_all_diagnostics ~doc_id ~notify_back new_state
+          in
+          (* Invalidate the cache *)
+          Server_state.unload_module_content new_state doc_id;
+          Lwt.return new_state
 
     method private document_changed ~notify_back ~new_contents doc_id =
       let* () = server_initialized in
@@ -592,42 +609,8 @@ class catala_lsp_server =
         (fun { FileEvent.uri; type_ } ->
           let doc_id = Doc_id.of_lsp_uri uri in
           match type_ with
-          | Created ->
-            (* If the file is created, we should try to reload its project so
-               that we're not missing any file. *)
-            let* () =
-              St.use_and_update server_state (fun sstate ->
-                  let project =
-                    Projects.lookup_project doc_id sstate.projects
-                  in
-                  let projects =
-                    match project with
-                    | None ->
-                      (* Not finding any project for a new file should not happen *)
-                      (* Let's just log a warning in the console *)
-                      Log.warn (fun m -> m "No project found");
-                      sstate.projects
-                    | Some project ->
-                      (* Found a project for the doc_id, reload the project to
-                         update the existing file, the reload should add the
-                         fresh created file *)
-                      let _reloaded, projects =
-                        Projects.reload_project
-                          ~on_error:(fun (_doc_id, _range, _diagnostic) ->
-                            Log.err (fun m ->
-                                m "Error when calling reload_project"))
-                          project sstate.projects
-                      in
-                      projects
-                  in
-                  (* Update the server_state *)
-                  Lwt.return { sstate with projects })
-            in
-            self#process_saved_document ~notify_back doc_id
-          | Changed -> self#process_saved_document ~notify_back doc_id
-          | Deleted ->
-            let* () = self#on_doc_delete ~notify_back doc_id in
-            self#on_doc_did_close ~notify_back doc_id)
+          | Created | Changed -> self#process_saved_document ~notify_back doc_id
+          | Deleted -> self#on_doc_delete ~notify_back doc_id)
         changes
 
     method private scan_project ~(notify_back : Jsonrpc2.notify_back)
@@ -918,19 +901,9 @@ class catala_lsp_server =
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
-    method private on_doc_did_close ~notify_back:_ (doc_id : Doc_id.t) =
-      let* () = server_initialized in
-      if should_ignore doc_id then Lwt.return_unit
-      else
-        St.use_and_update server_state
-        @@ fun { projects; open_documents; module_cache; diagnostics } ->
-        let open_documents = Doc_id.Map.remove doc_id open_documents in
-        let diagnostics = Doc_id.Map.remove doc_id diagnostics in
-        Lwt.return { St.projects; open_documents; module_cache; diagnostics }
-
-    method on_notif_doc_did_close ~notify_back d =
-      let* () = server_initialized in
-      self#on_doc_did_close ~notify_back (Doc_id.of_lsp_uri d.uri)
+    method on_notif_doc_did_close ~notify_back:_ _d =
+      (* Do nothing, we update documents through other requests *)
+      Lwt.return_unit
 
     method! on_req_completion ~notify_back:_ ~id:_ ~uri ~pos ~ctx:_
         ~workDoneToken:_ ~partialResultToken:_ doc_state =
