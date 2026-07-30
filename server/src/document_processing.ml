@@ -109,6 +109,110 @@ let lsp_errors_to_diag doc_id errors =
     (Doc_id.Map.singleton doc_id Range.Map.empty)
     errors
 
+let hash_local_context (ctx : Desugared.Name_resolution.context) : Hash.t =
+  let {
+    Desugared.Name_resolution.scopes;
+    topdefs;
+    structs;
+    enums;
+    abstract_types;
+    var_typs;
+    modules = _;
+    local;
+  } =
+    ctx
+  in
+  let strip = None in
+  let open Desugared.Name_resolution in
+  let open Hash in
+  let open Op in
+  let hash_typ = Type.hash ~strip in
+  let local_scopes =
+    ScopeName.Map.filter (fun sn _ -> ScopeName.path sn = []) scopes
+  in
+  let local_scopes_hash =
+    let hash_scope { scope_visibility; _ } =
+      (* we will get its real interface through [var_typs] *)
+      Hash.raw scope_visibility
+    in
+    ScopeName.Map.filter (fun sn _ -> ScopeName.path sn = []) scopes
+    |> map ScopeName.Map.fold (ScopeName.hash ~strip) hash_scope
+  in
+  let local_topdefs =
+    let hash_topdef (typ, vis) = Hash.raw (hash_typ typ, vis) in
+    TopdefName.Map.filter (fun td _ -> TopdefName.path td = []) topdefs
+    |> map TopdefName.Map.fold (TopdefName.hash ~strip) hash_topdef
+  in
+  let local_structs =
+    let hash_struct (struct_ctx, vis) =
+      map StructField.Map.fold StructField.hash hash_typ struct_ctx
+      % Hash.raw vis
+    in
+    StructName.Map.filter (fun sn _ -> StructName.path sn = []) structs
+    |> map StructName.Map.fold (StructName.hash ~strip) hash_struct
+  in
+  let local_enums =
+    let hash_enum (enum_ctx, vis) =
+      map EnumConstructor.Map.fold EnumConstructor.hash hash_typ enum_ctx
+      % Hash.raw vis
+    in
+    EnumName.Map.filter (fun en _ -> EnumName.path en = []) enums
+    |> map EnumName.Map.fold (EnumName.hash ~strip) hash_enum
+  in
+  let local_abs_typs =
+    AbstractType.Map.filter
+      (fun en _ -> AbstractType.path en = [])
+      abstract_types
+    |> map AbstractType.Map.fold (AbstractType.hash ~strip) raw
+  in
+  let local_var_typs =
+    let var_typs =
+      let local_scopes_vars =
+        ScopeName.Map.fold
+          (fun _sn { var_idmap; _ } s ->
+            Ident.Map.fold
+              (fun _id sv s ->
+                match sv with
+                | ScopeVar sv | SubScope (sv, _) -> ScopeVar.Set.add sv s)
+              var_idmap s)
+          local_scopes ScopeVar.Set.empty
+      in
+      ScopeVar.Map.filter
+        (fun sv _ -> ScopeVar.Set.mem sv local_scopes_vars)
+        var_typs
+    in
+    let hash_var_sig
+        {
+          var_sig_typ;
+          var_sig_is_condition = _;
+          var_sig_parameters;
+          var_sig_io;
+          var_sig_states_idmap = _;
+          var_sig_states_list;
+        } =
+      let hash_io
+          {
+            Surface.Ast.scope_decl_context_io_input;
+            scope_decl_context_io_output;
+          } =
+        raw (Mark.remove scope_decl_context_io_input)
+        % raw scope_decl_context_io_output
+      in
+      hash_typ var_sig_typ
+      % option (fun (l, _) -> list hash_typ (List.map snd l)) var_sig_parameters
+      % hash_io var_sig_io
+      % list StateName.hash var_sig_states_list
+    in
+    map ScopeVar.Map.fold ScopeVar.hash hash_var_sig var_typs
+  in
+  local_scopes_hash
+  % local_topdefs
+  % local_structs
+  % local_enums
+  % local_abs_typs
+  % local_var_typs
+  % map Ident.Map.fold Ident.hash ModuleName.hash local.used_modules
+
 let surface_to_scopelang
     ~on_error
     ~get_errors
@@ -199,11 +303,11 @@ let surface_to_scopelang
     let modules_content : Surface.Ast.module_content Uid.Module.Map.t =
       Uid.Module.Map.map (fun elt -> fst elt) modules
     in
-    let ctx, modules_contents = ctx, modules_content in
     let desugared =
-      Desugared.From_surface.translate_program ctx modules_contents surface
+      Desugared.From_surface.translate_program ctx modules_content surface
     in
     let prg = Desugared.Disambiguate.program desugared in
+    let sig_hash = hash_local_context ctx in
     let () = Desugared.Linting.lint_program prg in
     let exceptions_graphs =
       Scopelang.From_desugared.build_exceptions_graph prg
@@ -214,18 +318,24 @@ let surface_to_scopelang
     in
     let jump_table =
       lazy
-        (Jump_table.populate options.input_src ctx modules_contents surface prg)
+        (Jump_table.populate options.input_src ctx modules_content surface prg)
     in
     let used_modules : ModuleName.t File.Map.t =
       Ident.Map.bindings mod_uses |> File.Map.of_list
     in
+    let r =
+      {
+        Server_state.surface;
+        desugared;
+        sig_hash;
+        prg;
+        used_modules;
+        jump_table;
+      }
+    in
     match process_pending_errors ~on_error () with
-    | Error () ->
-      Partial
-        ( lsp_errors_to_diag doc_id (get_errors ()),
-          { Server_state.surface; desugared; prg; used_modules; jump_table } )
-    | Ok () ->
-      k { Server_state.surface; desugared; prg; used_modules; jump_table })
+    | Error () -> Partial (lsp_errors_to_diag doc_id (get_errors ()), r)
+    | Ok () -> k r)
 
 let process
     ~(resolve_file_content : string -> string Global.input_src)
