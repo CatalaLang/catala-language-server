@@ -474,6 +474,7 @@ export async function activate(
       new tree_view([catala_utils])
     )
   );
+  logger.log(`Register "Catala Tests" data in th Tree data provider`);
 
   let command_books: Command = {
     title: language == 'fr' ? 'Ouvrir le livre Catala' : 'Open Catala book',
@@ -512,14 +513,20 @@ export async function activate(
       new tree_view([catala_books, catala_github])
     )
   );
+  logger.log(
+    `Register "Catala Help and feedback" data in th Tree data provider`
+  );
 
   // Always register the custom editor providers
   context.subscriptions.push(
     TestCaseEditorProvider.register(context, codiconsCssPath)
   );
+  logger.log(`Register "Catala Test case editor"`);
+
   context.subscriptions.push(
     TraceEditorProvider.register(context, () => client, codiconsCssPath)
   );
+  logger.log(`Register "Catala Trace Editor"`);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -553,6 +560,7 @@ export async function activate(
       showExceptionsAtCursor(client)
     )
   );
+  logger.log(`Register "Catala Exception View"`);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -571,6 +579,7 @@ export async function activate(
 
   // Ensure the logger is disposed when the extension is deactivated
   context.subscriptions.push({ dispose: () => logger.dispose() });
+  logger.log(`Activate Catala extension`);
 }
 
 export function deactivate(): Thenable<void> | undefined {

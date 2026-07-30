@@ -863,16 +863,17 @@ function Loading({
   return (
     <div
       style={{
-        position: 'absolute',
-        inset: 0,
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        margin: 'auto',
       }}
     >
       <span
         className="codicon codicon-loading codicon-modifier-spin"
-        style={{ fontSize }}
+        style={{
+          fontSize,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
       />
     </div>
   );
