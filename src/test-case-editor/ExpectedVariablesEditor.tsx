@@ -10,6 +10,8 @@ import {
   traceVariablesForTest,
   traceValueEqual,
   traceValueFromRuntime,
+  variablePath,
+  variableSegment,
 } from '../trace-editor/traceUtils';
 import type { Test } from '../generated/catala_types';
 
@@ -76,7 +78,7 @@ function filterExpectedVariables(
 ): TraceVariable[] {
   const out: TraceVariable[] = [];
   for (const tv of variables) {
-    const pr = prefix ? `${prefix}.${tv.name}` : tv.name;
+    const pr = variablePath(prefix, tv);
     if (tv.kind === 'step') {
       variables = filterExpectedVariables(tv.variables, {}, testVariables, pr);
       out.push({ ...tv, variables });
@@ -372,7 +374,7 @@ function ScopeRow({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const show = open || !!filtering;
-  const scopePath = prefix ? `${prefix}.${node.name}` : node.name;
+  const scopePath = variablePath(prefix, node);
   const cellStyle = {
     background: 'var(--vscode-sideBarSectionHeader-background)',
     paddingBottom: show ? '0.5em' : undefined,
@@ -385,7 +387,9 @@ function ScopeRow({
             className={`codicon codicon-chevron-${show ? 'down' : 'right'}`}
           />
         </td>
-        <td style={{ ...cellStyle, fontWeight: 600 }}>{node.name}</td>
+        <td style={{ ...cellStyle, fontWeight: 600 }}>
+          {variableSegment(node)}
+        </td>
         <td
           colSpan={3}
           style={{ ...cellStyle, color: 'var(--vscode-descriptionForeground)' }}
@@ -431,7 +435,7 @@ function ValueRow({
   ) {
     return null;
   }
-  const path = prefix ? `${prefix}.${node.name}` : node.name;
+  const path = variablePath(prefix, node);
   const computedStr = formatTraceValue(computed);
   const trimmed = input.trim();
   const addValue = trimmed ? parseAs(computed.kind, trimmed) : null;

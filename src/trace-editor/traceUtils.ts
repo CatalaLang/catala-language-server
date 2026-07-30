@@ -54,6 +54,8 @@ export type TraceVariable =
       name: string;
       variables: TraceVariable[];
       value?: TraceValue;
+      index?: number;
+      source?: TraceElement;
     };
 
 export type TraceTest = {
@@ -384,14 +386,6 @@ export function traceFromJson(trace: JsonValue): TraceElement[] | null {
   return !looksLikeTrace ? null : (elements as TraceElement[]);
 }
 
-export function str(v: unknown): string {
-  return typeof v === 'string' ? v : '';
-}
-
-export function uncapitalize(s: string): string {
-  return s.charAt(0).toLowerCase() + s.slice(1);
-}
-
 function mergeSteps(l: TraceVariable[]): TraceVariable[] {
   let acc: TraceVariable[] = [];
   for (const tv of l) {
@@ -453,6 +447,7 @@ function traceVariablesAux(
           name: k.name,
           variables,
           value: te.value,
+          source: te,
         });
       }
     } else {
@@ -467,8 +462,52 @@ function traceVariablesAux(
   return acc;
 }
 
+function indexDuplicateSteps(variables: TraceVariable[]): TraceVariable[] {
+  const counts = new Map<string, number>();
+  for (const v of variables) {
+    if (v.kind === 'step') counts.set(v.name, (counts.get(v.name) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  return variables.map((v) => {
+    if (v.kind !== 'step') return v;
+    const step = { ...v, variables: indexDuplicateSteps(v.variables) };
+    if ((counts.get(v.name) ?? 0) > 1) {
+      const i = seen.get(v.name) ?? 0;
+      seen.set(v.name, i + 1);
+      return { ...step, index: i };
+    }
+    return step;
+  });
+}
+
 function traceVariables(trace: TraceElement[]): TraceVariable[] {
-  return mergeSteps(traceVariablesAux(trace));
+  return indexDuplicateSteps(mergeSteps(traceVariablesAux(trace)));
+}
+
+export function stepIndexMap(trace: TraceElement[]): Map<TraceElement, number> {
+  const map = new Map<TraceElement, number>();
+  const walk = (variables: TraceVariable[]): void => {
+    for (const v of variables) {
+      if (v.kind !== 'step') continue;
+      if (v.index !== undefined && v.source !== undefined) {
+        map.set(v.source, v.index);
+      }
+      walk(v.variables);
+    }
+  };
+  walk(traceVariables(trace));
+  return map;
+}
+
+export function variableSegment(v: TraceVariable): string {
+  return v.kind === 'step' && v.index !== undefined
+    ? `${v.name}[${v.index}]`
+    : v.name;
+}
+
+export function variablePath(prefix: string, v: TraceVariable): string {
+  const segment = variableSegment(v);
+  return prefix ? `${prefix}.${segment}` : segment;
 }
 
 export function findTraceValue(
@@ -477,7 +516,7 @@ export function findTraceValue(
   prefix = ''
 ): TraceValue | undefined {
   for (const v of variables) {
-    const childPath = prefix ? `${prefix}.${v.name}` : v.name;
+    const childPath = variablePath(prefix, v);
     if (childPath === path) return v.value;
     if (v.kind === 'step') {
       const tv = findTraceValue(path, v.variables, childPath);
