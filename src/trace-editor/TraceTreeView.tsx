@@ -15,11 +15,10 @@ import {
   type TraceValue,
   type TraceTest,
   formatTraceValue,
-  str,
   traceValueEqual,
   traceValueFromRuntime,
   traceVariablesForTest,
-  uncapitalize,
+  stepIndexMap,
 } from './traceUtils';
 import { FormattedMessage, useIntl, type IntlShape } from 'react-intl';
 
@@ -43,6 +42,7 @@ type Described = {
 };
 
 const ExpectedContext = createContext<Expected | null>(null);
+const IndexContext = createContext<Map<TraceElement, number>>(new Map());
 const CwdContext = createContext<string>('');
 const ExpandContext = createContext<ExpandCommand | null>(null);
 
@@ -53,6 +53,10 @@ function resolvePath(cwd: string, file: string): string {
   return `${cwd.replace(/[\\/]+$/, '')}/${file}`;
 }
 
+function detail(x: JsonValue): string {
+  return typeof x === 'string' ? x : '';
+}
+
 function describe(kind: TraceKind, intl: IntlShape): Described {
   const t = (id: string): string => intl.formatMessage({ id });
   switch (kind.kind) {
@@ -60,7 +64,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
       return {
         symbol: '→',
         label: t('trace.kind.scope'),
-        detail: str(kind.name),
+        detail: detail(kind.name),
         tone: 'scope',
         showsValue: true,
       };
@@ -74,7 +78,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
       return {
         symbol: '≔',
         label,
-        detail: str(kind.name),
+        detail: detail(kind.name),
         tone: 'plain',
         showsValue: true,
       };
@@ -83,7 +87,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
       return {
         symbol: '≔',
         label: t('trace.kind.localVariable'),
-        detail: str(kind.name),
+        detail: detail(kind.name),
         tone: 'plain',
         showsValue: true,
       };
@@ -101,7 +105,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
       return {
         symbol: '→',
         label: t('trace.kind.function'),
-        detail: str(kind.name),
+        detail: detail(kind.name),
         tone: 'scope',
         showsValue: true,
       };
@@ -123,7 +127,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
       return {
         symbol: '⊸',
         label: t('trace.kind.branchCase'),
-        detail: str(kind.constructor),
+        detail: detail(kind.constructor as unknown as JsonValue),
         tone: 'branch',
         showsValue: false,
       };
@@ -138,7 +142,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
       return {
         symbol: '⊕',
         label: t('trace.kind.definition'),
-        detail: kind.label !== undefined ? str(kind.label) : undefined,
+        detail: kind.label !== undefined ? detail(kind.label) : undefined,
         tone: 'plain',
         showsValue: false,
       };
@@ -146,7 +150,9 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
       return {
         symbol: '⨉',
         label: t('trace.kind.error'),
-        detail: [str(kind.type), str(kind.message)].filter(Boolean).join(': '),
+        detail: [detail(kind.type), detail(kind.message)]
+          .filter(Boolean)
+          .join(': '),
         tone: 'error',
         showsValue: false,
       };
@@ -173,7 +179,6 @@ function toneColor(tone: Tone): string | undefined {
   }
 }
 
-/** Related source locations attached to an `error` element. */
 function relatedLocations(kind: TraceKind): CodeLocation[] {
   const rp = kind.related_pos;
   return Array.isArray(rp) ? (rp as unknown as CodeLocation[]) : [];
@@ -189,7 +194,6 @@ function posText(pos?: CodeLocation): string {
   return `${pos.file}:${line}`;
 }
 
-/** A clickable link that opens the file at the given position in a new tab. */
 function formatPos(
   pos: CodeLocation | undefined,
   inline = false
@@ -232,8 +236,6 @@ function PosLink({
     </a>
   );
 }
-
-// -- Source line extraction (lazy request/response with the extension) --------
 
 const extractCache = new Map<string, string | null>();
 const pendingExtracts = new Map<number, (line: string | null) => void>();
@@ -389,6 +391,15 @@ function subtreeMatches(
   return children.some((c) => subtreeMatches(c, filter, intl));
 }
 
+function indexedSegment(
+  el: TraceElement,
+  name: string,
+  stepIndices: Map<TraceElement, number>
+): string {
+  const index = stepIndices.get(el);
+  return index !== undefined ? `${name}[${index}]` : name;
+}
+
 function nodeMatchState(
   expected: Expected,
   path: string,
@@ -404,7 +415,8 @@ function nodeMatchState(
 function subtreeHasMismatch(
   el: TraceElement,
   childPrefix: string,
-  expected: Expected
+  expected: Expected,
+  stepIndices: Map<TraceElement, number>
 ): boolean {
   const newPrefix = (c: TraceElement): string => {
     if (
@@ -413,11 +425,8 @@ function subtreeHasMismatch(
         c.element.kind === 'local_var') &&
       typeof c.element.name === 'string'
     ) {
-      if (childPrefix) {
-        return `${childPrefix}.${c.element.name}`;
-      } else {
-        return c.element.name;
-      }
+      const segment = indexedSegment(c, c.element.name, stepIndices);
+      return childPrefix ? `${childPrefix}.${segment}` : segment;
     } else {
       return childPrefix;
     }
@@ -429,7 +438,7 @@ function subtreeHasMismatch(
     el.trace !== undefined
   ) {
     const scopeMismatch = el.trace.some((c) =>
-      subtreeHasMismatch(c, newPrefix(c), expected)
+      subtreeHasMismatch(c, newPrefix(c), expected, stepIndices)
     );
     if (scopeMismatch) return true;
   }
@@ -442,7 +451,9 @@ function subtreeHasMismatch(
     }
   }
   if (el.trace !== undefined) {
-    return el.trace.some((c) => subtreeHasMismatch(c, newPrefix(c), expected));
+    return el.trace.some((c) =>
+      subtreeHasMismatch(c, newPrefix(c), expected, stepIndices)
+    );
   }
   return false;
 }
@@ -496,7 +507,9 @@ export default function TraceTreeView({
   }
 
   let expected: Expected | null = null;
+  let stepIndices: Map<TraceElement, number> = new Map();
   if (test !== undefined) {
+    stepIndices = stepIndexMap(trace);
     const [, outputs] = traceVariablesForTest(trace, test.tested_scope.name);
     const output: Map<string, Match> = new Map();
     for (const [name, io] of test.test_outputs.entries()) {
@@ -516,18 +529,20 @@ export default function TraceTreeView({
     <CwdContext.Provider value={cwd ?? ''}>
       <ExpandContext.Provider value={expand ?? null}>
         <ExpectedContext.Provider value={expected}>
-          <ul style={rootListStyle}>
-            {roots.map((el, i) => (
-              <TraceNode
-                key={i}
-                te={el}
-                depth={0}
-                filter={f}
-                prefix=""
-                tested_scope={testedScope}
-              />
-            ))}
-          </ul>
+          <IndexContext.Provider value={stepIndices}>
+            <ul style={rootListStyle}>
+              {roots.map((el, i) => (
+                <TraceNode
+                  key={i}
+                  te={el}
+                  depth={0}
+                  filter={f}
+                  prefix=""
+                  tested_scope={testedScope}
+                />
+              ))}
+            </ul>
+          </IndexContext.Provider>
         </ExpectedContext.Provider>
       </ExpandContext.Provider>
     </CwdContext.Provider>
@@ -551,6 +566,7 @@ function TraceNode({
 
   const filtering = filter.length > 0;
   const expected = useContext(ExpectedContext);
+  const stepIndices = useContext(IndexContext);
   const intl = useIntl();
 
   const singleLinePos =
@@ -565,7 +581,7 @@ function TraceNode({
   const consPos = fulfilled ? asCodeLocation(te.element.cons_pos) : undefined;
   const consSingleLine = isSingleLine(consPos) ? consPos : undefined;
 
-  const [te2, name2, isMerged]: [TraceElement, string, boolean] =
+  const [node, displayName, isMerged]: [TraceElement, string, boolean] =
     te.element.kind === 'scope_var' &&
     typeof te.element.name === 'string' &&
     te.trace?.length === 1 &&
@@ -574,7 +590,7 @@ function TraceNode({
       ? [te.trace[0], `${te.element.name}.${te.trace[0].element.name}`, true]
       : [te, te.element.name as string, false];
 
-  const children = te2.trace ?? [];
+  const children = node.trace ?? [];
   const hasChildren = children.length > 0;
   const containerValue =
     te.element.kind !== 'if_branching' &&
@@ -595,7 +611,7 @@ function TraceNode({
     !consSingleLine;
 
   const defaultExpanded =
-    te2.element.kind === 'assertion'
+    node.element.kind === 'assertion'
       ? hasChildren
       : onlyContainerValue
         ? false
@@ -615,26 +631,22 @@ function TraceNode({
   let childPrefix: string = prefix;
   let testedScope: string | undefined = tested_scope;
   if (
-    (te2.element.kind === 'scope_call' ||
-      te2.element.kind === 'scope_var' ||
-      te2.element.kind === 'local_var') &&
-    typeof te2.element.name === 'string'
+    (node.element.kind === 'scope_call' ||
+      node.element.kind === 'scope_var' ||
+      node.element.kind === 'local_var') &&
+    typeof node.element.name === 'string'
   ) {
-    if (te2.element.name == tested_scope) {
+    if (node.element.name == tested_scope) {
       testedScope = undefined;
-    } else if (isMerged && prefix) {
-      childPrefix = `${prefix}.${name2}`;
-    } else if (isMerged) {
-      childPrefix = name2;
-    } else if (prefix) {
-      childPrefix = `${prefix}.${te2.element.name}`;
     } else {
-      childPrefix = te2.element.name;
+      const segment = indexedSegment(node, displayName, stepIndices);
+      childPrefix = prefix ? `${prefix}.${segment}` : segment;
     }
   }
 
   const hasMismatch =
-    expected !== null && subtreeHasMismatch(te2, childPrefix, expected);
+    expected !== null &&
+    subtreeHasMismatch(node, childPrefix, expected, stepIndices);
   useEffect(() => {
     if (hasMismatch) {
       setExpanded(true);
@@ -643,23 +655,21 @@ function TraceNode({
 
   const open = expanded;
 
-  if (filtering && !subtreeMatches(te2, filter, intl)) {
+  if (filtering && !subtreeMatches(node, filter, intl)) {
     return null;
   }
   const childFilter =
-    filtering && !filterMatches(te2, filter, intl) ? filter : '';
+    filtering && !filterMatches(node, filter, intl) ? filter : '';
 
   let matchBackground: string | undefined;
   if (
     expected &&
-    te2.value !== undefined &&
-    (te2.element.kind === 'scope_var' || te2.element.kind === 'local_var') &&
-    typeof te2.element.name === 'string'
+    node.value !== undefined &&
+    (node.element.kind === 'scope_var' || node.element.kind === 'local_var') &&
+    typeof node.element.name === 'string'
   ) {
-    const path = prefix
-      ? `${prefix}.${uncapitalize(te2.element.name)}`
-      : uncapitalize(te2.element.name);
-    const state = nodeMatchState(expected, path, te2.value);
+    const path = prefix ? `${prefix}.${node.element.name}` : node.element.name;
+    const state = nodeMatchState(expected, path, node.value);
     if (state !== undefined) {
       matchBackground =
         state === 'mismatch'
@@ -673,21 +683,20 @@ function TraceNode({
         symbol: '→',
         label: intl.formatMessage(
           { id: 'trace.computationOf' },
-          { name: `${str(te.element.name)} (${str(te2.element.name)})` }
+          { name: `${detail(te.element.name)} (${detail(node.element.name)})` }
         ),
         tone: 'scope',
         showsValue: true,
       }
-    : describe(te2.element, intl);
-  // Assertions are coloured by their result: green when satisfied, red when not.
+    : describe(node.element, intl);
   const accentColor =
-    te2.element.kind === 'assertion'
-      ? !te2.trace
+    node.element.kind === 'assertion'
+      ? !node.trace
         ? 'var(--vscode-testing-iconPassed, var(--vscode-charts-green))'
         : 'var(--vscode-errorForeground)'
       : toneColor(described.tone);
   const related =
-    te2.element.kind === 'error' ? relatedLocations(te2.element) : [];
+    node.element.kind === 'error' ? relatedLocations(node.element) : [];
 
   return (
     <li style={liStyle}>
@@ -855,8 +864,6 @@ const rowStyle: CSSProperties = {
   gap: 6,
   padding: '1px 0',
   whiteSpace: 'nowrap',
-  // Size each row to its content so the tree overflows (and the root list
-  // scrolls) horizontally rather than truncating long lines.
   width: 'max-content',
   minWidth: '100%',
 };
