@@ -614,7 +614,7 @@ export type TestRunHandler = (
 ) => Promise<void>;
 
 export async function initTests(
-  entrypoints: CatalaEntrypoint[],
+  entrypoints: Promise<CatalaEntrypoint[]>,
   context: vscode.ExtensionContext,
   client: LanguageClient,
   ctrl: vscode.TestController,
@@ -636,7 +636,7 @@ export async function initTests(
     }
   };
 
-  populateTestController(entrypoints);
+  populateTestController(await entrypoints);
 
   const updateTestScopes: () => Promise<void> = async () => {
     const entrypoints = await listEntrypoints(

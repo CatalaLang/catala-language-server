@@ -560,9 +560,7 @@ export async function activate(
       clientOptions
     );
 
-    await client.start();
-
-    let entrypoints = await listEntrypoints(
+    let entrypointsRequest = listEntrypoints(
       client,
       [{ kind: 'GUI' }, { kind: 'Test' }],
       undefined,
@@ -570,7 +568,7 @@ export async function activate(
       true
     ).finally(() => ctrl.items.replace([]));
 
-    await initTests(entrypoints, context, client, ctrl, resultController);
+    initTests(entrypointsRequest, context, client, ctrl, resultController);
 
     const macroTestsView = new TestMacroController();
     context.subscriptions.push(
@@ -586,7 +584,7 @@ export async function activate(
             macroTestsView.createWebView(
               client,
               context,
-              entrypoints,
+              entrypointsRequest,
               resultController,
               ctrl
             );
@@ -728,8 +726,6 @@ export async function activate(
     )
   );
   logger.log(`Register "Catala Exception View"`);
-
-  // register_memoryFileProvider(context);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
