@@ -340,19 +340,28 @@ function VariableCatalog({
       />
       <table style={{ borderCollapse: 'collapse', width: '100%' }}>
         <tbody>
-          {filtered.map((v, i) =>
-            v.kind === 'step' ? (
-              <ScopeRow
-                key={i}
+          {filtered
+            .filter(
+              (v): v is Extract<TraceVariable, { kind: 'value' }> =>
+                v.kind === 'value' && outputs[v.name] === undefined
+            )
+            .map((v, i) => (
+              <ValueRow key={`v-${i}`} node={v} crumbs={[]} onAdd={onAdd} />
+            ))}
+          {filtered
+            .filter(
+              (v): v is Extract<TraceVariable, { kind: 'step' }> =>
+                v.kind === 'step'
+            )
+            .map((v, i) => (
+              <StepRow
+                key={`s-${i}`}
                 node={v}
-                prefix=""
+                crumbs={[]}
                 onAdd={onAdd}
                 filtering={q !== ''}
               />
-            ) : outputs[v.name] === undefined ? (
-              <ValueRow key={i} node={v} prefix="" onAdd={onAdd} />
-            ) : null
-          )}
+            ))}
         </tbody>
       </table>
     </>
@@ -360,23 +369,71 @@ function VariableCatalog({
 }
 
 const firstColStyle = { width: '1.5em' };
+const stepBorder = '1px solid var(--vscode-sideBarSectionHeader-background)';
 
-function ScopeRow({
+function toDisplayCrumbs(crumbs: string[]): { text: string; index: boolean }[] {
+  const out: { text: string; index: boolean }[] = [];
+  for (const c of crumbs) {
+    const m = /^(.+?)(\[\d+\])$/.exec(c);
+    if (m) {
+      out.push({ text: m[1], index: false }, { text: m[2], index: true });
+    } else {
+      out.push({ text: c, index: false });
+    }
+  }
+  return out;
+}
+
+function Breadcrumb({ crumbs }: { crumbs: string[] }): ReactElement {
+  const display = toDisplayCrumbs(crumbs);
+  const boldIdx = display.reduce((acc, c, i) => (c.index ? acc : i), -1);
+  return (
+    <>
+      {display.map((c, i) => (
+        <span key={i}>
+          {i > 0 && (
+            <span
+              style={{
+                color: 'var(--vscode-descriptionForeground)',
+                margin: '0 0.4em',
+              }}
+            >
+              /
+            </span>
+          )}
+          <span
+            style={
+              i === boldIdx
+                ? { fontWeight: 600 }
+                : { color: 'var(--vscode-descriptionForeground)' }
+            }
+          >
+            {c.text}
+          </span>
+        </span>
+      ))}
+    </>
+  );
+}
+
+function StepRow({
   node,
-  prefix,
+  crumbs,
   onAdd,
   filtering,
 }: {
   node: Extract<TraceVariable, { kind: 'step' }>;
-  prefix: string;
+  crumbs: string[];
   onAdd(path: string, tv: TraceValue | null): void;
   filtering?: boolean;
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const show = open || !!filtering;
-  const scopePath = variablePath(prefix, node);
+  const selfCrumbs = [...crumbs, ...variableSegment(node).split('.')];
   const cellStyle = {
     background: 'var(--vscode-sideBarSectionHeader-background)',
+    borderTop: stepBorder,
+    borderBottom: show ? undefined : stepBorder,
     paddingBottom: show ? '0.5em' : undefined,
   };
   return (
@@ -387,41 +444,52 @@ function ScopeRow({
             className={`codicon codicon-chevron-${show ? 'down' : 'right'}`}
           />
         </td>
-        <td style={{ ...cellStyle, fontWeight: 600 }}>
-          {variableSegment(node)}
-        </td>
-        <td
-          colSpan={3}
-          style={{ ...cellStyle, color: 'var(--vscode-descriptionForeground)' }}
-        >
-          {scopePath}
+        <td colSpan={4} style={cellStyle}>
+          <Breadcrumb crumbs={selfCrumbs} />
         </td>
       </tr>
-      {show &&
-        node.variables.map((v, i) =>
-          v.kind === 'step' ? (
-            <ScopeRow
-              key={i}
-              node={v}
-              prefix={scopePath}
-              onAdd={onAdd}
-              filtering={filtering}
-            />
-          ) : (
-            <ValueRow key={i} node={v} prefix={scopePath} onAdd={onAdd} />
-          )
-        )}
+      {show && (
+        <>
+          {node.variables
+            .filter(
+              (v): v is Extract<TraceVariable, { kind: 'value' }> =>
+                v.kind === 'value'
+            )
+            .map((v, i) => (
+              <ValueRow
+                key={`v-${i}`}
+                node={v}
+                crumbs={selfCrumbs}
+                onAdd={onAdd}
+              />
+            ))}
+          {node.variables
+            .filter(
+              (v): v is Extract<TraceVariable, { kind: 'step' }> =>
+                v.kind === 'step'
+            )
+            .map((v, i) => (
+              <StepRow
+                key={`s-${i}`}
+                node={v}
+                crumbs={selfCrumbs}
+                onAdd={onAdd}
+                filtering={filtering}
+              />
+            ))}
+        </>
+      )}
     </>
   );
 }
 
 function ValueRow({
   node,
-  prefix,
+  crumbs,
   onAdd,
 }: {
   node: Extract<TraceVariable, { kind: 'value' }>;
-  prefix: string;
+  crumbs: string[];
   onAdd(path: string, tv: TraceValue | null): void;
 }): ReactElement | null {
   const intl = useIntl();
@@ -435,7 +503,7 @@ function ValueRow({
   ) {
     return null;
   }
-  const path = variablePath(prefix, node);
+  const path = variablePath(crumbs.join('.'), node);
   const computedStr = formatTraceValue(computed);
   const trimmed = input.trim();
   const addValue = trimmed ? parseAs(computed.kind, trimmed) : null;
@@ -443,7 +511,11 @@ function ValueRow({
 
   return (
     <tr>
-      <td style={firstColStyle} />
+      <td
+        style={{
+          ...firstColStyle,
+        }}
+      />
       <td>{node.name}</td>
       <td>{computedStr ?? ''}</td>
       <td>
@@ -456,7 +528,7 @@ function ValueRow({
           style={{ width: '100%' }}
         />
       </td>
-      <td style={{ whiteSpace: 'nowrap' }}>
+      <td style={{ display: 'flex' }}>
         <VscodeButton
           secondary
           icon="arrow-left"
@@ -472,6 +544,7 @@ function ValueRow({
           icon="add"
           disabled={addDisabled}
           title={intl.formatMessage({ id: 'testEditor.addVariable' })}
+          style={{ flexGrow: 1 }}
           onClick={() => {
             if (addValue !== undefined) {
               onAdd(path, addValue);
