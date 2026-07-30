@@ -21,6 +21,7 @@ open Server_types
 type valid_result = {
   surface : Surface.Ast.program;
   desugared : Desugared.Ast.program;
+  sig_hash : Hash.t;
   prg : typed Scopelang.Ast.program;
   used_modules : ModuleName.t File.Map.t;
   jump_table : Jump_table.t Lazy.t;
@@ -42,6 +43,7 @@ type document_state = {
   project_file : Projects.project_file;
   last_valid_result : valid_result option;
   last_result : processing_result option;
+  last_saved_intf : Hash.t option;
 }
 
 val make_document :
