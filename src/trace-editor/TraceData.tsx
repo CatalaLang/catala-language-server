@@ -194,6 +194,8 @@ function VarRowView({ row }: { row: VarRow }): ReactElement {
   );
 }
 
+// -- Styles --------------------------------------------------------------------
+
 const ioPanelStyle: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
