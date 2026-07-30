@@ -216,8 +216,12 @@ let unlocked_process_document
       else false, document, diags
     end
     | Valid result ->
+      let last_saved_intf =
+        if document.buffer_state = Saved then Some result.sig_hash
+        else document.last_saved_intf
+      in
       ( true,
-        { document with last_valid_result = Some result },
+        { document with last_valid_result = Some result; last_saved_intf },
         (* We need to put an empty singleton in diags, otherwise the underlying
            mechanism doesn't update the previous error... *)
         Doc_id.Map.singleton document.document_id Range.Map.empty )
@@ -335,16 +339,17 @@ let unlocked_process_file
     ({ St.projects; open_documents; diagnostics; module_cache } as sstate) :
     St.server_state =
   let doc_errors, on_error = make_error_handler () in
-  let document, projects =
+  let document, projects, prev_sig_hash =
     Doc_id.Map.find_opt doc_id open_documents
     |> function
-    | Some document -> { document with buffer_state }, projects
+    | Some document ->
+      { document with buffer_state }, projects, document.last_saved_intf
     | None ->
       let (project_file, project), new_projects_opt =
         lookup_project ~on_error doc_id projects
       in
       let projects = Option.value ~default:projects new_projects_opt in
-      St.make_document buffer_state doc_id project project_file, projects
+      St.make_document buffer_state doc_id project project_file, projects, None
   in
   let is_valid, new_document, document_diagnostics =
     let get_module_content = Server_state.get_module_content sstate in
@@ -380,8 +385,13 @@ let unlocked_process_file
         merge_diags document_diagnostics
           (Doc_id.Map.of_list included_files_empty_diags) )
   in
+  let has_interface_changed =
+    match prev_sig_hash, new_document.last_saved_intf with
+    | Some h, Some h' -> h <> h'
+    | _ -> true
+  in
   let should_process_dependencies =
-    is_fully_saved && is_valid && !scan_project_config
+    is_fully_saved && is_valid && !scan_project_config && has_interface_changed
   in
   let new_server_state =
     (* Update server state with the new processed document : we will add updated
