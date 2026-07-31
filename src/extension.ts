@@ -28,6 +28,7 @@ import {
   getCwd,
   hasResourceUri,
   resolveBinaryPath,
+  shellArg,
 } from './shared/util_client';
 import type { RunArgs } from './shared/util_client';
 import { initTests, ResultController } from './extension/testAndCoverage';
@@ -172,7 +173,12 @@ function asyncRun(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const options = cwd ? { cwd } : undefined;
-    const proc = spawn(command, args, options);
+    // clerk is a .cmd wrapper on Windows: needs a shell, hence quoted args.
+    const useShell = process.platform === 'win32';
+    const proc = spawn(command, useShell ? args.map(shellArg) : args, {
+      shell: useShell,
+      ...options,
+    });
     proc.stdout.on('data', (data: Buffer) => {
       logger.log(data.toString());
     });
