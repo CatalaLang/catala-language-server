@@ -390,7 +390,11 @@ function TestLine({
   );
 }
 
-function HeaderLine({ expected }: { expected: string[] }): ReactElement {
+function HeaderLine({
+  expected,
+}: {
+  expected?: string[] | undefined;
+}): ReactElement {
   return (
     <thead>
       <tr>
@@ -409,9 +413,7 @@ function HeaderLine({ expected }: { expected: string[] }): ReactElement {
             defaultMessage="Description"
           />
         </td>
-        {expected.map((value) => (
-          <td>{value}</td>
-        ))}
+        {expected?.map((value) => <td>{value}</td>)}
         <td>
           <FormattedMessage
             id="generalTests.header.lastTestDate"
@@ -587,29 +589,37 @@ function CardGrid({
   }
 }
 
-function TestList({ vscode, onRun, tests }: CardGridArg): ReactElement {
-  let map = new Map<string, [Set<string>, OriginalTest[]]>();
+function TestList({
+  vscode,
+  onRun,
+  tests,
+  filteredScope,
+}: CardGridArg): ReactElement {
+  let map = new Map<string, OriginalTest[]>();
   let not_gui: OriginalTest[] = [];
   for (let index = 0; index < tests.length; index++) {
     const element = tests[index];
     if (element.test.test.kind == 'GUI') {
       let scope = element.test.test.value.scope_tested;
-      let [expected, scopeList] = map.get(scope) ?? [new Set<string>(), []];
+      let scopeList = map.get(scope) ?? [];
       scopeList.push(element);
-      map.set(scope, [expected, scopeList]);
+      map.set(scope, scopeList);
     } else {
       not_gui.push(element);
     }
   }
+  let allTests: [string, OriginalTest[]][] =
+    filteredScope.length == 0
+      ? [['Tests', [...map.values()].flat()]]
+      : [...map.entries()];
   return (
     <>
-      {[...map.entries()].map(([testedScope, [allExpected, tests]]) => {
-        let expected = [...allExpected.keys()];
+      {allTests.map(([testedScope, tests]) => {
         return (
           <>
             <h1>{testedScope}</h1>
             <table className="test-list">
-              <HeaderLine expected={expected} />
+              <HeaderLine />
               <tbody>
                 {tests.map(({ test, index }) => (
                   <TestLine
@@ -617,7 +627,7 @@ function TestList({ vscode, onRun, tests }: CardGridArg): ReactElement {
                     test={test}
                     num={index}
                     onRun={onRun}
-                    expected={expected}
+                    expected={[]}
                   />
                 ))}
               </tbody>
@@ -629,7 +639,7 @@ function TestList({ vscode, onRun, tests }: CardGridArg): ReactElement {
         <>
           <h1>Autres Tests</h1>
           <table className="test-list">
-            <HeaderLine expected={[]} />
+            <HeaderLine />
             <tbody>
               {not_gui.map(({ test, index }) => {
                 return (
@@ -853,16 +863,17 @@ function Loading({
   return (
     <div
       style={{
-        position: 'absolute',
-        inset: 0,
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        margin: 'auto',
       }}
     >
       <span
         className="codicon codicon-loading codicon-modifier-spin"
-        style={{ fontSize }}
+        style={{
+          fontSize,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
       />
     </div>
   );

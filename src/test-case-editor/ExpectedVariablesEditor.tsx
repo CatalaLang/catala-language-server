@@ -436,6 +436,22 @@ function StepRow({
     borderBottom: show ? undefined : stepBorder,
     paddingBottom: show ? '0.5em' : undefined,
   };
+
+  let stateVariables = new Map<string, TraceVariable[]>();
+  for (let nodeVar of node.variables.filter(
+    (v): v is Extract<TraceVariable, { kind: 'value' }> =>
+      v.kind === 'value' && v.name.includes('#')
+  )) {
+    let stateVar = nodeVar.name.split('#');
+    if (stateVar.length != 2) {
+      console.log(`Unexpected state variable ${nodeVar.name}`);
+      continue;
+    }
+    let existingState = stateVariables.get(stateVar[0]) ?? [];
+    // let stateNodeVar = { ...nodeVar, name: stateVar[1] };
+    existingState.push(nodeVar);
+    stateVariables.set(stateVar[0], existingState);
+  }
   return (
     <>
       <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
@@ -453,7 +469,7 @@ function StepRow({
           {node.variables
             .filter(
               (v): v is Extract<TraceVariable, { kind: 'value' }> =>
-                v.kind === 'value'
+                v.kind === 'value' && !v.name.includes('#')
             )
             .map((v, i) => (
               <ValueRow
@@ -463,6 +479,15 @@ function StepRow({
                 onAdd={onAdd}
               />
             ))}
+          {[...stateVariables.entries()].map(([stateName, nodes]) => (
+            <StateRow
+              varName={stateName}
+              nodes={nodes}
+              crumbs={selfCrumbs}
+              onAdd={onAdd}
+              filtering={filtering}
+            />
+          ))}
           {node.variables
             .filter(
               (v): v is Extract<TraceVariable, { kind: 'step' }> =>
@@ -483,13 +508,71 @@ function StepRow({
   );
 }
 
+function StateRow({
+  varName,
+  nodes,
+  crumbs,
+  onAdd,
+  filtering,
+}: {
+  varName: string;
+  nodes: TraceVariable[];
+  crumbs: string[];
+  onAdd(path: string, tv: TraceValue | null): void;
+  filtering?: boolean;
+}): ReactElement {
+  const [open, setOpen] = useState(false);
+  const show = open || !!filtering;
+  return (
+    <>
+      <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
+        <td
+          style={{
+            ...firstColStyle,
+          }}
+        />
+        <td
+          colSpan={4}
+          style={{ display: 'flex', alignItems: 'center', ...firstColStyle }}
+        >
+          <span
+            style={{ paddingRight: '0.2em' }}
+            className={`codicon codicon-chevron-${show ? 'down' : 'right'}`}
+          />
+          {varName}
+        </td>
+      </tr>
+      {show && (
+        <>
+          {nodes
+            .filter(
+              (v): v is Extract<TraceVariable, { kind: 'value' }> =>
+                v.kind === 'value'
+            )
+            .map((v, i) => (
+              <ValueRow
+                padding={true}
+                key={`v-${i}`}
+                node={v}
+                crumbs={crumbs}
+                onAdd={onAdd}
+              />
+            ))}
+        </>
+      )}
+    </>
+  );
+}
+
 function ValueRow({
   node,
   crumbs,
+  padding,
   onAdd,
 }: {
   node: Extract<TraceVariable, { kind: 'value' }>;
   crumbs: string[];
+  padding?: boolean | undefined;
   onAdd(path: string, tv: TraceValue | null): void;
 }): ReactElement | null {
   const intl = useIntl();
@@ -508,7 +591,9 @@ function ValueRow({
   const trimmed = input.trim();
   const addValue = trimmed ? parseAs(computed.kind, trimmed) : null;
   const addDisabled = trimmed !== '' && addValue === undefined;
-
+  const splittedName = node.name.split('#');
+  const prettyName =
+    splittedName.length == 1 ? splittedName[0] : splittedName[1];
   return (
     <tr>
       <td
@@ -516,7 +601,15 @@ function ValueRow({
           ...firstColStyle,
         }}
       />
-      <td>{node.name}</td>
+      <td>
+        {padding && (
+          <span
+            style={{ paddingRight: '0.2em' }}
+            className="codicon codicon-blank"
+          />
+        )}
+        {prettyName}
+      </td>
       <td>{computedStr ?? ''}</td>
       <td>
         <VscodeTextfield

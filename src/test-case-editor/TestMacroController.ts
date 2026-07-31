@@ -74,7 +74,7 @@ export class TestMacroController {
   public createWebView(
     client: LanguageClient,
     context: vscode.ExtensionContext,
-    catala_entry: CatalaEntrypoint[],
+    catala_entry: Promise<CatalaEntrypoint[]>,
     resultController: ResultController,
     testController: vscode.TestController
   ): void {
@@ -96,7 +96,7 @@ export class TestMacroController {
         case 'Ready': {
           this.tests = [];
           const entrypoints = catala_entry;
-          this.handleCatalaEntrypoint(entrypoints, resultController);
+          this.handleCatalaEntrypoint(await entrypoints, resultController);
           break;
         }
         case 'Reload': {
