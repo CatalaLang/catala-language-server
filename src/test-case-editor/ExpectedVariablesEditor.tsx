@@ -521,30 +521,25 @@ function StateRow({
   onAdd(path: string, tv: TraceValue | null): void;
   filtering?: boolean;
 }): ReactElement {
-  console.log('Ecrire une state Row');
   const [open, setOpen] = useState(false);
   const show = open || !!filtering;
-  const selfCrumbs = [
-    ...crumbs,
-    ...variableSegment(nodes[0]).split('.'),
-    varName,
-  ];
-  const cellStyle = {
-    background: 'var(--vscode-sideBarSectionHeader-background)',
-    borderTop: stepBorder,
-    borderBottom: show ? undefined : stepBorder,
-    paddingBottom: show ? '0.5em' : undefined,
-  };
   return (
     <>
       <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
-        <td style={{ ...firstColStyle, ...cellStyle }}>
+        <td
+          style={{
+            ...firstColStyle,
+          }}
+        />
+        <td
+          colSpan={4}
+          style={{ display: 'flex', alignItems: 'center', ...firstColStyle }}
+        >
           <span
+            style={{ paddingRight: '0.2em' }}
             className={`codicon codicon-chevron-${show ? 'down' : 'right'}`}
           />
-        </td>
-        <td colSpan={4} style={cellStyle}>
-          <Breadcrumb crumbs={selfCrumbs} />
+          {varName}
         </td>
       </tr>
       {show && (
@@ -556,9 +551,10 @@ function StateRow({
             )
             .map((v, i) => (
               <ValueRow
+                padding={true}
                 key={`v-${i}`}
                 node={v}
-                crumbs={selfCrumbs}
+                crumbs={crumbs}
                 onAdd={onAdd}
               />
             ))}
@@ -571,10 +567,12 @@ function StateRow({
 function ValueRow({
   node,
   crumbs,
+  padding,
   onAdd,
 }: {
   node: Extract<TraceVariable, { kind: 'value' }>;
   crumbs: string[];
+  padding?: boolean | undefined;
   onAdd(path: string, tv: TraceValue | null): void;
 }): ReactElement | null {
   const intl = useIntl();
@@ -593,7 +591,9 @@ function ValueRow({
   const trimmed = input.trim();
   const addValue = trimmed ? parseAs(computed.kind, trimmed) : null;
   const addDisabled = trimmed !== '' && addValue === undefined;
-
+  const splittedName = node.name.split('#');
+  const prettyName =
+    splittedName.length == 1 ? splittedName[0] : splittedName[1];
   return (
     <tr>
       <td
@@ -601,7 +601,15 @@ function ValueRow({
           ...firstColStyle,
         }}
       />
-      <td>{node.name}</td>
+      <td>
+        {padding && (
+          <span
+            style={{ paddingRight: '0.2em' }}
+            className="codicon codicon-blank"
+          />
+        )}
+        {prettyName}
+      </td>
       <td>{computedStr ?? ''}</td>
       <td>
         <VscodeTextfield
