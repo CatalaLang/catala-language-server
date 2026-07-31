@@ -436,6 +436,22 @@ function StepRow({
     borderBottom: show ? undefined : stepBorder,
     paddingBottom: show ? '0.5em' : undefined,
   };
+
+  let stateVariables = new Map<string, TraceVariable[]>();
+  for (let nodeVar of node.variables.filter(
+    (v): v is Extract<TraceVariable, { kind: 'value' }> =>
+      v.kind === 'value' && v.name.includes('#')
+  )) {
+    let stateVar = nodeVar.name.split('#');
+    if (stateVar.length != 2) {
+      console.log(`Unexpected state variable ${nodeVar.name}`);
+      continue;
+    }
+    let existingState = stateVariables.get(stateVar[0]) ?? [];
+    // let stateNodeVar = { ...nodeVar, name: stateVar[1] };
+    existingState.push(nodeVar);
+    stateVariables.set(stateVar[0], existingState);
+  }
   return (
     <>
       <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
@@ -453,7 +469,7 @@ function StepRow({
           {node.variables
             .filter(
               (v): v is Extract<TraceVariable, { kind: 'value' }> =>
-                v.kind === 'value'
+                v.kind === 'value' && !v.name.includes('#')
             )
             .map((v, i) => (
               <ValueRow
@@ -463,6 +479,15 @@ function StepRow({
                 onAdd={onAdd}
               />
             ))}
+          {[...stateVariables.entries()].map(([stateName, nodes]) => (
+            <StateRow
+              varName={stateName}
+              nodes={nodes}
+              crumbs={selfCrumbs}
+              onAdd={onAdd}
+              filtering={filtering}
+            />
+          ))}
           {node.variables
             .filter(
               (v): v is Extract<TraceVariable, { kind: 'step' }> =>
@@ -475,6 +500,66 @@ function StepRow({
                 crumbs={selfCrumbs}
                 onAdd={onAdd}
                 filtering={filtering}
+              />
+            ))}
+        </>
+      )}
+    </>
+  );
+}
+
+function StateRow({
+  varName,
+  nodes,
+  crumbs,
+  onAdd,
+  filtering,
+}: {
+  varName: string;
+  nodes: TraceVariable[];
+  crumbs: string[];
+  onAdd(path: string, tv: TraceValue | null): void;
+  filtering?: boolean;
+}): ReactElement {
+  console.log('Ecrire une state Row');
+  const [open, setOpen] = useState(false);
+  const show = open || !!filtering;
+  const selfCrumbs = [
+    ...crumbs,
+    ...variableSegment(nodes[0]).split('.'),
+    varName,
+  ];
+  const cellStyle = {
+    background: 'var(--vscode-sideBarSectionHeader-background)',
+    borderTop: stepBorder,
+    borderBottom: show ? undefined : stepBorder,
+    paddingBottom: show ? '0.5em' : undefined,
+  };
+  return (
+    <>
+      <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
+        <td style={{ ...firstColStyle, ...cellStyle }}>
+          <span
+            className={`codicon codicon-chevron-${show ? 'down' : 'right'}`}
+          />
+        </td>
+        <td colSpan={4} style={cellStyle}>
+          <Breadcrumb crumbs={selfCrumbs} />
+        </td>
+      </tr>
+      {show && (
+        <>
+          {nodes
+            .filter(
+              (v): v is Extract<TraceVariable, { kind: 'value' }> =>
+                v.kind === 'value'
+            )
+            .map((v, i) => (
+              <ValueRow
+                key={`v-${i}`}
+                node={v}
+                crumbs={selfCrumbs}
+                onAdd={onAdd}
               />
             ))}
         </>
