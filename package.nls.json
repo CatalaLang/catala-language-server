@@ -3,6 +3,7 @@
   "command.catala.debugAllTests.title": "Debug Catala tests",
   "command.catala.openWithTraceEditor.title": "Open Catala trace debugger",
   "view.catala.openAllTests.title": "Catala Tests",
+  "view.catala.switches.title": "Catala switches",
   "view.catala.help.title": "Help and feedback",
   "command.catala.showExceptions.title": "Show definition tree",
   "command.catala.showExceptionsAtCursor.title": "Show definition tree",

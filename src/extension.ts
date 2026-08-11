@@ -15,7 +15,7 @@ import codiconsCssPath from '@vscode/codicons/dist/codicon.css?url';
 import { logger } from './extension/logger';
 import * as net from 'net';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import path, { join } from 'path';
 import { spawn } from 'child_process';
 import {
   exceptionsViewProvider,
@@ -28,8 +28,9 @@ import {
   getCwd,
   hasResourceUri,
   resolveBinaryPath,
+  tryBinaryPath,
 } from './shared/util_client';
-import type { RunArgs } from './shared/util_client';
+import type { Binary, RunArgs } from './shared/util_client';
 import { initTests, ResultController } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints } from './extension/lspRequests';
@@ -40,7 +41,7 @@ type ItemParam = {
   label: string;
   descr?: string | undefined;
   icon?: vscode.ThemeIcon | undefined;
-  command: vscode.Command;
+  command?: vscode.Command | undefined;
 };
 
 class Item extends vscode.TreeItem {
@@ -68,9 +69,11 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
     new vscode.EventEmitter<Item | undefined>();
   readonly onDidChangeTreeData?: vscode.Event<Item | undefined> =
     this.m_onDidChangeTreeData.event;
+  private refresher?: () => Promise<Item[]>;
 
-  public constructor(switches: Item[]) {
+  public constructor(switches: Item[], refresher?: () => Promise<Item[]>) {
     this.switches = switches;
+    this.refresher = refresher;
   }
 
   public getTreeItem(
@@ -88,6 +91,13 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
       return this.switches;
     } else {
       return element.children;
+    }
+  }
+
+  public async refresh(): Promise<void> {
+    if (this.refresher) {
+      this.switches = await this.refresher();
+      this.m_onDidChangeTreeData.fire(undefined);
     }
   }
 }
@@ -314,6 +324,165 @@ async function debugScope(args?: RunArgs): Promise<void> {
   }
 }
 
+async function opamSwitch(): Promise<string[]> {
+  return new Promise((resolve) => {
+    let proc = spawn('opam', ['switch', 'list', '-s']);
+    let ocamlSwitch: string | undefined;
+
+    proc.stdout.on('data', (data) => {
+      ocamlSwitch = data.toString();
+    });
+
+    proc.on('close', (code: number | null) => {
+      if (code != null && code == 0) {
+        let splitted = ocamlSwitch?.split('\n');
+        resolve(splitted ?? []);
+      } else {
+        resolve([]);
+      }
+    });
+  });
+}
+
+type Toolchain = {
+  catalaPath?: Binary;
+  clerkPath?: Binary;
+  catalaFormatPath?: Binary;
+  lspServerPath?: Binary;
+};
+
+// Binary name behind each setting: friendlier to read than the setting key in
+// the confirmation modal.
+const toolchainBinaryNames: Record<keyof Toolchain, string> = {
+  catalaPath: 'catala',
+  clerkPath: 'clerk',
+  catalaFormatPath: 'catala-format',
+  lspServerPath: 'catala-lsp',
+};
+
+/**
+ * Renders toolchain entries as a bulleted list for a modal 'detail' field. That
+ * field is plain text in a proportional font, so padding cannot be used to line
+ * columns up: each entry gets its own bullet instead, with the version between
+ * the binary name and its path.
+ */
+function formatToolchain(entries: [string, Binary][]): string {
+  return entries
+    .map(([key, value]) => {
+      const name = toolchainBinaryNames[key as keyof Toolchain] ?? key;
+      return `•  ${name} →  ${value.path}${value.version != undefined ? ` (version ${value.version})` : ''}`;
+    })
+    .join('\n');
+}
+
+async function createItemSwitch(
+  title: string,
+  singlePath: string
+): Promise<Item | undefined> {
+  const [catala, clerk, catalaFormat, lsp] = await Promise.all([
+    tryBinaryPath('catala', singlePath),
+    tryBinaryPath('clerk', singlePath),
+    tryBinaryPath('catala-format', singlePath),
+    //  opam show catala-lsp --switch=/home/arnaud/catala-pj --field version --raw
+    // We can use this command on opam switch to get the lsp version
+    tryBinaryPath('catala-lsp', singlePath, true),
+  ]);
+
+  const toolchain: Toolchain = {
+    ...(catala && { catalaPath: catala }),
+    ...(clerk && { clerkPath: clerk }),
+    ...(catalaFormat && { catalaFormatPath: catalaFormat }),
+    ...(lsp && { lspServerPath: lsp }),
+  };
+
+  const keys = Object.keys(toolchain);
+  if (keys.length === 0) return undefined;
+
+  let commandUpdateToolchain: (toolchain: Toolchain) => vscode.Command = (
+    toolchain: Toolchain
+  ): Command => {
+    return {
+      title: 'Update toolchain',
+      command: 'catala.useToolchain',
+      arguments: [toolchain],
+    };
+  };
+
+  let catalaSwitch = new Item({
+    label: title,
+    command: commandUpdateToolchain(toolchain),
+  });
+  for (const [key, value] of Object.entries(toolchain)) {
+    let littleItem = new Item({
+      label: value.path,
+      descr: value.version,
+      command: commandUpdateToolchain({ [key]: value }),
+    });
+    catalaSwitch.add_child(littleItem);
+  }
+  return catalaSwitch;
+}
+
+async function searchSwitches(): Promise<Item[]> {
+  let opamItem: Item = new Item({
+    label: 'Catala switches (OPAM)',
+  });
+
+  let ocamlSwitches = await opamSwitch();
+
+  let opamRoot = await new Promise<string | undefined>((resolve) => {
+    let proc = spawn('opam', ['var', 'root']);
+    let root: string | undefined;
+    proc.stdout.on('data', (data) => {
+      root = data.toString();
+    });
+
+    proc.on('close', (code: number | null) => {
+      if (code != null && code == 0) {
+        resolve(root?.trim());
+      } else {
+        resolve(undefined);
+      }
+    });
+  });
+
+  for (const ocSwitch of ocamlSwitches) {
+    let switchPath: string;
+    if (path.isAbsolute(ocSwitch)) {
+      switchPath = path.join(ocSwitch, '_opam', 'bin');
+    } else if (opamRoot) {
+      switchPath = path.join(opamRoot, ocSwitch, 'bin');
+    } else {
+      continue;
+    }
+    let item = await createItemSwitch(ocSwitch, switchPath);
+    if (item) {
+      opamItem.add_child(item);
+    }
+  }
+
+  let pathItem: Item = new Item({
+    label: 'Catala switches (PATH)',
+  });
+
+  let envPath = process.env.PATH;
+  let currentSwitch = process.env.OPAM_SWITCH_PREFIX;
+  if (envPath) {
+    let paths = envPath.split(':');
+    for (const singlePath of paths) {
+      if (currentSwitch && singlePath.includes(currentSwitch)) continue;
+      let item = await createItemSwitch(singlePath, singlePath);
+      if (item) {
+        pathItem.add_child(item);
+      }
+    }
+  }
+  let items = [];
+  if (opamItem.children.length > 0) items.push(opamItem);
+  if (pathItem.children.length > 0) items.push(pathItem);
+  return items;
+}
+
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
@@ -375,7 +544,9 @@ export async function activate(
     getConfig('lspServerPath')
   );
 
-  let resultController = new ResultController(context.workspaceState);
+  const language = vscode.env.language;
+
+  let resultController = new ResultController(context.workspaceState, language);
   if (lsp_path) {
     const run: Executable = {
       command: lsp_path,
@@ -440,23 +611,18 @@ export async function activate(
           const columnToShowIn = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
-          if (macroTestsView.panel != undefined) {
-            macroTestsView.panel.reveal(columnToShowIn);
-          } else {
-            macroTestsView.createWebView(
-              client,
-              context,
-              entrypointsRequest,
-              resultController,
-              ctrl
-            );
-          }
+          macroTestsView.show(
+            client,
+            context,
+            entrypointsRequest,
+            resultController,
+            ctrl,
+            columnToShowIn
+          );
         }
       )
     );
   }
-
-  const language = vscode.env.language;
 
   let command: Command = {
     title: language == 'fr' ? 'Vue globale des tests' : 'General tests view',
@@ -474,7 +640,63 @@ export async function activate(
       new tree_view([catala_utils])
     )
   );
+
   logger.log(`Register "Catala Tests" data in th Tree data provider`);
+
+  vscode.commands.registerCommand(
+    'catala.useToolchain',
+    async (toolchain: Toolchain) => {
+      let entries = Object.entries(toolchain);
+      const yes: vscode.MessageItem = { title: vscode.l10n.t('Yes') };
+      // isCloseAffordance makes 'No' replace the Cancel button VSCode adds to
+      // every modal, instead of sitting next to it.
+      const no: vscode.MessageItem = {
+        title: vscode.l10n.t('No'),
+        isCloseAffordance: true,
+      };
+      const answer = await vscode.window.showWarningMessage(
+        vscode.l10n.t('You are about to change Catala user settings'),
+        {
+          modal: true,
+          detail: `${vscode.l10n.t(
+            'The following settings will be updated:'
+          )}\n\n
+            ${formatToolchain(entries)})}`,
+        },
+        yes,
+        no
+      );
+      if (answer !== yes) {
+        return;
+      }
+      const cfg = vscode.workspace.getConfiguration('catala');
+      for (const [key, value] of entries) {
+        await cfg.update(key, value.path);
+      }
+      await vscode.window.showInformationMessage(
+        vscode.l10n.t('Settings changed !'),
+        {
+          modal: true,
+          detail: vscode.l10n.t(
+            'Your settings were changed, reload the window to notice some changes'
+          ),
+        }
+      );
+    }
+  );
+
+  let items = await searchSwitches();
+
+  let switchTree = new tree_view(items, searchSwitches);
+
+  vscode.commands.registerCommand('catala.refreshSwitches', async () => {
+    await switchTree.refresh();
+  });
+
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider('catala.switches', switchTree)
+  );
 
   let command_books: Command = {
     title: language == 'fr' ? 'Ouvrir le livre Catala' : 'Open Catala book',
@@ -491,7 +713,6 @@ export async function activate(
     icon: new vscode.ThemeIcon('book'),
     command: command_books,
   });
-  catala_books.iconPath;
 
   let command_github: Command = {
     title: language == 'fr' ? 'Ouvrir Github' : 'Open Github',

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import cmd_exists from 'command-exists';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import path from 'path';
 import { logger } from '../extension/logger';
 
@@ -25,6 +25,61 @@ export type RunArgs = {
 };
 
 var warned = false;
+
+export type Binary = { path: string; version?: string };
+
+/**
+ * Spawns `command` and resolves with its trimmed stdout, or `undefined` if the
+ * process could not be started or exited non-zero. Never rejects: a missing
+ * executable resolves to `undefined` instead of raising an unhandled 'error'
+ * event. Note that a successful command with no output resolves to '', which is
+ * distinct from the `undefined` returned on failure.
+ */
+function spawnStdout(
+  command: string,
+  args: string[]
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const proc = spawn(command, args);
+    // Without an encoding, 'data' hands us Buffers: they interpolate fine in a
+    // template literal but are not strings, which silently breaks any consumer
+    // expecting one (e.g. TreeItem.description).
+    let out = '';
+    proc.stdout.setEncoding('utf8');
+    proc.stdout.on('data', (data: string) => {
+      // Concatenate: output may arrive in several chunks.
+      out += data;
+    });
+    proc.on('error', (err) => {
+      logger.log(`Failed to spawn '${command}': ${err.message}`);
+      resolve(undefined);
+    });
+    proc.on('close', (code: number | null) => {
+      resolve(code === 0 ? out.trim() : undefined);
+    });
+  });
+}
+
+export async function tryBinaryPath(
+  binaryName: string,
+  pathEnv: string,
+  server?: boolean
+): Promise<Binary | undefined> {
+  let binary = path.join(pathEnv, binaryName);
+  if (!fs.existsSync(binary)) {
+    return undefined;
+  }
+  if (server) {
+    // Server doesn't have version command and never hands so just returning the binary name
+    return { path: binary };
+  }
+  const version = await spawnStdout(binary, ['--version']);
+  if (version === undefined) {
+    // A non-zero exit means the binary is not usable, not merely version-less.
+    return undefined;
+  }
+  return { path: binary, version: version || undefined };
+}
 
 export function resolveBinaryPath(
   public_bin_name: string,

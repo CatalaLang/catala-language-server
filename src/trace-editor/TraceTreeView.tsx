@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import type { JsonValue } from '../shared/util_client';
+import { splitOnTerms } from '../shared/util';
 import { getVsCodeApi } from '../shared/webviewApi';
 import type { TraceDownMessage, TraceUpMessage } from './messages';
 import type { CodeLocation, TraceElement, TraceKind } from './traceUtils';
@@ -45,6 +46,34 @@ const ExpectedContext = createContext<Expected | null>(null);
 const IndexContext = createContext<Map<TraceElement, number>>(new Map());
 const CwdContext = createContext<string>('');
 const ExpandContext = createContext<ExpandCommand | null>(null);
+/**
+ * The filters the user typed or saved, for highlighting purposes only.
+ * `TraceNode` cannot use its own `filters` prop for that: it hands an empty list
+ * to the children of a node that matches (so that a matching subtree is shown
+ * whole), which would leave those children unhighlighted.
+ */
+const FilterContext = createContext<string[]>([]);
+
+/**
+ * Renders `text` with the parts matched by the filters highlighted, so that the
+ * user sees what kept an entry in the tree.
+ */
+function Highlight({ text }: { text: string }): ReactElement {
+  const filters = useContext(FilterContext);
+  return (
+    <>
+      {splitOnTerms(text, filters).map((chunk, index) =>
+        chunk.match ? (
+          <mark key={index} style={filterMatchStyle}>
+            {chunk.text}
+          </mark>
+        ) : (
+          chunk.text
+        )
+      )}
+    </>
+  );
+}
 
 function resolvePath(cwd: string, file: string): string {
   if (!cwd || file.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(file)) {
@@ -232,7 +261,7 @@ function PosLink({
       title={intl.formatMessage({ id: 'trace.openLocation' }, { target: text })}
       style={inline ? posLinkInlineStyle : posLinkStyle}
     >
-      {text}
+      <Highlight text={text} />
     </a>
   );
 }
@@ -360,9 +389,13 @@ function asCodeLocation(v: JsonValue | undefined): CodeLocation | undefined {
   return undefined;
 }
 
+/**
+ * An entry matches when **every** term is found in its own text: the terms
+ * accumulate, exactly like the saved filters of the general test list.
+ */
 function filterMatches(
   el: TraceElement,
-  filter: string,
+  filters: string[],
   intl: IntlShape
 ): boolean {
   const { label, detail } = describe(el.element, intl);
@@ -376,19 +409,19 @@ function filterMatches(
   ]
     .join(' ')
     .toLowerCase();
-  return text.includes(filter);
+  return filters.every((filter) => text.includes(filter));
 }
 
 function subtreeMatches(
   el: TraceElement,
-  filter: string,
+  filters: string[],
   intl: IntlShape
 ): boolean {
-  if (filterMatches(el, filter, intl)) {
+  if (filterMatches(el, filters, intl)) {
     return true;
   }
   const children = Array.isArray(el.trace) ? el.trace : [];
-  return children.some((c) => subtreeMatches(c, filter, intl));
+  return children.some((c) => subtreeMatches(c, filters, intl));
 }
 
 function indexedSegment(
@@ -462,13 +495,13 @@ function subtreeHasMismatch(
 
 export default function TraceTreeView({
   trace,
-  filter,
+  filters,
   cwd,
   expand,
   test,
 }: {
   trace: TraceElement[];
-  filter?: string;
+  filters?: string[];
   cwd?: string;
   expand?: ExpandCommand | null;
   test?: TraceTest;
@@ -496,8 +529,13 @@ export default function TraceTreeView({
     );
   }
 
-  const f = (filter ?? '').trim().toLowerCase();
-  const anyVisible = f ? roots.some((el) => subtreeMatches(el, f, intl)) : true;
+  // Normalised once here: the matching is case insensitive, and a blank term
+  // would match everything, so it is dropped rather than kept as a no-op.
+  const f = (filters ?? [])
+    .map((filter) => filter.trim().toLowerCase())
+    .filter((filter) => filter.length > 0);
+  const anyVisible =
+    f.length > 0 ? roots.some((el) => subtreeMatches(el, f, intl)) : true;
   if (!anyVisible) {
     return (
       <p style={{ color: 'var(--vscode-descriptionForeground)' }}>
@@ -530,18 +568,20 @@ export default function TraceTreeView({
       <ExpandContext.Provider value={expand ?? null}>
         <ExpectedContext.Provider value={expected}>
           <IndexContext.Provider value={stepIndices}>
-            <ul style={rootListStyle}>
-              {roots.map((el, i) => (
-                <TraceNode
-                  key={i}
-                  te={el}
-                  depth={0}
-                  filter={f}
-                  prefix=""
-                  tested_scope={testedScope}
-                />
-              ))}
-            </ul>
+            <FilterContext.Provider value={f}>
+              <ul style={rootListStyle}>
+                {roots.map((el, i) => (
+                  <TraceNode
+                    key={i}
+                    te={el}
+                    depth={0}
+                    filters={f}
+                    prefix=""
+                    tested_scope={testedScope}
+                  />
+                ))}
+              </ul>
+            </FilterContext.Provider>
           </IndexContext.Provider>
         </ExpectedContext.Provider>
       </ExpandContext.Provider>
@@ -552,19 +592,24 @@ export default function TraceTreeView({
 function TraceNode({
   te,
   depth,
-  filter,
+  filters,
   prefix,
   tested_scope,
 }: {
   te: TraceElement;
   depth: number;
-  filter: string;
+  filters: string[];
   prefix: string;
   tested_scope?: string;
 }): ReactElement | null {
   if (te.element.kind === 'exception' && depth === 1) return null;
 
-  const filtering = filter.length > 0;
+  const filtering = filters.length > 0;
+  // `filters` is a fresh array on every render, so it cannot be used as an
+  // effect dependency: the effect below would re-run each time and keep
+  // resetting the manual expand/collapse state. This joined key compares by
+  // value instead. The separator is a character no filter can contain.
+  const filterKey = filters.join('\n');
   const expected = useContext(ExpectedContext);
   const stepIndices = useContext(IndexContext);
   const intl = useIntl();
@@ -619,7 +664,7 @@ function TraceNode({
   const [expanded, setExpanded] = useState(defaultExpanded);
   useEffect(() => {
     setExpanded(filtering ? true : defaultExpanded);
-  }, [filter, defaultExpanded, filtering]);
+  }, [filterKey, defaultExpanded, filtering]);
 
   const expandCmd = useContext(ExpandContext);
   useEffect(() => {
@@ -655,11 +700,11 @@ function TraceNode({
 
   const open = expanded;
 
-  if (filtering && !subtreeMatches(node, filter, intl)) {
+  if (filtering && !subtreeMatches(node, filters, intl)) {
     return null;
   }
-  const childFilter =
-    filtering && !filterMatches(node, filter, intl) ? filter : '';
+  const childFilters =
+    filtering && !filterMatches(node, filters, intl) ? filters : [];
 
   let matchBackground: string | undefined;
   if (
@@ -720,10 +765,12 @@ function TraceNode({
           {described.symbol}
         </span>
         <span style={{ ...labelStyle, color: accentColor }}>
-          {described.label}
+          <Highlight text={described.label} />
         </span>
         {described.detail && (
-          <span style={detailStyle}>{described.detail}</span>
+          <span style={detailStyle}>
+            <Highlight text={described.detail} />
+          </span>
         )}
         <ValueView te={te} described={described} />
       </div>
@@ -764,7 +811,7 @@ function TraceNode({
                   key={i}
                   te={c}
                   depth={depth + 1}
-                  filter={childFilter}
+                  filters={childFilters}
                   prefix={childPrefix}
                   tested_scope={testedScope}
                 />
@@ -824,7 +871,7 @@ function ValueView({
   if (te.value.kind === 'absent') {
     return (
       <span style={valueStyle}>
-        = {intl.formatMessage({ id: 'trace.absent' })}
+        = <Highlight text={intl.formatMessage({ id: 'trace.absent' })} />
       </span>
     );
   }
@@ -832,7 +879,11 @@ function ValueView({
   if (fv === undefined) {
     return null;
   }
-  return <span style={valueStyle}>= {fv}</span>;
+  return (
+    <span style={valueStyle}>
+      = <Highlight text={fv} />
+    </span>
+  );
 }
 
 // -- Styles -------------------------------------------------------------------
@@ -916,6 +967,17 @@ const valueStyle: CSSProperties = {
   color: 'var(--vscode-debugTokenExpression-value, var(--vscode-foreground))',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
+};
+
+// Same colors as the editor's search highlight. `color: inherit` cancels the
+// black on yellow a browser applies to <mark> by default, which would fight
+// with the tone colors of the tree, and nothing here may alter the metrics of
+// the text: the rows are laid out on a single line.
+const filterMatchStyle: CSSProperties = {
+  backgroundColor:
+    'var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33))',
+  color: 'inherit',
+  borderRadius: 2,
 };
 
 const sourceStyle: CSSProperties = {

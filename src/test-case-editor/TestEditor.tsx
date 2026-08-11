@@ -129,7 +129,6 @@ export default function TestEditor(props: Props): ReactElement {
   };
 
   const openTraceEditor = (): void => {
-    console.log('Open Trace editor');
     getVsCodeApi().postMessage({
       kind: 'openTraceEditor',
       scope: props.test.testing_scope,
@@ -183,7 +182,6 @@ export default function TestEditor(props: Props): ReactElement {
             <textarea
               value={props.test.description}
               onChange={onDescriptionChange}
-              onBlur={onDescriptionChange}
               placeholder={intl.formatMessage({
                 id: 'testEditor.descriptionPlaceholder',
               })}

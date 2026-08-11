@@ -3,10 +3,9 @@
   border-radius: 0.5em;
   display: flex;
   flex-direction: column;
-  flex-wrap: wrap;
   gap: 4em;
   padding: 2em 1em 2em 1em;
-  overflow-x: auto;
+  /* overflow-x: auto; */
   /* remplit la hauteur de la cellule Grid → toutes les cartes d'une rangée ont la même hauteur */
   height: 100%;
   box-sizing: border-box;
@@ -21,7 +20,6 @@
 }
 
 .test-item .test-item-header {
-  position: relative;
   display: flex;
 }
 
@@ -32,10 +30,26 @@
 
 .test-item .test-item-header .test-title {
   font-size: 2em;
+  overflow-wrap: anywhere;
 }
 
 .test-descr {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Portion de texte qui a fait correspondre un filtre. On reprend les couleurs
+   de recherche de l'éditeur, et `color: inherit` annule le noir sur jaune que
+   le navigateur applique par défaut à <mark>. Aucune marge ni bordure : le
+   surlignage ne doit pas changer la façon dont le texte se coupe, sinon la
+   mesure de débordement de la description en serait faussée. */
+.filter-match {
+  background-color: var(
+    --vscode-editor-findMatchHighlightBackground,
+    rgba(234, 92, 0, 0.33)
+  );
+  color: inherit;
+  border-radius: 2px;
 }
 
 .test-list .test-descr-hidden {
@@ -260,6 +274,21 @@
   border-radius: 5px;
 }
 
+.filter-pin {
+  display: inline-block;
+  padding: 0.7em 0.2em 0.7em 0.2em;
+  color: black;
+  border-radius: 5px;
+}
+
+.inclusion-filter {
+  background-color: var(--vscode-notebookStatusSuccessIcon-foreground);
+}
+
+.exclusion-filter {
+  background-color: var(--vscode-errorForeground);
+}
+
 .selected-filter {
   color: var(--vscode-button-foreground);
   background-color: var(--vscode-button-background);
@@ -275,7 +304,7 @@
   background-color: var(--vscode-button-hoverBackground);
 }
 
-.box-filter .scope-filter {
+.box-filter .pins {
   /* display: flex; */
   height: 14em;
   padding: 2em 0em 2em 0em;

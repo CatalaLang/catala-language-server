@@ -53,6 +53,11 @@
           "icon": "$(menu)"
         },
         {
+          "id": "catala.switches",
+          "name": "%view.catala.switches.title%",
+          "icon": "$(info)"
+        },
+        {
           "id": "catala.help",
           "name": "%view.catala.help.title%",
           "icon": "$(info)"
@@ -110,6 +115,12 @@
         "command": "catala.showExceptionsAtCursor",
         "title": "%command.catala.showExceptionsAtCursor.title%",
         "category": "%category.catala%"
+      },
+      {
+        "command": "catala.refreshSwitches",
+        "category": "catala",
+        "title": "Refresh Switches",
+        "icon": "$(sync-compact)"
       }
     ],
     "menus": {
@@ -117,6 +128,17 @@
         {
           "command": "catala.showExceptions",
           "when": "false"
+        },
+        {
+          "command": "catala.refreshSwitches",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "catala.refreshSwitches",
+          "when": "view == catala.switches",
+          "group": "navigation"
         }
       ],
       "explorer/context": [

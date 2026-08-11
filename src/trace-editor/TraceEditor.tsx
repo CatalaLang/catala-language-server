@@ -47,6 +47,25 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
   const [scopePreset, setScopePreset] = useState(false);
   const [runState, setRunState] = useState<RunState>({ status: 'idle' });
   const [initialized, setInitialized] = useState(false);
+  // What is currently typed in the search field: it filters live, as before.
+  const [filter, setFilter] = useState('');
+  // Filters the user chose to keep. They accumulate with each other and with
+  // the live one: an entry has to match all of them.
+  const [savedFilters, setSavedFilters] = useState<string[]>([]);
+
+  // Always hand a new array to the setter: React skips the re-render when an
+  // updater returns the very same reference.
+  const saveFilter = (newFilter: string): void => {
+    const trimmed = newFilter.trim();
+    if (trimmed === '') {
+      return;
+    }
+    setSavedFilters((old) => (old.includes(trimmed) ? old : [...old, trimmed]));
+  };
+
+  const removeFilter = (toRemove: string): void => {
+    setSavedFilters((old) => old.filter((current) => current !== toRemove));
+  };
 
   useEffect(() => {
     setVsCodeApi(vscode);
@@ -192,14 +211,34 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         <SplitPane
           left={
             <DataPanel
+              setFilter={setFilter}
               test={scope[1]}
               trace={runState.status === 'success' ? runState.trace : undefined}
             />
           }
-          right={<TraceResult runState={runState} cwd={cwd} test={scope[1]} />}
+          right={
+            <TraceResult
+              filter={filter}
+              setFilter={setFilter}
+              savedFilters={savedFilters}
+              saveFilter={saveFilter}
+              removeFilter={removeFilter}
+              runState={runState}
+              cwd={cwd}
+              test={scope[1]}
+            />
+          }
         />
       ) : (
-        <TraceResult runState={runState} cwd={cwd} />
+        <TraceResult
+          filter={filter}
+          setFilter={setFilter}
+          savedFilters={savedFilters}
+          saveFilter={saveFilter}
+          removeFilter={removeFilter}
+          runState={runState}
+          cwd={cwd}
+        />
       )}
     </div>
   );
@@ -209,14 +248,23 @@ function TraceResult({
   runState,
   cwd,
   test,
+  filter,
+  setFilter,
+  savedFilters,
+  saveFilter,
+  removeFilter,
 }: {
   runState: RunState;
   cwd: string;
   test?: TraceTest;
+  filter: string;
+  setFilter: React.Dispatch<React.SetStateAction<string>>;
+  savedFilters: string[];
+  saveFilter: (filter: string) => void;
+  removeFilter: (filter: string) => void;
 }): ReactElement | null {
   const intl = useIntl();
   const [view, setView] = useState<OutputView>('tree');
-  const [filter, setFilter] = useState('');
   const [expand, setExpand] = useState<ExpandCommand | null>(null);
   const expandAll = (open: boolean): void =>
     setExpand((prev) => ({ open, nonce: (prev?.nonce ?? 0) + 1 }));
@@ -285,8 +333,29 @@ function TraceResult({
                   })}
                   value={filter}
                   onInput={(e) => setFilter(fieldValue(e))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveFilter(filter);
+                      setFilter('');
+                    }
+                  }}
                   style={{ flex: 1 }}
-                />
+                >
+                  <span
+                    className="codicon codicon-save"
+                    slot="content-after"
+                    title={intl.formatMessage({ id: 'trace.saveFilter' })}
+                    style={{ cursor: 'pointer' }}
+                    // Keep the focus in the field so that the user can chain
+                    // several filters without clicking back into it.
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      saveFilter(filter);
+                      setFilter('');
+                    }}
+                  />
+                </VscodeTextfield>
                 <VscodeButton
                   icon="expand-all"
                   secondary
@@ -304,9 +373,10 @@ function TraceResult({
                   <FormattedMessage id="trace.collapseAll" />
                 </VscodeButton>
               </div>
+              <FilterPins filters={savedFilters} removeFilter={removeFilter} />
               <TraceTreeView
                 trace={runState.trace}
-                filter={filter}
+                filters={[...savedFilters, filter]}
                 cwd={cwd}
                 expand={expand}
                 test={test}
@@ -340,6 +410,38 @@ function TraceResult({
 
 function post(vscode: WebviewApi<unknown>, message: TraceUpMessage): void {
   vscode.postMessage(message);
+}
+
+/**
+ * The saved filters, each removable. Renders nothing at all when there is none,
+ * so the layout is unchanged as long as the user only uses the live search.
+ */
+function FilterPins({
+  filters,
+  removeFilter,
+}: {
+  filters: string[];
+  removeFilter: (filter: string) => void;
+}): ReactElement | null {
+  const intl = useIntl();
+  if (filters.length === 0) {
+    return null;
+  }
+  return (
+    <div style={pinsStyle}>
+      {filters.map((filter) => (
+        <span key={filter} style={pinStyle}>
+          <span>{filter}</span>
+          <span
+            className="codicon codicon-close"
+            title={intl.formatMessage({ id: 'trace.removeFilter' })}
+            style={{ cursor: 'pointer' }}
+            onClick={() => removeFilter(filter)}
+          />
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function SplitPane({
@@ -421,6 +523,24 @@ const fieldStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 4,
+};
+
+const pinsStyle: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 6,
+  margin: '0 0 8px 0',
+};
+
+const pinStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '2px 6px',
+  borderRadius: 4,
+  background: 'var(--vscode-badge-background)',
+  color: 'var(--vscode-badge-foreground)',
+  fontFamily: 'var(--vscode-editor-font-family, monospace)',
 };
 
 const preStyle: React.CSSProperties = {

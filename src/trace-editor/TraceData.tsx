@@ -73,9 +73,11 @@ type VarRow = {
 
 export function DataPanel({
   test,
+  setFilter,
   trace,
 }: {
   test: TraceTest;
+  setFilter: React.Dispatch<React.SetStateAction<string>>;
   trace?: TraceElement[];
 }): ReactElement {
   const [trVariables, trOutputs] = traceVariablesForTest(
@@ -140,15 +142,27 @@ export function DataPanel({
         <tbody>
           <SectionRow id="trace.section.inputs" />
           {inputRows.map((r, i) => (
-            <VarRowView key={`in-${r.name}-${i}`} row={r} />
+            <VarRowView
+              key={`in-${r.name}-${i}`}
+              row={r}
+              setFilter={setFilter}
+            />
           ))}
           <SectionRow id="trace.section.internal" />
           {internalRows.map((r, i) => (
-            <VarRowView key={`int-${r.name}-${i}`} row={r} />
+            <VarRowView
+              key={`int-${r.name}-${i}`}
+              row={r}
+              setFilter={setFilter}
+            />
           ))}
           <SectionRow id="trace.section.outputs" />
           {outputRows.map((r, i) => (
-            <VarRowView key={`out-${r.name}-${i}`} row={r} />
+            <VarRowView
+              key={`out-${r.name}-${i}`}
+              row={r}
+              setFilter={setFilter}
+            />
           ))}
         </tbody>
       </table>
@@ -166,7 +180,13 @@ function SectionRow({ id }: { id: string }): ReactElement {
   );
 }
 
-function VarRowView({ row }: { row: VarRow }): ReactElement {
+function VarRowView({
+  row,
+  setFilter,
+}: {
+  row: VarRow;
+  setFilter: React.Dispatch<React.SetStateAction<string>>;
+}): ReactElement {
   const comparable =
     !row.noExpected && row.expected !== undefined && row.value !== undefined;
   const background = !comparable
@@ -177,7 +197,14 @@ function VarRowView({ row }: { row: VarRow }): ReactElement {
   return (
     <tr style={{ background }}>
       <td style={{ ...tdStyle, fontWeight: 600 }}>
-        <span style={nameCellStyle}>
+        <span
+          onClick={(e) => {
+            e.preventDefault();
+            let simpleName = row.name.split('.').pop() ?? '';
+            setFilter(simpleName);
+          }}
+          style={nameCellStyle}
+        >
           <span style={typeIconStyle} title={row.kind}>
             {typeIcon(row.kind)}
           </span>
@@ -187,9 +214,25 @@ function VarRowView({ row }: { row: VarRow }): ReactElement {
       {row.noExpected ? (
         <td style={disabledCellStyle}>—</td>
       ) : (
-        <td style={tdStyle}>{row.expected ?? ''}</td>
+        <td
+          style={tdStyle}
+          onClick={(e) => {
+            e.preventDefault();
+            setFilter(row.expected ?? '');
+          }}
+        >
+          {row.expected ?? ''}
+        </td>
       )}
-      <td style={tdStyle}>{row.value ?? ''}</td>
+      <td
+        style={tdStyle}
+        onClick={(e) => {
+          e.preventDefault();
+          setFilter(row.value ?? '');
+        }}
+      >
+        {row.value ?? ''}
+      </td>
     </tr>
   );
 }
@@ -221,6 +264,7 @@ const thStyle: CSSProperties = {
 };
 
 const tdStyle: CSSProperties = {
+  cursor: 'pointer',
   textAlign: 'left',
   padding: '1px 8px 1px 0',
   verticalAlign: 'top',
@@ -233,6 +277,7 @@ const sectionStyle: CSSProperties = {
 };
 
 const nameCellStyle: CSSProperties = {
+  cursor: 'pointer',
   display: 'inline-flex',
   alignItems: 'baseline',
   gap: 4,

@@ -1339,7 +1339,7 @@ let write_catala_test ppf t lang =
       | Some { value; _ } ->
         fprintf ppf "@,%s (@[<hv>%s.%s =@ %a)@]" strings.assertion sscope_var
           tvar
-          (print_catala_value ~typ:(Some t_out.typ) ~lang)
+          (print_catala_value ~typ:None ~lang)
           value)
     t.test_outputs;
   fprintf ppf "@]@,```@,"

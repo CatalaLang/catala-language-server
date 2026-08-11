@@ -16,7 +16,6 @@ import {
   generate,
   serializeInputs,
 } from '../test-case-editor/testCaseCompilerInterop';
-import { logger } from '../extension/logger';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
@@ -56,7 +55,6 @@ export class ScopeInputController {
       const typed_msg = readUpMessage(message);
       switch (typed_msg.kind) {
         case 'Ready': {
-          logger.log(`Arnaud a recu le message ready`);
           const generatedTest: TestGenerateResults = generate(
             scope,
             file,

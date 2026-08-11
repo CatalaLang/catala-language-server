@@ -25,7 +25,9 @@ import { getCwd } from '../shared/util_client';
 // sets up the UI, provide initial data and exchanges messages with the
 // web view whose entry point is in `uiEntryPoint.ts`
 export class TestMacroController {
-  panel: vscode.WebviewPanel;
+  // Undefined until the panel is created, and reset to undefined when the
+  // user closes it (a disposed panel can neither be revealed nor posted to).
+  panel: vscode.WebviewPanel | undefined;
   tests: TestDebugger[] = [];
 
   private testQueue: PQueue = new PQueue({ concurrency: 1 });
@@ -33,7 +35,7 @@ export class TestMacroController {
   // We want to restrict shell -> webview messages to instances
   // of DownMessage
   postMessageToWebView(message: DownMessage): void {
-    this.panel.webview.postMessage(writeDownMessage(message));
+    this.panel?.webview.postMessage(writeDownMessage(message));
   }
 
   handleCatalaEntrypoint(
@@ -71,6 +73,28 @@ export class TestMacroController {
     this.postMessageToWebView({ kind: 'AllTests', value: this.tests });
   }
 
+  // Reveal the panel if it is still alive, otherwise (re)create it.
+  public show(
+    client: LanguageClient,
+    context: vscode.ExtensionContext,
+    catala_entry: Promise<CatalaEntrypoint[]>,
+    resultController: ResultController,
+    testController: vscode.TestController,
+    columnToShowIn: vscode.ViewColumn | undefined
+  ): void {
+    if (this.panel != undefined) {
+      this.panel.reveal(columnToShowIn);
+      return;
+    }
+    this.createWebView(
+      client,
+      context,
+      catala_entry,
+      resultController,
+      testController
+    );
+  }
+
   public createWebView(
     client: LanguageClient,
     context: vscode.ExtensionContext,
@@ -78,7 +102,7 @@ export class TestMacroController {
     resultController: ResultController,
     testController: vscode.TestController
   ): void {
-    this.panel = vscode.window.createWebviewPanel(
+    const panel = vscode.window.createWebviewPanel(
       'debugAllTests',
       'Catala debug tests',
       vscode.ViewColumn.One,
@@ -87,16 +111,27 @@ export class TestMacroController {
         retainContextWhenHidden: true,
       }
     );
-    this.panel.title = 'Catala debug tests';
-    this.panel.webview.html = this.getHtmlForWebview(this.panel, context);
+    this.panel = panel;
+    panel.title = 'Catala debug tests';
+    panel.webview.html = this.getHtmlForWebview(panel, context);
 
-    this.panel.webview.onDidReceiveMessage(async (message: unknown) => {
+    // Once the user closes the panel it is disposed for good: drop our
+    // reference so the next invocation creates a fresh one instead of
+    // revealing (or posting to) a disposed webview.
+    panel.onDidDispose(() => {
+      if (this.panel === panel) {
+        this.panel = undefined;
+        this.tests = [];
+      }
+    });
+
+    panel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
       switch (typed_msg.kind) {
         case 'Ready': {
           this.tests = [];
-          const entrypoints = catala_entry;
-          this.handleCatalaEntrypoint(await entrypoints, resultController);
+          const entrypoints = await catala_entry;
+          this.handleCatalaEntrypoint(entrypoints, resultController);
           break;
         }
         case 'Reload': {
@@ -141,7 +176,7 @@ export class TestMacroController {
                   value: [testElt.test, res, index],
                 });
               } else {
-                let date = new Date().toLocaleDateString();
+                let date = new Date().toLocaleDateString('fr');
                 this.postMessageToWebView({
                   kind: 'TestScopeResult',
                   value: [testElt.test, { success: false, date }, index],
@@ -187,14 +222,14 @@ export class TestMacroController {
                       value: [test.test, res, index],
                     });
                   } else {
-                    let date = new Date().toLocaleDateString();
+                    let date = new Date().toLocaleDateString('fr');
                     this.postMessageToWebView({
                       kind: 'TestScopeResult',
                       value: [test.test, { success: false, date }, index],
                     });
                   }
                 } else {
-                  let date = new Date().toLocaleDateString();
+                  let date = new Date().toLocaleDateString('fr');
                   this.postMessageToWebView({
                     kind: 'TestScopeResult',
                     value: [test.test, { success: false, date }, index],

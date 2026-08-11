@@ -3,6 +3,7 @@
   "command.catala.debugAllTests.title": "Debogguer les tests Catala",
   "command.catala.openWithTraceEditor.title": "Ouvrir en mode débogueur de trace Catala",
   "view.catala.openAllTests.title": "Ouvrir les tests Catala",
+  "view.catala.switches.title": "Catala switches",
   "view.catala.help.title": "Aide et retours",
   "command.catala.showExceptions.title": "Afficher l'arbre de définitions",
   "command.catala.showExceptionsAtCursor.title": "Afficher l'arbre de définitions",

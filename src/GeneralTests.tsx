@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  createContext,
+  Fragment,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 
 import { type WebviewApi } from 'vscode-webview';
@@ -7,7 +16,7 @@ import type { TestDebugger } from './generated/catala_types';
 import { readDownMessage, writeUpMessage } from './generated/catala_types';
 import { Box, Checkbox, FormControlLabel, Grid } from '@mui/material';
 import { VscodeTextfield } from '@vscode-elements/react-elements';
-import { assertUnreachable } from './shared/util';
+import { assertUnreachable, splitOnTerms } from './shared/util';
 import { setVsCodeApi } from './shared/webviewApi';
 
 type FilteredTests = {
@@ -20,6 +29,7 @@ type TestGridArg = {
   filtered: FilteredTests;
   grid: boolean;
   filterScope: string[];
+  orderFailure: boolean;
   onRun: (id: number) => void;
 };
 
@@ -43,18 +53,23 @@ type TestItemArg = {
   onRun: (id: number) => void;
 };
 
+type Filters = [string, boolean][];
 /**
  * Type to build the Filter component with filter on Scope, on description and
  * wether the test is a Catala Test Case editor generated test
  */
 type FilterArg = {
   tests: TestMacro[] | undefined;
-  filter: string;
+  filters: Filters;
   filterScope: string[];
   setFilterScope: React.Dispatch<React.SetStateAction<string[]>>;
-  setFilter: React.Dispatch<React.SetStateAction<string>>;
+  addFilter: (filter: string, include: boolean) => void;
+  removeFilter: (filter: string, include: boolean) => void;
+  removeAllFilter: () => void;
   filterGui: boolean;
   setFilterGui: React.Dispatch<React.SetStateAction<boolean>>;
+  orderFailure: boolean;
+  setOrder: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 type ScopeFilterArg = {
@@ -120,13 +135,20 @@ function SeparationLine(): ReactElement {
 
 /**
  * Return the correct symbol depending on a state, usually the
- * given state comes from an object TestMacro
+ * given state comes from an object TestMacro.
+ * The state is only conveyed by the shape and the color of the icon, so it is
+ * also spelled out in a tooltip.
  */
-function testState(success: TestState): ReactElement {
+function TestStateIcon({ success }: { success: TestState }): ReactElement {
+  const intl = useIntl();
   switch (success.state) {
     case 'Success':
       return (
         <span
+          title={intl.formatMessage({
+            id: 'generalTests.tooltip.stateSuccess',
+            defaultMessage: 'Test réussi',
+          })}
           className="codicon codicon-check-all check-icon"
           style={{ color: 'darkgreen', fontSize: '1.5em' }}
         />
@@ -134,6 +156,10 @@ function testState(success: TestState): ReactElement {
     case 'Failed':
       return (
         <span
+          title={intl.formatMessage({
+            id: 'generalTests.tooltip.stateFailed',
+            defaultMessage: 'Test échoué',
+          })}
           className="codicon codicon-error wrong-icon"
           style={{ color: 'darkred', fontSize: '1.5em' }}
         />
@@ -141,6 +167,10 @@ function testState(success: TestState): ReactElement {
     case 'JustFailed':
       return (
         <span
+          title={intl.formatMessage({
+            id: 'generalTests.tooltip.stateFailed',
+            defaultMessage: 'Test échoué',
+          })}
           className="codicon codicon-error wrong-icon"
           style={{ color: 'darkred', fontSize: '1.5em' }}
         />
@@ -148,12 +178,24 @@ function testState(success: TestState): ReactElement {
     case 'Loading':
       return (
         <span
+          title={intl.formatMessage({
+            id: 'generalTests.tooltip.stateLoading',
+            defaultMessage: 'Test en cours…',
+          })}
           className="codicon codicon-loading codicon-modifier-spin"
           style={{ fontSize: '1.5em' }}
         />
       );
     case 'Unknown':
-      return <span className="codicon codicon-question" />;
+      return (
+        <span
+          title={intl.formatMessage({
+            id: 'generalTests.tooltip.stateUnknown',
+            defaultMessage: 'Test jamais lancé',
+          })}
+          className="codicon codicon-question"
+        />
+      );
     default:
       return assertUnreachable(success);
   }
@@ -171,8 +213,13 @@ function RunIcon({
   className?: string | undefined;
   onRun: () => void;
 }): ReactElement {
+  const intl = useIntl();
   return (
     <span
+      title={intl.formatMessage({
+        id: 'generalTests.tooltip.runTest',
+        defaultMessage: 'Lancer le test',
+      })}
       onClick={(event) => {
         event.preventDefault();
         onRun();
@@ -197,8 +244,13 @@ function OpenGUI({
 }): ReactElement {
   let fail = success.state == 'JustFailed';
   let [first, setFirst] = useState<boolean>(true);
+  const intl = useIntl();
   return (
     <span
+      title={intl.formatMessage({
+        id: 'generalTests.tooltip.openGui',
+        defaultMessage: "Ouvrir l'éditeur Catala",
+      })}
       onAnimationEnd={(event) => {
         event.preventDefault();
         setFirst(false);
@@ -226,8 +278,13 @@ function OpenTextEditor({
   vscode: WebviewApi<unknown>;
   filename: string;
 }): ReactElement {
+  const intl = useIntl();
   return (
     <span
+      title={intl.formatMessage({
+        id: 'generalTests.tooltip.openTextEditor',
+        defaultMessage: "Ouvrir l'éditeur de texte",
+      })}
       onClick={(event) => {
         event.preventDefault();
         vscode.postMessage(
@@ -249,25 +306,53 @@ function OpenTextEditor({
  *
  */
 function TestItem({ vscode, test, num, onRun }: TestItemArg): ReactElement {
+  const intl = useIntl();
   return (
     <Box
       className={`test-item${test.state == 'JustFailed' ? ' justFailed' : ''}`}
     >
       <div className="test-item-header">
-        <b className="test-title">{testTitle(test)}</b>
-        <span className="test-number">
+        <b
+          className="test-title"
+          title={intl.formatMessage({
+            id: 'generalTests.header.title',
+            defaultMessage: 'Titre',
+          })}
+        >
+          <HighlightedText text={testTitle(test)} />
+        </b>
+        <span
+          className="test-number"
+          title={intl.formatMessage({
+            id: 'generalTests.header.id',
+            defaultMessage: 'Numéro du test',
+          })}
+        >
           <FormattedMessage
             id="generalTests.testNumber"
             defaultMessage="Test #{num}"
-            values={{ num: num + 1 }}
+            values={{ num: <HighlightedText text={(num + 1).toString()} /> }}
           />
         </span>
       </div>
-      <span className="test-descr">{testDescription(test)}</span>
+      <span
+        className="test-descr"
+        title={intl.formatMessage({
+          id: 'generalTests.header.description',
+          defaultMessage: 'Description',
+        })}
+      >
+        <HighlightedText text={testDescription(test)} />
+      </span>
       <SeparationLine />
       <div className="footer">
-        {testState(test)}
-        <span>
+        <TestStateIcon success={test} />
+        <span
+          title={intl.formatMessage({
+            id: 'generalTests.header.lastTestDate',
+            defaultMessage: 'Date du dernier test',
+          })}
+        >
           <FormattedMessage
             id="generalTests.testedOn"
             defaultMessage="Testé le {date}"
@@ -318,32 +403,61 @@ function TestLine({
   // and change the icon next to the text
   let [expanded, setExpanded] = useState<boolean>(false);
 
-  // set the overflow active is the current rendered span overflows
-  useEffect(() => {
-    if (textRef.current != null && isOverflowActive(textRef.current!)) {
-      setOverflowActive(true);
+  const description = testDescription(test);
+
+  // A new description invalidates the previous expansion state
+  useEffect(() => setExpanded(false), [description]);
+
+  // Set the overflow active if the currently rendered span overflows.
+  // This has to be re-measured every time the text changes (hence the
+  // `description` dependency: the ref object itself never changes identity, so
+  // depending on it would only ever run this once) and every time the column is
+  // resized (hence the ResizeObserver).
+  // While expanded the clamping class is removed, so a measure would always
+  // report "no overflow": skip it and keep the last known value.
+  useLayoutEffect(() => {
+    const span = textRef.current;
+    if (span == null || expanded) {
       return;
     }
 
-    setOverflowActive(false);
-  }, [isOverflowActive]);
+    const measure = (): void => setOverflowActive(isOverflowActive(span));
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(span);
+    return (): void => observer.disconnect();
+  }, [description, expanded]);
 
   return (
     <tr className={test.state == 'JustFailed' ? 'justFailed' : ''}>
       <th>
         <a
           href=""
+          title={test.filename}
           onClick={(event) => {
             event.preventDefault();
             vscode.postMessage(
-              writeUpMessage({ kind: 'OpenInTestEditor', value: test.filename })
+              writeUpMessage(
+                isGui(test)
+                  ? { kind: 'OpenInTestEditor', value: test.filename }
+                  : {
+                      kind: 'OpenInTextEditor',
+                      value: { value: test.filename },
+                    }
+              )
             );
           }}
         >
-          {num + 1}
+          <HighlightedText text={(num + 1).toString()} />
         </a>
       </th>
-      <td>{testingScope(test)}</td>
+      <td>
+        <HighlightedText text={testTitle(test)} />
+      </td>
+      <td>
+        <HighlightedText text={testingScope(test)} />
+      </td>
       <td
         className={overflowActive ? `descr-column` : ''}
         onClick={(event) => {
@@ -360,7 +474,7 @@ function TestLine({
           ref={textRef}
           className={`test-descr ${expanded ? 'text' : 'test-descr-hidden'}`}
         >
-          {testDescription(test)}
+          <HighlightedText text={description} />
         </span>
         {overflowActive && (
           <span
@@ -369,15 +483,11 @@ function TestLine({
         )}
       </td>
       <td>{test.date ?? '??/??/????'}</td>
-      <td>{testState(test)}</td>
       <td>
-        <span
-          className="codicon codicon-debug-start run-icon"
-          onClick={(event) => {
-            event.preventDefault();
-            onRun(num);
-          }}
-        />
+        <TestStateIcon success={test} />
+      </td>
+      <td>
+        <RunIcon className="run-icon" onRun={() => onRun(num)} />
       </td>
       <td>
         {isGui(test) ? (
@@ -392,15 +502,26 @@ function TestLine({
 
 function HeaderLine({
   expected,
+  gui,
 }: {
   expected?: string[] | undefined;
+  gui: boolean;
 }): ReactElement {
   return (
     <thead>
       <tr>
         <th>
-          <FormattedMessage id="generalTests.header.id" defaultMessage="Id" />
+          <FormattedMessage
+            id="generalTests.header.id"
+            defaultMessage="Numéro du test"
+          />
         </th>
+        <td>
+          <FormattedMessage
+            id="generalTests.header.title"
+            defaultMessage="Titre"
+          />
+        </td>
         <td>
           <FormattedMessage
             id="generalTests.header.scope"
@@ -430,7 +551,9 @@ function HeaderLine({
           <RunIcon onRun={() => {}} />
         </td>
         <td>
-          <FormattedMessage id="generalTests.header.gui" defaultMessage="GUI" />
+          <FormattedMessage
+            id={gui ? 'generalTests.header.gui' : 'generalTests.header.editor'}
+          />
         </td>
       </tr>
     </thead>
@@ -495,22 +618,59 @@ function testMacro(test: TestDebugger, previousSuccess: boolean): TestMacro {
 function matchFilter(
   test: TestDebugger,
   index: number,
-  filterBar: string,
+  filterBar: Filters,
   filterScope: string[],
   filterGui: boolean
 ): boolean {
-  let filter = filterBar.toLowerCase();
-  let searchBarFilter =
-    testTitle(test).toLowerCase().includes(filter) ||
-    testDescription(test).toLowerCase().includes(filter) ||
-    testingScope(test).toLowerCase().includes(filter) ||
-    (index + 1).toString().includes(filter);
+  let searchBarFilter = true;
+  for (let [filterRaw, include] of filterBar) {
+    let filter = filterRaw.toLowerCase();
+    let includesFilter =
+      testTitle(test).toLowerCase().includes(filter) ||
+      testDescription(test).toLowerCase().includes(filter) ||
+      testingScope(test).toLowerCase().includes(filter) ||
+      (index + 1).toString().includes(filter);
+    let currentFilter = include ? includesFilter : !includesFilter;
+    searchBarFilter = searchBarFilter && currentFilter;
+  }
   let scopeFilter =
     filterScope.length == 0
       ? true
       : filterScope.some((value) => testingScope(test) == value);
   let guiFilter = filterGui ? isGui(test) : true;
   return searchBarFilter && scopeFilter && guiFilter;
+}
+
+/**
+ * The filters currently applied to the list, shared with the whole tree so that
+ * any displayed text can highlight what the user searched for, without having
+ * to thread the filters through every intermediate component.
+ */
+const FiltersContext = createContext<Filters>([]);
+
+/**
+ * Renders `text`, wrapping every substring matched by a filter in a `<mark>` so
+ * that the user sees what made the test show up. Matching is case insensitive,
+ * like in `matchFilter`.
+ * Only inclusion filters are considered: a test that survived an exclusion
+ * filter cannot contain the excluded term in the first place.
+ */
+function HighlightedText({ text }: { text: string }): ReactElement {
+  const filters = useContext(FiltersContext);
+  const terms = filters.filter(([, include]) => include).map(([term]) => term);
+  return (
+    <>
+      {splitOnTerms(text, terms).map((chunk, index) =>
+        chunk.match ? (
+          <mark key={index} className="filter-match">
+            {chunk.text}
+          </mark>
+        ) : (
+          chunk.text
+        )
+      )}
+    </>
+  );
 }
 
 type OriginalTest = { index: number; test: TestMacro };
@@ -542,7 +702,7 @@ function CardGrid({
         {Array.from(gridTests.entries()).map(([scope, tests]) => (
           <>
             <Grid size={3}>
-              <h2 style={{ overflowX: 'auto' }}>{scope}</h2>
+              <h2 style={{ overflowWrap: 'anywhere' }}>{scope}</h2>
               <h3>
                 <FormattedMessage
                   id="generalTests.associatedTests"
@@ -589,40 +749,88 @@ function CardGrid({
   }
 }
 
+type SortingTest = { index: number; success: boolean | undefined };
+
+function sortTests(test_a: SortingTest, test_b: SortingTest): number {
+  let scale = (success: boolean | undefined): number => {
+    if (success == undefined) {
+      return 1;
+    } else if (success) {
+      return 0;
+    } else {
+      return 2;
+    }
+  };
+  let a_scale = scale(test_a.success);
+  let b_scale = scale(test_b.success);
+  let failures = b_scale - a_scale;
+  return failures != 0 ? failures : test_a.index - test_b.index;
+}
+
 function TestList({
   vscode,
   onRun,
   tests,
+  orderFailure,
   filteredScope,
-}: CardGridArg): ReactElement {
-  let map = new Map<string, OriginalTest[]>();
+}: CardGridArg & { orderFailure: boolean }): ReactElement {
+  let map = new Map<string, [OriginalTest[], OriginalTest[], OriginalTest[]]>();
   let not_gui: OriginalTest[] = [];
   for (let index = 0; index < tests.length; index++) {
     const element = tests[index];
     if (element.test.test.kind == 'GUI') {
       let scope = element.test.test.value.scope_tested;
-      let scopeList = map.get(scope) ?? [];
-      scopeList.push(element);
-      map.set(scope, scopeList);
+      let [fList, uList, sList] = map.get(scope) ?? [[], [], []];
+      if (orderFailure && element.test.success == undefined) {
+        uList.push(element);
+      } else if (orderFailure && element.test.success) {
+        sList.push(element);
+      } else {
+        fList.push(element);
+      }
+      map.set(scope, [fList, uList, sList]);
     } else {
       not_gui.push(element);
     }
   }
-  let allTests: [string, OriginalTest[]][] =
-    filteredScope.length == 0
-      ? [['Tests', [...map.values()].flat()]]
-      : [...map.entries()];
+  if (orderFailure) {
+    not_gui = not_gui.sort((test_a, test_b) => {
+      let a = { index: test_a.index, success: test_a.test.success };
+      let b = { index: test_b.index, success: test_b.test.success };
+      return sortTests(a, b);
+    });
+  }
+
+  let allTests: [string, OriginalTest[]][] = [];
+  if (filteredScope.length == 0) {
+    let list = [...map.values()].flat().flat();
+    if (orderFailure) {
+      list = list.sort((test_a, test_b) => {
+        let a = { index: test_a.index, success: test_a.test.success };
+        let b = { index: test_b.index, success: test_b.test.success };
+        return sortTests(a, b);
+      });
+    }
+    allTests = [['Tests', list]];
+  } else {
+    let list = [...map.entries()].map((value) => {
+      let res: [string, OriginalTest[]] = [value[0], value[1].flat().flat()];
+      return res;
+    });
+    allTests = list;
+  }
   return (
     <>
       {allTests.map(([testedScope, tests]) => {
         return (
-          <>
+          <Fragment key={testedScope}>
             <h1>{testedScope}</h1>
             <table className="test-list">
-              <HeaderLine />
+              <HeaderLine gui={true} />
               <tbody>
                 {tests.map(({ test, index }) => (
                   <TestLine
+                    key={index}
                     vscode={vscode}
                     test={test}
                     num={index}
@@ -632,18 +840,19 @@ function TestList({
                 ))}
               </tbody>
             </table>
-          </>
+          </Fragment>
         );
       })}
       {not_gui.length > 0 ? (
         <>
           <h1>Autres Tests</h1>
           <table className="test-list">
-            <HeaderLine />
+            <HeaderLine gui={false} />
             <tbody>
               {not_gui.map(({ test, index }) => {
                 return (
                   <TestLine
+                    key={index}
                     vscode={vscode}
                     test={test}
                     num={index}
@@ -666,6 +875,7 @@ function TestsGrid({
   grid,
   filterScope,
   onRun,
+  orderFailure,
 }: TestGridArg): ReactElement {
   if (filtered == undefined || filtered.length == 0) {
     return (
@@ -696,6 +906,7 @@ function TestsGrid({
     />
   ) : (
     <TestList
+      orderFailure={orderFailure}
       filteredScope={filterScope}
       vscode={vscode}
       tests={filtered}
@@ -723,9 +934,10 @@ function ScopeFilter({
   filterScope,
   setFilterScope,
 }: ScopeFilterArg): ReactElement {
+  const intl = useIntl();
   let filteredScope = scopesFromTests(tests ?? []);
   return (
-    <div className="scope-filter">
+    <div className="pins">
       <Box
         sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, textAlign: 'center' }}
       >
@@ -740,6 +952,14 @@ function ScopeFilter({
           Array.from(filteredScope).map((scope, index) => (
             <span
               key={index}
+              title={intl.formatMessage(
+                {
+                  id: 'generalTests.tooltip.filterScope',
+                  defaultMessage:
+                    'Filtrer les tests selon le champ d\'application "{scope}"',
+                },
+                { scope }
+              )}
               onClick={(event) => {
                 event.preventDefault();
                 setFilterScope((previous) => {
@@ -762,14 +982,92 @@ function ScopeFilter({
   );
 }
 
+type FilterPinArg = {
+  removeFilter: (filter: string, include: boolean) => void;
+  filter: string;
+  include: boolean;
+};
+
+function FilterPin({
+  removeFilter,
+  filter,
+  include,
+}: FilterPinArg): ReactElement {
+  const intl = useIntl();
+  // Both branches keep their descriptor inline so that the message ids stay
+  // statically extractable
+  const tooltip = include
+    ? intl.formatMessage(
+        {
+          id: 'generalTests.filterPin.inclusion',
+          defaultMessage: 'Je veux que "{filter}" apparaisse dans le test',
+        },
+        { filter }
+      )
+    : intl.formatMessage(
+        {
+          id: 'generalTests.filterPin.exclusion',
+          defaultMessage:
+            'Je ne veux pas que "{filter}" apparaisse dans le test',
+        },
+        { filter }
+      );
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'center' }}
+      title={tooltip}
+      className={`filter-pin ${include ? 'inclusion-filter' : 'exclusion-filter'}`}
+    >
+      <span>{filter}</span>
+      <span
+        style={{ cursor: 'pointer' }}
+        className="codicon codicon-close"
+        onClick={(event) => {
+          event.preventDefault();
+          removeFilter(filter, include);
+        }}
+      />
+    </div>
+  );
+}
+
+function FilterPins({
+  removeFilter,
+  filters,
+}: {
+  removeFilter: (filter: string, include: boolean) => void;
+  filters: Filters;
+}): ReactElement | null {
+  return filters.length == 0 ? null : (
+    <div className="pins" style={{ width: '30em' }}>
+      <Box
+        sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, textAlign: 'center' }}
+      >
+        {Array.from(filters).map(([filter, include], index) => (
+          <FilterPin
+            key={index}
+            removeFilter={removeFilter}
+            filter={filter}
+            include={include}
+          />
+        ))}
+      </Box>
+    </div>
+  );
+}
+
 function Filter({
   tests,
-  filter,
+  filters,
   filterScope,
   setFilterScope,
-  setFilter,
+  addFilter,
+  removeFilter,
+  removeAllFilter,
   filterGui,
   setFilterGui,
+  orderFailure,
+  setOrder,
 }: FilterArg): ReactElement {
   const intl = useIntl();
   // Restore the default state: GUI-only checkbox checked, no scope selected,
@@ -777,15 +1075,17 @@ function Filter({
   const resetFilters = (): void => {
     setFilterGui(true);
     setFilterScope([]);
-    setFilter('');
+    removeAllFilter();
   };
 
   const filteredTests = tests
     ?.map((test, index) => ({ test, index }))
     .filter(({ test, index }) =>
-      matchFilter(test, index, filter, [], filterGui)
+      matchFilter(test, index, filters, [], filterGui)
     );
 
+  const [searchBar, setSearchBar] = useState<string>('');
+  let valueSearch = searchBar.trim();
   return (
     <div className="box-filter">
       <div className="filter-title">
@@ -813,41 +1113,104 @@ function Filter({
         <Loading size="small" />
       ) : (
         <>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={filterGui}
-                onChange={(event) => setFilterGui(event.target.checked)}
-                sx={{ color: 'gray', '&.Mui-checked': { color: 'lightgray' } }}
-              />
-            }
-            label={
-              <FormattedMessage
-                id="generalTests.guiOnly"
-                defaultMessage="Tests GUI uniquement"
-              />
-            }
-            sx={{ '.MuiFormControlLabel-label': { color: 'gray' } }}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={filterGui}
+                  onChange={(event) => setFilterGui(event.target.checked)}
+                  sx={{
+                    color: 'gray',
+                    '&.Mui-checked': { color: 'lightgray' },
+                  }}
+                />
+              }
+              label={
+                <FormattedMessage
+                  id="generalTests.guiOnly"
+                  defaultMessage="Tests GUI uniquement"
+                />
+              }
+              sx={{ '.MuiFormControlLabel-label': { color: 'gray' } }}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={orderFailure}
+                  onChange={(event) => setOrder(event.target.checked)}
+                  sx={{
+                    color: 'gray',
+                    '&.Mui-checked': { color: 'lightgray' },
+                  }}
+                />
+              }
+              label={
+                <FormattedMessage
+                  id="generalTests.highlightFails"
+                  defaultMessage="Mettre en avant les tests échoués"
+                />
+              }
+              sx={{ '.MuiFormControlLabel-label': { color: 'gray' } }}
+            />
+          </div>
           <ScopeFilter
             tests={filteredTests}
             filterScope={filterScope}
             setFilterScope={setFilterScope}
           />
-          <VscodeTextfield
-            className="search-bar"
-            value={filter}
-            placeholder={intl.formatMessage({
-              id: 'generalTests.searchPlaceholder',
-              defaultMessage: 'Rechercher un test…',
-            })}
-            onInput={(e) => {
-              const value = (e.target as HTMLInputElement).value;
-              setFilter(value);
-            }}
-          >
-            <span className="codicon codicon-search" slot="content-before" />
-          </VscodeTextfield>
+          <div style={{ marginLeft: 'auto' }}>
+            <FilterPins removeFilter={removeFilter} filters={filters} />
+            <VscodeTextfield
+              className="search-bar"
+              value={searchBar}
+              placeholder={intl.formatMessage({
+                id: 'generalTests.searchPlaceholder',
+                defaultMessage: 'Rechercher un test…',
+              })}
+              onInput={(e) => {
+                const value = (e.target as HTMLInputElement).value;
+                setSearchBar(value);
+              }}
+            >
+              <span className="codicon codicon-search" slot="content-before" />
+              <span
+                title={intl.formatMessage(
+                  {
+                    id: 'generalTests.filterBar.inclusion',
+                    defaultMessage: 'Inclure {filter} dans la recherche',
+                  },
+                  { filter: valueSearch == '' ? '' : `"${valueSearch}"` }
+                )}
+                style={{ cursor: 'pointer' }}
+                className="codicon codicon-save"
+                slot="content-after"
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (valueSearch == '') return;
+                  addFilter(valueSearch, true);
+                  setSearchBar('');
+                }}
+              />
+              <span
+                title={intl.formatMessage(
+                  {
+                    id: 'generalTests.filterBar.exclusion',
+                    defaultMessage: 'Exclure {filter} de la recherche',
+                  },
+                  { filter: valueSearch == '' ? '' : `"${valueSearch}"` }
+                )}
+                style={{ cursor: 'pointer' }}
+                className="codicon codicon-circle-slash"
+                slot="content-after"
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (valueSearch == '') return;
+                  addFilter(valueSearch, false);
+                  setSearchBar('');
+                }}
+              />
+            </VscodeTextfield>
+          </div>
         </>
       )}
     </div>
@@ -880,11 +1243,11 @@ function Loading({
 }
 
 function noFilter(
-  filter: string,
+  filter: Filters,
   filterScope: string[],
   filterGui: boolean
 ): boolean {
-  return filter == '' && filterScope.length == 0 && filterGui == false;
+  return filter.length == 0 && filterScope.length == 0 && filterGui == false;
 }
 
 // Total duration of the `highlight` blink animation (`blink 1s ... 4` = 1s ×
@@ -895,30 +1258,37 @@ function noFilter(
 export default function GeneralTests({
   vscode,
 }: GeneralTestsArg): ReactElement {
-  const [filter, setFilter] = useState<string>('');
+  const intl = useIntl();
+  const [filter, setFilter] = useState<Filters>([]);
   const [filterScope, setFilterScope] = useState<string[]>([]);
   const [filterGui, setFilterGui] = useState<boolean>(true);
+  const [orderFailure, setOrderFails] = useState<boolean>(true);
   const [grid, setGrid] = useState<boolean>(true);
   const [tests, setTests] = useState<TestMacro[] | undefined>(undefined);
   const [reload, setReload] = useState<boolean>(false);
 
+  // These three helpers must always hand a *new* array to setFilter: React
+  // bails out of the re-render when the updater returns the very same reference,
+  // so mutating the current state in place would leave the view one step behind.
+  const addFilter = (filter: string, include: boolean): void => {
+    setFilter((oldFilter) => [...oldFilter, [filter, include]]);
+  };
+
+  const removeAllFilter = (): void => {
+    setFilter([]);
+  };
+
+  const removeFilter = (filter: string, include: boolean): void => {
+    setFilter((oldFilter) =>
+      oldFilter.filter(([current, currentInclude]) => {
+        return current != filter || include != currentInclude;
+      })
+    );
+  };
+
   useEffect(() => {
     setVsCodeApi(vscode);
   }, [vscode]);
-
-  // const settleHighlight = (id: number): void => {
-  //   setTests((oldTests) =>
-  //     oldTests?.map((test, index) =>
-  //       index === id && test.state === 'JustFailed'
-  //         ? { ...test, state: 'Failed' }
-  //         : test
-  //     )
-  //   );
-  // };
-
-  // const scheduleSettle = (id: number): void => {
-  //   setTimeout(() => settleHighlight(id), HIGHLIGHT_MS);
-  // };
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
@@ -978,7 +1348,6 @@ export default function GeneralTests({
   }, []);
 
   const onRun = (id: number): void => {
-    console.log(`Run test ${id} Loading`);
     if (!tests) {
       return;
     }
@@ -992,119 +1361,157 @@ export default function GeneralTests({
     );
   };
 
-  const filteredTest = tests
+  const filteredTests = tests
     ?.map((test, index) => ({ test, index }))
     .filter(({ test, index }) =>
       matchFilter(test, index, filter, filterScope, filterGui)
     );
 
+  const sortedTests = orderFailure
+    ? filteredTests?.sort((test_a, test_b) => {
+        let a = { index: test_a.index, success: test_a.test.success };
+        let b = { index: test_b.index, success: test_b.test.success };
+        return sortTests(a, b);
+      })
+    : filteredTests;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div
-        style={{ display: 'flex', alignItems: 'center', flexDirection: 'row' }}
-      >
-        <FormattedMessage
-          id="generalTests.title"
-          defaultMessage="Ensemble des tests"
-          children={(msg) => <h1>{msg}</h1>}
-        />
-        <div className="tests-button">
-          <AddNewTest vscode={vscode} />
-          <RunAllTests
-            onRun={() => {
-              if (tests) {
-                if (noFilter(filter, filterScope, filterGui)) {
-                  setTests((oldTests) =>
-                    oldTests?.map((test) => {
-                      return { ...test, state: 'Loading' };
-                    })
-                  );
-                  vscode.postMessage(
-                    writeUpMessage({ kind: 'SpecificTestRequest', value: [] })
-                  );
-                } else if (filteredTest) {
-                  let indexes = filteredTest.map(({ index }) => index);
-                  setTests((oldTests) => {
-                    if (oldTests) {
-                      for (const index of indexes) {
-                        oldTests[index].state = 'Loading';
-                      }
-                    }
-                    return oldTests;
-                  });
-                  vscode.postMessage(
-                    writeUpMessage({
-                      kind: 'SpecificTestRequest',
-                      value: indexes,
-                    })
-                  );
+    <FiltersContext.Provider value={filter}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexDirection: 'row',
+          }}
+        >
+          <FormattedMessage
+            id="generalTests.title"
+            defaultMessage="Ensemble des tests"
+            children={(msg) => <h1>{msg}</h1>}
+          />
+          <div className="tests-button">
+            <AddNewTest vscode={vscode} />
+            <RunAllTests
+              onRun={() => {
+                if (tests) {
+                  if (noFilter(filter, filterScope, filterGui)) {
+                    setTests((oldTests) =>
+                      oldTests?.map((test) => {
+                        return { ...test, state: 'Loading' };
+                      })
+                    );
+                    vscode.postMessage(
+                      writeUpMessage({ kind: 'SpecificTestRequest', value: [] })
+                    );
+                  } else if (sortedTests) {
+                    let indexes = sortedTests.map(({ index }) => index);
+                    setTests((oldTests) => {
+                      return oldTests?.map((test, index) => {
+                        let loading = indexes.includes(index);
+                        return loading ? { ...test, state: 'Loading' } : test;
+                      });
+                    });
+                    vscode.postMessage(
+                      writeUpMessage({
+                        kind: 'SpecificTestRequest',
+                        value: indexes,
+                      })
+                    );
+                  }
                 }
-              }
-            }}
-          />{' '}
+              }}
+            />{' '}
+          </div>
         </div>
-      </div>
-      <Filter
-        tests={tests}
-        filter={filter}
-        setFilter={setFilter}
-        setFilterScope={setFilterScope}
-        filterScope={filterScope}
-        filterGui={filterGui}
-        setFilterGui={setFilterGui}
-      />
-      <div className="select-test-print">
-        <FormattedMessage
-          id="generalTests.display"
-          defaultMessage="Affichage :"
-          children={(msg) => <h3>{msg}</h3>}
+        <Filter
+          tests={tests}
+          addFilter={addFilter}
+          removeFilter={removeFilter}
+          removeAllFilter={removeAllFilter}
+          setFilterScope={setFilterScope}
+          filterScope={filterScope}
+          filterGui={filterGui}
+          setFilterGui={setFilterGui}
+          orderFailure={orderFailure}
+          setOrder={setOrderFails}
+          filters={filter}
         />
-        <div
-          className={`pp-button ${grid ? 'selected' : ''}`}
-          onClick={(event) => {
-            event.preventDefault();
-            setGrid((_) => true);
-          }}
-        >
-          <span className="codicon codicon-layout" />
-          <span>
-            <FormattedMessage id="generalTests.card" defaultMessage="Carte" />
-          </span>
-        </div>
-        <div
-          className={`pp-button ${grid ? '' : 'selected'}`}
-          onClick={(event) => {
-            event.preventDefault();
-            setGrid((_) => false);
-          }}
-        >
-          <span className="codicon codicon-list-unordered" />
-          <span>
-            <FormattedMessage id="generalTests.list" defaultMessage="Liste" />
-          </span>
-        </div>
-        <div className="refresh-box">
-          <span
-            className={`refresh codicon ${reload ? 'codicon-loading codicon-modifier-spin' : 'codicon-refresh'}`}
+        <div className="select-test-print">
+          <FormattedMessage
+            id="generalTests.display"
+            defaultMessage="Affichage :"
+            children={(msg) => <h3>{msg}</h3>}
+          />
+          <div
+            className={`pp-button ${grid ? 'selected' : ''}`}
+            title={intl.formatMessage({
+              id: 'generalTests.tooltip.displayCard',
+              defaultMessage: 'Afficher les tests sous forme de cartes',
+            })}
             onClick={(event) => {
               event.preventDefault();
-              setReload(true);
-              vscode.postMessage(writeUpMessage({ kind: 'Reload' }));
+              setGrid((_) => true);
             }}
-          />
+          >
+            <span className="codicon codicon-layout" />
+            <span>
+              <FormattedMessage id="generalTests.card" defaultMessage="Carte" />
+            </span>
+          </div>
+          <div
+            className={`pp-button ${grid ? '' : 'selected'}`}
+            title={intl.formatMessage({
+              id: 'generalTests.tooltip.displayList',
+              defaultMessage: 'Afficher les tests sous forme de liste',
+            })}
+            onClick={(event) => {
+              event.preventDefault();
+              setGrid((_) => false);
+            }}
+          >
+            <span className="codicon codicon-list-unordered" />
+            <span>
+              <FormattedMessage id="generalTests.list" defaultMessage="Liste" />
+            </span>
+          </div>
+          <div
+            className="refresh-box"
+            title={intl.formatMessage(
+              reload
+                ? {
+                    id: 'generalTests.tooltip.reloading',
+                    defaultMessage: 'Rechargement en cours…',
+                  }
+                : {
+                    id: 'generalTests.tooltip.reload',
+                    defaultMessage: 'Recharger la liste des tests',
+                  }
+            )}
+          >
+            <span
+              className={`refresh codicon ${reload ? 'codicon-loading codicon-modifier-spin' : 'codicon-refresh'}`}
+              onClick={(event) => {
+                event.preventDefault();
+                setReload(true);
+                vscode.postMessage(writeUpMessage({ kind: 'Reload' }));
+              }}
+            />
+          </div>
         </div>
+        {sortedTests === undefined ? (
+          <Loading size="medium" />
+        ) : (
+          <TestsGrid
+            vscode={vscode}
+            filtered={sortedTests}
+            grid={grid}
+            filterScope={filterScope}
+            orderFailure={orderFailure}
+            onRun={onRun}
+          />
+        )}
       </div>
-      {filteredTest === undefined ? (
-        <Loading size="medium" />
-      ) : (
-        <TestsGrid
-          vscode={vscode}
-          filtered={filteredTest}
-          grid={grid}
-          filterScope={filterScope}
-          onRun={onRun}
-        />
-      )}
-    </div>
+    </FiltersContext.Provider>
   );
 }
