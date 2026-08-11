@@ -3,17 +3,15 @@
   border-radius: 0.5em;
   display: flex;
   flex-direction: column;
-  flex-wrap: wrap;
   gap: 4em;
   padding: 2em 1em 2em 1em;
-  overflow-x: auto;
+  /* overflow-x: auto; */
   /* remplit la hauteur de la cellule Grid → toutes les cartes d'une rangée ont la même hauteur */
   height: 100%;
   box-sizing: border-box;
 }
 
 .test-item .test-item-header {
-  position: relative;
   display: flex;
 }
 
@@ -24,10 +22,12 @@
 
 .test-item .test-item-header .test-title {
   font-size: 2em;
+  overflow-wrap: anywhere;
 }
 
 .test-descr {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .test-list .test-descr-hidden {
@@ -259,7 +259,7 @@
   background-color: var(--vscode-button-hoverBackground);
 }
 
-.box-filter .scope-filter {
+.box-filter .pins {
   /* display: flex; */
   height: 14em;
   padding: 2em 0em 2em 0em;

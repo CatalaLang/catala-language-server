@@ -24,7 +24,7 @@ import {
   spawnStdout,
   tryBinaryPath,
 } from './shared/util_client';
-import type { RunArgs } from './shared/util_client';
+import type { Binary, RunArgs } from './shared/util_client';
 import { initTests, ResultController } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints } from './extension/lspRequests';
@@ -136,8 +136,6 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
     }
   }
 }
-
-type Binary = { path: string; version?: string };
 
 type Toolchain = {
   catalaPath?: Binary;
@@ -499,7 +497,9 @@ export async function activate(
     getConfig('lspServerPath')
   );
 
-  let resultController = new ResultController(context.workspaceState);
+  const language = vscode.env.language;
+
+  let resultController = new ResultController(context.workspaceState, language);
   if (lsp_path) {
     const run: Executable = {
       command: lsp_path,
@@ -564,17 +564,14 @@ export async function activate(
           const columnToShowIn = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
-          if (macroTestsView.panel != undefined) {
-            macroTestsView.panel.reveal(columnToShowIn);
-          } else {
-            macroTestsView.createWebView(
-              client,
-              context,
-              entrypointsRequest,
-              resultController,
-              ctrl
-            );
-          }
+          macroTestsView.show(
+            client,
+            context,
+            entrypointsRequest,
+            resultController,
+            ctrl,
+            columnToShowIn
+          );
         }
       )
     );
@@ -634,7 +631,6 @@ export async function activate(
 
   // Can't use Intl to retrieve message from the json, also tried
   // to retrieve it manually but encountered an undefined
-  const language = vscode.env.language;
   const itemMsg = itemMessages[language];
 
   const titleAllTests = itemMsg['generalTestsTitle'];
@@ -654,6 +650,7 @@ export async function activate(
       new tree_view([catala_tests])
     )
   );
+
   logger.log(`Register "Catala Tests" data in th Tree data provider`);
 
   context.subscriptions.push(
