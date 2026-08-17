@@ -210,6 +210,21 @@ type diff = {
   actual: runtime_value;
 }
 
+(* One auxiliary variable whose value in the trace does not match the one
+   declared by its [#[testcase.variable]] attribute. The variable is looked up
+   in the trace by name.
+
+   Mirrors [Clerk_report.expected]. The values are the rendered strings the
+   checker compares, not [runtime_value]s: the comparison deliberately happens
+   on the trace's own rendering, so that hand-written expected values need not
+   have the runtime's formatting rules replicated. [current_value] is absent
+   when the trace carries no value for the variable. *)
+type variable_failure = {
+  name: string;
+  expected: string;
+  ?current_value: string option;
+}
+
 (* Message exchange within extension (shell <-> webview) *)
 
 type parse_results = [

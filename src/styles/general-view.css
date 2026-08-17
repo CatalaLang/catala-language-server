@@ -76,11 +76,15 @@
   margin-top: auto;
 }
 
+/* `anywhere` et pas `break-word` : les enfants du footer sont des éléments
+   flex, et seul `anywhere` réduit leur taille min-content. Sans ça une date
+   longue refuse de se couper et pousse les icônes hors de la carte. */
 .test-item .footer {
   display: flex;
   gap: 0.7em;
   align-items: center;
   font-size: 2em;
+  overflow-wrap: anywhere;
 }
 
 .test-item .footer .run-icon {

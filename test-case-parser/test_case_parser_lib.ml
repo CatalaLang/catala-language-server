@@ -943,6 +943,33 @@ let parse_expected_variable (s : string) :
     if value = "" then Some (name, None)
     else Some (name, Some (runtime_value_of_string value))
 
+(* Splits a "name: payload" attribute payload, keeping [payload] exactly as
+   written in the source: [Expected.check_expected] needs the surface form to
+   re-render it through the trace's own encoder. *)
+let split_expected_attr (s : string) : (string * string) option =
+  match String.index_opt s ':' with
+  | None -> None
+  | Some i ->
+    let name = String.trim (String.sub s 0 i) in
+    let payload =
+      String.trim (String.sub s (i + 1) (String.length s - i - 1))
+    in
+    if name = "" || payload = "" then None else Some (name, payload)
+
+(* The expected variables of one testing scope, in the form
+   [Expected.check_expected] consumes.
+
+   Read from the scope's own attributes rather than through [Scan.catala_file],
+   which gathers a single map for a whole file: a file may hold several test
+   scopes, and `testcase run` runs exactly one. *)
+let expected_variables info : Scan.expected_variable Scan.M.t =
+  List.fold_left
+    (fun acc (name, value) -> Scan.add_expected_value name value acc)
+    Scan.M.empty
+    (Pos.get_attrs info (function
+      | ExpectedVariable s -> split_expected_attr s
+      | _ -> None))
+
 let get_catala_test (prg, naming_ctx) testing_scope_name =
   let testing_scope =
     ScopeName.Map.find testing_scope_name prg.I.program_root.module_scopes

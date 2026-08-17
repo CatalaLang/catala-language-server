@@ -115,6 +115,11 @@ export default function TestEditor(props: Props): ReactElement {
     }
   }, [props.runState]);
 
+  // Whether the run needs to be traced: the trace is what the compiler checks
+  // the expected variables against, so it is only worth producing when the
+  // test declares some.
+  const hasExpected = props.test.variables.size > 0;
+
   const scrollToFirstUnset = (): void => {
     scrollToFirstInvalidOrUnset(unsetElementRef.current ?? document, 0);
   };

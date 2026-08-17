@@ -48,7 +48,7 @@ export type TraceElement = {
 };
 
 export type TraceVariable =
-  | { kind: 'value'; name: string; value?: TraceValue }
+  | { kind: 'value'; name: string; value?: TraceValue; source?: TraceElement }
   | {
       kind: 'step';
       name: string;
@@ -57,6 +57,15 @@ export type TraceVariable =
       index?: number;
       source?: TraceElement;
     };
+
+// The step a test's variable paths are relative to, as returned by
+// `traceVariablesForTest`.
+export type TestedScope = {
+  variable: Extract<TraceVariable, { kind: 'step' }>;
+  // Path of that step in the whole variable tree: prepend it to a path coming
+  // from `traceVariablesForTest` to get one that is absolute.
+  path: string;
+};
 
 export type TraceTest = {
   testing_scope: string;
@@ -366,7 +375,7 @@ function traceElementFromJson(e: JsonValue): TraceElement | null {
   }
   const trace = Array.isArray(o.trace)
     ? o.trace
-        .map(traceElementFromJson)
+        .map((child) => traceElementFromJson(child))
         .filter((x): x is TraceElement => x !== null)
     : undefined;
   return {
@@ -392,6 +401,9 @@ function mergeSteps(l: TraceVariable[]): TraceVariable[] {
     if (tv.kind === 'step') {
       const variables = mergeSteps(tv.variables);
       if (variables.length === 1 && variables[0].kind === 'step') {
+        // The merged segment keeps the *innermost* source, i.e. the node the
+        // value belongs to. The collapsed outer nodes are still reachable: they
+        // are the ancestors of `source.jsonPath` in the raw JSON.
         acc.push({ ...variables[0], name: `${tv.name}.${variables[0].name}` });
       } else {
         const vs = variables.filter(
@@ -431,6 +443,7 @@ function traceVariablesAux(
           kind: 'value',
           name: k.name,
           value: te.value,
+          source: te,
         });
       } else if (variables.length !== 0) {
         if (
@@ -440,7 +453,12 @@ function traceVariablesAux(
           te.value.kind !== 'struct' &&
           te.value.kind !== 'array'
         ) {
-          acc.push({ kind: 'value', name: k.name, value: te.value });
+          acc.push({
+            kind: 'value',
+            name: k.name,
+            value: te.value,
+            source: te,
+          });
         }
         acc.push({
           kind: 'step',
@@ -452,7 +470,7 @@ function traceVariablesAux(
       }
     } else {
       if (varCond && typeof k.name === 'string') {
-        acc.push({ kind: 'value', name: k.name, value: te.value });
+        acc.push({ kind: 'value', name: k.name, value: te.value, source: te });
       }
       if (te.trace !== undefined) {
         traceVariablesAux(te.trace, acc);
@@ -528,35 +546,41 @@ export function findTraceValue(
 
 function findScope(
   scope: string,
-  variables: TraceVariable[]
-): Extract<TraceVariable, { kind: 'step' }> | undefined {
+  variables: TraceVariable[],
+  prefix = ''
+): TestedScope | undefined {
   for (const v of variables) {
     if (v.kind === 'step') {
-      if (v.name.split('.').includes(scope)) return v;
-      const sc = findScope(scope, v.variables);
+      const path = variablePath(prefix, v);
+      if (v.name.split('.').includes(scope)) return { variable: v, path };
+      const sc = findScope(scope, v.variables, path);
       if (sc !== undefined) return sc;
     }
   }
 }
 
+// The returned variables are those of the tested scope, so the paths built from
+// them are relative to it; the third element is that anchor.
 export function traceVariablesForTest(
   trace: TraceElement[],
   scope: string
-): [TraceVariable[], Record<string, TraceValue>] {
+): [TraceVariable[], Record<string, TraceValue>, TestedScope?] {
   let variables: TraceVariable[] = [];
   let outputs: Record<string, TraceValue> = {};
+  let testedScope: TestedScope | undefined;
   if (trace !== undefined) {
-    const testedScope = findScope(scope, traceVariables(trace));
+    testedScope = findScope(scope, traceVariables(trace));
     if (testedScope !== undefined) {
-      variables = testedScope.variables;
-      if (testedScope.value?.kind === 'struct') {
-        outputs = testedScope.value.fields;
-      } else if (testedScope.value !== undefined) {
-        outputs = { output: testedScope.value };
+      const value = testedScope.variable.value;
+      variables = testedScope.variable.variables;
+      if (value?.kind === 'struct') {
+        outputs = value.fields;
+      } else if (value !== undefined) {
+        outputs = { output: value };
       }
     }
   }
-  return [variables, outputs];
+  return [variables, outputs, testedScope];
 }
 
 function readTraceTestVariables(x: JsonValue): Map<string, TraceValue | null> {
