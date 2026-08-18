@@ -76,6 +76,7 @@
   "testEditor.deleteVariable": "Remove expected variable",
   "testEditor.fillComputedVariable": "Fill with computed value ({value})",
   "testEditor.setVariable": "Set expected value to {value}",
+  "testEditor.variableMismatch": "The trace holds {actual} where {expected} was expected",
   "trace.viewer.title": "Trace viewer",
   "trace.loading": "Loading…",
   "trace.scope": "Scope",

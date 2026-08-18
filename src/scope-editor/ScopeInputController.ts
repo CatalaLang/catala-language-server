@@ -16,6 +16,7 @@ import {
   generate,
   serializeInputs,
 } from '../test-case-editor/testCaseCompilerInterop';
+import { runTrace } from '../trace-editor/traceRunner';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
@@ -86,11 +87,15 @@ export class ScopeInputController {
           if (typed_msg.value.in_shell) {
             const result = serializeInputs(this.test.test_inputs);
             if (result.kind == 'Ok')
-              vscode.commands.executeCommand('catala.runScope', {
-                uri: file,
-                scope: this.scope,
-                inputs: result.json,
-              });
+              if (this.test.variables.size > 0) {
+                runTrace(file, this.scope, result.json);
+              } else {
+                vscode.commands.executeCommand('catala.runScope', {
+                  uri: file,
+                  scope: this.scope,
+                  inputs: result.json,
+                });
+              }
             else
               throw new Error(
                 `Error on test scope run with inputs: ${result.message}`

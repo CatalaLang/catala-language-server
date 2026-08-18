@@ -139,7 +139,8 @@ function ninjaUpToDate(cwd: string): boolean {
 
 export async function runTrace(
   uri: string,
-  scope: string
+  scope: string,
+  inputs?: JSON
 ): Promise<TraceResult> {
   const cwd = getCwd(uri) ?? dirname(uri);
   const ninjaFile = join(cwd, TRACE_NINJA_FILE);
@@ -167,6 +168,7 @@ export async function runTrace(
     await vscode.commands.executeCommand('catala.runScope', {
       uri,
       scope,
+      inputs,
       withTrace: true,
       headless: true,
       traceOutputFile,

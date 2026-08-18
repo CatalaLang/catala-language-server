@@ -76,6 +76,7 @@
   "testEditor.deleteVariable": "Usuń oczekiwaną zmienną",
   "testEditor.fillComputedVariable": "Wypełnij obliczoną wartością ({value})",
   "testEditor.setVariable": "Ustaw oczekiwaną wartość na {value}",
+  "testEditor.variableMismatch": "Ślad zawiera {actual}, podczas gdy oczekiwano {expected}",
   "trace.viewer.title": "Przeglądarka śladu",
   "trace.loading": "Ładowanie…",
   "trace.scope": "Zakres",

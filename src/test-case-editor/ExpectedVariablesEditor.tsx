@@ -13,7 +13,7 @@ import {
   variablePath,
   variableSegment,
 } from '../trace-editor/traceUtils';
-import type { Test } from '../generated/catala_types';
+import type { Test, VariableFailure } from '../generated/catala_types';
 
 type Props = {
   test: Test;
@@ -129,6 +129,7 @@ export default function ExpectedVariablesEditor({
   test,
   trace,
   runTrace,
+  failures,
   onChange,
 }: Props): ReactElement {
   const [showCatalog, setShowCatalog] = useState(false);
@@ -184,6 +185,7 @@ export default function ExpectedVariablesEditor({
                   name={path}
                   expected={tv}
                   computed={computedOf(path)}
+                  failure={failureByName.get(path)}
                   onSet={setVar}
                   onRemove={remove}
                 />
@@ -236,12 +238,14 @@ function VariableRow({
   name,
   expected,
   computed,
+  failure,
   onSet,
   onRemove,
 }: {
   name: string;
   expected: TraceValue | null;
   computed?: TraceValue;
+  failure?: VariableFailure;
   onSet(name: string, rv: TraceValue | null): void;
   onRemove(name: string): void;
 }): ReactElement {
@@ -252,10 +256,14 @@ function VariableRow({
   const computedStr =
     computed !== undefined ? formatTraceValue(computed) : undefined;
 
+  // A reported failure wins over the local comparison: it was computed by the
+  // compiler against the trace, with the runtime's own formatting rules, so it
+  // is right where `traceValueEqual` on re-parsed JSON values may not be.
   const mismatch =
-    computed !== undefined &&
-    expected !== null &&
-    !traceValueEqual(expected, computed);
+    failure !== undefined ||
+    (computed !== undefined &&
+      expected !== null &&
+      !traceValueEqual(expected, computed));
 
   const kind =
     expected !== null && expected.kind !== 'absent'
@@ -295,6 +303,19 @@ function VariableRow({
           className="expected-variable-value body-1"
           style={
             mismatch ? { color: 'var(--vscode-errorForeground)' } : undefined
+          }
+          // The compiler reports both sides as already-rendered strings, so the
+          // mismatch can be shown verbatim.
+          title={
+            failure !== undefined
+              ? intl.formatMessage(
+                  { id: 'testEditor.variableMismatch' },
+                  {
+                    expected: failure.expected,
+                    actual: failure.current_value ?? '--',
+                  }
+                )
+              : undefined
           }
         >
           {expectedStr}

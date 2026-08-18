@@ -177,6 +177,7 @@ export function runTestScope(
       test: { test_outputs },
       assert_failures,
       diffs,
+      variable_failures,
     } = readTestRun(parsed);
     return {
       kind: 'Ok',
@@ -185,6 +186,7 @@ export function runTestScope(
         test_outputs,
         assert_failures,
         diffs,
+        variable_failures,
       },
     };
   } catch (error) {

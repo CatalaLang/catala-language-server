@@ -14,7 +14,9 @@ import type {
   RuntimeValue,
   SourcePosition,
   TestOutputs,
+  TestRunOutput,
   TestRunResults,
+  VariableFailure,
 } from '../generated/catala_types';
 import path from 'path';
 
@@ -293,6 +295,30 @@ function formatDiffs(diffs: Diff[]): string {
     .join('\n\n');
 }
 
+// Mismatches on the auxiliary variables declared by `#[testcase.variable]`.
+// Already-rendered strings: the comparison was done by the compiler, against
+// the trace, so nothing is re-formatted here.
+function formatVariableFailures(failures: VariableFailure[]): string {
+  return failures
+    .map(
+      (f) =>
+        `Variable ${f.name}:\n  expected: ${f.expected}\n  actual:   ${
+          f.current_value ?? '<not found in trace>'
+        }`
+    )
+    .join('\n\n');
+}
+
+// A run counts as failed if an assertion failed, an output differs from what
+// was expected, or an auxiliary variable does not match its expected value.
+function hasTestFailures(out: TestRunOutput): boolean {
+  return (
+    out.assert_failures ||
+    (out.diffs ?? []).length > 0 ||
+    (out.variable_failures ?? []).length > 0
+  );
+}
+
 // Shared helper to apply results to a single TestItem and report to a TestRun
 function applyResultsToTestItem(
   tr: vscode.TestRun,
@@ -303,11 +329,15 @@ function applyResultsToTestItem(
   if (results.kind === 'Ok') {
     const out = results.value;
     const diffs = out.diffs ?? [];
-    const hasFailures = out.assert_failures || diffs.length > 0;
-    if (hasFailures) {
+    const variableFailures = out.variable_failures ?? [];
+    if (hasTestFailures(out)) {
       // Prefer focusing the custom editor and displaying diffs there when
       // run from controller; location still attached for Test Explorer
-      const msg = new vscode.TestMessage(formatDiffs(diffs));
+      const msg = new vscode.TestMessage(
+        [formatDiffs(diffs), formatVariableFailures(variableFailures)]
+          .filter((s) => s !== '')
+          .join('\n\n')
+      );
       const loc = firstDiffLocation(diffs, out.test_outputs, file);
       if (loc) msg.location = loc;
       tr.failed(item, msg);
@@ -331,10 +361,7 @@ async function processGUITest(
     const uri = vscode.Uri.file(file);
     const res: TestRunResults = await runTestScope(file, scope);
     if (res.kind === 'Ok') {
-      const out = res.value;
-      const diffs = out.diffs ?? [];
-      const hasFailures = out.assert_failures || diffs.length > 0;
-      if (hasFailures) {
+      if (hasTestFailures(res.value)) {
         // Prefer focusing the custom editor and displaying diffs there
         // TODO: SHOULD WE?
         await focusDiffInCustomEditor(uri, scope, res);

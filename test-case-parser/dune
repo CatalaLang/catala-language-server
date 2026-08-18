@@ -2,11 +2,10 @@
  (name test_case_parser_lib)
  (modules test_case_parser_lib)
  (libraries
-   catala.driver
-   catala.clerk_lib
-   catala_types_atd
-   catala.clerk_backend
-   catala.clerk_utils)
+  catala.driver
+  catala.clerk_lib
+  catala.clerk_utils
+  catala_types_atd)
  (flags
   (:standard -open Catala_types_atd)))
 
@@ -20,7 +19,6 @@
   ninja_utils
   catala.clerk_lib
   catala.clerk_utils
-  catala.clerk_backend
   atdgen-runtime
   catala_types_atd
   test_case_parser_lib))

@@ -8,6 +8,7 @@ import {
   type TestInputs,
   type TestRunResults,
   type PathSegment,
+  type VariableFailure,
 } from '../generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
@@ -91,6 +92,14 @@ export default function TestEditor(props: Props): ReactElement {
     });
     props.onTestChange({ ...props.test, variables }, false);
   }
+
+  // Mismatches on the auxiliary variables, as reported by the compiler for the
+  // last run. Keyed by variable name, which is also the key of
+  // `test.variables`. Empty until a run happened.
+  const variableFailures: VariableFailure[] =
+    props.runState?.results?.kind === 'Ok'
+      ? props.runState.results.value.variable_failures
+      : [];
 
   const expectedSectionRef = useRef<HTMLDivElement>(null);
   // Scope for searching the first '.value-editor.invalid' or '.value-editor.unset' before running; used to scroll into view
@@ -209,6 +218,7 @@ export default function TestEditor(props: Props): ReactElement {
           test={props.test}
           trace={props.trace}
           runTrace={props.runTrace}
+          failures={variableFailures}
           onChange={onVariablesChange}
         />
         <div
@@ -252,7 +262,8 @@ export default function TestEditor(props: Props): ReactElement {
             <div className="test-result">
               {props.runState?.status === 'success' &&
                 props.runState?.results?.kind === 'Ok' &&
-                !props.runState.results.value.assert_failures && (
+                !props.runState.results.value.assert_failures &&
+                variableFailures.length === 0 && (
                   <p className="test-run-result test-run-success body-1">
                     <span className="codicon codicon-check-all"></span>
                     <FormattedMessage
@@ -263,7 +274,8 @@ export default function TestEditor(props: Props): ReactElement {
                 )}
               {(props.runState?.status === 'error' ||
                 (props.runState?.results?.kind === 'Ok' &&
-                  props.runState.results.value.assert_failures)) && (
+                  (props.runState.results.value.assert_failures ||
+                    variableFailures.length > 0))) && (
                 <div className="test-result-information">
                   <p className="test-run-result test-run-error body-1">
                     <span className="codicon codicon-warning"></span>

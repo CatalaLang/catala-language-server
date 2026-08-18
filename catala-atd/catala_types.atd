@@ -143,6 +143,9 @@ type test_run = {
   test: test;
   assert_failures: bool;
   diffs: diff list;
+  (* Defaulted rather than required: absent from the JSON emitted by a Catala
+     that does not check expected variables yet. *)
+  ~variable_failures: variable_failure list;
 }
 
 type file_test = {
@@ -237,6 +240,7 @@ type test_run_output = { (* do we need that type at all when the difference with
   test_outputs: test_outputs;
   assert_failures: bool;
   diffs: diff list;
+  ~variable_failures: variable_failure list;
 }
 
 type test_run_results = [

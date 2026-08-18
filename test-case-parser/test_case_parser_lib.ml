@@ -19,6 +19,40 @@ module O = Catala_types_t
 module J = Catala_types_j
 module S = Surface.Ast
 
+module Expected : sig
+  type expected = {
+    name : string;
+    expected : string;
+    current_value : string option;
+  }
+
+  val check_expected :
+    expected:Clerk_utils.Scan.expected_variable Clerk_utils.Scan.M.t ->
+    tested_scope:string ->
+    Yojson.Safe.t ->
+    expected list
+end = struct
+  type expected = {
+    name : string;
+    expected : string;
+    current_value : string option;
+  }
+
+  let check_expected ~expected ~tested_scope json =
+    let open Clerk_utils in
+    let expected_list = Expected.check_expected ~expected ~tested_scope json in
+    List.map
+      (fun expected ->
+        {
+          name = expected.Expected.name;
+          expected = expected.Expected.expected;
+          current_value = expected.Expected.current_value;
+        })
+      expected_list
+end
+
+module Scan = Clerk_utils.Scan
+
 type Pos.attr += TestUi
 type Pos.attr += Uid of string
 type Pos.attr += TestDescription of string
@@ -970,6 +1004,19 @@ let expected_variables info : Scan.expected_variable Scan.M.t =
       | ExpectedVariable s -> split_expected_attr s
       | _ -> None))
 
+(* Splits a "name: payload" attribute payload, keeping [payload] exactly as
+   written in the source: [Expected.check_expected] needs the surface form to
+   re-render it through the trace's own encoder. *)
+let split_expected_attr (s : string) : (string * string) option =
+  match String.index_opt s ':' with
+  | None -> None
+  | Some i ->
+    let name = String.trim (String.sub s 0 i) in
+    let payload =
+      String.trim (String.sub s (i + 1) (String.length s - i - 1))
+    in
+    if name = "" || payload = "" then None else Some (name, payload)
+
 let get_catala_test (prg, naming_ctx) testing_scope_name =
   let testing_scope =
     ScopeName.Map.find testing_scope_name prg.I.program_root.module_scopes
@@ -1638,7 +1685,34 @@ let rec convert_atd_to_runtime_value : O.runtime_value -> Catala_runtime.Value.t
     failwith "Cannot convert 'NotOverridden' atd value to Catala runtime value"
   | Empty -> failwith "Cannot convert 'Empty' atd value to Catala runtime value"
 
-let interpret_program dcalc_prg scope_name build_term_to_interp =
+(* Runs [f] with the interpreter's JSON trace directed to a buffer, and returns
+   what it wrote. No file involved: [Global.options.trace] only needs a
+   formatter, the accompanying tag being read by clerk's backends to build
+   command lines, never on this path. *)
+let with_json_trace (f : unit -> 'a) : 'a * string =
+  let buf = Buffer.create 4096 in
+  let ppf = Format.formatter_of_buffer buf in
+  let previous_trace = Global.options.Global.trace in
+  let previous_format = Global.options.Global.trace_format in
+  ignore
+    (Global.enforce_options
+       ~trace:(Some (lazy ppf, `Stdout))
+       ~trace_format:Global.JSON ());
+  Fun.protect
+    ~finally:(fun () ->
+      ignore
+        (Global.enforce_options ~trace:previous_trace
+           ~trace_format:previous_format ()))
+    (fun () ->
+      let result = f () in
+      Format.pp_print_flush ppf ();
+      result, Buffer.contents buf)
+
+let interpret_program
+    ?(collect_trace = false)
+    dcalc_prg
+    scope_name
+    build_term_to_interp =
   Interpreter.load_runtime_modules
     ~hashf:Hash.(finalise ~monomorphize_types:false)
     (dcalc_prg : typed Dcalc.Ast.program);
@@ -1659,11 +1733,20 @@ let interpret_program dcalc_prg scope_name build_term_to_interp =
     |> Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang
   in
   let to_interp = build_term_to_interp program_fun in
-  let results =
+  let evaluate () =
     Interpreter.evaluate_expr dcalc_prg.decl_ctx dcalc_prg.lang to_interp
   in
+  (* Only this last evaluation is traced: [Interpreter.evaluate_expr] flushes
+     and resets the global trace state on every call, so tracing the closure
+     built above would leave a second JSON document in the buffer. *)
+  let results, trace =
+    if collect_trace then
+      let results, json = with_json_trace evaluate in
+      results, Some json
+    else evaluate (), None
+  in
   Message.report_delayed_errors_if_any ();
-  results, !failed_asserts
+  results, !failed_asserts, trace
 
 let rec convert_to_json_input ({ value; _ } : O.runtime_value) : Yojson.Safe.t =
   let open O in
@@ -1758,7 +1841,9 @@ let run_with_inputs
       (Expr.pos program_fun)
     |> Expr.unbox
   in
-  let result_struct, failed_asserts =
+  (* No trace collected: this runs against ad-hoc inputs, so the expected values
+     written in the source do not apply. *)
+  let result_struct, failed_asserts, _trace =
     interpret_program dcalc_prg scope_name build_term
   in
   let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
@@ -1790,7 +1875,10 @@ let run_with_inputs
   in
   let assert_failures = not (failed_asserts = []) in
   let test = O.{ test with test_outputs } in
-  write_stdout J.write_test_run O.{ test; assert_failures; diffs = [] }
+  (* TODO(expected variables): [run_with_inputs] runs against ad-hoc inputs, so
+     the expected values written in the source do not apply here. *)
+  write_stdout J.write_test_run
+    O.{ test; assert_failures; diffs = []; variable_failures = [] }
 
 let run_test include_dirs options testing_scope =
   let desugared_prg, naming_ctx, testing_scope_name, dcalc_prg =
@@ -1805,8 +1893,15 @@ let run_test include_dirs options testing_scope =
     in
     program_expr
   in
-  let result_struct, failed_asserts =
-    interpret_program dcalc_prg testing_scope_name build_term
+  let expected =
+    expected_variables (Mark.get (ScopeName.get_info testing_scope_name))
+  in
+  (* Tracing costs interpretation time and this command sits on the editor's
+     interactive path, so it is only turned on when there is something to
+     check. *)
+  let collect_trace = not (Scan.M.is_empty expected) in
+  let result_struct, failed_asserts, trace =
+    interpret_program ~collect_trace dcalc_prg testing_scope_name build_term
   in
   let (actual_results : (StructField.t * (dcalc, typed) gexpr) list), out_struct
       =
@@ -1845,7 +1940,34 @@ let run_test include_dirs options testing_scope =
     |> List.map (proj_diff (get_value dcalc_prg.lang dcalc_prg.decl_ctx))
   in
   let assert_failures = not (failed_asserts = []) in
-  let test_run = { O.test; O.assert_failures; O.diffs } in
+  (* Same check as `interpret --check-expected`, reported as data instead of
+     raising: this command exists to hand failures back to the editor, and its
+     error absorber only catches assertion failures. An unreadable trace
+     therefore leaves the variables unchecked with a warning, where `interpret`
+     rightly fails hard. *)
+  let variable_failures =
+    match trace with
+    | None -> []
+    | Some json -> (
+      match Yojson.Safe.from_string json with
+      | trace ->
+        Expected.check_expected ~expected ~tested_scope:testing_scope trace
+        (* Annotated: several ATD records carry a [name] field, so the type is
+           pinned rather than left to field-based inference. *)
+        |> List.map (fun (e : Expected.expected) : O.variable_failure ->
+            {
+              name = e.Expected.name;
+              expected = e.Expected.expected;
+              current_value = e.Expected.current_value;
+            })
+      | exception Yojson.Json_error msg ->
+        Message.warning
+          "Could not read the trace of @{<bold>%s@}, its expected variables \
+           are left unchecked:@ %s"
+          testing_scope msg;
+        [])
+  in
+  let test_run = { O.test; O.assert_failures; O.diffs; O.variable_failures } in
   write_stdout J.write_test_run test_run
 
 let run_test_cmd include_dirs options test_scope_name scope_input_opt =
