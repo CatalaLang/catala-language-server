@@ -1477,10 +1477,26 @@ let write_catala options outfile =
 
 let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program) :
     (StructField.t * (dcalc, typed) gexpr) list =
+  (* When the trace is on, the compiler wraps sub-expressions in [Tag] operator
+     applications: [Expr.etag] is a no-op unless [Global.options.trace] is set,
+     and `testcase run` now sets it before compiling. Those markers carry no
+     value and have to be seen through to reach the shape below. *)
+  let rec strip_tags (e : (dcalc, typed) gexpr) : (dcalc, typed) gexpr =
+    match Mark.remove e with
+    | EAppOp { op = Op.Tag _, _; args = [e]; _ } -> strip_tags e
+    | _ -> e
+  in
   let get_expected_value (assert_e : (dcalc, typed) gexpr) =
-    match Mark.remove assert_e with
-    | EAssert (EAppOp { args = [(EStructAccess { field; _ }, _); v]; _ }, _) ->
-      field, v
+    match Mark.remove (strip_tags assert_e) with
+    | EAssert equality -> (
+      match Mark.remove (strip_tags equality) with
+      | EAppOp { args = [lhs; v]; _ } -> (
+        match Mark.remove (strip_tags lhs) with
+        (* [v] is stripped too: it is handed to [get_value] downstream, which
+           knows nothing about tags. *)
+        | EStructAccess { field; _ } -> field, strip_tags v
+        | _ -> assert false)
+      | _ -> assert false)
     | _ -> assert false
   in
   let code_items = dcalc_prg.code_items |> BoundList.to_seq |> List.of_seq in
