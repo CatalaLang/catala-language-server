@@ -15,10 +15,6 @@
  (modules testcase)
  (libraries yojson atdgen-runtime test_case_parser_lib catala.clerk_utils)
  (embed_in_plugin_libraries
-  otoml
-  ninja_utils
-  catala.clerk_lib
-  catala.clerk_utils
   atdgen-runtime
   catala_types_atd
   test_case_parser_lib))
