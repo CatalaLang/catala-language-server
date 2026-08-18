@@ -145,9 +145,13 @@ export function runTestScope(
   if (cwd) {
     const relFilename = path.relative(cwd, filename);
     //compile dependencies (hack), do not fail on asserts
-    execBinary(clerkPath, ['run', '-c--no-fail-on-assert', relFilename], {
-      cwd,
-    });
+    execBinary(
+      clerkPath,
+      ['run', '--trace', '-c--no-fail-on-assert', relFilename],
+      {
+        cwd,
+      }
+    );
     // if (!clerkResult.ok) {
     //   window.showErrorMessage(clerkResult.stderr);
     //   return { kind: 'Error', value: clerkResult.stderr };
