@@ -240,6 +240,7 @@ export type TestRunRequest = {
   reset_outputs: boolean;
   in_shell: boolean;
   debug: boolean;
+  has_expected: boolean;
 }
 
 export type TestGenerateRequest = {
@@ -1117,6 +1118,7 @@ export function writeTestRunRequest(x: TestRunRequest, context: any = x): any {
     'reset_outputs': _atd_write_required_field('TestRunRequest', 'reset_outputs', _atd_write_bool, x.reset_outputs, x),
     'in_shell': _atd_write_required_field('TestRunRequest', 'in_shell', _atd_write_bool, x.in_shell, x),
     'debug': _atd_write_required_field('TestRunRequest', 'debug', _atd_write_bool, x.debug, x),
+    'has_expected': _atd_write_required_field('TestRunRequest', 'has_expected', _atd_write_bool, x.has_expected, x),
   };
 }
 
@@ -1126,6 +1128,7 @@ export function readTestRunRequest(x: any, context: any = x): TestRunRequest {
     reset_outputs: _atd_read_required_field('TestRunRequest', 'reset_outputs', _atd_read_bool, x['reset_outputs'], x),
     in_shell: _atd_read_required_field('TestRunRequest', 'in_shell', _atd_read_bool, x['in_shell'], x),
     debug: _atd_read_required_field('TestRunRequest', 'debug', _atd_read_bool, x['debug'], x),
+    has_expected: _atd_read_required_field('TestRunRequest', 'has_expected', _atd_read_bool, x['has_expected'], x),
   };
 }
 

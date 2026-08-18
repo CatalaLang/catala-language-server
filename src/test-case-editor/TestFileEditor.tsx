@@ -135,6 +135,16 @@ export default function TestFileEditor({
         ...prev,
         [testScope]: { status: 'running' },
       }));
+      // A variable declared with only one of the two attributes still counts:
+      // this mirrors the map the compiler builds from both of them, so that
+      // both sides agree on whether the trace is needed.
+      const test =
+        state.state === 'success'
+          ? state.tests.find((t) => t.testing_scope === testScope)
+          : undefined;
+      const has_expected =
+        test !== undefined &&
+        (test.variables.size > 0);
       vscode.postMessage(
         writeUpMessage({
           kind: 'TestRunRequest',
@@ -143,6 +153,7 @@ export default function TestFileEditor({
             reset_outputs: resetOutputs,
             in_shell: false,
             debug: false,
+            has_expected,
           },
         })
       );

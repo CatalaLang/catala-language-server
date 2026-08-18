@@ -31,14 +31,12 @@ function execBinary(
   logger.log(`Running ${bin} ${args.join(' ')}`);
   try {
     const useShell = process.platform === 'win32';
-    return {
-      ok: true,
-      output: execFileSync(bin, useShell ? args.map(shellArg) : args, {
-        encoding: 'utf8',
-        shell: useShell,
-        ...opts,
-      }),
-    };
+    const output = execFileSync(bin, useShell ? args.map(shellArg) : args, {
+      encoding: 'utf8',
+      shell: useShell,
+      ...opts,
+    });
+    return { ok: true, output };
   } catch (error) {
     const stderr = (error as SpawnSyncReturns<Buffer | string>).stderr;
     return {
@@ -116,7 +114,8 @@ export type ScopeRunResult =
 export function runTestScope(
   filename: string,
   testScope: string,
-  inputs?: TestInputs
+  inputs?: TestInputs,
+  trace?: boolean,
 ): TestRunResults {
   /*
    * Notes:
@@ -133,6 +132,12 @@ export function runTestScope(
     ? JSON.stringify(writeTestInputs(inputs))
     : undefined;
   const inputArgs = inputs ? ['--input=-'] : [];
+  // Only instrument the run when the test has expected variables to check:
+  // tracing changes the compiled AST and costs interpretation time.
+  // NB: bare `--trace` defaults to writing the trace on stdout, where the JSON
+  // result is read from; the plugin redirects it away, which is what makes this
+  // safe.
+  const traceArgs = trace ? ['--trace'] : [];
   const args = [
     'testcase',
     'run',
@@ -140,6 +145,7 @@ export function runTestScope(
     testScope,
     filename,
     ...inputArgs,
+    ...traceArgs,
   ];
   const cwd = getCwd(filename);
   if (cwd) {
@@ -147,7 +153,7 @@ export function runTestScope(
     //compile dependencies (hack), do not fail on asserts
     execBinary(
       clerkPath,
-      ['run', '--trace', '-c--no-fail-on-assert', relFilename],
+      ['run', ...traceArgs, '-c--no-fail-on-assert', relFilename],
       {
         cwd,
       }

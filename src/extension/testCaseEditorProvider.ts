@@ -141,7 +141,6 @@ export class TestCaseEditorProvider
   implements vscode.CustomEditorProvider<CatalaTestCaseDocument>
 {
   private testQueue: PQueue;
-
   private _onDidChangeCustomDocument = new vscode.EventEmitter<
     vscode.CustomDocumentEditEvent<CatalaTestCaseDocument>
   >();
@@ -268,9 +267,10 @@ export class TestCaseEditorProvider
 
     async function runTest(
       fileName: string,
-      scope: string
+      scope: string,
+      trace?: boolean
     ): Promise<TestRunResults> {
-      return runTestScope(fileName, scope);
+      return runTestScope(fileName, scope, undefined, trace);
     }
 
     function applyGuiEdit(
@@ -363,7 +363,7 @@ export class TestCaseEditorProvider
             return;
           }
 
-          const { scope, reset_outputs } = typed_msg.value;
+          const { scope, reset_outputs, has_expected } = typed_msg.value;
           if (reset_outputs) {
             const confirmation = await vscode.window.showInformationMessage(
               vscode.l10n.t(
@@ -393,7 +393,7 @@ export class TestCaseEditorProvider
           }
 
           const results = await this.testQueue.add(() =>
-            runTest(document.uri.fsPath, scope)
+            runTest(document.uri.fsPath, scope, has_expected)
           );
 
           // This run does not go through clerk, so nothing else would record

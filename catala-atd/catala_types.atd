@@ -259,6 +259,11 @@ type test_run_request = {
   reset_outputs: bool;
   in_shell: bool;
   debug: bool;
+  (* Whether the test declares expected variables. Only then is the run worth
+     instrumenting with "--trace": tracing changes the compiled AST and costs
+     interpretation time, so it is not enabled for tests that have nothing to
+     check against the trace. *)
+  has_expected: bool;
 }
 
 type test_generate_request = {

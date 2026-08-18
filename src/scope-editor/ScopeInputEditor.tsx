@@ -85,6 +85,9 @@ export default function ScopeInputEditor({
           reset_outputs: false,
           in_shell: args.action == 'Terminal',
           debug: args.action == 'Debug',
+          // The scope editor runs a scope against ad-hoc inputs, not a test:
+          // there are no expected variables to check against a trace.
+          has_expected: false,
         },
       })
     );
