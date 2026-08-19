@@ -22,6 +22,31 @@ type Props = {
   onChange(next: Map<string, TraceValue | null>): void;
 };
 
+function isolateStateVariable(
+  variables: TraceVariable[]
+): [TraceVariable[], Map<string, TraceVariable[]>] {
+  let stateVariables = new Map<string, TraceVariable[]>();
+  let valueVariables = [];
+  for (let nodeVar of variables.filter(
+    (v): v is Extract<TraceVariable, { kind: 'value' }> => v.kind === 'value'
+  )) {
+    if (!nodeVar.name.includes('#')) {
+      valueVariables.push(nodeVar);
+    } else {
+      let stateVar = nodeVar.name.split('#');
+      if (stateVar.length != 2) {
+        console.log(`Unexpected state variable ${nodeVar.name}`);
+        continue;
+      }
+      let existingState = stateVariables.get(stateVar[0]) ?? [];
+      // let stateNodeVar = { ...nodeVar, name: stateVar[1] };
+      existingState.push(nodeVar);
+      stateVariables.set(stateVar[0], existingState);
+    }
+  }
+  return [valueVariables, stateVariables];
+}
+
 function parseAs(kind: string, s: string): TraceValue | undefined {
   if (s.toLowerCase() === 'absent') return { kind: 'absent' };
   switch (kind) {
@@ -328,6 +353,7 @@ function VariableCatalog({
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const filtered = q ? filterByName(trVariables, q) : trVariables;
+  let [variables, stateVariables] = isolateStateVariable(filtered);
   return (
     <>
       <VscodeTextfield
@@ -340,7 +366,15 @@ function VariableCatalog({
       />
       <table style={{ borderCollapse: 'collapse', width: '100%' }}>
         <tbody>
-          {filtered
+          {[...stateVariables.entries()].map(([stateName, nodes]) => (
+            <StateRow
+              varName={stateName}
+              nodes={nodes}
+              crumbs={[]}
+              onAdd={onAdd}
+            />
+          ))}
+          {variables
             .filter(
               (v): v is Extract<TraceVariable, { kind: 'value' }> =>
                 v.kind === 'value' && outputs[v.name] === undefined
@@ -437,21 +471,8 @@ function StepRow({
     paddingBottom: show ? '0.5em' : undefined,
   };
 
-  let stateVariables = new Map<string, TraceVariable[]>();
-  for (let nodeVar of node.variables.filter(
-    (v): v is Extract<TraceVariable, { kind: 'value' }> =>
-      v.kind === 'value' && v.name.includes('#')
-  )) {
-    let stateVar = nodeVar.name.split('#');
-    if (stateVar.length != 2) {
-      console.log(`Unexpected state variable ${nodeVar.name}`);
-      continue;
-    }
-    let existingState = stateVariables.get(stateVar[0]) ?? [];
-    // let stateNodeVar = { ...nodeVar, name: stateVar[1] };
-    existingState.push(nodeVar);
-    stateVariables.set(stateVar[0], existingState);
-  }
+  let [variables, stateVariables] = isolateStateVariable(node.variables);
+
   return (
     <>
       <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
@@ -466,7 +487,7 @@ function StepRow({
       </tr>
       {show && (
         <>
-          {node.variables
+          {variables
             .filter(
               (v): v is Extract<TraceVariable, { kind: 'value' }> =>
                 v.kind === 'value' && !v.name.includes('#')
@@ -525,21 +546,19 @@ function StateRow({
   const show = open || !!filtering;
   return (
     <>
-      <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
-        <td
-          style={{
-            ...firstColStyle,
-          }}
-        />
-        <td
-          colSpan={4}
-          style={{ display: 'flex', alignItems: 'center', ...firstColStyle }}
-        >
-          <span
-            style={{ paddingRight: '0.2em' }}
-            className={`codicon codicon-chevron-${show ? 'down' : 'right'}`}
-          />
-          {varName}
+      <tr className="state-row" onClick={() => setOpen((o) => !o)}>
+        <td style={firstColStyle} />
+        {/* The cell must stay a real table cell for `colSpan` to apply, so the
+            flex layout lives on an inner element rather than on the `td`
+            itself. Same shape as `StepRow` above, which spans correctly. */}
+        <td colSpan={4}>
+          <span style={{ display: 'flex', alignItems: 'center' }}>
+            <span
+              style={{ paddingRight: '0.2em' }}
+              className={`codicon codicon-chevron-${show ? 'down' : 'right'}`}
+            />
+            {varName}
+          </span>
         </td>
       </tr>
       {show && (

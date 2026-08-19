@@ -74,17 +74,13 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
       const message = event.data as TraceDownMessage;
-      console.log('TEST0', message.kind);
       switch (message.kind) {
         case 'init': {
-          console.log('TEST1');
           const scopeMap = new Map<string, TraceTest | undefined>(
             message.scopes.map(([s, json]) => {
-              console.log('TEST3', s);
               return [s, json !== null ? readTraceTest(json) : undefined];
             })
           );
-          console.log('TEST2');
           setCwd(message.cwd);
           setScopes(scopeMap);
           setScopePreset(message.scope !== undefined);

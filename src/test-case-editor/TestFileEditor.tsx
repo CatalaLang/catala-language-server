@@ -114,8 +114,6 @@ export default function TestFileEditor({
         const newTestState = state.tests.filter(
           (test) => test.testing_scope !== testScope
         );
-        console.log('Deleting test:', testScope);
-        console.log('New test state:', newTestState);
 
         // optimistic update
         setState({ state: 'success', tests: newTestState });
