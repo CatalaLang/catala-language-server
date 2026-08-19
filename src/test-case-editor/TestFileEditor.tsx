@@ -129,22 +129,16 @@ export default function TestFileEditor({
     [state, vscode]
   );
 
+  // `has_expected` is a parameter rather than something looked up here: the
+  // callbacks below are memoized on `[vscode]`, so anything read from `state`
+  // in this closure would stay frozen at the first render. The caller holds
+  // the test anyway.
   const _onTestRun = (resetOutputs: boolean) => {
-    return (testScope: string): void => {
+    return (testScope: string, has_expected: boolean): void => {
       setTestRunState((prev) => ({
         ...prev,
         [testScope]: { status: 'running' },
       }));
-      // A variable declared with only one of the two attributes still counts:
-      // this mirrors the map the compiler builds from both of them, so that
-      // both sides agree on whether the trace is needed.
-      const test =
-        state.state === 'success'
-          ? state.tests.find((t) => t.testing_scope === testScope)
-          : undefined;
-      const has_expected =
-        test !== undefined &&
-        (test.variables.size > 0);
       vscode.postMessage(
         writeUpMessage({
           kind: 'TestRunRequest',

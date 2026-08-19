@@ -30,8 +30,8 @@ type Props = {
   test: Test;
   onTestChange(newValue: Test, mayBeBatched: boolean): void;
   onTestDelete(testScope: string): void;
-  onTestRun(testScope: string): void;
-  onTestOutputsReset(testScope: string): void;
+  onTestRun(testScope: string, hasExpected: boolean): void;
+  onTestOutputsReset(testScope: string, hasExpected: boolean): void;
   runState?: {
     status: TestRunStatus;
     results?: TestRunResults;
@@ -139,7 +139,7 @@ export default function TestEditor(props: Props): ReactElement {
       const confirmed = await confirm('RunTestWithUnsetValues');
       if (!confirmed) return;
     }
-    props.onTestRun(props.test.testing_scope);
+    props.onTestRun(props.test.testing_scope, hasExpected);
   };
 
   const openTraceEditor = (): void => {
@@ -156,7 +156,7 @@ export default function TestEditor(props: Props): ReactElement {
       const confirmed = await confirm('RunTestWithUnsetValues');
       if (!confirmed) return;
     }
-    props.onTestOutputsReset(props.test.testing_scope);
+    props.onTestOutputsReset(props.test.testing_scope, hasExpected);
   };
 
   return (

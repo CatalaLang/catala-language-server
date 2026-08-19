@@ -115,7 +115,12 @@ export function runTestScope(
   filename: string,
   testScope: string,
   inputs?: TestInputs,
-  trace?: boolean,
+  /**
+   * Absolute path of the JSON file the trace should be written to. When
+   * undefined the run is not instrumented at all: tracing changes the compiled
+   * AST and costs interpretation time.
+   */
+  traceFile?: string
 ): TestRunResults {
   /*
    * Notes:
@@ -137,7 +142,23 @@ export function runTestScope(
   // NB: bare `--trace` defaults to writing the trace on stdout, where the JSON
   // result is read from; the plugin redirects it away, which is what makes this
   // safe.
-  const traceArgs = trace ? ['--trace'] : [];
+  // Dependencies are built in a separate directory so that the instrumented
+  // artifacts do not evict the plain ones from the main build dir.
+  const clerkTraceArgs = traceFile
+    ? [
+        '--quiet',
+        '--trace',
+        '--build-dir',
+        '_build/_trace',
+        '--ninja-output-file',
+        '_build/_trace/clerk.ninja',
+      ]
+    : [];
+  // To a file, not to stdout: stdout carries the JSON result. `--trace-format`
+  // is required, the default being the human-readable rendering.
+  const catalaTraceArgs = traceFile
+    ? [`--trace=${traceFile}`, '--trace-format=json']
+    : [];
   const args = [
     'testcase',
     'run',
@@ -145,7 +166,7 @@ export function runTestScope(
     testScope,
     filename,
     ...inputArgs,
-    ...traceArgs,
+    ...catalaTraceArgs,
   ];
   const cwd = getCwd(filename);
   if (cwd) {
@@ -153,7 +174,7 @@ export function runTestScope(
     //compile dependencies (hack), do not fail on asserts
     execBinary(
       clerkPath,
-      ['run', ...traceArgs, '-c--no-fail-on-assert', relFilename],
+      ['run', ...clerkTraceArgs, '-c--no-fail-on-assert', relFilename],
       {
         cwd,
       }

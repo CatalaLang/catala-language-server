@@ -109,11 +109,14 @@ export class ScopeInputController {
               inputs: result.json,
             });
           } else {
+            // No trace requested: running with overridden inputs goes through
+            // the compiler's `run_with_inputs`, which does not check the
+            // expected values written in the source, so instrumenting the run
+            // would only cost time.
             const results: TestRunResults = runTestScope(
               file,
               scope,
-              this.test.test_inputs,
-              this.test.variables.size > 0
+              this.test.test_inputs
             );
             this.postMessageToWebView({
               kind: 'TestRunResults',

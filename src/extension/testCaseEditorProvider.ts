@@ -24,7 +24,9 @@ import {
 import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
 import { TraceEditorProvider } from './traceEditorProvider';
-import { runTrace } from '../trace-editor/traceRunner';
+import { runTrace, readTraceFile } from '../trace-editor/traceRunner';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import type { TraceElement } from '../trace-editor/traceUtils';
 import type { ResultController } from './testAndCoverage';
 import { TestId } from './testAndCoverage';
@@ -268,9 +270,9 @@ export class TestCaseEditorProvider
     async function runTest(
       fileName: string,
       scope: string,
-      trace?: boolean
+      traceFile?: string
     ): Promise<TestRunResults> {
-      return runTestScope(fileName, scope, undefined, trace);
+      return runTestScope(fileName, scope, undefined, traceFile);
     }
 
     function applyGuiEdit(
@@ -362,7 +364,6 @@ export class TestCaseEditorProvider
             );
             return;
           }
-
           const { scope, reset_outputs, has_expected } = typed_msg.value;
           if (reset_outputs) {
             const confirmation = await vscode.window.showInformationMessage(
@@ -391,10 +392,46 @@ export class TestCaseEditorProvider
               return;
             }
           }
+          // The trace is only produced when the test declares expected variables:
+          // it is what the compiler checks them against, and what the webview
+          // displays. A temporary directory keeps it out of the project.
+          let traceDir: string | undefined;
+          let traceFile: string | undefined;
+          if (has_expected) {
+            try {
+              traceDir = mkdtempSync(path.join(tmpdir(), 'catala-test-trace-'));
+              traceFile = path.join(traceDir, 'trace.json');
+            } catch (err) {
+              logger.log(
+                `Could not create a temporary trace file, running without a trace: ${String(err)}`
+              );
+            }
+          }
 
           const results = await this.testQueue.add(() =>
-            runTest(document.uri.fsPath, scope, has_expected)
+            runTest(document.uri.fsPath, scope, traceFile)
           );
+
+          if (traceFile !== undefined) {
+            const trace = readTraceFile(traceFile);
+            if (trace.ok) {
+              // Hand-written message, like `sendTrace` above: the webview
+              // intercepts this kind before the strict ATD `readDownMessage`,
+              // so it cannot go through `postMessageToWebView`.
+              webviewPanel.webview.postMessage({
+                kind: 'trace',
+                scope,
+                trace: trace.trace,
+              });
+            } else {
+              logger.log(
+                `Could not read the trace of scope ${scope}: ${trace.error}`
+              );
+            }
+          }
+          if (traceDir !== undefined) {
+            rmSync(traceDir, { recursive: true, force: true });
+          }
 
           // This run does not go through clerk, so nothing else would record
           // it: without this the General Tests view would keep showing the

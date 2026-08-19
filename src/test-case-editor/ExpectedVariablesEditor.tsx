@@ -260,10 +260,9 @@ function VariableRow({
   // compiler against the trace, with the runtime's own formatting rules, so it
   // is right where `traceValueEqual` on re-parsed JSON values may not be.
   const mismatch =
-    failure !== undefined ||
-    (computed !== undefined &&
-      expected !== null &&
-      !traceValueEqual(expected, computed));
+    computed !== undefined &&
+    expected !== null &&
+    !traceValueEqual(expected, computed);
 
   const kind =
     expected !== null && expected.kind !== 'absent'
