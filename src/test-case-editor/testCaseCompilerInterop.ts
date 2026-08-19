@@ -176,7 +176,7 @@ export function runTestScope(
     // a trace was asked for — produce it. `-c--no-fail-on-assert` matters in
     // both cases: a test whose expectations do not match must still get its
     // dependencies built and its trace written.
-    execBinary(
+    const clerkResult = execBinary(
       clerkPath,
       [
         'run',
@@ -190,10 +190,10 @@ export function runTestScope(
         cwd,
       }
     );
-    // if (!clerkResult.ok) {
-    //   window.showErrorMessage(clerkResult.stderr);
-    //   return { kind: 'Error', value: clerkResult.stderr };
-    // }
+    if (!clerkResult.ok) {
+      window.showErrorMessage(clerkResult.stderr);
+      return { kind: 'Error', value: clerkResult.stderr };
+    }
   }
   // Here we *do* want to fail on asserts, as we catch failures through
   // the `register_lsp_error_notifier` hook.
