@@ -41,7 +41,6 @@ type TestState =
   | { state: 'Success' }
   | { state: 'Loading' }
   | { state: 'Failed' }
-  | { state: 'JustFailed' }
   | { state: 'Unknown' };
 
 type TestMacro = TestDebugger & TestState;
@@ -66,6 +65,9 @@ type FilterArg = {
   addFilter: (filter: string, include: boolean) => void;
   removeFilter: (filter: string, include: boolean) => void;
   removeAllFilter: () => void;
+  // What is currently typed: it filters live, and can be pinned on top.
+  searchBar: string;
+  setSearchBar: React.Dispatch<React.SetStateAction<string>>;
   filterGui: boolean;
   setFilterGui: React.Dispatch<React.SetStateAction<boolean>>;
   orderFailure: boolean;
@@ -164,17 +166,6 @@ function TestStateIcon({ success }: { success: TestState }): ReactElement {
           style={{ color: 'darkred', fontSize: '1.5em' }}
         />
       );
-    case 'JustFailed':
-      return (
-        <span
-          title={intl.formatMessage({
-            id: 'generalTests.tooltip.stateFailed',
-            defaultMessage: 'Test échoué',
-          })}
-          className="codicon codicon-error wrong-icon"
-          style={{ color: 'darkred', fontSize: '1.5em' }}
-        />
-      );
     case 'Loading':
       return (
         <span
@@ -236,14 +227,10 @@ function RunIcon({
 function OpenGUI({
   vscode,
   filename,
-  success,
 }: {
   vscode: WebviewApi<unknown>;
   filename: string;
-  success: TestState;
 }): ReactElement {
-  let fail = success.state == 'JustFailed';
-  let [first, setFirst] = useState<boolean>(true);
   const intl = useIntl();
   return (
     <span
@@ -251,17 +238,13 @@ function OpenGUI({
         id: 'generalTests.tooltip.openGui',
         defaultMessage: "Ouvrir l'éditeur Catala",
       })}
-      onAnimationEnd={(event) => {
-        event.preventDefault();
-        setFirst(false);
-      }}
       onClick={(event) => {
         event.preventDefault();
         vscode.postMessage(
           writeUpMessage({ kind: 'OpenInTestEditor', value: filename })
         );
       }}
-      className={`codicon codicon-eye open-gui ${fail && first ? 'highlight ' : ''}`}
+      className="codicon codicon-eye open-gui"
     />
   );
 }
@@ -308,9 +291,7 @@ function OpenTextEditor({
 function TestItem({ vscode, test, num, onRun }: TestItemArg): ReactElement {
   const intl = useIntl();
   return (
-    <Box
-      className={`test-item${test.state == 'JustFailed' ? ' justFailed' : ''}`}
-    >
+    <Box className="test-item">
       <div className="test-item-header">
         <b
           className="test-title"
@@ -362,7 +343,7 @@ function TestItem({ vscode, test, num, onRun }: TestItemArg): ReactElement {
           />
         </span>
         {isGui(test) ? (
-          <OpenGUI vscode={vscode} filename={test.filename} success={test} />
+          <OpenGUI vscode={vscode} filename={test.filename} />
         ) : (
           <OpenTextEditor vscode={vscode} filename={test.filename} />
         )}
@@ -430,7 +411,7 @@ function TestLine({
   }, [description, expanded]);
 
   return (
-    <tr className={test.state == 'JustFailed' ? 'justFailed' : ''}>
+    <tr>
       <th>
         <a
           href=""
@@ -491,7 +472,7 @@ function TestLine({
       </td>
       <td>
         {isGui(test) ? (
-          <OpenGUI vscode={vscode} filename={test.filename} success={test} />
+          <OpenGUI vscode={vscode} filename={test.filename} />
         ) : (
           <OpenTextEditor vscode={vscode} filename={test.filename} />
         )}
@@ -586,7 +567,7 @@ function testingScope(test: TestDebugger): string {
     : test.test.value.scope;
 }
 
-function testMacro(test: TestDebugger, previousSuccess: boolean): TestMacro {
+function testMacro(test: TestDebugger): TestMacro {
   if (test.success == undefined) {
     return {
       ...test,
@@ -595,11 +576,7 @@ function testMacro(test: TestDebugger, previousSuccess: boolean): TestMacro {
   } else {
     return {
       ...test,
-      state: test.success
-        ? 'Success'
-        : previousSuccess
-          ? 'JustFailed'
-          : 'Failed',
+      state: test.success ? 'Success' : 'Failed',
     };
   }
 }
@@ -1068,6 +1045,8 @@ function Filter({
   setFilterGui,
   orderFailure,
   setOrder,
+  searchBar,
+  setSearchBar,
 }: FilterArg): ReactElement {
   const intl = useIntl();
   // Restore the default state: GUI-only checkbox checked, no scope selected,
@@ -1076,7 +1055,10 @@ function Filter({
     setFilterGui(true);
     setFilterScope([]);
     removeAllFilter();
+    setSearchBar('');
   };
+
+  let valueSearch = searchBar.trim();
 
   const filteredTests = tests
     ?.map((test, index) => ({ test, index }))
@@ -1084,8 +1066,12 @@ function Filter({
       matchFilter(test, index, filters, [], filterGui)
     );
 
-  const [searchBar, setSearchBar] = useState<string>('');
-  let valueSearch = searchBar.trim();
+  // Pin what is typed, then clear the field so several filters can be chained.
+  const pinSearch = (include: boolean): void => {
+    if (valueSearch == '') return;
+    addFilter(valueSearch, include);
+    setSearchBar('');
+  };
   return (
     <div className="box-filter">
       <div className="filter-title">
@@ -1171,6 +1157,12 @@ function Filter({
                 const value = (e.target as HTMLInputElement).value;
                 setSearchBar(value);
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  pinSearch(true);
+                }
+              }}
             >
               <span className="codicon codicon-search" slot="content-before" />
               <span
@@ -1184,11 +1176,12 @@ function Filter({
                 style={{ cursor: 'pointer' }}
                 className="codicon codicon-save"
                 slot="content-after"
+                // Keep the focus in the field so that the user can chain
+                // several filters without clicking back into it.
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={(event) => {
                   event.preventDefault();
-                  if (valueSearch == '') return;
-                  addFilter(valueSearch, true);
-                  setSearchBar('');
+                  pinSearch(true);
                 }}
               />
               <span
@@ -1202,11 +1195,10 @@ function Filter({
                 style={{ cursor: 'pointer' }}
                 className="codicon codicon-circle-slash"
                 slot="content-after"
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={(event) => {
                   event.preventDefault();
-                  if (valueSearch == '') return;
-                  addFilter(valueSearch, false);
-                  setSearchBar('');
+                  pinSearch(false);
                 }}
               />
             </VscodeTextfield>
@@ -1266,12 +1258,17 @@ export default function GeneralTests({
   const [grid, setGrid] = useState<boolean>(true);
   const [tests, setTests] = useState<TestMacro[] | undefined>(undefined);
   const [reload, setReload] = useState<boolean>(false);
+  const [searchBar, setSearchBar] = useState<string>('');
 
   // These three helpers must always hand a *new* array to setFilter: React
   // bails out of the re-render when the updater returns the very same reference,
   // so mutating the current state in place would leave the view one step behind.
   const addFilter = (filter: string, include: boolean): void => {
-    setFilter((oldFilter) => [...oldFilter, [filter, include]]);
+    setFilter((oldFilter) =>
+      oldFilter.some(([term, inc]) => term == filter && inc == include)
+        ? oldFilter
+        : [...oldFilter, [filter, include]]
+    );
   };
 
   const removeAllFilter = (): void => {
@@ -1300,7 +1297,7 @@ export default function GeneralTests({
           let tsTests: TestMacro[] = [];
           for (let index = 0; index < tests.length; index++) {
             const test = tests[index];
-            tsTests.push(testMacro(test, false));
+            tsTests.push(testMacro(test));
           }
           setTests(tsTests);
           break;
@@ -1325,8 +1322,7 @@ export default function GeneralTests({
                 success: run.success,
                 date: run.date,
               };
-              let previousSuccess = test.success == undefined || test.success!;
-              return testMacro(updatedTest, previousSuccess);
+              return testMacro(updatedTest);
             })
           );
           // if (!run.success) {
@@ -1436,6 +1432,8 @@ export default function GeneralTests({
           orderFailure={orderFailure}
           setOrder={setOrderFails}
           filters={filter}
+          searchBar={searchBar}
+          setSearchBar={setSearchBar}
         />
         <div className="select-test-print">
           <FormattedMessage

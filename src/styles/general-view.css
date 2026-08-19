@@ -11,14 +11,6 @@
   box-sizing: border-box;
 }
 
-.test-item.justFailed {
-  background-color: color-mix(
-    in srgb,
-    var(--vscode-errorForeground) 25%,
-    transparent
-  );
-}
-
 .test-item .test-item-header {
   display: flex;
 }
@@ -193,14 +185,6 @@
 
 .test-list tbody > tr:nth-of-type(even) {
   background-color: var(--vscode-list-hoverBackground);
-}
-
-.test-list tbody > tr.justFailed {
-  background-color: color-mix(
-    in srgb,
-    var(--vscode-errorForeground) 25%,
-    transparent
-  );
 }
 
 /* Filter */
