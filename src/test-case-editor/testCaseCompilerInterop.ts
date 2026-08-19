@@ -148,17 +148,17 @@ export function runTestScope(
     ? [
         '--quiet',
         '--trace',
+        traceFile,
         '--build-dir',
         '_build/_trace',
         '--ninja-output-file',
         '_build/_trace/clerk.ninja',
       ]
     : [];
-  // To a file, not to stdout: stdout carries the JSON result. `--trace-format`
-  // is required, the default being the human-readable rendering.
-  const catalaTraceArgs = traceFile
-    ? [`--trace=${traceFile}`, '--trace-format=json']
-    : [];
+  // Trace file from testcase run is not correct for us because testcase run wrap
+  // the scope test with a dummy call function, so the trace in result is just a
+  // <function> in the value field
+  const catalaTraceArgs = traceFile ? [`--trace`] : [];
   const args = [
     'testcase',
     'run',
@@ -174,7 +174,14 @@ export function runTestScope(
     //compile dependencies (hack), do not fail on asserts
     execBinary(
       clerkPath,
-      ['run', ...clerkTraceArgs, '-c--no-fail-on-assert', relFilename],
+      [
+        'run',
+        ...clerkTraceArgs,
+        '-c--no-fail-on-assert',
+        relFilename,
+        '--scope',
+        testScope,
+      ],
       {
         cwd,
       }
