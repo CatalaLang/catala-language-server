@@ -155,10 +155,11 @@ export function runTestScope(
         '_build/_trace/clerk.ninja',
       ]
     : [];
-  // Trace file from testcase run is not correct for us because testcase run wrap
-  // the scope test with a dummy call function, so the trace in result is just a
-  // <function> in the value field
-  const catalaTraceArgs = traceFile ? [`--trace`] : [];
+  // The trace is produced by the clerk run below, not here: `testcase run` wraps
+  // every evaluation in a dummy scope call, so the trace it could emit carries
+  // only "<function>" as its root value. It is handed the file instead, so that
+  // the expected variables are checked against the very trace the editor shows.
+  const catalaTraceArgs = traceFile ? [`--check-trace=${traceFile}`] : [];
   const args = [
     'testcase',
     'run',
@@ -171,7 +172,10 @@ export function runTestScope(
   const cwd = getCwd(filename);
   if (cwd) {
     const relFilename = path.relative(cwd, filename);
-    //compile dependencies (hack), do not fail on asserts
+    // Two jobs at once: compile the dependencies the run below needs, and — when
+    // a trace was asked for — produce it. `-c--no-fail-on-assert` matters in
+    // both cases: a test whose expectations do not match must still get its
+    // dependencies built and its trace written.
     execBinary(
       clerkPath,
       [

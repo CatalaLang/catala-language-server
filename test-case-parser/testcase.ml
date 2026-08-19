@@ -98,7 +98,8 @@ let cmd_run =
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
       $ Cli.Flags.ex_scope
-      $ Cli.Flags.scope_input)
+      $ Cli.Flags.scope_input
+      $ check_trace)
 
 let cmd_write =
   Cmd.v
