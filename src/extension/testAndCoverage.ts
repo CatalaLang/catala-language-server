@@ -27,7 +27,9 @@ type ClerkScopeTestResult = {
   scope_name: string;
   success: boolean;
   errors: Array<{
-    location: ClerkLocation;
+    // Absent when the failure does not come from clerk, e.g. one synthesized
+    // by `ResultController.record`. Already read behind a guard.
+    location?: ClerkLocation;
     message: string;
   }>;
   time: number;
@@ -115,6 +117,28 @@ export class ResultController {
       `${LAST_TEST_RESULT_KEY}:${testId.id}`
     );
     return result;
+  }
+
+  /**
+   * Records the outcome of a single scope, for the runs that do not go through
+   * clerk: `testcase run` reports diffs and assertion failures where `refresh`
+   * expects clerk's per-scope results. A cancelled run is ignored — it says
+   * nothing about the test, and overwriting the last known result with a
+   * fabricated failure would be worse than keeping it.
+   */
+  record(testId: TestId, scope_name: string, results: TestRunResults): void {
+    if (results.kind === 'Cancelled') return;
+    const failures =
+      results.kind === 'Ok'
+        ? results.value.assert_failures || results.value.diffs.length > 0
+        : true;
+    this.storage.update(`${LAST_TEST_RESULT_KEY}:${testId.id}`, {
+      scope_name,
+      success: !failures,
+      errors: results.kind === 'Error' ? [{ message: results.value }] : [],
+      time: 0,
+      date: new Date().toLocaleDateString('fr'),
+    } satisfies ResultType);
   }
 
   refresh(result: ClerkTestRunResult): void {
