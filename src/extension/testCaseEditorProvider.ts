@@ -27,8 +27,7 @@ import { TraceEditorProvider } from './traceEditorProvider';
 import { runTrace } from '../trace-editor/traceRunner';
 import type { TraceElement } from '../trace-editor/traceUtils';
 import type { ResultController } from './testAndCoverage';
-import { runTestVscode, TestMap } from './testAndCoverage';
-import { getCwd } from '../shared/util_client';
+import { TestId } from './testAndCoverage';
 
 export function parseContents(
   content: Uint8Array,
@@ -396,18 +395,19 @@ export class TestCaseEditorProvider
               return;
             }
           }
-          let filename = document.uri.fsPath;
-          const cwd = getCwd(filename);
-          const results = await this.testQueue.add(async () => {
-            await runTestVscode(
-              cwd!,
-              new TestMap(),
-              this.testController,
-              this.resultController,
-              { kind: 'scope', filename, scope }
-            );
-            return runTest(document.uri.fsPath, scope);
-          });
+
+          const results = await this.testQueue.add(() =>
+            runTest(document.uri.fsPath, scope)
+          );
+
+          // This run does not go through clerk, so nothing else would record
+          // it: without this the General Tests view would keep showing the
+          // outcome of the previous run for that scope.
+          this.resultController.record(
+            new TestId(document.uri, scope),
+            scope,
+            results
+          );
 
           postMessageToWebView({
             kind: 'TestRunResults',
