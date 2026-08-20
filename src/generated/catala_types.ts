@@ -282,10 +282,17 @@ export type UpMessage =
 | { kind: 'ConfirmRequest'; value: ConfirmRequest }
 | { kind: 'OpenInTestEditor'; value: string }
 
+export type TestScopeResult = {
+  entry: TestEntrypoint;
+  scope_success: ScopeSuccess;
+  index: number /*int*/;
+  order: boolean;
+}
+
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
-| { kind: 'TestScopeResult'; value: [TestEntrypoint, ScopeSuccess, number /*int*/] }
+| { kind: 'TestScopeResult'; value: TestScopeResult }
 | { kind: 'ConfirmResult'; value: ConfirmResult }
 | { kind: 'AllTests'; value: TestDebuggerList }
 
@@ -1280,6 +1287,24 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
   }
 }
 
+export function writeTestScopeResult(x: TestScopeResult, context: any = x): any {
+  return {
+    'entry': _atd_write_required_field('TestScopeResult', 'entry', writeTestEntrypoint, x.entry, x),
+    'scope_success': _atd_write_required_field('TestScopeResult', 'scope_success', writeScopeSuccess, x.scope_success, x),
+    'index': _atd_write_required_field('TestScopeResult', 'index', _atd_write_int, x.index, x),
+    'order': _atd_write_required_field('TestScopeResult', 'order', _atd_write_bool, x.order, x),
+  };
+}
+
+export function readTestScopeResult(x: any, context: any = x): TestScopeResult {
+  return {
+    entry: _atd_read_required_field('TestScopeResult', 'entry', readTestEntrypoint, x['entry'], x),
+    scope_success: _atd_read_required_field('TestScopeResult', 'scope_success', readScopeSuccess, x['scope_success'], x),
+    index: _atd_read_required_field('TestScopeResult', 'index', _atd_read_int, x['index'], x),
+    order: _atd_read_required_field('TestScopeResult', 'order', _atd_read_bool, x['order'], x),
+  };
+}
+
 export function writeDownMessage(x: DownMessage, context: any = x): any {
   switch (x.kind) {
     case 'Update':
@@ -1287,7 +1312,7 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
     case 'TestRunResults':
       return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
     case 'TestScopeResult':
-      return ['TestScopeResult', ((x, context) => [writeTestEntrypoint(x[0], x), writeScopeSuccess(x[1], x), _atd_write_int(x[2], x)])(x.value, x)]
+      return ['TestScopeResult', writeTestScopeResult(x.value, x)]
     case 'ConfirmResult':
       return ['ConfirmResult', writeConfirmResult(x.value, x)]
     case 'AllTests':
@@ -1303,7 +1328,7 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
     case 'TestRunResults':
       return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
     case 'TestScopeResult':
-      return { kind: 'TestScopeResult', value: ((x, context): [TestEntrypoint, ScopeSuccess, number /*int*/] => { _atd_check_json_tuple(3, x, context); return [readTestEntrypoint(x[0], x), readScopeSuccess(x[1], x), _atd_read_int(x[2], x)] })(x[1], x) }
+      return { kind: 'TestScopeResult', value: readTestScopeResult(x[1], x) }
     case 'ConfirmResult':
       return { kind: 'ConfirmResult', value: readConfirmResult(x[1], x) }
     case 'AllTests':

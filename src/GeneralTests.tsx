@@ -1227,30 +1227,32 @@ export default function GeneralTests({
           break;
         }
         case 'TestScopeResult': {
-          let [result, run, id] = message.value;
+          const {
+            entry,
+            scope_success,
+            index: runIndex,
+            order,
+          } = message.value;
           setTests((oldTests) => {
             if (oldTests === undefined) {
               return oldTests;
             }
-            // Stable partition: failures first, everyone else in place. The
-            // test being examined decides which side it lands on — `run` only
-            // describes the one that just finished.
             const failures: TestMacro[] = [];
             const others: TestMacro[] = [];
             for (const test of oldTests) {
               let updatedTest: TestMacro = test;
-              if (test.index == id) {
+              if (test.index == runIndex) {
                 updatedTest = testMacro({
                   index: test.index,
                   filename: test.filename,
-                  test: result,
-                  success: run.success,
-                  date: run.date,
+                  test: entry,
+                  success: scope_success.success,
+                  date: scope_success.date,
                 });
               }
               // Explicitly `false`: a test that was never run has an undefined
               // `success` and does not belong with the failures.
-              if (updatedTest.success === false) {
+              if (order && updatedTest.success === false) {
                 failures.push(updatedTest);
               } else {
                 others.push(updatedTest);

@@ -294,10 +294,17 @@ type up_message = [
   | OpenInTestEditor of string (* filename *)
 ]
 
+type test_scope_result = {
+  entry: test_entrypoint;
+  scope_success: scope_success;
+  index: int;
+  order: bool
+}
+
 type down_message = [
   | Update of parse_results
   | TestRunResults of test_run_results_msg
-  | TestScopeResult of (test_entrypoint * scope_success *  int)
+  | TestScopeResult of test_scope_result
   | ConfirmResult of confirm_result
   | AllTests of test_debugger_list
 ]

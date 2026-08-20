@@ -164,6 +164,11 @@ export class TestMacroController {
             cwd
           );
           let ids = typed_msg.value;
+          // Reordering is worth it when a run refreshes several results at
+          // once — the whole list (`[]`) or a filtered selection. A single
+          // test must leave the order alone, or the list moves under the
+          // pointer that just clicked it.
+          const order = ids.length != 1;
           if (ids.length == 0) {
             let items = [...testController.items].map(([, item]) => item);
             let request = new vscode.TestRunRequest(items);
@@ -178,13 +183,23 @@ export class TestMacroController {
               if (res != undefined) {
                 this.postMessageToWebView({
                   kind: 'TestScopeResult',
-                  value: [testElt.test, res, index],
+                  value: {
+                    entry: testElt.test,
+                    scope_success: res,
+                    index,
+                    order,
+                  },
                 });
               } else {
                 let date = new Date().toLocaleDateString('fr');
                 this.postMessageToWebView({
                   kind: 'TestScopeResult',
-                  value: [testElt.test, { success: false, date }, index],
+                  value: {
+                    entry: testElt.test,
+                    scope_success: { success: false, date },
+                    index,
+                    order,
+                  },
                 });
               }
             }
@@ -224,20 +239,35 @@ export class TestMacroController {
                   if (res != undefined) {
                     this.postMessageToWebView({
                       kind: 'TestScopeResult',
-                      value: [test.test, res, index],
+                      value: {
+                        entry: test.test,
+                        scope_success: res,
+                        index,
+                        order,
+                      },
                     });
                   } else {
                     let date = new Date().toLocaleDateString('fr');
                     this.postMessageToWebView({
                       kind: 'TestScopeResult',
-                      value: [test.test, { success: false, date }, index],
+                      value: {
+                        entry: test.test,
+                        scope_success: { success: false, date },
+                        index,
+                        order,
+                      },
                     });
                   }
                 } else {
                   let date = new Date().toLocaleDateString('fr');
                   this.postMessageToWebView({
                     kind: 'TestScopeResult',
-                    value: [test.test, { success: false, date }, index],
+                    value: {
+                      entry: test.test,
+                      scope_success: { success: false, date },
+                      index,
+                      order,
+                    },
                   });
                 }
               }
