@@ -27,7 +27,9 @@ type ClerkScopeTestResult = {
   scope_name: string;
   success: boolean;
   errors: Array<{
-    location: ClerkLocation;
+    // Absent when the failure does not come from clerk, e.g. one synthesized
+    // by `ResultController.record`. Already read behind a guard.
+    location?: ClerkLocation;
     message: string;
   }>;
   time: number;
@@ -125,6 +127,69 @@ export class ResultController {
       `${LAST_TEST_RESULT_KEY}:${testId.id}`
     );
     return result;
+  }
+
+  /**
+   * Records the outcome of a single scope, for the runs that do not go through
+   * clerk: `testcase run` reports diffs and assertion failures where `refresh`
+   * expects clerk's per-scope results. A cancelled run is ignored — it says
+   * nothing about the test, and overwriting the last known result with a
+   * fabricated failure would be worse than keeping it.
+   */
+  record(testId: TestId, scope_name: string, results: TestRunResults): void {
+    if (results.kind === 'Cancelled') return;
+    const failures =
+      results.kind === 'Ok'
+        ? results.value.assert_failures || results.value.diffs.length > 0
+        : true;
+    this.storage.update(`${LAST_TEST_RESULT_KEY}:${testId.id}`, {
+      scope_name,
+      success: !failures,
+      errors: results.kind === 'Error' ? [{ message: results.value }] : [],
+      time: 0,
+      date: new Date().toISOString(),
+    } satisfies ResultType);
+  }
+
+  /**
+   * Drops the results of the tests that no longer exist, given every test the
+   * workspace lists. A result whose test is not listed goes when:
+   * - its file is listed: the scope was renamed or removed;
+   * - its file is gone from the disk.
+   * A file that exists but is not listed is kept: the server skips the files
+   * that do not compile, and a test being edited must not lose its result.
+   */
+  async prune(listed: TestScopeMap): Promise<void> {
+    const ids = new Set<string>();
+    const listedFiles = new Set<string>();
+    for (const { path, scopes } of listed) {
+      const file = vscode.Uri.file(path);
+      listedFiles.add(file.path);
+      for (const { scope } of scopes) {
+        const test_id = new TestId(file, scope);
+        ids.add(test_id.id);
+      }
+    }
+    const prefix = `${LAST_TEST_RESULT_KEY}:`;
+    for (const key of this.storage.keys()) {
+      if (!key.startsWith(prefix)) continue;
+      const id = key.slice(prefix.length);
+      if (ids.has(id)) continue;
+      // `<file path>:<scope>`: the file path may hold a ':' too (`/c:/…` on
+      // Windows), a scope name never does.
+      const sep = id.lastIndexOf(':');
+      if (sep < 0) continue;
+      const filePath = id.slice(0, sep);
+      // `filePath` is the path of a URI (`Uri.path`, `/c:/…` on Windows), not
+      // a path of the system (`fsPath`): `Uri.from` takes it as it is, where
+      // `Uri.file` expects a path of the system.
+      if (
+        listedFiles.has(filePath) ||
+        !(await fileExists(vscode.Uri.from({ scheme: 'file', path: filePath })))
+      ) {
+        await this.storage.update(key, undefined);
+      }
+    }
   }
 
   refresh(result: ClerkTestRunResult): void {
@@ -662,6 +727,9 @@ export async function initTests(
     if (test_scopes_map.length > 0) {
       cwd = getCwd(test_scopes_map[0].path);
     }
+    // The listing covers the whole workspace: the time to forget the results
+    // of the tests that are gone.
+    await resultController.prune(test_scopes_map);
   };
 
   updateTestScopes();
