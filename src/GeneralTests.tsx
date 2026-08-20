@@ -65,9 +65,6 @@ type FilterArg = {
   addFilter: (filter: string, include: boolean) => void;
   removeFilter: (filter: string, include: boolean) => void;
   removeAllFilter: () => void;
-  // What is currently typed: it filters live, and can be pinned on top.
-  searchBar: string;
-  setSearchBar: React.Dispatch<React.SetStateAction<string>>;
   filterGui: boolean;
   setFilterGui: React.Dispatch<React.SetStateAction<boolean>>;
   orderFailure: boolean;
@@ -1045,26 +1042,9 @@ function Filter({
   setFilterGui,
   orderFailure,
   setOrder,
-  searchBar,
-  setSearchBar,
 }: FilterArg): ReactElement {
-  const intl = useIntl();
-  // Restore the default state: GUI-only checkbox checked, no scope selected,
-  // empty search bar.
-  const resetFilters = (): void => {
-    setFilterGui(true);
-    setFilterScope([]);
-    removeAllFilter();
-    setSearchBar('');
-  };
-
+  const [searchBar, setSearchBar] = useState<string>('');
   let valueSearch = searchBar.trim();
-
-  const filteredTests = tests
-    ?.map((test, index) => ({ test, index }))
-    .filter(({ test, index }) =>
-      matchFilter(test, index, filters, [], filterGui)
-    );
 
   // Pin what is typed, then clear the field so several filters can be chained.
   const pinSearch = (include: boolean): void => {
@@ -1072,6 +1052,22 @@ function Filter({
     addFilter(valueSearch, include);
     setSearchBar('');
   };
+
+  const intl = useIntl();
+  // Restore the default state: GUI-only checkbox checked, no scope selected,
+  // empty search bar.
+  const resetFilters = (): void => {
+    setFilterGui(true);
+    setFilterScope([]);
+    removeAllFilter();
+  };
+
+  const filteredTests = tests
+    ?.map((test, index) => ({ test, index }))
+    .filter(({ test, index }) =>
+      matchFilter(test, index, filters, [], filterGui)
+    );
+
   return (
     <div className="box-filter">
       <div className="filter-title">
@@ -1258,7 +1254,6 @@ export default function GeneralTests({
   const [grid, setGrid] = useState<boolean>(true);
   const [tests, setTests] = useState<TestMacro[] | undefined>(undefined);
   const [reload, setReload] = useState<boolean>(false);
-  const [searchBar, setSearchBar] = useState<string>('');
 
   // These three helpers must always hand a *new* array to setFilter: React
   // bails out of the re-render when the updater returns the very same reference,
@@ -1432,8 +1427,6 @@ export default function GeneralTests({
           orderFailure={orderFailure}
           setOrder={setOrderFails}
           filters={filter}
-          searchBar={searchBar}
-          setSearchBar={setSearchBar}
         />
         <div className="select-test-print">
           <FormattedMessage
