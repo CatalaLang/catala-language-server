@@ -740,7 +740,12 @@ export async function activate(
 
   // Always register the custom editor providers
   context.subscriptions.push(
-    TestCaseEditorProvider.register(context, codiconsCssPath)
+    TestCaseEditorProvider.register(
+      context,
+      codiconsCssPath,
+      resultController,
+      ctrl
+    )
   );
   logger.log(`Register "Catala Test case editor"`);
 

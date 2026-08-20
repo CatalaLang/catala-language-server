@@ -26,6 +26,9 @@ import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
 import { TraceEditorProvider } from './traceEditorProvider';
 import { runTrace } from '../trace-editor/traceRunner';
 import type { TraceElement } from '../trace-editor/traceUtils';
+import type { ResultController } from './testAndCoverage';
+import { runTestVscode, TestMap } from './testAndCoverage';
+import { getCwd } from '../shared/util_client';
 
 export function parseContents(
   content: Uint8Array,
@@ -149,9 +152,13 @@ export class TestCaseEditorProvider
   constructor(
     private readonly context: vscode.ExtensionContext,
     /** dist-relative path to the emitted `codicon.css`. */
-    private readonly codiconsCssPath: string
+    private readonly codiconsCssPath: string,
+    private resultController: ResultController,
+    private testController: vscode.TestController
   ) {
     this.testQueue = new PQueue({ concurrency: 1 });
+    this.resultController = resultController;
+    this.testController = testController;
   }
 
   saveCustomDocument(
@@ -207,9 +214,16 @@ export class TestCaseEditorProvider
 
   public static register(
     context: vscode.ExtensionContext,
-    codiconsCssPath: string
+    codiconsCssPath: string,
+    resultController: ResultController,
+    testController: vscode.TestController
   ): vscode.Disposable {
-    const provider = new TestCaseEditorProvider(context, codiconsCssPath);
+    const provider = new TestCaseEditorProvider(
+      context,
+      codiconsCssPath,
+      resultController,
+      testController
+    );
     logger.log(`Registering ${TestCaseEditorProvider.viewType}`);
     const providerRegistration = vscode.window.registerCustomEditorProvider(
       TestCaseEditorProvider.viewType,
@@ -382,9 +396,18 @@ export class TestCaseEditorProvider
               return;
             }
           }
-          const results = await this.testQueue.add(() =>
-            runTest(document.uri.fsPath, scope)
-          );
+          let filename = document.uri.fsPath;
+          const cwd = getCwd(filename);
+          const results = await this.testQueue.add(async () => {
+            await runTestVscode(
+              cwd!,
+              new TestMap(),
+              this.testController,
+              this.resultController,
+              { kind: 'scope', filename, scope }
+            );
+            return runTest(document.uri.fsPath, scope);
+          });
 
           postMessageToWebView({
             kind: 'TestRunResults',

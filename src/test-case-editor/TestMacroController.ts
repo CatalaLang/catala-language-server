@@ -5,10 +5,7 @@ import {
   writeDownMessage,
   type DownMessage,
 } from '../generated/catala_types';
-import {
-  CancellationTokenSource,
-  type LanguageClient,
-} from 'vscode-languageclient/node';
+import { type LanguageClient } from 'vscode-languageclient/node';
 import type { CatalaEntrypoint } from '../extension/lspRequests';
 import { listEntrypoints } from '../extension/lspRequests';
 import { logger } from '../extension/logger';
@@ -18,7 +15,7 @@ import path from 'path';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
 import PQueue from 'p-queue';
 import type { ResultController } from '../extension/testAndCoverage';
-import { makeRunHandler, TestId, TestMap } from '../extension/testAndCoverage';
+import { runTestVscode, TestId, TestMap } from '../extension/testAndCoverage';
 import { getCwd } from '../shared/util_client';
 
 // This class contains the 'backend' part of the test case editor that
@@ -152,17 +149,10 @@ export class TestMacroController {
           break;
         }
         case 'SpecificTestRequest': {
-          let testMap = new TestMap();
           if (this.tests.length == 0) {
             break;
           }
           const cwd = getCwd(this.tests[0].filename);
-          let runTest = makeRunHandler(
-            testController,
-            testMap,
-            resultController,
-            cwd
-          );
           let ids = typed_msg.value;
           // Reordering is worth it when a run refreshes several results at
           // once — the whole list (`[]`) or a filtered selection. A single
@@ -170,9 +160,13 @@ export class TestMacroController {
           // pointer that just clicked it.
           const order = ids.length != 1;
           if (ids.length == 0) {
-            let items = [...testController.items].map(([, item]) => item);
-            let request = new vscode.TestRunRequest(items);
-            await runTest(request, new CancellationTokenSource().token, false);
+            await runTestVscode(
+              cwd!,
+              new TestMap(),
+              testController,
+              resultController,
+              { kind: 'all' }
+            );
             for (let index = 0; index < this.tests.length; index++) {
               const testElt = this.tests[index];
               let testId = new TestId(
@@ -209,55 +203,32 @@ export class TestMacroController {
             );
             await this.testQueue.add(async () => {
               for (const [index, test] of testToRun) {
-                const relFilename = path.relative(cwd!, test.filename);
-                // Split on both separators: `path.relative` uses the platform
-                // separator (`\` on Windows, `/` elsewhere).
-                let dirs = relFilename.split(/[/\\]/);
-                let items = testController.items;
-                let filename = cwd!;
-                for (const dir of dirs) {
-                  filename = path.join(filename, dir);
-                  let testId = new TestId(vscode.Uri.file(filename));
-                  let testItem = items.get(testId.id);
-                  if (testItem != undefined) {
-                    items = testItem.children;
+                await runTestVscode(
+                  cwd!,
+                  new TestMap(),
+                  testController,
+                  resultController,
+                  {
+                    kind: 'scope',
+                    filename: test.filename,
+                    scope: test.test.value.scope,
                   }
-                }
+                );
                 let testId = new TestId(
                   vscode.Uri.file(test.filename),
                   test.test.value.scope
                 );
-                let testItem = items.get(testId.id);
-                if (testItem != undefined) {
-                  let request = new vscode.TestRunRequest([testItem]);
-                  await runTest(
-                    request,
-                    new CancellationTokenSource().token,
-                    false
-                  );
-                  let res = resultController.getResult(testId);
-                  if (res != undefined) {
-                    this.postMessageToWebView({
-                      kind: 'TestScopeResult',
-                      value: {
-                        entry: test.test,
-                        scope_success: res,
-                        index,
-                        order,
-                      },
-                    });
-                  } else {
-                    let date = new Date().toLocaleDateString('fr');
-                    this.postMessageToWebView({
-                      kind: 'TestScopeResult',
-                      value: {
-                        entry: test.test,
-                        scope_success: { success: false, date },
-                        index,
-                        order,
-                      },
-                    });
-                  }
+                let res = resultController.getResult(testId);
+                if (res != undefined) {
+                  this.postMessageToWebView({
+                    kind: 'TestScopeResult',
+                    value: {
+                      entry: test.test,
+                      scope_success: res,
+                      index,
+                      order,
+                    },
+                  });
                 } else {
                   let date = new Date().toLocaleDateString('fr');
                   this.postMessageToWebView({

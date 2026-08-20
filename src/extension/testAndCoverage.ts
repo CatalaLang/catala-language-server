@@ -16,6 +16,7 @@ import type {
   TestOutputs,
   TestRunResults,
 } from '../generated/catala_types';
+import path from 'path';
 
 type ClerkLocation = {
   file: string;
@@ -517,7 +518,7 @@ type RunHandler = (
   with_coverage?: boolean
 ) => Promise<void>;
 
-export function makeRunHandler(
+function makeRunHandler(
   ctrl: vscode.TestController,
   test_map: TestMap,
   resultController: ResultController,
@@ -709,4 +710,45 @@ export async function initTests(
   );
 
   return testRunHandler;
+}
+
+type RunTestArgs =
+  | { kind: 'all' }
+  | { kind: 'scope'; filename: string; scope: string };
+
+export async function runTestVscode(
+  cwd: string,
+  testMap: TestMap,
+  testController: vscode.TestController,
+  resultController: ResultController,
+  test: RunTestArgs
+): Promise<void> {
+  let runTest = makeRunHandler(testController, testMap, resultController, cwd);
+  let items = testController.items;
+  let request: vscode.TestRunRequest;
+  if (test.kind == 'all') {
+    let items = [...testController.items].map(([, item]) => item);
+    request = new vscode.TestRunRequest(items);
+  } else {
+    const relFilename = path.relative(cwd, test.filename);
+    // Split on both separators: `path.relative` uses the platform
+    // separator (`\` on Windows, `/` elsewhere).
+    let dirs = relFilename.split(/[/\\]/);
+    let filename = cwd;
+    for (const dir of dirs) {
+      filename = path.join(filename, dir);
+      let testId = new TestId(vscode.Uri.file(filename));
+      let testItem = items.get(testId.id);
+      if (testItem != undefined) {
+        items = testItem.children;
+      }
+    }
+    let testId = new TestId(vscode.Uri.file(test.filename), test.scope);
+    let testItem = items.get(testId.id);
+    if (testItem == undefined) {
+      return;
+    }
+    request = new vscode.TestRunRequest([testItem]);
+  }
+  await runTest(request, new vscode.CancellationTokenSource().token, false);
 }
