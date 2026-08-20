@@ -709,8 +709,10 @@ export async function activate(
     `Register "Catala Help and feedback" data in th Tree data provider`
   );
 
-  // Always register the custom editor provider
-  context.subscriptions.push(TestCaseEditorProvider.register(context));
+  // Always register the custom editor providers
+  context.subscriptions.push(
+    TestCaseEditorProvider.register(context, resultController, ctrl)
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
