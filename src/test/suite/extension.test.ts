@@ -24,21 +24,12 @@ suite('Extension Test Suite', () => {
     const resultController = new ResultController(dummyStorage, 'catala_en');
     // A real controller rather than a stub: the test host provides one for
     // free, and it has to be disposed either way.
-    const testController = vscode.tests.createTestController(
-      'catala.test.dummy',
-      'Catala tests (dummy)'
+    const disposable = TestCaseEditorProvider.register(
+      context,
+      'codicon.css',
+      resultController
     );
-    try {
-      const disposable = TestCaseEditorProvider.register(
-        context,
-        'codicon.css',
-        resultController,
-        testController
-      );
-      assert.ok(disposable);
-      disposable.dispose();
-    } finally {
-      testController.dispose();
-    }
+    assert.ok(disposable);
+    disposable.dispose();
   });
 });

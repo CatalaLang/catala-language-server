@@ -152,12 +152,10 @@ export class TestCaseEditorProvider
     private readonly context: vscode.ExtensionContext,
     /** dist-relative path to the emitted `codicon.css`. */
     private readonly codiconsCssPath: string,
-    private resultController: ResultController,
-    private testController: vscode.TestController
+    private resultController: ResultController
   ) {
     this.testQueue = new PQueue({ concurrency: 1 });
     this.resultController = resultController;
-    this.testController = testController;
   }
 
   saveCustomDocument(
@@ -214,14 +212,12 @@ export class TestCaseEditorProvider
   public static register(
     context: vscode.ExtensionContext,
     codiconsCssPath: string,
-    resultController: ResultController,
-    testController: vscode.TestController
+    resultController: ResultController
   ): vscode.Disposable {
     const provider = new TestCaseEditorProvider(
       context,
       codiconsCssPath,
-      resultController,
-      testController
+      resultController
     );
     logger.log(`Registering ${TestCaseEditorProvider.viewType}`);
     const providerRegistration = vscode.window.registerCustomEditorProvider(
