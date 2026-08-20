@@ -825,7 +825,18 @@ class catala_lsp_server =
                      no_variables = None;
                    }
           in
-          let all_projects = Projects.elements projects in
+          (* Rescan every project before listing. [projects] is the snapshot
+             taken when the workspace was loaded: a file created since then is
+             absent from [project_files], and both the file filtering below and
+             [get_prog] would skip it. Diagnostics produced by the scan are
+             dropped, this request only reports entrypoints — the files get
+             their own when opened or saved. *)
+          let _scan_errors, on_error = make_error_handler () in
+          let all_projects =
+            List.map
+              (fun project -> fst (reload_project ~on_error project projects))
+              (Projects.elements projects)
+          in
           let* entrypoint_list =
             Lwt_list.map_s
               (fun project ->
