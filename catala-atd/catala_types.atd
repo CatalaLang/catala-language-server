@@ -132,6 +132,7 @@ type test = {
    (GUI or plain), along with the run metadata that is not intrinsic to
    the test (which file it lives in and its last run result). *)
 type test_debugger = {
+  index: int;  
   filename: string;
   test: test_entrypoint;
   ?success: bool option;

@@ -149,7 +149,6 @@
   "generalTests.display": "Display:",
   "generalTests.card": "Card",
   "generalTests.list": "List",
-  "generalTests.highlightFails": "Highlight failed tests",
   "generalTests.tooltip.runTest": "Run the test",
   "generalTests.tooltip.displayCard": "Display the tests as cards",
   "generalTests.tooltip.displayList": "Display the tests as a list",

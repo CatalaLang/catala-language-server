@@ -53,6 +53,7 @@ export class TestMacroController {
         let res = resultController.getResult(testId);
         if (res != undefined) {
           let testEntrypoint = {
+            index,
             filename: filename,
             test: e.entrypoint.value,
             success: res.success,
@@ -61,6 +62,7 @@ export class TestMacroController {
           this.tests.push(testEntrypoint);
         } else {
           let testEntrypoint = {
+            index,
             filename: filename,
             test: e.entrypoint.value,
           };
@@ -143,6 +145,9 @@ export class TestMacroController {
             false,
             true
           );
+          for (let o of entrypoints) {
+            logger.log(`Entrypoint: ${JSON.stringify(o)}`);
+          }
           this.handleCatalaEntrypoint(entrypoints, resultController);
           break;
         }

@@ -149,7 +149,6 @@
   "generalTests.display": "Widok:",
   "generalTests.card": "Karty",
   "generalTests.list": "Lista",
-  "generalTests.highlightFails": "Wyróżnij niezaliczone testy",
   "generalTests.tooltip.runTest": "Uruchom test",
   "generalTests.tooltip.displayCard": "Wyświetl testy jako karty",
   "generalTests.tooltip.displayList": "Wyświetl testy jako listę",

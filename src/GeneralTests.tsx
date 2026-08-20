@@ -19,17 +19,11 @@ import { VscodeTextfield } from '@vscode-elements/react-elements';
 import { assertUnreachable, splitOnTerms } from './shared/util';
 import { setVsCodeApi } from './shared/webviewApi';
 
-type FilteredTests = {
-  test: TestMacro;
-  index: number;
-}[];
-
 type TestGridArg = {
   vscode: WebviewApi<unknown>;
-  filtered: FilteredTests;
+  filtered: TestMacro[];
   grid: boolean;
   filterScope: string[];
-  orderFailure: boolean;
   onRun: (id: number) => void;
 };
 
@@ -48,7 +42,6 @@ type TestMacro = TestDebugger & TestState;
 type TestItemArg = {
   vscode: WebviewApi<unknown>;
   test: TestMacro;
-  num: number;
   onRun: (id: number) => void;
 };
 
@@ -67,12 +60,10 @@ type FilterArg = {
   removeAllFilter: () => void;
   filterGui: boolean;
   setFilterGui: React.Dispatch<React.SetStateAction<boolean>>;
-  orderFailure: boolean;
-  setOrder: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 type ScopeFilterArg = {
-  tests: FilteredTests | undefined;
+  tests: TestMacro[] | undefined;
   filterScope: string[];
   setFilterScope: React.Dispatch<React.SetStateAction<string[]>>;
 };
@@ -285,7 +276,7 @@ function OpenTextEditor({
  * mostly items with css to render them poperly
  *
  */
-function TestItem({ vscode, test, num, onRun }: TestItemArg): ReactElement {
+function TestItem({ vscode, test, onRun }: TestItemArg): ReactElement {
   const intl = useIntl();
   return (
     <Box className="test-item">
@@ -309,7 +300,9 @@ function TestItem({ vscode, test, num, onRun }: TestItemArg): ReactElement {
           <FormattedMessage
             id="generalTests.testNumber"
             defaultMessage="Test #{num}"
-            values={{ num: <HighlightedText text={(num + 1).toString()} /> }}
+            values={{
+              num: <HighlightedText text={(test.index + 1).toString()} />,
+            }}
           />
         </span>
       </div>
@@ -344,7 +337,7 @@ function TestItem({ vscode, test, num, onRun }: TestItemArg): ReactElement {
         ) : (
           <OpenTextEditor vscode={vscode} filename={test.filename} />
         )}
-        <RunIcon className="run-icon" onRun={() => onRun(num)} />
+        <RunIcon className="run-icon" onRun={() => onRun(test.index)} />
       </div>
     </Box>
   );
@@ -370,7 +363,6 @@ function isOverflowActive(event: HTMLSpanElement): boolean {
 function TestLine({
   vscode,
   test,
-  num,
   onRun,
 }: TestItemArg & { expected: string[] }): ReactElement {
   // This textRef is used on the description span, it will be set when
@@ -427,7 +419,7 @@ function TestLine({
             );
           }}
         >
-          <HighlightedText text={(num + 1).toString()} />
+          <HighlightedText text={(test.index + 1).toString()} />
         </a>
       </th>
       <td>
@@ -465,7 +457,7 @@ function TestLine({
         <TestStateIcon success={test} />
       </td>
       <td>
-        <RunIcon className="run-icon" onRun={() => onRun(num)} />
+        <RunIcon className="run-icon" onRun={() => onRun(test.index)} />
       </td>
       <td>
         {isGui(test) ? (
@@ -591,7 +583,6 @@ function testMacro(test: TestDebugger): TestMacro {
  */
 function matchFilter(
   test: TestDebugger,
-  index: number,
   filterBar: Filters,
   filterScope: string[],
   filterGui: boolean
@@ -603,7 +594,7 @@ function matchFilter(
       testTitle(test).toLowerCase().includes(filter) ||
       testDescription(test).toLowerCase().includes(filter) ||
       testingScope(test).toLowerCase().includes(filter) ||
-      (index + 1).toString().includes(filter);
+      (test.index + 1).toString().includes(filter);
     let currentFilter = include ? includesFilter : !includesFilter;
     searchBarFilter = searchBarFilter && currentFilter;
   }
@@ -647,12 +638,10 @@ function HighlightedText({ text }: { text: string }): ReactElement {
   );
 }
 
-type OriginalTest = { index: number; test: TestMacro };
-
 type CardGridArg = {
   vscode: WebviewApi<unknown>;
   filteredScope: string[];
-  tests: OriginalTest[];
+  tests: TestMacro[];
   onRun: (id: number) => void;
 };
 
@@ -662,11 +651,11 @@ function CardGrid({
   filteredScope,
   onRun,
 }: CardGridArg): ReactElement {
-  let gridTests = new Map<string, OriginalTest[]>();
+  let gridTests = new Map<string, TestMacro[]>();
   if (filteredScope.length != 0) {
     for (let index = 0; index < tests.length; index++) {
       const elt = tests[index];
-      let scopeFiltered = testingScope(elt.test);
+      let scopeFiltered = testingScope(elt);
       let scopeTested = gridTests.get(scopeFiltered) ?? [];
       scopeTested.push(elt);
       gridTests.set(scopeFiltered, scopeTested);
@@ -689,12 +678,7 @@ function CardGrid({
               {tests.map((elt, index) => (
                 <Grid key={index} size={1}>
                   <div style={{ fontSize: '8px', height: '100%' }}>
-                    <TestItem
-                      vscode={vscode}
-                      test={elt.test}
-                      num={elt.index}
-                      onRun={onRun}
-                    />
+                    <TestItem vscode={vscode} test={elt} onRun={onRun} />
                   </div>
                 </Grid>
               ))}
@@ -709,12 +693,7 @@ function CardGrid({
         {tests.map((elt, index) => (
           <Grid key={index} size={1}>
             <div style={{ fontSize: '8px', height: '100%' }}>
-              <TestItem
-                vscode={vscode}
-                test={elt.test}
-                num={elt.index}
-                onRun={onRun}
-              />
+              <TestItem vscode={vscode} test={elt} onRun={onRun} />
             </div>
           </Grid>
         ))}
@@ -723,72 +702,33 @@ function CardGrid({
   }
 }
 
-type SortingTest = { index: number; success: boolean | undefined };
-
-function sortTests(test_a: SortingTest, test_b: SortingTest): number {
-  let scale = (success: boolean | undefined): number => {
-    if (success == undefined) {
-      return 1;
-    } else if (success) {
-      return 0;
-    } else {
-      return 2;
-    }
-  };
-  let a_scale = scale(test_a.success);
-  let b_scale = scale(test_b.success);
-  let failures = b_scale - a_scale;
-  return failures != 0 ? failures : test_a.index - test_b.index;
-}
-
 function TestList({
   vscode,
   onRun,
   tests,
-  orderFailure,
   filteredScope,
-}: CardGridArg & { orderFailure: boolean }): ReactElement {
-  let map = new Map<string, [OriginalTest[], OriginalTest[], OriginalTest[]]>();
-  let not_gui: OriginalTest[] = [];
+}: CardGridArg): ReactElement {
+  let map = new Map<string, TestMacro[]>();
+  let not_gui: TestMacro[] = [];
   for (let index = 0; index < tests.length; index++) {
     const element = tests[index];
-    if (element.test.test.kind == 'GUI') {
-      let scope = element.test.test.value.scope_tested;
-      let [fList, uList, sList] = map.get(scope) ?? [[], [], []];
-      if (orderFailure && element.test.success == undefined) {
-        uList.push(element);
-      } else if (orderFailure && element.test.success) {
-        sList.push(element);
-      } else {
-        fList.push(element);
-      }
-      map.set(scope, [fList, uList, sList]);
+    if (element.test.kind == 'GUI') {
+      let scope = element.test.value.scope_tested;
+      let scopeTests = map.get(scope) ?? [];
+      scopeTests.push(element);
+      map.set(scope, scopeTests);
     } else {
       not_gui.push(element);
     }
   }
-  if (orderFailure) {
-    not_gui = not_gui.sort((test_a, test_b) => {
-      let a = { index: test_a.index, success: test_a.test.success };
-      let b = { index: test_b.index, success: test_b.test.success };
-      return sortTests(a, b);
-    });
-  }
 
-  let allTests: [string, OriginalTest[]][] = [];
+  let allTests: [string, TestMacro[]][] = [];
   if (filteredScope.length == 0) {
-    let list = [...map.values()].flat().flat();
-    if (orderFailure) {
-      list = list.sort((test_a, test_b) => {
-        let a = { index: test_a.index, success: test_a.test.success };
-        let b = { index: test_b.index, success: test_b.test.success };
-        return sortTests(a, b);
-      });
-    }
+    let list = [...map.values()].flat();
     allTests = [['Tests', list]];
   } else {
     let list = [...map.entries()].map((value) => {
-      let res: [string, OriginalTest[]] = [value[0], value[1].flat().flat()];
+      let res: [string, TestMacro[]] = [value[0], value[1]];
       return res;
     });
     allTests = list;
@@ -802,12 +742,11 @@ function TestList({
             <table className="test-list">
               <HeaderLine gui={true} />
               <tbody>
-                {tests.map(({ test, index }) => (
+                {tests.map((test) => (
                   <TestLine
-                    key={index}
+                    key={test.index}
                     vscode={vscode}
                     test={test}
-                    num={index}
                     onRun={onRun}
                     expected={[]}
                   />
@@ -823,13 +762,12 @@ function TestList({
           <table className="test-list">
             <HeaderLine gui={false} />
             <tbody>
-              {not_gui.map(({ test, index }) => {
+              {not_gui.map((test) => {
                 return (
                   <TestLine
-                    key={index}
+                    key={test.index}
                     vscode={vscode}
                     test={test}
-                    num={index}
                     onRun={onRun}
                     expected={[]}
                   />
@@ -849,7 +787,6 @@ function TestsGrid({
   grid,
   filterScope,
   onRun,
-  orderFailure,
 }: TestGridArg): ReactElement {
   if (filtered == undefined || filtered.length == 0) {
     return (
@@ -880,7 +817,6 @@ function TestsGrid({
     />
   ) : (
     <TestList
-      orderFailure={orderFailure}
       filteredScope={filterScope}
       vscode={vscode}
       tests={filtered}
@@ -889,8 +825,8 @@ function TestsGrid({
   );
 }
 
-function scopesFromTests(tests: FilteredTests): string[] {
-  let allScopes = tests?.map((test) => testingScope(test.test)).sort();
+function scopesFromTests(tests: TestMacro[]): string[] {
+  let allScopes = tests?.map((test) => testingScope(test)).sort();
   let scopes = [];
   let prev = '';
   for (let index = 0; index < allScopes!.length; index++) {
@@ -1040,8 +976,6 @@ function Filter({
   removeAllFilter,
   filterGui,
   setFilterGui,
-  orderFailure,
-  setOrder,
 }: FilterArg): ReactElement {
   const [searchBar, setSearchBar] = useState<string>('');
   let valueSearch = searchBar.trim();
@@ -1062,11 +996,9 @@ function Filter({
     removeAllFilter();
   };
 
-  const filteredTests = tests
-    ?.map((test, index) => ({ test, index }))
-    .filter(({ test, index }) =>
-      matchFilter(test, index, filters, [], filterGui)
-    );
+  const filteredTests = tests?.filter((test) =>
+    matchFilter(test, filters, [], filterGui)
+  );
 
   return (
     <div className="box-filter">
@@ -1111,25 +1043,6 @@ function Filter({
                 <FormattedMessage
                   id="generalTests.guiOnly"
                   defaultMessage="Tests GUI uniquement"
-                />
-              }
-              sx={{ '.MuiFormControlLabel-label': { color: 'gray' } }}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={orderFailure}
-                  onChange={(event) => setOrder(event.target.checked)}
-                  sx={{
-                    color: 'gray',
-                    '&.Mui-checked': { color: 'lightgray' },
-                  }}
-                />
-              }
-              label={
-                <FormattedMessage
-                  id="generalTests.highlightFails"
-                  defaultMessage="Mettre en avant les tests échoués"
                 />
               }
               sx={{ '.MuiFormControlLabel-label': { color: 'gray' } }}
@@ -1250,7 +1163,10 @@ export default function GeneralTests({
   const [filter, setFilter] = useState<Filters>([]);
   const [filterScope, setFilterScope] = useState<string[]>([]);
   const [filterGui, setFilterGui] = useState<boolean>(true);
-  const [orderFailure, setOrderFails] = useState<boolean>(true);
+  // Whether failures are brought to the front. Not a user preference any more:
+  // it is turned on by the two actions that refresh every result at once, and
+  // back off by a single run, so that the list does not reshuffle under the
+  // pointer when only one test changed.
   const [grid, setGrid] = useState<boolean>(true);
   const [tests, setTests] = useState<TestMacro[] | undefined>(undefined);
   const [reload, setReload] = useState<boolean>(false);
@@ -1290,11 +1206,17 @@ export default function GeneralTests({
           setReload(false);
           let tests = message.value;
           let tsTests: TestMacro[] = [];
+          let failures: TestMacro[] = [];
           for (let index = 0; index < tests.length; index++) {
-            const test = tests[index];
-            tsTests.push(testMacro(test));
+            const test = testMacro(tests[index]);
+            if (test.success !== undefined && !test.success) {
+              failures.push(test);
+            } else {
+              tsTests.push(test);
+            }
           }
-          setTests(tsTests);
+          failures.push(...tsTests);
+          setTests(failures);
           break;
         }
         case 'TestRunResults': {
@@ -1306,23 +1228,36 @@ export default function GeneralTests({
         }
         case 'TestScopeResult': {
           let [result, run, id] = message.value;
-          setTests((oldTests) =>
-            oldTests?.map((test, index) => {
-              if (index != id) {
-                return test;
+          setTests((oldTests) => {
+            if (oldTests === undefined) {
+              return oldTests;
+            }
+            // Stable partition: failures first, everyone else in place. The
+            // test being examined decides which side it lands on — `run` only
+            // describes the one that just finished.
+            const failures: TestMacro[] = [];
+            const others: TestMacro[] = [];
+            for (const test of oldTests) {
+              let updatedTest: TestMacro = test;
+              if (test.index == id) {
+                updatedTest = testMacro({
+                  index: test.index,
+                  filename: test.filename,
+                  test: result,
+                  success: run.success,
+                  date: run.date,
+                });
               }
-              let updatedTest: TestDebugger = {
-                filename: test.filename,
-                test: result,
-                success: run.success,
-                date: run.date,
-              };
-              return testMacro(updatedTest);
-            })
-          );
-          // if (!run.success) {
-          //   scheduleSettle(id);
-          // }
+              // Explicitly `false`: a test that was never run has an undefined
+              // `success` and does not belong with the failures.
+              if (updatedTest.success === false) {
+                failures.push(updatedTest);
+              } else {
+                others.push(updatedTest);
+              }
+            }
+            return [...failures, ...others];
+          });
           break;
         }
         default:
@@ -1343,8 +1278,8 @@ export default function GeneralTests({
       return;
     }
     setTests((oldTests) =>
-      oldTests?.map((test, index) =>
-        index === id ? { ...test, state: 'Loading' } : test
+      oldTests?.map((test) =>
+        test.index === id ? { ...test, state: 'Loading' } : test
       )
     );
     vscode.postMessage(
@@ -1352,19 +1287,9 @@ export default function GeneralTests({
     );
   };
 
-  const filteredTests = tests
-    ?.map((test, index) => ({ test, index }))
-    .filter(({ test, index }) =>
-      matchFilter(test, index, filter, filterScope, filterGui)
-    );
-
-  const sortedTests = orderFailure
-    ? filteredTests?.sort((test_a, test_b) => {
-        let a = { index: test_a.index, success: test_a.test.success };
-        let b = { index: test_b.index, success: test_b.test.success };
-        return sortTests(a, b);
-      })
-    : filteredTests;
+  const filteredTests = tests?.filter((test) =>
+    matchFilter(test, filter, filterScope, filterGui)
+  );
 
   return (
     <FiltersContext.Provider value={filter}>
@@ -1395,11 +1320,11 @@ export default function GeneralTests({
                     vscode.postMessage(
                       writeUpMessage({ kind: 'SpecificTestRequest', value: [] })
                     );
-                  } else if (sortedTests) {
-                    let indexes = sortedTests.map(({ index }) => index);
+                  } else if (filteredTests) {
+                    let indexes = filteredTests.map(({ index }) => index);
                     setTests((oldTests) => {
-                      return oldTests?.map((test, index) => {
-                        let loading = indexes.includes(index);
+                      return oldTests?.map((test) => {
+                        let loading = indexes.includes(test.index);
                         return loading ? { ...test, state: 'Loading' } : test;
                       });
                     });
@@ -1424,8 +1349,6 @@ export default function GeneralTests({
           filterScope={filterScope}
           filterGui={filterGui}
           setFilterGui={setFilterGui}
-          orderFailure={orderFailure}
-          setOrder={setOrderFails}
           filters={filter}
         />
         <div className="select-test-print">
@@ -1490,15 +1413,14 @@ export default function GeneralTests({
             />
           </div>
         </div>
-        {sortedTests === undefined ? (
+        {filteredTests === undefined ? (
           <Loading size="medium" />
         ) : (
           <TestsGrid
             vscode={vscode}
-            filtered={sortedTests}
+            filtered={filteredTests}
             grid={grid}
             filterScope={filterScope}
-            orderFailure={orderFailure}
             onRun={onRun}
           />
         )}

@@ -149,7 +149,6 @@
   "generalTests.display": "Affichage :",
   "generalTests.card": "Carte",
   "generalTests.list": "Liste",
-  "generalTests.highlightFails": "Mettre en avant les tests échoués",
   "generalTests.tooltip.runTest": "Lancer le test",
   "generalTests.tooltip.displayCard": "Afficher les tests sous forme de cartes",
   "generalTests.tooltip.displayList": "Afficher les tests sous forme de liste",
