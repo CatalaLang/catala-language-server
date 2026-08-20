@@ -25,6 +25,9 @@ import {
 } from '../test-case-editor/testCaseCompilerInterop';
 import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
+import type { ResultController } from './testAndCoverage';
+import { runTestVscode, TestMap } from './testAndCoverage';
+import { getCwd } from '../shared/util_client';
 
 export function parseContents(
   content: Uint8Array,
@@ -145,8 +148,12 @@ export class TestCaseEditorProvider
   public readonly onDidChangeCustomDocument =
     this._onDidChangeCustomDocument.event;
 
-  constructor(private readonly context: vscode.ExtensionContext) {
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private resultController: ResultController
+  ) {
     this.testQueue = new PQueue({ concurrency: 1 });
+    this.resultController = resultController;
   }
 
   async saveCustomDocument(
@@ -218,8 +225,11 @@ export class TestCaseEditorProvider
     return document;
   }
 
-  public static register(context: vscode.ExtensionContext): vscode.Disposable {
-    const provider = new TestCaseEditorProvider(context);
+  public static register(
+    context: vscode.ExtensionContext,
+    resultController: ResultController
+  ): vscode.Disposable {
+    const provider = new TestCaseEditorProvider(context, resultController);
     logger.log(`Registering ${TestCaseEditorProvider.viewType}`);
     const providerRegistration = vscode.window.registerCustomEditorProvider(
       TestCaseEditorProvider.viewType,
@@ -386,9 +396,18 @@ export class TestCaseEditorProvider
               return;
             }
           }
-          const results = await this.testQueue.add(() =>
-            runTest(document.uri.fsPath, scope)
-          ); // assumes that the document is local (fsPath)
+          let filename = document.uri.fsPath;
+          const cwd = getCwd(filename);
+          const results = await this.testQueue.add(async () => {
+            await runTestVscode(
+              cwd!,
+              new TestMap(),
+              this.testController,
+              this.resultController,
+              { kind: 'scope', filename, scope }
+            );
+            return runTest(document.uri.fsPath, scope);
+          });
 
           postMessageToWebView({
             kind: 'TestRunResults',
