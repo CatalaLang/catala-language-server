@@ -134,6 +134,7 @@ export type Test = {
 export type TestDebugger = {
   index: number /*int*/;
   filename: string;
+  relative_filename?: string;
   test: TestEntrypoint;
   success?: boolean;
   date?: string;
@@ -762,6 +763,7 @@ export function writeTestDebugger(x: TestDebugger, context: any = x): any {
   return {
     'index': _atd_write_required_field('TestDebugger', 'index', _atd_write_int, x.index, x),
     'filename': _atd_write_required_field('TestDebugger', 'filename', _atd_write_string, x.filename, x),
+    'relative_filename': _atd_write_optional_field(_atd_write_string, x.relative_filename, x),
     'test': _atd_write_required_field('TestDebugger', 'test', writeTestEntrypoint, x.test, x),
     'success': _atd_write_optional_field(_atd_write_bool, x.success, x),
     'date': _atd_write_optional_field(_atd_write_string, x.date, x),
@@ -772,6 +774,7 @@ export function readTestDebugger(x: any, context: any = x): TestDebugger {
   return {
     index: _atd_read_required_field('TestDebugger', 'index', _atd_read_int, x['index'], x),
     filename: _atd_read_required_field('TestDebugger', 'filename', _atd_read_string, x['filename'], x),
+    relative_filename: _atd_read_optional_field(_atd_read_string, x['relative_filename'], x),
     test: _atd_read_required_field('TestDebugger', 'test', readTestEntrypoint, x['test'], x),
     success: _atd_read_optional_field(_atd_read_bool, x['success'], x),
     date: _atd_read_optional_field(_atd_read_string, x['date'], x),

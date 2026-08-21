@@ -401,26 +401,8 @@ function TestLine({
 
   return (
     <tr>
-      <th>
-        <a
-          href=""
-          title={test.filename}
-          onClick={(event) => {
-            event.preventDefault();
-            vscode.postMessage(
-              writeUpMessage(
-                isGui(test)
-                  ? { kind: 'OpenInTestEditor', value: test.filename }
-                  : {
-                      kind: 'OpenInTextEditor',
-                      value: { value: test.filename },
-                    }
-              )
-            );
-          }}
-        >
-          <HighlightedText text={(test.index + 1).toString()} />
-        </a>
+      <th className="path-column">
+        <TestPath vscode={vscode} test={test} />
       </th>
       <td>
         <HighlightedText text={testTitle(test)} />
@@ -480,10 +462,10 @@ function HeaderLine({
   return (
     <thead>
       <tr>
-        <th>
+        <th className="path-column">
           <FormattedMessage
-            id="generalTests.header.id"
-            defaultMessage="Numéro du test"
+            id="generalTests.header.file"
+            defaultMessage="Fichier"
           />
         </th>
         <td>
@@ -635,6 +617,59 @@ function HighlightedText({ text }: { text: string }): ReactElement {
         )
       )}
     </>
+  );
+}
+
+/**
+ * The file a test lives in, as a link that opens it. This is what identifies a
+ * row of the table: the path tells where the test sits in the project, which a
+ * bare test number could not.
+ * The path shown is the one the extension made relative to the workspace
+ * folder, falling back to the absolute one for a file outside of it. The
+ * directory is dimmed so that the file name stands out, and the whole cell may
+ * wrap on the separators to keep the column narrow; the absolute path stays
+ * available as a tooltip.
+ */
+function TestPath({
+  vscode,
+  test,
+}: {
+  vscode: WebviewApi<unknown>;
+  test: TestMacro;
+}): ReactElement {
+  const displayed = test.relative_filename ?? test.filename;
+  // `+ 1` keeps the separator on the directory side, and yields 0 (hence an
+  // empty directory) when the path is a bare file name. Both separators are
+  // looked for, since the fallback path is whatever the host reported.
+  const cut =
+    Math.max(displayed.lastIndexOf('/'), displayed.lastIndexOf('\\')) + 1;
+  const directory = displayed.slice(0, cut);
+  const name = displayed.slice(cut);
+  return (
+    <a
+      href=""
+      title={test.filename}
+      onClick={(event) => {
+        event.preventDefault();
+        vscode.postMessage(
+          writeUpMessage(
+            isGui(test)
+              ? { kind: 'OpenInTestEditor', value: test.filename }
+              : {
+                  kind: 'OpenInTextEditor',
+                  value: { value: test.filename },
+                }
+          )
+        );
+      }}
+    >
+      {directory == '' ? null : (
+        <span className="test-path-directory">
+          <HighlightedText text={directory} />
+        </span>
+      )}
+      <HighlightedText text={name} />
+    </a>
   );
 }
 

@@ -134,6 +134,11 @@ type test = {
 type test_debugger = {
   index: int;  
   filename: string;
+  (* [filename] made relative to the workspace folder it belongs to, for
+     display: the panel shows where a test sits in the project, and only the
+     extension side can compute this. Absent when the file belongs to no
+     workspace folder, in which case there is nothing to be relative to. *)
+  ?relative_filename: string option;
   test: test_entrypoint;
   ?success: bool option;
   ?date: string option;

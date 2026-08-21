@@ -50,6 +50,23 @@
   overflow-y: hidden;
 }
 
+/* Colonne du fichier. Elle remplace l'ancien numéro de test : on y lit
+   l'emplacement du test dans le projet, donc elle doit rester lisible sans
+   manger la place des autres colonnes. `anywhere` autorise la coupure sur les
+   séparateurs, et la largeur maximale empêche une arborescence profonde
+   d'écraser le reste du tableau. */
+.test-list .path-column {
+  max-width: 20em;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+/* Le dossier est atténué pour que le nom du fichier ressorte. */
+.test-list .test-path-directory {
+  opacity: 0.7;
+  font-weight: normal;
+}
+
 .test-list td.descr-column {
   cursor: pointer;
   display: flex;

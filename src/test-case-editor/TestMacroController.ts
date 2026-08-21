@@ -18,6 +18,21 @@ import type { ResultController } from '../extension/testAndCoverage';
 import { runTestVscode, TestId, TestMap } from '../extension/testAndCoverage';
 import { getCwd } from '../shared/util_client';
 
+// Path of a test file relative to the workspace folder it belongs to, which is
+// what the 'debug all tests' panel displays: an absolute path is both too long
+// for a table column and mostly noise, the interesting part being where the
+// test sits in the project. The separator is normalised so that the web view
+// need not care which platform the path was built on. Undefined when the file
+// belongs to no workspace folder: there is then nothing to be relative to, and
+// the panel falls back to the absolute path.
+function relativeFilename(filename: string): string | undefined {
+  const cwd = getCwd(filename);
+  if (cwd == undefined) {
+    return undefined;
+  }
+  return path.relative(cwd, filename).split(path.sep).join('/');
+}
+
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
 // web view whose entry point is in `uiEntryPoint.ts`
@@ -52,6 +67,7 @@ export class TestMacroController {
           let testEntrypoint = {
             index,
             filename: filename,
+            relative_filename: relativeFilename(filename),
             test: e.entrypoint.value,
             success:
               res.success && res.expected !== undefined
@@ -64,6 +80,7 @@ export class TestMacroController {
           let testEntrypoint = {
             index,
             filename: filename,
+            relative_filename: relativeFilename(filename),
             test: e.entrypoint.value,
           };
           this.tests.push(testEntrypoint);

@@ -131,6 +131,7 @@
   "generalTests.testNumber": "Test #{num}",
   "generalTests.testedOn": "Testé le {date}",
   "generalTests.header.id": "Numéro du test",
+  "generalTests.header.file": "Fichier",
   "generalTests.header.title": "Titre",
   "generalTests.header.scope": "Champ d'application",
   "generalTests.header.description": "Description",
