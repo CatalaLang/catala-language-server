@@ -132,6 +132,7 @@
   "generalTests.testedOn": "Tested on {date}",
   "generalTests.neverRun": "Never run",
   "generalTests.header.id": "Test number",
+  "generalTests.header.file": "File",
   "generalTests.header.title": "Title",
   "generalTests.header.scope": "Scope",
   "generalTests.header.description": "Description",

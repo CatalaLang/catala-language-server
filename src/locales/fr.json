@@ -132,6 +132,7 @@
   "generalTests.testedOn": "Testé le {date}",
   "generalTests.neverRun": "Jamais lancé",
   "generalTests.header.id": "Numéro du test",
+  "generalTests.header.file": "Fichier",
   "generalTests.header.title": "Titre",
   "generalTests.header.scope": "Champ d'application",
   "generalTests.header.description": "Description",

@@ -132,6 +132,7 @@
   "generalTests.testedOn": "Testowano {date}",
   "generalTests.neverRun": "Nigdy nie uruchomiono",
   "generalTests.header.id": "Numer testu",
+  "generalTests.header.file": "Plik",
   "generalTests.header.title": "Tytuł",
   "generalTests.header.scope": "Zakres",
   "generalTests.header.description": "Opis",
