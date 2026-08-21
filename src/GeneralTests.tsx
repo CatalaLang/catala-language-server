@@ -737,6 +737,10 @@ function CardGrid({
   }
 }
 
+function hasFailure(tests: TestMacro[]): boolean {
+  return tests.some((test) => test.state === 'Failed');
+}
+
 function TestList({
   vscode,
   onRun,
@@ -745,9 +749,11 @@ function TestList({
 }: CardGridArg): ReactElement {
   let map = new Map<string, TestMacro[]>();
   let not_gui: TestMacro[] = [];
+  let gui: TestMacro[] = [];
   for (let index = 0; index < tests.length; index++) {
     const element = tests[index];
     if (element.test.kind == 'GUI') {
+      gui.push(element);
       let scope = element.test.value.scope_tested;
       let scopeTests = map.get(scope) ?? [];
       scopeTests.push(element);
@@ -759,14 +765,19 @@ function TestList({
 
   let allTests: [string, TestMacro[]][] = [];
   if (filteredScope.length == 0) {
-    let list = [...map.values()].flat();
-    allTests = [['Tests', list]];
+    // Everything ends up in a single table, so grouping by scope on the way
+    // there would only shuffle it: `tests` arrives with the failures already
+    // hoisted to the front, and that is the order to keep.
+    allTests = [['Tests', gui]];
   } else {
-    let list = [...map.entries()].map((value) => {
-      let res: [string, TestMacro[]] = [value[0], value[1]];
-      return res;
-    });
-    allTests = list;
+    // One table per scope. Failures already lead inside each group — the
+    // grouping above preserves the order they came in — but the groups
+    // themselves have to be reordered, otherwise a failing scope can sit below
+    // several passing ones. The sort is stable, so scopes that are alike keep
+    // their relative order.
+    allTests = [...map.entries()].sort(
+      ([, a], [, b]) => Number(hasFailure(b)) - Number(hasFailure(a))
+    );
   }
   return (
     <>
@@ -1277,9 +1288,13 @@ export default function GeneralTests({
             for (const test of oldTests) {
               let updatedTest: TestMacro = test;
               if (test.index == runIndex) {
+                // Spread rather than rebuilt field by field: everything the
+                // run does not report is intrinsic to the test and must
+                // survive it — `relative_filename`, in particular, or the
+                // list view would fall back to the absolute path as soon as
+                // a test has run.
                 updatedTest = testMacro({
-                  index: test.index,
-                  filename: test.filename,
+                  ...test,
                   test: entry,
                   success: scope_success.success,
                   date: scope_success.date,
