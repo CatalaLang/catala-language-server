@@ -77,6 +77,7 @@
   "testEditor.fillComputedVariable": "Wypełnij obliczoną wartością ({value})",
   "testEditor.setVariable": "Ustaw oczekiwaną wartość na {value}",
   "testEditor.variableMismatch": "Ślad zawiera {actual}, podczas gdy oczekiwano {expected}",
+  "testEditor.openTrace": "Otwórz edytor w trybie debugera dla tego testu",
   "trace.viewer.title": "Przeglądarka śladu",
   "trace.loading": "Ładowanie…",
   "trace.scope": "Zakres",

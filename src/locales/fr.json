@@ -77,6 +77,7 @@
   "testEditor.fillComputedVariable": "Remplir avec la valeur calculée ({value})",
   "testEditor.setVariable": "Définir la valeur attendue à {value}",
   "testEditor.variableMismatch": "La trace contient {actual} là où {expected} était attendu",
+  "testEditor.openTrace": "Ouvrir l'éditeur en mode débogueur pour ce test",
   "trace.viewer.title": "Visualisation",
   "trace.loading": "Chargement…",
   "trace.scope": "Champ d'application",

@@ -253,7 +253,7 @@ export default function TestEditor(props: Props): ReactElement {
               </button>
               <button
                 className="button-action-dvp body-b3"
-                title="Open the trace editor for this test"
+                title={intl.formatMessage({ id: 'testEditor.openTrace' })}
                 onClick={openTraceEditor}
               >
                 <span className="codicon codicon-graph"></span> Trace
