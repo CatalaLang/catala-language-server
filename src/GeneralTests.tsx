@@ -389,26 +389,8 @@ function TestLine({ vscode, test, onRun }: TestItemArg): ReactElement {
 
   return (
     <tr>
-      <th>
-        <a
-          href=""
-          title={test.filename}
-          onClick={(event) => {
-            event.preventDefault();
-            vscode.postMessage(
-              writeUpMessage(
-                isGui(test)
-                  ? { kind: 'OpenInTestEditor', value: test.filename }
-                  : {
-                      kind: 'OpenInTextEditor',
-                      value: { value: test.filename },
-                    }
-              )
-            );
-          }}
-        >
-          {test.index + 1}
-        </a>
+      <th className="path-column">
+        <TestPath vscode={vscode} test={test} />
       </th>
       <td>{testTitle(test)}</td>
       <td>{testingScope(test)}</td>
@@ -458,10 +440,10 @@ function HeaderLine({ gui }: { gui: boolean }): ReactElement {
   return (
     <thead>
       <tr>
-        <th>
+        <th className="path-column">
           <FormattedMessage
-            id="generalTests.header.id"
-            defaultMessage="Numéro du test"
+            id="generalTests.header.file"
+            defaultMessage="Fichier"
           />
         </th>
         <td>
@@ -574,6 +556,47 @@ function matchFilter(
       : filterScope.some((value) => testingScope(test) == value);
   let guiFilter = filterGui ? isGui(test) : true;
   return searchBarFilter && scopeFilter && guiFilter;
+}
+
+function TestPath({
+  vscode,
+  test,
+}: {
+  vscode: WebviewApi<unknown>;
+  test: TestMacro;
+}): ReactElement {
+  const displayed = test.relative_filename ?? test.filename;
+  // `+ 1` keeps the separator on the directory side, and yields 0 (hence an
+  // empty directory) when the path is a bare file name. Both separators are
+  // looked for, since the fallback path is whatever the host reported.
+  const cut =
+    Math.max(displayed.lastIndexOf('/'), displayed.lastIndexOf('\\')) + 1;
+  const directory = displayed.slice(0, cut);
+  const name = displayed.slice(cut);
+  return (
+    <a
+      href=""
+      title={test.filename}
+      onClick={(event) => {
+        event.preventDefault();
+        vscode.postMessage(
+          writeUpMessage(
+            isGui(test)
+              ? { kind: 'OpenInTestEditor', value: test.filename }
+              : {
+                  kind: 'OpenInTextEditor',
+                  value: { value: test.filename },
+                }
+          )
+        );
+      }}
+    >
+      {directory == '' ? null : (
+        <span className="test-path-directory">{directory}</span>
+      )}
+      {name}
+    </a>
+  );
 }
 
 type CardGridArg = {
