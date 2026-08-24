@@ -12,6 +12,7 @@ import {
   readTestInputs,
   readTestOutputs,
 } from '../generated/catala_types';
+import type { IntlShape } from 'react-intl';
 
 export type CodeLocation = {
   file: string;
@@ -247,6 +248,8 @@ export function traceValueToRuntime(
 
 export function formatTraceValue(
   v: TraceValue,
+  intl: IntlShape,
+  lang = 'en',
   all = false,
   indent = ''
 ): string | undefined {
@@ -255,14 +258,25 @@ export function formatTraceValue(
     case 'money':
       return v.value;
     case 'bool':
+      return intl.formatMessage({
+        id: v.value ? 'true' : 'false',
+      });
     case 'integer':
     case 'decimal':
       return String(v.value);
     case 'date': {
-      return `${v.value.year}-${String(v.value.month).padStart(2, '0')}-${String(v.value.day).padStart(2, '0')}`;
+      const d = new Date(v.value.year, v.value.month, v.value.day);
+      return intl.formatDate(d);
     }
     case 'duration': {
-      return `${v.value.years}y ${v.value.months}m ${v.value.days}d`;
+      switch (lang) {
+        case 'en':
+          return `${v.value.years}y ${v.value.months}m ${v.value.days}d`;
+        case 'fr':
+          return `${v.value.days}j ${v.value.months}m ${v.value.years}a`;
+        default:
+          return 'Unexpected language for duration';
+      }
     }
     case 'absent':
       return 'Absent';
@@ -271,14 +285,15 @@ export function formatTraceValue(
         return v.ctor;
       }
       return all
-        ? `${v.ctor} ${formatTraceValue(v.value, all, indent) ?? ''}`
+        ? `${v.ctor} ${formatTraceValue(v.value, intl, lang, all, indent) ?? ''}`
         : undefined;
     case 'struct':
       if (!all) return undefined;
       if (Object.keys(v.fields).length === 0) return '{}';
       return `{\n${Object.entries(v.fields)
         .map(
-          ([k, f]) => `${inner}${k}: ${formatTraceValue(f, all, inner) ?? ''}`
+          ([k, f]) =>
+            `${inner}${k}: ${formatTraceValue(f, intl, lang, all, inner) ?? ''}`
         )
         .join(',\n')}\n${indent}}`;
     case 'array':
@@ -287,7 +302,7 @@ export function formatTraceValue(
       return `[\n${v.values
         .map(
           ([x, label]) =>
-            `${inner}${label ? `${label}: ` : ''}${formatTraceValue(x, all, inner) ?? ''}`
+            `${inner}${label ? `${label}: ` : ''}${formatTraceValue(x, intl, lang, all, inner) ?? ''}`
         )
         .join(',\n')}\n${indent}]`;
   }

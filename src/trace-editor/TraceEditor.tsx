@@ -191,6 +191,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
             <DataPanel
               test={scope[1]}
               trace={runState.status === 'success' ? runState.trace : undefined}
+              intl={intl}
             />
           }
           right={<TraceResult runState={runState} cwd={cwd} test={scope[1]} />}

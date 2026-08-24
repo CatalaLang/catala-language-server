@@ -201,6 +201,12 @@ export type Diff = {
   actual: RuntimeValue;
 }
 
+export type VariableFailure = {
+  name: string;
+  expected: string;
+  current_value?: string;
+}
+
 export type ParseResults =
 | { kind: 'ParseError'; value: string }
 | { kind: 'EmptyTestListMismatch' }
@@ -1038,6 +1044,22 @@ export function readDiff(x: any, context: any = x): Diff {
     path: _atd_read_required_field('Diff', 'path', _atd_read_array(readPathSegment), x['path'], x),
     expected: _atd_read_required_field('Diff', 'expected', readRuntimeValue, x['expected'], x),
     actual: _atd_read_required_field('Diff', 'actual', readRuntimeValue, x['actual'], x),
+  };
+}
+
+export function writeVariableFailure(x: VariableFailure, context: any = x): any {
+  return {
+    'name': _atd_write_required_field('VariableFailure', 'name', _atd_write_string, x.name, x),
+    'expected': _atd_write_required_field('VariableFailure', 'expected', _atd_write_string, x.expected, x),
+    'current_value': _atd_write_optional_field(_atd_write_string, x.current_value, x),
+  };
+}
+
+export function readVariableFailure(x: any, context: any = x): VariableFailure {
+  return {
+    name: _atd_read_required_field('VariableFailure', 'name', _atd_read_string, x['name'], x),
+    expected: _atd_read_required_field('VariableFailure', 'expected', _atd_read_string, x['expected'], x),
+    current_value: _atd_read_optional_field(_atd_read_string, x['current_value'], x),
   };
 }
 
