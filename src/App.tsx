@@ -7,12 +7,14 @@ import { type WebviewApi } from 'vscode-webview';
 
 import frMessages from './locales/fr.json';
 import enMessages from './locales/en.json';
+import plMessages from './locales/pl.json';
 
 type Messages = Record<string, string>;
 
 const allMessages: Record<string, Messages> = {
   fr: frMessages,
   en: enMessages,
+  pl: plMessages,
 };
 
 type Props = {
