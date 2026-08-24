@@ -1,0 +1,113 @@
+# This file is part of the Catala compiler, a specification language for tax and social benefits
+# computation rules.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License. You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software distributed under the License
+# is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+# or implied. See the License for the specific language governing permissions and limitations under
+# the License.
+#
+# NOTE: not Iro-generated (the Iro tooling is unavailable/removed upstream, see
+# pl.xml for details). Written by an AI coding assistant, keeping this file
+# alongside types_pl.xml only for parity with types_en.iro/types_fr.iro's
+# role as a readable companion source -- types_pl.xml (compiled by hand from
+# this) is what's actually loaded by the extension. Two entries are best-effort
+# rather than compiler-verified, flagged inline below.
+
+
+name                   = catala_type_pl
+
+################################################################
+## Styles
+################################################################
+
+styles [] {
+
+.cc_id : style {
+   color                 = light_blue
+   textmate_scope        = storage.type
+}
+
+.primitive : style {
+   color                = cyan
+   textmate_scope       = support.type
+}
+
+.kind : style {
+   color                 = orange
+   textmate_scope        = keyword.control
+}
+
+.punctuation : style {
+   color     = red_2
+   textmate_scope        = punctuation
+}
+
+.literal_numeric : style {
+   color = violet
+   textmate_scope        = constant.numeric
+}
+
+}
+
+#################################################
+## Parse contexts
+#################################################
+
+__LOWER_CHARS \= a-ząćęłńóśżź
+
+__UPPER_CHARS \= A-ZĄĆĘŁŃÓŚŻŹ
+
+__SC_ID \= [$${__LOWER_CHARS}][$${__LOWER_CHARS}$${__UPPER_CHARS}0-9_\']*
+
+__SC_ID_COMPOSED \= [$${__LOWER_CHARS}][$${__LOWER_CHARS}$${__UPPER_CHARS}0-9_\'\.]*
+
+__CC_ID \= [$${__UPPER_CHARS}][$${__LOWER_CHARS}$${__UPPER_CHARS}0-9_\']*
+
+contexts [] {
+
+##############################################
+## Main Context - Entry point context
+##############################################
+
+main : context {
+
+  # <enum> and <default> kept untranslated: no Polish abbreviated form is
+  # attested anywhere in the compiler (lexer_pl.cppo.ml / type_printing.ml),
+  # unlike <struct>/<option>/<closure_env> which are locale-invariant tags.
+  : pattern {
+   regex \= (<struct>|<enum>|<default>|<option>|<closure_env>)
+   styles [] = .kind;
+  }
+
+  # "cokolwiek z rodzaju" (anything of type) is a best-effort composition of
+  # MS_WILDCARD "cokolwiek" + MS_OF "z" + MS_TYPE "rodzaj" (declined to
+  # "rodzaju" for grammatical correctness after "z") -- not itself a single
+  # compiler macro, unlike the other primitives here which are.
+  : pattern {
+    regex \= \b(unit|całkowita|zerojedynkowy|czas|czastrwania|pieniądze|code_location|dziesiętny|cokolwiek\s+z\s+rodzaju|lista|opcjonalny)\b
+    styles [] = .primitive;
+  }
+
+  : pattern {
+     regex \= (\,|\(|\)|→|\.)
+     styles [] = .punctuation;
+  }
+
+  : pattern {
+    regex \= (\|[0-9]+\-[0-9]+\-[0-9]+\|)
+    styles [] = .literal_numeric ;
+  }
+
+  : pattern {
+    regex \= \b($${__CC_ID})\b
+    styles [] = .cc_id ;
+  }
+
+}
+
+}

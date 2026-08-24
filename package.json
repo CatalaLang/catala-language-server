@@ -92,31 +92,31 @@
       "explorer/context": [
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(en|fr)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(en|fr|pl)$/",
           "group": "navigation@2"
         }
       ],
       "editor/context": [
         {
           "command": "catala.showExceptionsAtCursor",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
           "group": "navigation@1"
         }
       ],
       "editor/title": [
         {
           "command": "catala.run",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
           "group": "navigation@10"
         },
         {
           "command": "catala.debug",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
           "group": "navigation@11"
         },
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && (editorLangId == catala_en || editorLangId == catala_fr) && resourceFilename =~ /.*test.*\\.catala_(en|fr)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && (editorLangId == catala_en || editorLangId == catala_fr || editorLangId == catala_pl) && resourceFilename =~ /.*test.*\\.catala_(en|fr|pl)$/",
           "group": "navigation@2"
         }
       ]
@@ -127,6 +127,9 @@
       },
       {
         "language": "catala_en"
+      },
+      {
+        "language": "catala_pl"
       }
     ],
     "debuggers": [
@@ -135,7 +138,8 @@
         "label": "Catala Debug",
         "languages": [
           "catala_en",
-          "catala_fr"
+          "catala_fr",
+          "catala_pl"
         ],
         "variables": {
           "SpecifyScope": "catala.selectScope"
@@ -277,6 +281,17 @@
         "configuration": "./language-configuration.json"
       },
       {
+        "id": "catala_pl",
+        "aliases": [
+          "Catala (Polish)"
+        ],
+        "extensions": [
+          ".catala_pl",
+          ".catala_pl.md"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
         "id": "catala_type_en",
         "configuration": "./language-configuration.json"
       },
@@ -285,11 +300,19 @@
         "configuration": "./language-configuration.json"
       },
       {
+        "id": "catala_type_pl",
+        "configuration": "./language-configuration.json"
+      },
+      {
         "id": "catala_code_en",
         "configuration": "./language-configuration.json"
       },
       {
         "id": "catala_code_fr",
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_code_pl",
         "configuration": "./language-configuration.json"
       }
     ],
@@ -305,6 +328,11 @@
         "path": "./syntaxes/fr.xml"
       },
       {
+        "language": "catala_pl",
+        "scopeName": "source.catala_pl",
+        "path": "./syntaxes/pl.xml"
+      },
+      {
         "language": "catala_type_en",
         "scopeName": "source.catala_type_en",
         "path": "./syntaxes/types_en.xml"
@@ -315,6 +343,11 @@
         "path": "./syntaxes/types_fr.xml"
       },
       {
+        "language": "catala_type_pl",
+        "scopeName": "source.catala_type_pl",
+        "path": "./syntaxes/types_pl.xml"
+      },
+      {
         "language": "catala_code_en",
         "scopeName": "source.catala_code_en",
         "path": "./syntaxes/code_en.xml"
@@ -323,6 +356,11 @@
         "language": "catala_code_fr",
         "scopeName": "source.catala_code_fr",
         "path": "./syntaxes/code_fr.xml"
+      },
+      {
+        "language": "catala_code_pl",
+        "scopeName": "source.catala_code_pl",
+        "path": "./syntaxes/code_pl.xml"
       }
     ],
     "comments": {
@@ -336,13 +374,18 @@
       "[catala_fr]": {
         "editor.tabSize": 2,
         "editor.insertSpaces": true
+      },
+      "[catala_pl]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
       }
     }
   },
   "activationEvents": [
     "workspaceContains:**/clerk.toml",
     "workspaceContains:**/*.catala_en",
-    "workspaceContains:**/*.catala_fr"
+    "workspaceContains:**/*.catala_fr",
+    "workspaceContains:**/*.catala_pl"
   ],
   "scripts": {
     "vscode:prepublish": "npm run package",

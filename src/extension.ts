@@ -278,6 +278,11 @@ export async function activate(
           language: 'catala_fr',
           pattern: '**/*.catala_fr{,.md}',
         },
+        {
+          scheme: 'file',
+          language: 'catala_pl',
+          pattern: '**/*.catala_pl{,.md}',
+        },
       ],
       synchronize: {
         fileEvents: [
@@ -286,6 +291,9 @@ export async function activate(
           ),
           vscode.workspace.createFileSystemWatcher(
             '**/*.{catala_fr,catala_fr.md}'
+          ),
+          vscode.workspace.createFileSystemWatcher(
+            '**/*.{catala_pl,catala_pl.md}'
           ),
         ],
       },
