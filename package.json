@@ -341,6 +341,10 @@
         "path": "./syntaxes/code_fr.xml"
       }
     ],
+    "markdown.markdownItPlugins": true,
+    "markdown.previewStyles": [
+      "./media/markdown-preview-catala.css"
+    ],
     "comments": {
       "lineComment": "#"
     },
