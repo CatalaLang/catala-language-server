@@ -19,99 +19,114 @@ open Catala_utils
 open Shared_ast
 open Format
 
-let locale_s locale =
-  match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
+let locale_s locale = match locale with `En -> "en" | `Fr -> "fr" | `Pl -> "pl"
 
+(* Not itself a lexer macro: composed from MS_WILDCARD + MS_OF + MS_TYPE
+   ("cokolwiek" + "z" + "rodzaj", declined to "rodzaju" after "z"). *)
 let _for_all = function
   | `En -> "anything of type"
   | `Fr -> "n'importe quel de type"
-  | `Pl -> assert false
+  | `Pl -> "cokolwiek z rodzaju"
 
+(* MS_LIST is "lista" alone, with no "of"/"z" suffix in the macro. *)
 let list_of = function
   | `En -> "list of"
   | `Fr -> "liste de"
-  | `Pl -> assert false
+  | `Pl -> "lista"
 
+(* Kept untranslated: TDefault doesn't currently call this (see below), and
+   no Polish form is attested anywhere in the compiler. Keep in sync with
+   types_pl.xml/.iro's <default> kind-tag pattern if this ever changes. *)
 let default = function
   | `En -> "default"
   | `Fr -> "défaut"
-  | `Pl -> assert false
+  | `Pl -> "default"
 
-let enum = function `En -> "enum" | `Fr -> "énum" | `Pl -> assert false
-let struct_s = function `Pl -> assert false | _ -> "structure"
+(* Kept untranslated: no attested Polish abbreviated form (see types_pl.xml). *)
+let enum = function `En -> "enum" | `Fr -> "énum" | `Pl -> "enum"
+let struct_s = function `Pl -> "struktura" | _ -> "structure"
 
 let struct_header = function
   | `En -> struct_s `En
   | `Fr -> struct_s `Fr
-  | `Pl -> assert false
+  | `Pl -> struct_s `Pl
 
 let struct_data = function
   | `En -> "data"
   | `Fr -> "donnée"
-  | `Pl -> assert false
+  | `Pl -> "dane"
 
 let content = function
   | `En -> "content"
   | `Fr -> "contenu"
-  | `Pl -> assert false
+  | `Pl -> "typu"
 
 let depends_on = function
   | `En -> "depends on"
   | `Fr -> "dépend de"
-  | `Pl -> assert false
+  | `Pl -> "zależy od"
 
 let enum_s = function
   | `En -> "enumeration"
   | `Fr -> "énumération"
-  | `Pl -> assert false
+  | `Pl -> "enumeracja"
 
 let enum_header = function
   | `En -> enum_s `En
   | `Fr -> enum_s `Fr
-  | `Pl -> assert false
+  | `Pl -> enum_s `Pl
 
 let scope_s = function
   | `En -> "scope"
   | `Fr -> "champ d'application"
-  | `Pl -> assert false
+  | `Pl -> "zakres"
 
 let topdef_s = function
   | `En -> "declaration"
   | `Fr -> "déclaration"
-  | `Pl -> assert false
+  | `Pl -> "deklaracja"
 
+(* Best-effort display label, not a lexer macro (MR_EXTERNAL "external" stays
+   the literal keyword in every locale, including Polish). *)
 let external_type_s = function
   | `En -> "external type"
   | `Fr -> "type externe"
-  | `Pl -> assert false
+  | `Pl -> "typ zewnętrzny"
 
+(* Best-effort display label, not a lexer macro (MR_MODULE_ALIAS "as" stays
+   the literal keyword in every locale, including Polish). *)
 let alias_s = function
   | `En -> "as"
   | `Fr -> "en tant que"
-  | `Pl -> assert false
+  | `Pl -> "jako"
 
 let option_s = function
   | `En -> "optional of"
   | `Fr -> "optionnel de"
-  | `Pl -> assert false
+  | `Pl -> "opcjonalny"
 
+(* Kept as the literal keyword, not translated like alias_s/external_type_s:
+   this feeds a completion item bound to Tokens.MODULE_USE (doc_completion.ml),
+   and MR_MODULE_USE "Using" is the literal keyword in every locale -- an
+   inserted translation here would risk producing invalid Catala syntax. *)
 let using_s = function
   | `En -> "Using"
   | `Fr -> "Usage de"
-  | `Pl -> assert false
+  | `Pl -> "Using"
 
 let pp_lit locale fmt l =
-  fprintf fmt "%s"
-  @@ (if locale = `En then fst else snd)
-       (match l with
-       | TUnit -> "unit", "unit"
-       | TBool -> "boolean", "booléen"
-       | TInt -> "integer", "entier"
-       | TRat -> "decimal", "décimal"
-       | TMoney -> "money", "argent"
-       | TDuration -> "duration", "durée"
-       | TDate -> "date", "date"
-       | TPos -> "position", "position")
+  let en, fr, pl =
+    match l with
+    | TUnit -> "unit", "unit", "unit"
+    | TBool -> "boolean", "booléen", "zerojedynkowy"
+    | TInt -> "integer", "entier", "całkowita"
+    | TRat -> "decimal", "décimal", "dziesiętny"
+    | TMoney -> "money", "argent", "pieniądze"
+    | TDuration -> "duration", "durée", "czastrwania"
+    | TDate -> "date", "date", "czas"
+    | TPos -> "position", "position", "pozycja"
+  in
+  fprintf fmt "%s" (match locale with `En -> en | `Fr -> fr | `Pl -> pl)
 
 let pp_typ locale fmt (ty : typ) =
   let untuplify = function [(TTuple tys, _)] -> tys | x -> x in
@@ -181,9 +196,7 @@ let pp_typ_no_box locale fmt (ty : typ) =
   pp_typ fmt ty
 
 let expr_type ~markdown locale typ =
-  let locale_s =
-    match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
-  in
+  let locale_s = locale_s locale in
   let typ_s =
     if markdown then
       asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_typ locale) typ
@@ -206,9 +219,7 @@ let pp_struct_code
     (StructField.Map.bindings field_map)
 
 let struct_code ~markdown locale field_map =
-  let locale_s =
-    match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
-  in
+  let locale_s = locale_s locale in
   let typ_s =
     if markdown then
       asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_struct_code locale)
@@ -236,9 +247,7 @@ let pp_enum_code
     (EnumConstructor.Map.bindings field_map)
 
 let enum_code ~markdown locale field_map =
-  let locale_s =
-    match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
-  in
+  let locale_s = locale_s locale in
   let typ_s =
     if markdown then
       asprintf "```catala_code_%s@\n%a@\n```" locale_s (pp_enum_code locale)
@@ -276,12 +285,12 @@ let svar_input_s_opt locale =
   let context_s = function
     | `En -> "context"
     | `Fr -> "contexte"
-    | `Pl -> assert false
+    | `Pl -> "kontekst"
   in
   let input_s = function
     | `En -> "input"
     | `Fr -> "entrée"
-    | `Pl -> assert false
+    | `Pl -> "wejście"
   in
   function
   | Catala_runtime.NoInput -> None
@@ -292,7 +301,7 @@ let svar_output_s_opt locale b =
   let output_s = function
     | `En -> "output"
     | `Fr -> "résultat"
-    | `Pl -> assert false
+    | `Pl -> "wyjście"
   in
   if b then Some (output_s locale) else None
 
@@ -306,12 +315,12 @@ let svar_io_s locale (var_io : Desugared.Ast.io) =
 let svar_internal_s = function
   | `En -> "output"
   | `Fr -> "résultat"
-  | `Pl -> assert false
+  | `Pl -> "wyjście"
 
 let svar_state_s = function
   | `En -> "state"
   | `Fr -> "état"
-  | `Pl -> assert false
+  | `Pl -> "stan"
 
 let pp_scope_var
     ?(skip_internals = true)
