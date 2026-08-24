@@ -2,6 +2,7 @@
   "command.catala.openWithTestEditor.title": "Open with Catala Test Editor",
   "command.catala.showExceptions.title": "Show definition tree",
   "command.catala.showExceptionsAtCursor.title": "Show definition tree",
+  "command.catala.showMarkdownPreview.title": "Open Markdown Preview to the Side",
   "view.catala.exceptionsView.name": "Definition tree",
   "category.catala": "Catala",
   "customEditor.testCaseEditor.displayName": "Catala Test Case Editor"

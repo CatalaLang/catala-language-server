@@ -253,6 +253,28 @@ export async function activate(
     )
   );
 
+  // Delegate to the built-in Markdown preview: catala_en/fr files are valid
+  // Markdown, and its `showPreviewToSide` command only inspects the given
+  // URI's text (no languageId check), so this works despite the command's
+  // own menu entries being restricted to editorLangId == markdown.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.showMarkdownPreview',
+      async (arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+        const uri =
+          arg instanceof vscode.Uri
+            ? arg
+            : hasResourceUri(arg)
+              ? arg.resourceUri
+              : vscode.window.activeTextEditor?.document.uri;
+        if (!uri) {
+          return;
+        }
+        await vscode.commands.executeCommand('markdown.showPreviewToSide', uri);
+      }
+    )
+  );
+
   const lsp_path = resolveBinaryPath(
     'catala-lsp',
     context,

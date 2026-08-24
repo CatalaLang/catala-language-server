@@ -73,6 +73,12 @@
         "title": "Scope Input Editor"
       },
       {
+        "command": "catala.showMarkdownPreview",
+        "title": "%command.catala.showMarkdownPreview.title%",
+        "category": "%category.catala%",
+        "icon": "$(open-preview)"
+      },
+      {
         "command": "catala.showExceptions",
         "title": "%command.catala.showExceptions.title%"
       },
@@ -94,6 +100,11 @@
           "command": "catala.openWithTestEditor",
           "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(en|fr)$/",
           "group": "navigation@2"
+        },
+        {
+          "command": "catala.showMarkdownPreview",
+          "when": "resourceLangId == catala_en || resourceLangId == catala_fr",
+          "group": "navigation@3"
         }
       ],
       "editor/context": [
@@ -118,6 +129,11 @@
           "command": "catala.openWithTestEditor",
           "when": "config.catala.enableCustomTestCaseEditor && (editorLangId == catala_en || editorLangId == catala_fr) && resourceFilename =~ /.*test.*\\.catala_(en|fr)$/",
           "group": "navigation@2"
+        },
+        {
+          "command": "catala.showMarkdownPreview",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "group": "navigation@3"
         }
       ]
     },
