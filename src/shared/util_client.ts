@@ -5,10 +5,23 @@ import { execFileSync } from 'child_process';
 import path from 'path';
 import { logger } from '../extension/logger';
 
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export type RunArgs = {
   uri: string;
   scope: string;
   inputs?: JSON;
+  withTrace?: boolean;
+  traceOutputFile?: string;
+  headless?: boolean;
+  buildDir?: string;
+  ninjaOutput?: string;
 };
 
 var warned = false;
@@ -89,9 +102,6 @@ export const catalaPath: string =
 export const clerkPath: string =
   resolveBinaryPath('clerk', undefined, undefined, getConfig('clerkPath')) ??
   'clerk';
-
-logger.log(`catala command: ${catalaPath}`);
-logger.log(`clerk command: ${clerkPath}`);
 
 export function getCwd(bufferPath: string): string | undefined {
   // Uri.file, not Uri.parse: bufferPath is an OS path.

@@ -532,7 +532,7 @@ let find_file_in_project doc_id (project : project) =
 
 let reload_project ~on_error project projects =
   let project = project_of_dir ~on_error project.project_dir in
-  project, Projects.add project projects
+  project, Projects.add project (Projects.remove project projects)
 
 exception Project_not_found
 
@@ -805,7 +805,8 @@ let remove_project_file ~on_error doc_id project projects =
 
 type test_kind =
   | GUI of {
-      scope : Shared_ast.ScopeName.t;
+      tested_scope : Shared_ast.ScopeName.t;
+      testing_scope : Shared_ast.ScopeName.t;
       title : string option;
       description : string option;
     }
@@ -863,7 +864,9 @@ let typ_to_json (decl_ctx : Shared_ast.decl_ctx) (typ : Shared_ast.typ) :
                 let ty = loop ty in
                 let ty = if ty = O.TUnit then None else Some ty in
                 EnumConstructor.to_string cstr, ty);
-          ctor_attrs = []; (* not populated: no current consumer on this path; see Test_case_parser_lib.enum_ctor_attrs for the testcase path *)
+          ctor_attrs = [];
+          (* not populated: no current consumer on this path; see
+             Test_case_parser_lib.enum_ctor_attrs for the testcase path *)
         }
     | TArray ty -> O.TArray (loop ty)
     | TOption ty -> O.TOption (loop ty)
@@ -882,8 +885,15 @@ let entrypoint_to_json ?(no_variables = false) (decl_ctx, { path; pos; kind }) :
   let opt_var f = if no_variables then None else Some (f ()) in
   let entrypoint_kind : entrypoint_kind -> Catala_types_t.entrypoint_kind =
     function
-    | Test (GUI { scope; title; description }) ->
-      `Test (`GUI { scope = scopename scope; title; description })
+    | Test (GUI { tested_scope; testing_scope; title; description }) ->
+      `Test
+        (`GUI
+           {
+             scope_tested = Shared_ast.ScopeName.base tested_scope;
+             scope = scopename testing_scope;
+             title;
+             description;
+           })
     | Test (Scope scope) -> `Test (`Test { scope = scopename scope })
     | NoInputScope { scopename = scope; output_vars } ->
       `NoInputScope
@@ -932,7 +942,7 @@ type Catala_utils.Pos.attr += TestUI
 type Catala_utils.Pos.attr += TestDescription of string
 type Catala_utils.Pos.attr += TestTitle of string
 
-let list_file_entrypoints doc_id prg : entrypoint list =
+let list_file_entrypoints doc_id prg module_scopes : entrypoint list =
   let open Shared_ast in
   let open Scopelang.Ast in
   let path = doc_id in
@@ -941,6 +951,22 @@ let list_file_entrypoints doc_id prg : entrypoint list =
       let pos = Mark.get sdecl in
       let { scope_decl_name = _; scope_sig; _ } = Mark.remove sdecl in
       if Pos.has_attr pos TestUI then
+        let tested_scope =
+          let testing_scope = ScopeName.Map.find scopename module_scopes in
+          let _, tested_scope =
+            let count =
+              ScopeVar.Map.cardinal testing_scope.Desugared.Ast.scope_sub_scopes
+            in
+            if count <> 1 then
+              invalid_arg
+                (Format.asprintf
+                   "@{<b>%a@}: testing scopes are expected to have one, and \
+                    only one subscope, this has %d"
+                   ScopeName.format scopename count)
+            else ScopeVar.Map.choose testing_scope.scope_sub_scopes
+          in
+          tested_scope
+        in
         let title =
           Pos.get_attr pos (function
             | TestTitle s -> if s = "" then None else Some s
@@ -954,7 +980,10 @@ let list_file_entrypoints doc_id prg : entrypoint list =
         {
           path;
           pos;
-          kind = Test (GUI { scope = scopename; title; description });
+          kind =
+            Test
+              (GUI
+                 { tested_scope; testing_scope = scopename; title; description });
         }
         :: acc
       else if Pos.has_attr pos Test then
@@ -1029,7 +1058,11 @@ let has_no_lambda
 
 let list_entrypoints
     ~(get_prog :
-       Doc_id.t -> Shared_ast.typed Scopelang.Ast.program option Lwt.t)
+       Doc_id.t ->
+       (Shared_ast.typed Scopelang.Ast.program
+       * Desugared.Ast.scope Shared_ast.ScopeName.Map.t)
+       option
+       Lwt.t)
     (project : project)
     (params : Catala_types_t.entrypoints_params) :
     Catala_types_t.entrypoints Lwt.t =
@@ -1061,7 +1094,9 @@ let list_entrypoints
     if not (Sys.is_directory path) then
       let doc_id = Doc_id.of_file path in
       let* prg = get_prog doc_id in
-      match prg with None -> Lwt.return_nil | Some p -> Lwt.return [doc_id, p]
+      match prg with
+      | None -> Lwt.return_nil
+      | Some (p, module_scope) -> Lwt.return [doc_id, p, module_scope]
     else
       let filtered_files =
         List.filter_map
@@ -1076,16 +1111,19 @@ let list_entrypoints
       Lwt_list.filter_map_s
         (fun doc_id ->
           let* prg = get_prog doc_id in
-          Lwt.return (Option.bind prg (fun prg -> Some (doc_id, prg))))
+          Lwt.return
+            (Option.bind prg (fun (prg, module_scope) ->
+                 Some (doc_id, prg, module_scope))))
         filtered_files
   in
   let entrypoints =
     List.concat_map
-      (fun (doc_id, prg) ->
+      (fun (doc_id, prg, module_scope) ->
         List.map (fun x -> prg.Scopelang.Ast.program_ctx, x)
         @@
         let entrypoints =
-          list_file_entrypoints doc_id prg |> List.filter filter_entrypoint
+          list_file_entrypoints doc_id prg module_scope
+          |> List.filter filter_entrypoint
         in
         if no_lambdas then
           List.filter (fun ep -> has_no_lambda prg ep) entrypoints

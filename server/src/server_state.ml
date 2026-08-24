@@ -22,6 +22,7 @@ open Catala_utils
 type valid_result = {
   surface : Surface.Ast.program;
   desugared : Desugared.Ast.program;
+  sig_hash : Hash.t;
   prg : typed Scopelang.Ast.program;
   used_modules : ModuleName.t File.Map.t;
   jump_table : Jump_table.t Lazy.t;
@@ -43,6 +44,7 @@ type document_state = {
   project_file : Projects.project_file;
   last_valid_result : valid_result option;
   last_result : processing_result option;
+  last_saved_intf : Hash.t option;
 }
 
 let make_document buffer_state (document_id : Doc_id.t) project project_file =
@@ -55,6 +57,7 @@ let make_document buffer_state (document_id : Doc_id.t) project project_file =
     project_file;
     last_valid_result = None;
     last_result = None;
+    last_saved_intf = None;
   }
 
 type module_cache = Surface.Ast.module_content Doc_id.Hashtbl.t
@@ -248,8 +251,7 @@ let lookup_module_content
     in
     H.replace module_cache doc_id r;
     r
-  | Some r ->
-    r
+  | Some r -> r
 
 let get_module_content server_state =
   lookup_module_content server_state.module_cache

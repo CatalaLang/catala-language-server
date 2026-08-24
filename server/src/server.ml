@@ -216,8 +216,12 @@ let unlocked_process_document
       else false, document, diags
     end
     | Valid result ->
+      let last_saved_intf =
+        if document.buffer_state = Saved then Some result.sig_hash
+        else document.last_saved_intf
+      in
       ( true,
-        { document with last_valid_result = Some result },
+        { document with last_valid_result = Some result; last_saved_intf },
         (* We need to put an empty singleton in diags, otherwise the underlying
            mechanism doesn't update the previous error... *)
         Doc_id.Map.singleton document.document_id Range.Map.empty )
@@ -335,16 +339,17 @@ let unlocked_process_file
     ({ St.projects; open_documents; diagnostics; module_cache } as sstate) :
     St.server_state =
   let doc_errors, on_error = make_error_handler () in
-  let document, projects =
+  let document, projects, prev_sig_hash =
     Doc_id.Map.find_opt doc_id open_documents
     |> function
-    | Some document -> { document with buffer_state }, projects
+    | Some document ->
+      { document with buffer_state }, projects, document.last_saved_intf
     | None ->
       let (project_file, project), new_projects_opt =
         lookup_project ~on_error doc_id projects
       in
       let projects = Option.value ~default:projects new_projects_opt in
-      St.make_document buffer_state doc_id project project_file, projects
+      St.make_document buffer_state doc_id project project_file, projects, None
   in
   let is_valid, new_document, document_diagnostics =
     let get_module_content = Server_state.get_module_content sstate in
@@ -380,8 +385,13 @@ let unlocked_process_file
         merge_diags document_diagnostics
           (Doc_id.Map.of_list included_files_empty_diags) )
   in
+  let has_interface_changed =
+    match prev_sig_hash, new_document.last_saved_intf with
+    | Some h, Some h' -> h <> h'
+    | _ -> true
+  in
   let should_process_dependencies =
-    is_fully_saved && is_valid && !scan_project_config
+    is_fully_saved && is_valid && !scan_project_config && has_interface_changed
   in
   let new_server_state =
     (* Update server state with the new processed document : we will add updated
@@ -490,16 +500,35 @@ class catala_lsp_server =
 
     method private process_saved_document
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back) (doc_id : Doc_id.t) =
+      let* () = server_initialized in
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
         @@ fun () -> process_saved_file ~notify_back server_state doc_id
 
     method on_notif_doc_did_open ~notify_back d ~content:_ =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri d.uri in
-      self#process_saved_document ~notify_back doc_id
+      if should_ignore doc_id then Lwt.return_unit
+      else
+        protect_project_not_found
+        @@ fun () ->
+        St.use_and_update server_state
+        @@ fun ({ open_documents; _ } as sstate) ->
+        if Doc_id.Map.mem doc_id open_documents then
+          (* Document exists: it should have been processed, do nothing. *)
+          Lwt.return sstate
+        else
+          let new_state = unlocked_process_file St.Saved doc_id sstate in
+          let* () =
+            unlocked_send_all_diagnostics ~doc_id ~notify_back new_state
+          in
+          (* Invalidate the cache *)
+          Server_state.unload_module_content new_state doc_id;
+          Lwt.return new_state
 
     method private document_changed ~notify_back ~new_contents doc_id =
+      let* () = server_initialized in
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
@@ -520,13 +549,16 @@ class catala_lsp_server =
     method on_notif_doc_did_change ~notify_back d
         (_c : TextDocumentContentChangeEvent.t list) ~old_content:_
         ~new_content:new_contents =
+      let* () = server_initialized in
       self#document_changed ~notify_back ~new_contents (Doc_id.of_lsp_uri d.uri)
 
     method! on_notif_doc_did_save ~notify_back d =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri d.textDocument.uri in
       self#process_saved_document ~notify_back doc_id
 
     method private on_doc_delete ~notify_back (doc_id : Doc_id.doc_id) =
+      let* () = server_initialized in
       if should_ignore doc_id then Lwt.return_unit
       else
         protect_project_not_found
@@ -558,64 +590,129 @@ class catala_lsp_server =
               (fun _doc_id new_diag _ -> Some new_diag)
               new_diagnostics existing_diagnostics
           in
+          let new_open_documents = Doc_id.Map.remove doc_id open_documents in
           let new_state =
-            { St.projects; open_documents; module_cache; diagnostics }
+            {
+              St.projects;
+              open_documents = new_open_documents;
+              module_cache;
+              diagnostics;
+            }
           in
           let* () = unlocked_send_all_diagnostics ~notify_back new_state in
           Lwt.return new_state
 
     method private on_notif_did_change_watched_files ~notify_back changes =
+      let* () = server_initialized in
       (* Triggers even on save.. *)
       Lwt_list.iter_p
         (fun { FileEvent.uri; type_ } ->
           let doc_id = Doc_id.of_lsp_uri uri in
           match type_ with
-          | Created -> self#process_saved_document ~notify_back doc_id
-          | Changed -> self#process_saved_document ~notify_back doc_id
-          | Deleted ->
-            let* () = self#on_doc_delete ~notify_back doc_id in
-            self#on_doc_did_close ~notify_back doc_id)
+          | Created | Changed -> self#process_saved_document ~notify_back doc_id
+          | Deleted -> self#on_doc_delete ~notify_back doc_id)
         changes
 
-    method private scan_project ~notify_back
+    method private scan_project ~(notify_back : Jsonrpc2.notify_back)
         ({ St.projects; open_documents; module_cache; diagnostics = _ } as
          sstate) =
-      let diagnostics, open_documents =
+      let* progress =
+        let w, r = Lwt.wait () in
+        let init_token = `String "init_progress" in
+        let* _req_id =
+          notify_back#send_request
+            (WorkDoneProgressCreate
+               (WorkDoneProgressCreateParams.create ~token:init_token))
+            (function
+              | Ok () ->
+                let notify_progress tok =
+                  notify_back#send_notification
+                    (Server_notification.WorkDoneProgress
+                       { token = init_token; value = tok })
+                in
+                Lwt.wakeup r (Some notify_progress);
+                Lwt.return_unit
+              | Error _r ->
+                Log.warn (fun m ->
+                    m "could not setup scanning project progress");
+                Lwt.wakeup r None;
+                Lwt.return_unit)
+        in
+        let* k = w in
+        match k with
+        | None -> Lwt.return (fun _ -> Lwt.return_unit)
+        | Some k -> Lwt.return k
+      in
+      let nb_files =
         Projects.Projects.fold
-          (fun project documents ->
+          (fun project acc -> Doc_id.Map.cardinal project.project_files + acc)
+          projects 0
+      in
+      let* () =
+        let begin_token =
+          WorkDoneProgressBegin.create ~cancellable:false
+            ~title:"Catala project scan" ~percentage:100 ()
+        in
+        progress (Progress.Begin begin_token)
+      in
+      let* _, (diagnostics, open_documents) =
+        Projects.Projects.fold
+          (fun project acc ->
             Doc_id.Map.fold
-              (fun doc_id _ (diagnostics, documents) ->
-                if Projects.is_an_included_file doc_id project then
-                  (* We do not consider included files *)
-                  diagnostics, documents
-                else
-                  (* Affected files are necessarily present in the project *)
-                  let project_file =
-                    Option.get @@ Projects.find_file_in_project doc_id project
-                  in
-                  let document =
-                    match Doc_id.Map.find_opt doc_id documents with
-                    | None ->
-                      St.make_document St.Saved doc_id project project_file
-                    | Some document -> document
-                  in
-                  let _is_valid, document, document_diagnostics =
-                    let get_module_content =
-                      Server_state.get_module_content sstate
+              (fun doc_id _ r ->
+                let* n, (diagnostics, documents) = r in
+                let* () =
+                  let progress_token =
+                    let percentage =
+                      Float.round (100. *. (float (succ n) /. float nb_files))
+                      |> int_of_float
+                      |> min 99
                     in
-                    unlocked_process_document ~get_module_content document
-                      open_documents
+                    WorkDoneProgressReport.create ~cancellable:false
+                      ~message:
+                        (Format.asprintf "%d%% %a" percentage Doc_id.format
+                           doc_id)
+                      ~percentage ()
                   in
-                  let new_diagnostics =
-                    merge_diags document_diagnostics diagnostics
-                  in
-                  new_diagnostics, Doc_id.Map.add doc_id document documents)
-              project.project_files documents)
+                  progress (Report progress_token)
+                in
+                let acc =
+                  if Projects.is_an_included_file doc_id project then
+                    (* We do not consider included files *)
+                    diagnostics, documents
+                  else
+                    (* Affected files are necessarily present in the project *)
+                    let project_file =
+                      Option.get @@ Projects.find_file_in_project doc_id project
+                    in
+                    let document =
+                      match Doc_id.Map.find_opt doc_id documents with
+                      | None ->
+                        St.make_document St.Saved doc_id project project_file
+                      | Some document -> document
+                    in
+                    let _is_valid, document, document_diagnostics =
+                      let get_module_content =
+                        Server_state.get_module_content sstate
+                      in
+                      unlocked_process_document ~get_module_content document
+                        open_documents
+                    in
+                    let new_diagnostics =
+                      merge_diags document_diagnostics diagnostics
+                    in
+                    new_diagnostics, Doc_id.Map.add doc_id document documents
+                in
+                Lwt.return (succ n, acc))
+              project.project_files acc)
           projects
-          (Doc_id.Map.empty, open_documents)
+          (Lwt.return (0, (Doc_id.Map.empty, open_documents)))
       in
       let sstate = { St.projects; open_documents; module_cache; diagnostics } in
       let* () = unlocked_send_all_diagnostics ~notify_back sstate in
+      let* () =
+        progress (End (WorkDoneProgressEnd.create ~message:"Scanning done" ()))
+      in
       Lwt.return sstate
 
     method! on_notification_unhandled ~notify_back (n : Client_notification.t) =
@@ -730,8 +827,9 @@ class catala_lsp_server =
                 let get_prog doc_id =
                   Doc_id.Map.find_opt doc_id open_documents
                   |> function
-                  | Some { last_valid_result = Some { prg; _ }; _ } ->
-                    Lwt.return_some prg
+                  | Some { last_valid_result = Some { prg; desugared; _ }; _ }
+                    ->
+                    Lwt.return_some (prg, desugared.program_root.module_scopes)
                   | _ -> (
                     let*? project_file =
                       Lwt.return
@@ -752,7 +850,9 @@ class catala_lsp_server =
                     in
                     match validation_result with
                     | Skipped | Faulty _ | Partial _ -> Lwt.return_none
-                    | Valid r -> Lwt.return_some r.prg)
+                    | Valid r ->
+                      Lwt.return_some
+                        (r.prg, r.desugared.program_root.module_scopes))
                 in
                 list_entrypoints ~get_prog project params)
               all_projects
@@ -801,20 +901,13 @@ class catala_lsp_server =
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
 
-    method private on_doc_did_close ~notify_back:_ (doc_id : Doc_id.t) =
-      if should_ignore doc_id then Lwt.return_unit
-      else
-        St.use_and_update server_state
-        @@ fun { projects; open_documents; module_cache; diagnostics } ->
-        let open_documents = Doc_id.Map.remove doc_id open_documents in
-        let diagnostics = Doc_id.Map.remove doc_id diagnostics in
-        Lwt.return { St.projects; open_documents; module_cache; diagnostics }
-
-    method on_notif_doc_did_close ~notify_back d =
-      self#on_doc_did_close ~notify_back (Doc_id.of_lsp_uri d.uri)
+    method on_notif_doc_did_close ~notify_back:_ _d =
+      (* Do nothing, we update documents through other requests *)
+      Lwt.return_unit
 
     method! on_req_completion ~notify_back:_ ~id:_ ~uri ~pos ~ctx:_
         ~workDoneToken:_ ~partialResultToken:_ doc_state =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -830,6 +923,7 @@ class catala_lsp_server =
 
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ _doc_state =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -851,6 +945,7 @@ class catala_lsp_server =
 
     method private on_req_declaration ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Locations.t option t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -870,6 +965,7 @@ class catala_lsp_server =
 
     method private on_req_references ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Location.t list option Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -888,6 +984,7 @@ class catala_lsp_server =
 
     method! on_req_hover ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         _doc_state : Hover.t option Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -904,6 +1001,7 @@ class catala_lsp_server =
 
     method private on_req_type_definition ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Locations.t option Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -921,7 +1019,7 @@ class catala_lsp_server =
         | `SymbolInformation of SymbolInformation.t list ]
         option
         t =
-      Log.info (fun m -> m "DOCUMENT SYMBOL REQUEST");
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -931,6 +1029,7 @@ class catala_lsp_server =
 
     method! on_req_code_lens ~notify_back:_ ~id:_ ~uri ~workDoneToken:_
         ~partialResultToken:_ _doc_state : CodeLens.t list Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
       if should_ignore doc_id then Lwt.return_nil
       else
@@ -944,6 +1043,7 @@ class catala_lsp_server =
 
     method private on_req_document_formatting ~notify_back
         (params : DocumentFormattingParams.t) : TextEdit.t list option Lwt.t =
+      let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri params.textDocument.uri in
       if should_ignore doc_id then Lwt.return_none
       else
@@ -978,6 +1078,7 @@ class catala_lsp_server =
           textDocument : TextDocumentIdentifier.t;
           _;
         } : WorkspaceEdit.t Lwt.t =
+      let* () = server_initialized in
       let empty_response = WorkspaceEdit.create () in
       let doc_id = Doc_id.of_lsp_uri textDocument.uri in
       if should_ignore doc_id then Lwt.return empty_response
