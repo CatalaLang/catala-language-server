@@ -1,7 +1,11 @@
 <?xml  version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0" >
-<!-- Generated via Iro -->
+<!-- Originally generated via Iro. Since modified by an AI coding assistant to delegate
+     law-text prose to VS Code's built-in Markdown grammar (text.html.markdown) via
+     `#main`'s trailing include; only the `> Module`/`> Using`/`> Include:` directives
+     and the ```catala / ```catala-metadata fenced blocks (which route to `#code`)
+     remain custom. -->
 <dict>
   <key>fileTypes</key>
   <array>
@@ -218,70 +222,6 @@
         </dict>
         <dict>
           <key>begin</key>
-          <string>(^\s*[\#]+)</string>
-          <key>beginCaptures</key>
-          <dict>
-            <key>1</key>
-            <dict>
-              <key>name</key>
-              <string>markup.heading.title.catala_en</string>
-            </dict>
-          </dict>
-          <key>patterns</key>
-          <array>
-            <dict>
-              <key>include</key>
-              <string>#main__1</string>
-            </dict>
-           </array>
-          <key>end</key>
-          <string>(\n)</string>
-          <key>endCaptures</key>
-          <dict>
-            <key>1</key>
-            <dict>
-              <key>name</key>
-              <string>markup.heading.title.catala_en</string>
-            </dict>
-          </dict>
-        </dict>
-        <dict>
-          <key>begin</key>
-          <string>(^\s*[#]+\s*\[^\]]\s*\])</string>
-          <key>beginCaptures</key>
-          <dict>
-            <key>1</key>
-            <dict>
-              <key>name</key>
-              <string>markup.heading.subtitle.catala_en</string>
-            </dict>
-          </dict>
-          <key>patterns</key>
-          <array>
-            <dict>
-              <key>include</key>
-              <string>#main__2</string>
-            </dict>
-           </array>
-          <key>end</key>
-          <string>(\n)</string>
-          <key>endCaptures</key>
-          <dict>
-            <key>1</key>
-            <dict>
-              <key>name</key>
-              <string>markup.heading.subtitle.catala_en</string>
-            </dict>
-          </dict>
-        </dict>
-        <dict>
-          <key>match</key>
-          <string>([^`])</string>
-          <key>name</key>
-          <string>entity.law.catala_en</string>
-        </dict>
-        <dict>
-          <key>begin</key>
           <string>(```catala-metadata)</string>
           <key>beginCaptures</key>
           <dict>
@@ -337,6 +277,10 @@
               <string>comment.block.documentation.catala_en</string>
             </dict>
           </dict>
+        </dict>
+        <dict>
+          <key>include</key>
+          <string>text.html.markdown</string>
         </dict>
        </array>
     </dict>
@@ -485,30 +429,6 @@
           <string>\b([A-Z\x{00c9}\x{00c8}\x{00c0}\x{00c2}\x{00d9}\x{00ce}\x{00ca}\x{0152}\x{00c7}][a-z\x{00e9}\x{00e8}\x{00e0}\x{00e2}\x{00f9}\x{00ee}\x{00ea}\x{0153}\x{00e7}A-Z\x{00c9}\x{00c8}\x{00c0}\x{00c2}\x{00d9}\x{00ce}\x{00ca}\x{0152}\x{00c7}0-9_\&apos;]*)\b</string>
           <key>name</key>
           <string>entity.name.class.catala_en</string>
-        </dict>
-       </array>
-    </dict>
-    <key>main__1</key>
-    <dict>
-      <key>patterns</key>
-      <array>
-        <dict>
-          <key>match</key>
-          <string>(.)</string>
-          <key>name</key>
-          <string>markup.heading.title.catala_en</string>
-        </dict>
-       </array>
-    </dict>
-    <key>main__2</key>
-    <dict>
-      <key>patterns</key>
-      <array>
-        <dict>
-          <key>match</key>
-          <string>(.)</string>
-          <key>name</key>
-          <string>markup.heading.subtitle.catala_en</string>
         </dict>
        </array>
     </dict>
