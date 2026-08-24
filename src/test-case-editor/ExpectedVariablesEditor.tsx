@@ -1,4 +1,5 @@
 import { type ReactElement, useState } from 'react';
+import type { IntlShape} from 'react-intl';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { VscodeButton, VscodeTextfield } from '@vscode-elements/react-elements';
 import {
@@ -12,8 +13,23 @@ import {
   traceValueFromRuntime,
   variablePath,
   variableSegment,
+  traceValueToRuntime,
 } from '../trace-editor/traceUtils';
-import type { Test, VariableFailure } from '../generated/catala_types';
+import type {
+  RuntimeValue,
+  RuntimeValueRaw,
+  Test,
+  ValueDef,
+  VariableFailure,
+} from '../generated/catala_types';
+import {
+  BoolEditor,
+  DateEditor,
+  DurationEditor,
+  IntEditor,
+  MoneyEditor,
+  RatEditor,
+} from '../editors/ValueEditors';
 
 type Props = {
   test: Test;
@@ -54,51 +70,85 @@ function isolateStateVariable(
   return [valueVariables, stateVariables];
 }
 
-function parseAs(kind: string, s: string): TraceValue | undefined {
-  if (s.toLowerCase() === 'absent') return { kind: 'absent' };
+function formtatRuntimeValue(
+  rv: RuntimeValue | undefined,
+  intl: IntlShape
+): string | undefined {
+  const inputTraceValue = rv ? traceValueFromRuntime(rv) : undefined;
+  const inputStr = inputTraceValue
+    ? formatTraceValue(inputTraceValue, intl)
+    : '';
+  return inputStr;
+}
+
+function TraceValueEditor({
+  input,
+  setInput,
+  kind,
+  intl,
+}: {
+  input: RuntimeValue | undefined;
+  setInput: React.Dispatch<React.SetStateAction<RuntimeValue | undefined>>;
+  kind: string;
+  intl: IntlShape;
+}): ReactElement {
+  let rv: ValueDef | undefined = input ? { value: input } : undefined;
   switch (kind) {
-    case 'bool':
-      if (s === 'true') return { kind: 'bool', value: true };
-      if (s === 'false') return { kind: 'bool', value: false };
-      return undefined;
-    case 'money':
-      if (!/^-?\d+(\.\d+)?$/.test(s)) return undefined;
-      return { kind: 'money', value: s };
-    case 'integer':
-      if (!/^-?\d+$/.test(s)) return undefined;
-      return { kind: 'integer', value: parseInt(s, 10) };
-    case 'decimal': {
-      const rat = /^(-?\d+)\/(\d+)$/.exec(s);
-      if (rat) {
-        return { kind: 'decimal', value: Number(rat[1]) / Number(rat[2]) };
-      }
-      if (!/^-?\d+(\.\d+)?$/.test(s)) return undefined;
-      return { kind: 'decimal', value: parseFloat(s) };
+    case 'money': {
+      return (
+        <MoneyEditor valueDef={rv} onValueChange={setInput} editable={true} />
+      );
     }
-    case 'date': {
-      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-      if (!m) return undefined;
-      return {
-        kind: 'date',
-        value: { year: +m[1], month: +m[2], day: +m[3] },
-      };
+    case 'bool': {
+      return (
+        <BoolEditor valueDef={rv} onValueChange={setInput} editable={true} />
+      );
     }
-    case 'duration': {
-      const m = /^(-?\d+)y\s+(-?\d+)m\s+(-?\d+)d$/.exec(s);
-      if (!m) return undefined;
-      return {
-        kind: 'duration',
-        value: { years: +m[1], months: +m[2], days: +m[3] },
-      };
+    case 'integer': {
+      return (
+        <IntEditor valueDef={rv} onValueChange={setInput} editable={true} />
+      );
     }
+    case 'decimal':
+      return (
+        <RatEditor valueDef={rv} onValueChange={setInput} editable={true} />
+      );
+    case 'date':
+      return (
+        <DateEditor valueDef={rv} onValueChange={setInput} editable={true} />
+      );
+    case 'duration':
+      return (
+        <DurationEditor
+          valueDef={rv}
+          onValueChange={setInput}
+          editable={true}
+        />
+      );
+    case 'absent':
     case 'enum': {
-      return {
-        kind: 'enum',
-        ctor: s,
-      };
+      const inputStr = formtatRuntimeValue(input, intl);
+      return (
+        <VscodeTextfield
+          value={inputStr}
+          onInput={(e) => {
+            let valueField =
+              (e.target as { value?: string } | null)?.value ?? '';
+            let traceValue: RuntimeValueRaw | undefined = traceValueToRuntime({
+              kind: 'enum',
+              ctor: valueField,
+            });
+            let jsonValue: RuntimeValue | undefined = traceValue
+              ? { value: traceValue, attrs: [] }
+              : undefined;
+            setInput(jsonValue);
+          }}
+          style={{ flex: 1, width: '100%' }}
+        />
+      );
     }
     default:
-      return undefined;
+      return <span />;
   }
 }
 
@@ -251,10 +301,11 @@ function VariableRow({
 }): ReactElement {
   const intl = useIntl();
 
-  const [input, setInput] = useState('');
-  const expectedStr = expected !== null ? formatTraceValue(expected) : '--';
+  const [input, setInput] = useState<RuntimeValue | undefined>(undefined);
+  const expectedStr =
+    expected !== null ? formatTraceValue(expected, intl) : '--';
   const computedStr =
-    computed !== undefined ? formatTraceValue(computed) : undefined;
+    computed !== undefined ? formatTraceValue(computed, intl) : undefined;
 
   // A reported failure wins over the local comparison: it was computed by the
   // compiler against the trace, with the runtime's own formatting rules, so it
@@ -264,31 +315,16 @@ function VariableRow({
     expected !== null &&
     !traceValueEqual(expected, computed);
 
-  const kind =
-    expected !== null && expected.kind !== 'absent'
-      ? expected.kind
-      : computed !== undefined
-        ? computed.kind
-        : undefined;
-  const inputEmpty = input.trim() === '';
-  const parsedInput = inputEmpty
-    ? null
-    : kind === undefined
-      ? undefined
-      : parseAs(kind, input.trim());
-
-  const addDisabled =
-    !inputEmpty && kind !== undefined && parsedInput === undefined;
-
-  const applyStr = inputEmpty ? (computedStr ?? '') : input.trim();
+  let comp = computed ? traceValueToRuntime(computed) : undefined;
+  let compValu: RuntimeValue | undefined = comp
+    ? { value: comp, attrs: [] }
+    : undefined;
 
   function apply(): void {
-    if (parsedInput !== undefined) {
-      onSet(name, parsedInput);
-      setInput('');
-    } else if (computed !== undefined) {
-      onSet(name, computed);
-      setInput('');
+    if (input !== undefined) {
+      const tvInput = traceValueFromRuntime(input);
+      onSet(name, tvInput ?? null);
+      setInput(undefined);
     }
   }
 
@@ -319,13 +355,11 @@ function VariableRow({
         >
           {expectedStr}
         </span>
-        <VscodeTextfield
-          value={input}
-          placeholder={computedStr ?? expectedStr}
-          onInput={(e) =>
-            setInput((e.target as { value?: string } | null)?.value ?? '')
-          }
-          style={{ flex: 1 }}
+        <TraceValueEditor
+          kind={computed ? computed.kind : 'absent'}
+          input={input}
+          setInput={setInput}
+          intl={intl}
         />
         <VscodeButton
           secondary
@@ -335,15 +369,16 @@ function VariableRow({
             { id: 'testEditor.fillComputedVariable' },
             { value: computedStr ?? '' }
           )}
-          onClick={() => setInput(computedStr ?? '')}
+          onClick={() => {
+            setInput(compValu);
+          }}
         />
         <VscodeButton
           secondary
           icon="check"
-          disabled={addDisabled}
           title={intl.formatMessage(
             { id: 'testEditor.setVariable' },
-            { value: applyStr }
+            { value: 'applyStr' }
           )}
           onClick={apply}
         />
@@ -397,7 +432,19 @@ function VariableCatalog({
         }
         style={{ width: '100%', marginBottom: '0.5em' }}
       />
-      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+      <table className="variable-catalog-table">
+        {/* The column widths are pinned by this colgroup (see
+            `.variable-catalog-table`, which is `table-layout: fixed`): rows
+            appear and disappear as the tree is expanded, so widths derived
+            from the content would make the whole table jump around while the
+            user is reading or typing in it. */}
+        <colgroup>
+          <col className="variable-catalog-col-chevron" />
+          <col />
+          <col className="variable-catalog-col-value" />
+          <col />
+          <col className="variable-catalog-col-actions" />
+        </colgroup>
         <tbody>
           {[...stateVariables.entries()].map(([stateName, nodes]) => (
             <StateRow
@@ -435,7 +482,6 @@ function VariableCatalog({
   );
 }
 
-const firstColStyle = { width: '1.5em' };
 const stepBorder = '1px solid var(--vscode-sideBarSectionHeader-background)';
 
 function toDisplayCrumbs(crumbs: string[]): { text: string; index: boolean }[] {
@@ -509,7 +555,7 @@ function StepRow({
   return (
     <>
       <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
-        <td style={{ ...firstColStyle, ...cellStyle }}>
+        <td style={cellStyle}>
           <span
             className={`codicon codicon-chevron-${show ? 'down' : 'right'}`}
           />
@@ -580,11 +626,11 @@ function StateRow({
   return (
     <>
       <tr className="state-row" onClick={() => setOpen((o) => !o)}>
-        <td style={firstColStyle} />
+        <td />
         {/* The cell must stay a real table cell for `colSpan` to apply, so the
             flex layout lives on an inner element rather than on the `td`
             itself. Same shape as `StepRow` above, which spans correctly. */}
-        <td colSpan={4}>
+        <td colSpan={3}>
           <span style={{ display: 'flex', alignItems: 'center' }}>
             <span
               style={{ paddingRight: '0.2em' }}
@@ -628,8 +674,12 @@ function ValueRow({
   onAdd: AddVariable;
 }): ReactElement | null {
   const intl = useIntl();
-  const [input, setInput] = useState('');
   const computed = node.value;
+  const runtimeComputed = computed ? traceValueToRuntime(computed) : undefined;
+  const computedRuntime: RuntimeValue | undefined = runtimeComputed
+    ? { value: runtimeComputed, attrs: [] }
+    : undefined;
+  const [input, setInput] = useState<RuntimeValue | undefined>(computedRuntime);
   if (
     computed === undefined ||
     computed.kind === 'struct' ||
@@ -639,21 +689,16 @@ function ValueRow({
     return null;
   }
   const path = variablePath(crumbs.join('.'), node);
-  const computedStr = formatTraceValue(computed);
-  const trimmed = input.trim();
-  const addValue = trimmed ? parseAs(computed.kind, trimmed) : null;
-  const addDisabled = trimmed !== '' && addValue === undefined;
+  const computedStr = formatTraceValue(computed, intl);
+  const addValue = input !== undefined ? traceValueFromRuntime(input) : null;
+  const addDisabled = input !== undefined && addValue === undefined;
   const splittedName = node.name.split('#');
   const prettyName =
     splittedName.length == 1 ? splittedName[0] : splittedName[1];
   return (
     <tr>
-      <td
-        style={{
-          ...firstColStyle,
-        }}
-      />
-      <td>
+      <td />
+      <td className="variable-catalog-ellipsis" title={prettyName}>
         {padding && (
           <span
             style={{ paddingRight: '0.2em' }}
@@ -662,41 +707,42 @@ function ValueRow({
         )}
         {prettyName}
       </td>
-      <td>{computedStr ?? ''}</td>
       <td>
-        <VscodeTextfield
-          value={input}
-          placeholder={computedStr ?? ''}
-          onInput={(e) =>
-            setInput((e.target as { value?: string } | null)?.value ?? '')
-          }
-          style={{ width: '100%' }}
+        <TraceValueEditor
+          kind={computed.kind}
+          input={input}
+          setInput={setInput}
+          intl={intl}
         />
       </td>
-      <td style={{ display: 'flex' }}>
-        <VscodeButton
-          secondary
-          icon="arrow-left"
-          disabled={computedStr === undefined}
-          title={intl.formatMessage(
-            { id: 'testEditor.fillComputedVariable' },
-            { value: computedStr ?? '' }
-          )}
-          onClick={() => setInput(computedStr ?? '')}
-        />
-        <VscodeButton
-          secondary
-          icon="add"
-          disabled={addDisabled}
-          title={intl.formatMessage({ id: 'testEditor.addVariable' })}
-          style={{ flexGrow: 1 }}
-          onClick={() => {
-            if (addValue !== undefined) {
-              onAdd(path, addValue);
-              setInput('');
-            }
-          }}
-        />
+      <td/>
+      {/* `display: flex` on the `td` itself would take it out of the table's
+          column model, so the flex row lives on an inner element. */}
+      <td>
+        <span className="variable-catalog-actions">
+          <VscodeButton
+            secondary
+            icon="arrow-left"
+            disabled={computedStr === undefined}
+            title={intl.formatMessage(
+              { id: 'testEditor.fillComputedVariable' },
+              { value: computedStr ?? '' }
+            )}
+            onClick={() => onAdd(path, computed)}
+          />
+          <VscodeButton
+            secondary
+            icon="add"
+            disabled={addDisabled}
+            title={intl.formatMessage({ id: 'testEditor.addVariable' })}
+            onClick={() => {
+              if (addValue !== undefined) {
+                onAdd(path, addValue);
+                setInput(undefined);
+              }
+            }}
+          />
+        </span>
       </td>
     </tr>
   );

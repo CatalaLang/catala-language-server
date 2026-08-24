@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactElement } from 'react';
+import type { IntlShape } from 'react-intl';
 import { FormattedMessage } from 'react-intl';
 import type { TestIo } from '../generated/catala_types';
 import {
@@ -15,32 +16,32 @@ import {
 
 type Leaf = { path: string; kind: string; value?: string };
 
-function flattenValue(path: string, tv: TraceValue): Leaf[] {
+function flattenValue(path: string, tv: TraceValue, intl: IntlShape): Leaf[] {
   switch (tv.kind) {
     case 'struct':
       if (Object.keys(tv.fields).length === 0)
         return [{ path, kind: 'struct' }];
       return Object.entries(tv.fields).flatMap(([field, v]) =>
-        flattenValue(`${path}.${field}`, v)
+        flattenValue(`${path}.${field}`, v, intl)
       );
     case 'array':
       if (tv.values.length === 0) return [{ path, kind: 'array' }];
       return tv.values.flatMap(([v, label], i) =>
-        flattenValue(`${path}[${label ?? i}]`, v)
+        flattenValue(`${path}[${label ?? i}]`, v, intl)
       );
     case 'enum':
       return tv.value === undefined
         ? [{ path, kind: 'enum', value: tv.ctor }]
-        : flattenValue(`${path}.${tv.ctor}`, tv.value);
+        : flattenValue(`${path}.${tv.ctor}`, tv.value, intl);
     default:
-      return [{ path, kind: tv.kind, value: formatTraceValue(tv) }];
+      return [{ path, kind: tv.kind, value: formatTraceValue(tv, intl) }];
   }
 }
 
-function flattenIo(name: string, io: TestIo): Leaf[] {
+function flattenIo(name: string, io: TestIo, intl: IntlShape): Leaf[] {
   if (!io.value) return [];
   const tv = traceValueFromRuntime(io.value.value);
-  return tv === undefined ? [] : flattenValue(name, tv);
+  return tv === undefined ? [] : flattenValue(name, tv, intl);
 }
 
 // -- Type icons ---------------------------------------------------------------
@@ -75,10 +76,12 @@ export function DataPanel({
   test,
   setFilter,
   trace,
+  intl
 }: {
   test: TraceTest;
   setFilter: React.Dispatch<React.SetStateAction<string>>;
   trace?: TraceElement[];
+  intl: IntlShape;
 }): ReactElement {
   const [trVariables, trOutputs] = traceVariablesForTest(
     trace ?? [],
@@ -87,7 +90,7 @@ export function DataPanel({
 
   const inputRows: VarRow[] = [...test.test_inputs.entries()].flatMap(
     ([name, io]) =>
-      flattenIo(name, io).map((leaf) => ({
+      flattenIo(name, io, intl).map((leaf) => ({
         name: leaf.path,
         value: leaf.value,
         noExpected: true,
@@ -100,8 +103,8 @@ export function DataPanel({
       const computed = findTraceValue(name, trVariables);
       return {
         name,
-        expected: expected ? formatTraceValue(expected) : undefined,
-        value: computed ? formatTraceValue(computed) : undefined,
+        expected: expected ? formatTraceValue(expected, intl) : undefined,
+        value: computed ? formatTraceValue(computed, intl) : undefined,
         kind: expected ? expected.kind : undefined,
       };
     }
@@ -116,8 +119,8 @@ export function DataPanel({
       const computed = trOutputs[name];
       return {
         name,
-        expected: tv !== undefined ? formatTraceValue(tv) : undefined,
-        value: computed !== undefined ? formatTraceValue(computed) : undefined,
+        expected: tv !== undefined ? formatTraceValue(tv, intl) : undefined,
+        value: computed !== undefined ? formatTraceValue(computed, intl) : undefined,
         kind: io.value?.value.value.kind,
       };
     }

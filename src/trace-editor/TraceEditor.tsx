@@ -210,6 +210,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
               setFilter={setFilter}
               test={scope[1]}
               trace={runState.status === 'success' ? runState.trace : undefined}
+              intl={intl}
             />
           }
           right={

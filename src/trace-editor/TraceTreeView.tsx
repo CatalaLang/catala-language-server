@@ -399,7 +399,8 @@ function filterMatches(
   intl: IntlShape
 ): boolean {
   const { label, detail } = describe(el.element, intl);
-  const value = el.value !== undefined ? formatTraceValue(el.value) : undefined;
+  const value =
+    el.value !== undefined ? formatTraceValue(el.value, intl) : undefined;
   const text = [
     label,
     detail ?? '',
@@ -641,8 +642,8 @@ function TraceNode({
     te.element.kind !== 'if_branching' &&
     te.element.kind !== 'scope_call' &&
     te.value !== undefined &&
-    formatTraceValue(te.value) === undefined
-      ? formatTraceValue(te.value, true)
+    formatTraceValue(te.value, intl) === undefined
+      ? formatTraceValue(te.value, intl, 'en', true)
       : undefined;
   const expandable =
     hasChildren ||
@@ -875,7 +876,7 @@ function ValueView({
       </span>
     );
   }
-  const fv = formatTraceValue(te.value);
+  const fv = formatTraceValue(te.value, intl);
   if (fv === undefined) {
     return null;
   }

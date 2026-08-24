@@ -12,6 +12,7 @@ import {
   readTestInputs,
   readTestOutputs,
 } from '../generated/catala_types';
+import type { IntlShape } from 'react-intl';
 
 export type CodeLocation = {
   file: string;
@@ -33,9 +34,9 @@ export type TraceValue =
   | { kind: 'money'; value: string }
   | { kind: 'date'; value: { year: number; month: number; day: number } }
   | {
-      kind: 'duration';
-      value: { years: number; months: number; days: number };
-    }
+    kind: 'duration';
+    value: { years: number; months: number; days: number };
+  }
   | { kind: 'enum'; ctor: string; value?: TraceValue }
   | { kind: 'struct'; fields: Record<string, TraceValue> }
   | { kind: 'array'; values: [TraceValue, string | undefined][] };
@@ -50,13 +51,13 @@ export type TraceElement = {
 export type TraceVariable =
   | { kind: 'value'; name: string; value?: TraceValue; source?: TraceElement }
   | {
-      kind: 'step';
-      name: string;
-      variables: TraceVariable[];
-      value?: TraceValue;
-      index?: number;
-      source?: TraceElement;
-    };
+    kind: 'step';
+    name: string;
+    variables: TraceVariable[];
+    value?: TraceValue;
+    index?: number;
+    source?: TraceElement;
+  };
 
 // The step a test's variable paths are relative to, as returned by
 // `traceVariablesForTest`.
@@ -79,6 +80,8 @@ export type TraceTest = {
 
 const OPTIONAL_PRESENT = new Set(['Present', 'Présent', 'Obecny']);
 const OPTIONAL_ABSENT = new Set(['Absent', 'Nieobecny']);
+
+
 
 function traceValueFromJson(value: JsonValue): TraceValue | undefined {
   if (typeof value === 'boolean') {
@@ -256,6 +259,8 @@ export function traceValueToRuntime(
 
 export function formatTraceValue(
   v: TraceValue,
+  intl: IntlShape,
+  lang = 'en',
   all = false,
   indent = ''
 ): string | undefined {
@@ -264,14 +269,25 @@ export function formatTraceValue(
     case 'money':
       return v.value;
     case 'bool':
+      return intl.formatMessage({
+        id: v.value ? 'true' : 'false',
+      })
     case 'integer':
     case 'decimal':
       return String(v.value);
     case 'date': {
-      return `${v.value.year}-${String(v.value.month).padStart(2, '0')}-${String(v.value.day).padStart(2, '0')}`;
+      const d = new Date(v.value.year, v.value.month, v.value.day)
+      return intl.formatDate(d);
     }
     case 'duration': {
-      return `${v.value.years}y ${v.value.months}m ${v.value.days}d`;
+      switch (lang) {
+        case 'en':
+          return `${v.value.years}y ${v.value.months}m ${v.value.days}d`;
+        case 'fr':
+          return `${v.value.days}j ${v.value.months}m ${v.value.years}a`;
+        default:
+          return 'Unexpected language for duration';
+      }
     }
     case 'absent':
       return 'Absent';
@@ -280,14 +296,14 @@ export function formatTraceValue(
         return v.ctor;
       }
       return all
-        ? `${v.ctor} ${formatTraceValue(v.value, all, indent) ?? ''}`
+        ? `${v.ctor} ${formatTraceValue(v.value, intl, lang, all, indent) ?? ''}`
         : undefined;
     case 'struct':
       if (!all) return undefined;
       if (Object.keys(v.fields).length === 0) return '{}';
       return `{\n${Object.entries(v.fields)
         .map(
-          ([k, f]) => `${inner}${k}: ${formatTraceValue(f, all, inner) ?? ''}`
+          ([k, f]) => `${inner}${k}: ${formatTraceValue(f, intl, lang, all, inner) ?? ''}`
         )
         .join(',\n')}\n${indent}}`;
     case 'array':
@@ -296,7 +312,7 @@ export function formatTraceValue(
       return `[\n${v.values
         .map(
           ([x, label]) =>
-            `${inner}${label ? `${label}: ` : ''}${formatTraceValue(x, all, inner) ?? ''}`
+            `${inner}${label ? `${label}: ` : ''}${formatTraceValue(x, intl, lang, all, inner) ?? ''}`
         )
         .join(',\n')}\n${indent}]`;
   }
@@ -375,8 +391,8 @@ function traceElementFromJson(e: JsonValue): TraceElement | null {
   }
   const trace = Array.isArray(o.trace)
     ? o.trace
-        .map((child) => traceElementFromJson(child))
-        .filter((x): x is TraceElement => x !== null)
+      .map((child) => traceElementFromJson(child))
+      .filter((x): x is TraceElement => x !== null)
     : undefined;
   return {
     element: element as unknown as TraceKind,
