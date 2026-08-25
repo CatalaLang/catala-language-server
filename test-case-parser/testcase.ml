@@ -54,6 +54,11 @@ let cmd_read =
       $ Cli.Flags.Global.options
       $ buffer_path)
 
+let cmd_partial_read =
+  Cmd.v
+    Cmd.(info "partial-read" ~doc:"TODO")
+    Term.(const Lib.read_partial_test $ Cli.Flags.Global.options)
+
 let cmd_run =
   Cmd.v
     Cmd.(
@@ -109,6 +114,7 @@ let register () =
     [
       cmd_generate;
       cmd_read;
+      cmd_partial_read;
       cmd_run;
       cmd_write;
       cmd_list_scopes;
@@ -145,13 +151,13 @@ let register () =
   match value with
   | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestTitle s)
   | _ -> failwith "unexpected test title");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-     ~contexts:(function
-     | Desugared.Name_resolution.Expression _ -> true
-     | _ -> false)
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
+    ~contexts:(function
+    | Desugared.Name_resolution.Expression _ -> true
+    | _ -> false)
   @@ fun ~pos:_ value ->
   match value with
   | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.ArrayItemLabel s)
-  | _ -> failwith "unexpected array item label")
+  | _ -> failwith "unexpected array item label"
 
 let () = register ()

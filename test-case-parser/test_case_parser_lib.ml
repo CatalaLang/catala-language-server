@@ -271,8 +271,7 @@ and enum_ctor_attrs constr_map =
           | Description s -> Some (O.Description s)
           | _ -> None)
       in
-      if attrs = [] then None
-      else Some (EnumConstructor.to_string constr, attrs))
+      if attrs = [] then None else Some (EnumConstructor.to_string constr, attrs))
     (EnumConstructor.Map.bindings constr_map)
 
 and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
@@ -366,10 +365,13 @@ let rec get_value : type a.
             (fun (field, v) ->
               StructField.to_string field, get_value lang decl_ctx v)
             (StructField.Map.bindings fields) )
-    | EInj { name; e; _ } when EnumName.equal ConstantNames.option_enum name -> (
+    | EInj { name; e; _ } when EnumName.equal ConstantNames.option_enum name
+      -> (
       match Typing.expr decl_ctx e |> Expr.unbox with
       | ELit LUnit, _ty ->
-        let none_field = EnumConstructor.to_string ConstantNames.none_constr, None in
+        let none_field =
+          EnumConstructor.to_string ConstantNames.none_constr, None
+        in
         let decl =
           {
             O.enum_name = EnumName.to_string ConstantNames.option_enum;
@@ -961,6 +963,254 @@ let read_test include_dirs (options : Global.options) buffer_path =
   let tests = import_catala_tests prg in
   write_stdout J.write_test_list tests
 
+let translate_literal l pos =
+  let open Surface.Ast in
+  let module Runtime = Catala_runtime in
+  let int1 = Runtime.integer_of_int 1 in
+  let intminus1 = Runtime.integer_of_int (-1) in
+  let int100 = Runtime.integer_of_int 100 in
+  let rat100 = Runtime.decimal_of_integer int100 in
+  match l with
+  | LNumber ((Int i, _), None) -> LInt (Runtime.integer_of_string i)
+  | LNumber ((Int i, _), Some (Percent, _)) ->
+    LRat
+      Runtime.(
+        Oper.o_div_rat_rat (Expr.pos_to_runtime pos) (decimal_of_string i)
+          rat100)
+  | LNumber ((Dec (i, f), _), None) ->
+    LRat Runtime.(decimal_of_string (i ^ "." ^ f))
+  | LNumber ((Dec (i, f), _), Some (Percent, _)) ->
+    LRat
+      Runtime.(
+        Oper.o_div_rat_rat (Expr.pos_to_runtime pos)
+          (decimal_of_string (i ^ "." ^ f))
+          rat100)
+  | LBool b -> LBool b
+  | LMoneyAmount i ->
+    LMoney
+      Runtime.(
+        money_of_cents_integer
+          (Oper.o_mult_int_int
+             (if i.money_amount_sign then int1 else intminus1)
+             (Oper.o_add_int_int
+                (Oper.o_mult_int_int
+                   (integer_of_string i.money_amount_units)
+                   int100)
+                (integer_of_string i.money_amount_cents))))
+  | LNumber ((Int i, _), Some (Year, _)) ->
+    LDuration (Runtime.duration_of_numbers (int_of_string i) 0 0)
+  | LNumber ((Int i, _), Some (Month, _)) ->
+    LDuration (Runtime.duration_of_numbers 0 (int_of_string i) 0)
+  | LNumber ((Int i, _), Some (Day, _)) ->
+    LDuration (Runtime.duration_of_numbers 0 0 (int_of_string i))
+  | LNumber ((Dec (_, _), _), Some ((Year | Month | Day), _)) ->
+    Message.error ~pos
+      "Impossible to specify decimal amounts of days, months or years."
+  | LDate date ->
+    if date.literal_date_month > 12 then
+      Message.error ~pos
+        "There is an error in this date: the month number is bigger than 12.";
+    if date.literal_date_day > 31 then
+      Message.error ~pos
+        "There is an error in this date: the day number is bigger than 31.";
+    LDate
+      (try
+         Runtime.date_of_numbers date.literal_date_year date.literal_date_month
+           date.literal_date_day
+       with Failure _ ->
+         Message.error ~pos
+           "There is an error in this date, it does not correspond to a \
+            correct calendar day.")
+
+let read_partial_test options : (O.test, string) Result.t =
+  let prg = Driver.Passes.surface options in
+  let ( let*? ) = Result.bind in
+  (* find ```catala code item *)
+  let open Surface.Ast in
+  let*? scope_use =
+    let*? code_block_def =
+      List.find_map
+        (function CodeBlock (cb, _, false) -> Some cb | _ -> None)
+        prg.program_items
+      |> Option.map Result.ok
+      |> Option.value ~default:(Error "did not find CodeBlock")
+    in
+    List.find_map
+      (function ScopeUse s, _ -> Some s | _ -> None)
+      code_block_def
+    |> Option.map Result.ok
+    |> Option.value ~default:(Error "did not find ScopeUse")
+  in
+  let*? scope_decl =
+    let*? code_block_decl =
+      List.find_map
+        (function CodeBlock (cb, _, true) -> Some cb | _ -> None)
+        prg.program_items
+      |> Option.map Result.ok
+      |> Option.value ~default:(Error "did not find CodeBlock")
+    in
+    List.find_map
+      (function ScopeDecl s, _ -> Some s | _ -> None)
+      code_block_decl
+    |> Option.map Result.ok
+    |> Option.value ~default:(Error "did not find ScopeDecl")
+  in
+  let vlit v = Some O.{ value = { value = v; attrs = [] }; pos = None } in
+  let vstrings = get_lang_strings prg.program_lang in
+  let exception Err of string in
+  let rec convert_literal (e : naked_expression) :
+      (O.typ * O.runtime_value_raw, string) Result.t =
+    match e with
+    | Literal l -> begin
+      match translate_literal l Pos.void with
+      | LBool b -> Ok (O.TBool, O.Bool b)
+      | LInt z -> Ok (O.TInt, O.Integer (Z.to_int z))
+      | LRat q -> Ok (O.TRat, O.Decimal (Q.to_float q))
+      | LMoney m -> Ok (O.TMoney, O.Money (Z.to_int m))
+      | LUnit -> assert false
+      | LDate d ->
+        let year, month, day = Dates_calc.date_to_ymd d in
+        Ok (O.TDate, O.Date { year; month; day })
+      | LDuration dur ->
+        let years, months, days = Dates_calc.period_to_ymds dur in
+        Ok (O.TDuration, O.Duration { years; months; days })
+    end
+    | EnumInject ((CBuiltin Absent, _), None) ->
+      let edecl = mk_optional_enum_decl prg.program_lang TUnit in
+      Ok (TEnum edecl, Enum (edecl, ("Absent", None)))
+    | EnumInject ((CBuiltin Present, _), Some (sube, _)) ->
+      let*? subt, subv = convert_literal sube in
+      let edecl = mk_optional_enum_decl prg.program_lang subt in
+      Ok
+        ( O.TEnum edecl,
+          O.Enum (edecl, (vstrings.present, Some { value = subv; attrs = [] }))
+        )
+    | EnumInject ((CConstr (_p, (u, _)), _), None) ->
+      let edecl =
+        { O.enum_name = "unknown"; constructors = [u, None]; ctor_attrs = [] }
+      in
+      Ok (TEnum edecl, Enum (edecl, (u, None)))
+    | EnumInject ((CConstr (_p, (u, _)), _), Some (sube, _)) ->
+      let*? subt, subv = convert_literal sube in
+      let edecl =
+        {
+          O.enum_name = "unknown";
+          constructors = [u, Some subt];
+          ctor_attrs = [];
+        }
+      in
+      Ok O.(TEnum edecl, Enum (edecl, (u, Some { value = subv; attrs = [] })))
+    | ArrayLit [] -> Ok O.(TArray TUnit, Array [||])
+    | ArrayLit (_ :: _ as l) ->
+      let*? ty, l =
+        try
+          let l =
+            List.map
+              (fun (lit, _) ->
+                match convert_literal lit with
+                | Error s -> raise (Err s)
+                | Ok v -> v)
+              l
+          in
+          let ty, _ = List.hd l in
+          Ok (ty, List.map (fun (_, value) -> { O.value; attrs = [] }) l)
+        with Err s -> Error s
+      in
+      Ok O.(TArray ty, Array (Array.of_list l))
+    | StructLit (((_path, (s_name, _)), _), fields) ->
+      let*? fields =
+        try
+          let fields =
+            List.map
+              (fun ((n, _), (lit, _)) ->
+                match convert_literal lit with
+                | Error s -> raise (Err s)
+                | Ok v -> n, v)
+              fields
+          in
+          Ok
+            (List.map
+               (fun (n, (ty, value)) -> n, ty, { O.value; attrs = [] })
+               fields)
+        with Err s -> Error s
+      in
+      let struct_decl =
+        {
+          O.struct_name = s_name;
+          fields = List.map (fun (n, ty, _) -> n, ty) fields;
+        }
+      in
+      Ok
+        O.(
+          ( TStruct struct_decl,
+            Struct (struct_decl, List.map (fun (n, _, v) -> n, v) fields) ))
+    | Builtin Impossible -> Ok (O.TUnset, O.Unset)
+    | _ | (exception _) -> Error "unsupported expression"
+  in
+  let convert_definition : definition -> (string * O.test_io, string) Result.t =
+    function
+    | {
+        definition_name = [_subscope_id; (input_var_name, _)], _;
+        definition_expr = expr, _;
+        _;
+      } ->
+      let*? typ, rv = convert_literal expr in
+      let expr = O.{ typ; value = vlit rv } in
+      Ok (input_var_name, expr)
+    | _ -> Error "invalid definition shape"
+  in
+  let convert_var_def = function
+    | Definition d, _ -> begin
+      match convert_definition d with
+      | Error s -> raise (Err s)
+      | Ok v -> Some v
+    end
+    | _ -> None (* TODO: asserts *)
+  in
+  let*? test_inputs =
+    try Ok (List.filter_map convert_var_def scope_use.scope_use_items)
+    with Err s -> Error s
+  in
+  let testing_scope = fst scope_decl.scope_decl_name in
+  let*? tested_scope =
+    List.find_map
+      (function
+        | ( ContextScope
+              { scope_decl_context_scope_sub_scope = (p, (sname, _)), _; _ },
+            _ ) ->
+          Some
+            {
+              O.name = sname;
+              module_name = List.hd (List.rev p) |> fst;
+              inputs =
+                List.map
+                  (fun (v, (i_io : O.test_io)) ->
+                    v, { O.typ = i_io.typ; is_context = false })
+                  test_inputs;
+              outputs = [];
+              module_deps = [];
+            }
+        | _ ->
+          Format.eprintf "%s@." __LOC__;
+          None)
+      scope_decl.scope_decl_context
+    |> function None -> Error "tested scope not found" | Some v -> Ok v
+  in
+  Ok
+    {
+      O.testing_scope;
+      tested_scope;
+      test_inputs;
+      test_outputs = [];
+      description = "";
+      title = "";
+    }
+
+let read_partial_test (options : Global.options) =
+  match read_partial_test options with
+  | Ok t -> write_stdout J.write_test_list [t]
+  | Error s -> Format.ksprintf failwith "Error: %s" s
+
 type duration_units = { day : string; month : string; year : string }
 
 type value_strings = {
@@ -1066,7 +1316,8 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
       fprintf ppf "%s %s %a" strings.present strings.content_str
         (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
         (Option.get v)
-  | Some (TEnum { enum_name; constructors; _ }), O.Enum (_en, (constr, Some v)) ->
+  | Some (TEnum { enum_name; constructors; _ }), O.Enum (_en, (constr, Some v))
+    ->
     fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
       (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
       v
