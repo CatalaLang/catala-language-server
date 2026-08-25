@@ -19,30 +19,16 @@ open Catala_utils
 open Shared_ast
 open Format
 
-let locale_s locale = match locale with `En -> "en" | `Fr -> "fr" | `Pl -> "pl"
+let locale_s locale =
+  match locale with `En -> "en" | `Fr -> "fr" | `Pl -> "pl"
 
-(* Not itself a lexer macro: composed from MS_WILDCARD + MS_OF + MS_TYPE
-   ("cokolwiek" + "z" + "rodzaj", declined to "rodzaju" after "z"). *)
 let _for_all = function
   | `En -> "anything of type"
   | `Fr -> "n'importe quel de type"
   | `Pl -> "cokolwiek z rodzaju"
 
-(* MS_LIST is "lista" alone, with no "of"/"z" suffix in the macro. *)
-let list_of = function
-  | `En -> "list of"
-  | `Fr -> "liste de"
-  | `Pl -> "lista"
-
-(* Kept untranslated: TDefault doesn't currently call this (see below), and
-   no Polish form is attested anywhere in the compiler. Keep in sync with
-   types_pl.xml/.iro's <default> kind-tag pattern if this ever changes. *)
-let default = function
-  | `En -> "default"
-  | `Fr -> "défaut"
-  | `Pl -> "default"
-
-(* Kept untranslated: no attested Polish abbreviated form (see types_pl.xml). *)
+let list_of = function `En -> "list of" | `Fr -> "liste de" | `Pl -> "lista"
+let default = function `En -> "default" | `Fr -> "défaut" | `Pl -> "default"
 let enum = function `En -> "enum" | `Fr -> "énum" | `Pl -> "enum"
 let struct_s = function `Pl -> "struktura" | _ -> "structure"
 
@@ -51,15 +37,8 @@ let struct_header = function
   | `Fr -> struct_s `Fr
   | `Pl -> struct_s `Pl
 
-let struct_data = function
-  | `En -> "data"
-  | `Fr -> "donnée"
-  | `Pl -> "dane"
-
-let content = function
-  | `En -> "content"
-  | `Fr -> "contenu"
-  | `Pl -> "typu"
+let struct_data = function `En -> "data" | `Fr -> "donnée" | `Pl -> "dane"
+let content = function `En -> "content" | `Fr -> "contenu" | `Pl -> "typu"
 
 let depends_on = function
   | `En -> "depends on"
@@ -86,33 +65,19 @@ let topdef_s = function
   | `Fr -> "déclaration"
   | `Pl -> "deklaracja"
 
-(* Best-effort display label, not a lexer macro (MR_EXTERNAL "external" stays
-   the literal keyword in every locale, including Polish). *)
 let external_type_s = function
   | `En -> "external type"
   | `Fr -> "type externe"
   | `Pl -> "typ zewnętrzny"
 
-(* Best-effort display label, not a lexer macro (MR_MODULE_ALIAS "as" stays
-   the literal keyword in every locale, including Polish). *)
-let alias_s = function
-  | `En -> "as"
-  | `Fr -> "en tant que"
-  | `Pl -> "jako"
+let alias_s = function `En -> "as" | `Fr -> "en tant que" | `Pl -> "jako"
 
 let option_s = function
   | `En -> "optional of"
   | `Fr -> "optionnel de"
   | `Pl -> "opcjonalny"
 
-(* Kept as the literal keyword, not translated like alias_s/external_type_s:
-   this feeds a completion item bound to Tokens.MODULE_USE (doc_completion.ml),
-   and MR_MODULE_USE "Using" is the literal keyword in every locale -- an
-   inserted translation here would risk producing invalid Catala syntax. *)
-let using_s = function
-  | `En -> "Using"
-  | `Fr -> "Usage de"
-  | `Pl -> "Using"
+let using_s = function `En -> "Using" | `Fr -> "Usage de" | `Pl -> "Using"
 
 let pp_lit locale fmt l =
   let en, fr, pl =
@@ -317,10 +282,7 @@ let svar_internal_s = function
   | `Fr -> "résultat"
   | `Pl -> "wyjście"
 
-let svar_state_s = function
-  | `En -> "state"
-  | `Fr -> "état"
-  | `Pl -> "stan"
+let svar_state_s = function `En -> "state" | `Fr -> "état" | `Pl -> "stan"
 
 let pp_scope_var
     ?(skip_internals = true)
