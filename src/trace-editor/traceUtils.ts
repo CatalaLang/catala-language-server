@@ -34,9 +34,9 @@ export type TraceValue =
   | { kind: 'money'; value: string }
   | { kind: 'date'; value: { year: number; month: number; day: number } }
   | {
-    kind: 'duration';
-    value: { years: number; months: number; days: number };
-  }
+      kind: 'duration';
+      value: { years: number; months: number; days: number };
+    }
   | { kind: 'enum'; ctor: string; value?: TraceValue }
   | { kind: 'struct'; fields: Record<string, TraceValue> }
   | { kind: 'array'; values: [TraceValue, string | undefined][] };
@@ -51,13 +51,13 @@ export type TraceElement = {
 export type TraceVariable =
   | { kind: 'value'; name: string; value?: TraceValue; source?: TraceElement }
   | {
-    kind: 'step';
-    name: string;
-    variables: TraceVariable[];
-    value?: TraceValue;
-    index?: number;
-    source?: TraceElement;
-  };
+      kind: 'step';
+      name: string;
+      variables: TraceVariable[];
+      value?: TraceValue;
+      index?: number;
+      source?: TraceElement;
+    };
 
 // The step a test's variable paths are relative to, as returned by
 // `traceVariablesForTest`.
@@ -80,8 +80,6 @@ export type TraceTest = {
 
 const OPTIONAL_PRESENT = new Set(['Present', 'Présent', 'Obecny']);
 const OPTIONAL_ABSENT = new Set(['Absent', 'Nieobecny']);
-
-
 
 function traceValueFromJson(value: JsonValue): TraceValue | undefined {
   if (typeof value === 'boolean') {
@@ -271,12 +269,12 @@ export function formatTraceValue(
     case 'bool':
       return intl.formatMessage({
         id: v.value ? 'true' : 'false',
-      })
+      });
     case 'integer':
     case 'decimal':
       return String(v.value);
     case 'date': {
-      const d = new Date(v.value.year, v.value.month, v.value.day)
+      const d = new Date(v.value.year, v.value.month, v.value.day);
       return intl.formatDate(d);
     }
     case 'duration': {
@@ -303,7 +301,8 @@ export function formatTraceValue(
       if (Object.keys(v.fields).length === 0) return '{}';
       return `{\n${Object.entries(v.fields)
         .map(
-          ([k, f]) => `${inner}${k}: ${formatTraceValue(f, intl, lang, all, inner) ?? ''}`
+          ([k, f]) =>
+            `${inner}${k}: ${formatTraceValue(f, intl, lang, all, inner) ?? ''}`
         )
         .join(',\n')}\n${indent}}`;
     case 'array':
@@ -391,8 +390,8 @@ function traceElementFromJson(e: JsonValue): TraceElement | null {
   }
   const trace = Array.isArray(o.trace)
     ? o.trace
-      .map((child) => traceElementFromJson(child))
-      .filter((x): x is TraceElement => x !== null)
+        .map((child) => traceElementFromJson(child))
+        .filter((x): x is TraceElement => x !== null)
     : undefined;
   return {
     element: element as unknown as TraceKind,
@@ -417,9 +416,6 @@ function mergeSteps(l: TraceVariable[]): TraceVariable[] {
     if (tv.kind === 'step') {
       const variables = mergeSteps(tv.variables);
       if (variables.length === 1 && variables[0].kind === 'step') {
-        // The merged segment keeps the *innermost* source, i.e. the node the
-        // value belongs to. The collapsed outer nodes are still reachable: they
-        // are the ancestors of `source.jsonPath` in the raw JSON.
         acc.push({ ...variables[0], name: `${tv.name}.${variables[0].name}` });
       } else {
         const vs = variables.filter(

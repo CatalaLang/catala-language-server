@@ -333,7 +333,7 @@
 }
 
 .expected-variable-value {
-  flex: 1;
+  width: 10em;
 }
 
 /* Rows grouping the states of one auxiliary variable. They carry no background
