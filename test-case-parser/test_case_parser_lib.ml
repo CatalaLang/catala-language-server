@@ -145,6 +145,7 @@ let implicit_stdlib_aliases, lookup_aliased_name =
   let implicit_stdlib_aliases = function
     | `En -> en_implicit_aliases
     | `Fr -> fr_implicit_aliases
+    | `Pl -> en_implicit_aliases
     | _ -> []
   in
   let en_alias_map = String.Map.of_list (List.combine en_aliases en_names) in
@@ -153,6 +154,7 @@ let implicit_stdlib_aliases, lookup_aliased_name =
     match lang with
     | `En -> String.Map.find_opt s en_alias_map
     | `Fr -> String.Map.find_opt s fr_alias_map
+    | `Pl -> String.Map.find_opt s en_alias_map
     | _ -> None
   in
   implicit_stdlib_aliases, lookup_aliased_name
@@ -170,6 +172,7 @@ type lang_strings = {
   content : string;
   scope : string;
   present : string;
+  absent : string;
 }
 
 let get_lang_strings =
@@ -184,6 +187,7 @@ let get_lang_strings =
       content = "contenu";
       scope = "champ d'application";
       present = "Présent";
+      absent = "Absent";
     }
   in
   let en_strings =
@@ -197,17 +201,37 @@ let get_lang_strings =
       content = "content";
       scope = "scope";
       present = "Present";
+      absent = "Absent";
+    }
+  in
+  let pl_strings =
+    {
+      declaration_scope = "deklaracja zakres";
+      output_scope = "wyjście";
+      using_module = "Using";
+      definition = "definicja";
+      assertion = "asercja";
+      equals = "wynosi";
+      content = "typu";
+      scope = "zakres";
+      present = "Obecny";
+      absent = "Nieobecny";
     }
   in
   function
   | `Fr -> fr_strings
   | `En -> en_strings
+  | `Pl -> pl_strings
   | _ -> unsupported "unsupported language"
 
 let mk_optional_enum_decl lang typ =
   {
     O.enum_name = EnumName.to_string ConstantNames.option_enum;
-    constructors = ["Absent", None; (get_lang_strings lang).present, Some typ];
+    constructors =
+      [
+        (get_lang_strings lang).absent, None;
+        (get_lang_strings lang).present, Some typ;
+      ];
     ctor_attrs = [];
   }
 
@@ -271,8 +295,7 @@ and enum_ctor_attrs constr_map =
           | Description s -> Some (O.Description s)
           | _ -> None)
       in
-      if attrs = [] then None
-      else Some (EnumConstructor.to_string constr, attrs))
+      if attrs = [] then None else Some (EnumConstructor.to_string constr, attrs))
     (EnumConstructor.Map.bindings constr_map)
 
 and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
@@ -366,10 +389,13 @@ let rec get_value : type a.
             (fun (field, v) ->
               StructField.to_string field, get_value lang decl_ctx v)
             (StructField.Map.bindings fields) )
-    | EInj { name; e; _ } when EnumName.equal ConstantNames.option_enum name -> (
+    | EInj { name; e; _ } when EnumName.equal ConstantNames.option_enum name
+      -> (
       match Typing.expr decl_ctx e |> Expr.unbox with
       | ELit LUnit, _ty ->
-        let none_field = EnumConstructor.to_string ConstantNames.none_constr, None in
+        let none_field =
+          EnumConstructor.to_string ConstantNames.none_constr, None
+        in
         let decl =
           {
             O.enum_name = EnumName.to_string ConstantNames.option_enum;
@@ -624,7 +650,9 @@ let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
         cn, Option.map (generate_default_value lang) ty
       in
       O.Enum (decl, elt)
-    | TOption typ -> Enum (mk_optional_enum_decl lang typ, ("Absent", None))
+    | TOption typ ->
+      Enum
+        (mk_optional_enum_decl lang typ, ((get_lang_strings lang).absent, None))
     | TArray _ -> O.Array [||]
     | TUnset -> O.Unset
     | TUnit -> raise (Unsupported "unit type")
@@ -971,6 +999,7 @@ type value_strings = {
   content_str : string;
   duration_units : duration_units;
   present : string;
+  absent : string;
 }
 
 let get_value_strings =
@@ -983,6 +1012,7 @@ let get_value_strings =
       content_str = "contenu";
       duration_units = { day = "jour"; month = "mois"; year = "an" };
       present = "Présent";
+      absent = "Absent";
     }
   in
   let en_strings =
@@ -994,12 +1024,22 @@ let get_value_strings =
       content_str = "content";
       duration_units = { day = "day"; month = "month"; year = "year" };
       present = "Present";
+      absent = "Absent";
     }
   in
-  function
-  | `Fr -> fr_strings
-  | `En -> en_strings
-  | _ -> unsupported "unsupported language"
+  let pl_strings =
+    {
+      true_str = "prawda";
+      false_str = "fałsz";
+      money_fmt = format_of_string "%01d.%02d PLN";
+      decimal_sep = '.';
+      content_str = "typu";
+      duration_units = { day = "dzień"; month = "miesiąc"; year = "rok" };
+      present = "Obecny";
+      absent = "Nieobecny";
+    }
+  in
+  function `Fr -> fr_strings | `En -> en_strings | `Pl -> pl_strings
 
 let print_attrs ppf (attrs : O.attr_def list) =
   let open Format in
@@ -1061,12 +1101,13 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
             else None);
          ])
   | _, O.Enum ({ enum_name = "Optional"; constructors; _ }, (constr, v)) ->
-    if v = None then fprintf ppf "Absent"
+    if v = None then pp_print_string ppf strings.absent
     else
       fprintf ppf "%s %s %a" strings.present strings.content_str
         (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
         (Option.get v)
-  | Some (TEnum { enum_name; constructors; _ }), O.Enum (_en, (constr, Some v)) ->
+  | Some (TEnum { enum_name; constructors; _ }), O.Enum (_en, (constr, Some v))
+    ->
     fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
       (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
       v
