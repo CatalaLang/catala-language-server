@@ -30,6 +30,8 @@ import { tmpdir } from 'os';
 import type { TraceElement } from '../trace-editor/traceUtils';
 import type { ResultController } from './testAndCoverage';
 import { TestId } from './testAndCoverage';
+import type { CheckExpected } from './lspRequests';
+import { getCwd } from '../shared/util_client';
 
 export function parseContents(
   content: Uint8Array,
@@ -153,7 +155,8 @@ export class TestCaseEditorProvider
     private readonly context: vscode.ExtensionContext,
     /** dist-relative path to the emitted `codicon.css`. */
     private readonly codiconsCssPath: string,
-    private resultController: ResultController
+    private resultController: ResultController,
+    private readonly checkExpected: CheckExpected
   ) {
     this.testQueue = new PQueue({ concurrency: 1 });
     this.resultController = resultController;
@@ -213,12 +216,14 @@ export class TestCaseEditorProvider
   public static register(
     context: vscode.ExtensionContext,
     codiconsCssPath: string,
-    resultController: ResultController
+    resultController: ResultController,
+    checkExpected: CheckExpected
   ): vscode.Disposable {
     const provider = new TestCaseEditorProvider(
       context,
       codiconsCssPath,
-      resultController
+      resultController,
+      checkExpected
     );
     logger.log(`Registering ${TestCaseEditorProvider.viewType}`);
     const providerRegistration = vscode.window.registerCustomEditorProvider(
@@ -239,6 +244,10 @@ export class TestCaseEditorProvider
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
+    const checkVariable = await this.checkExpected(
+      getCwd(document.uri.fsPath) ?? path.dirname(document.uri.fsPath)
+    );
+    logger.log(`Check Variable: ${checkVariable}`);
     const config = vscode.workspace.getConfiguration('catala');
     const isCustomEditorEnabled = config.get<boolean>(
       'enableCustomTestCaseEditor'
@@ -397,7 +406,7 @@ export class TestCaseEditorProvider
           // displays. A temporary directory keeps it out of the project.
           let traceDir: string | undefined;
           let traceFile: string | undefined;
-          if (has_expected) {
+          if (has_expected && checkVariable) {
             try {
               traceDir = mkdtempSync(path.join(tmpdir(), 'catala-test-trace-'));
               traceFile = path.join(traceDir, 'trace.json');

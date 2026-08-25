@@ -802,6 +802,23 @@ class catala_lsp_server =
               m "catala.exceptionsAt failed: %s" (Printexc.to_string exn));
           Lwt.return `Null)
 
+    method private get_expected (params : Yojson.Safe.t option) :
+        Yojson.Safe.t Lwt.t =
+      match params with
+      | None -> Lwt.return `Null
+      | Some json -> (
+        let clerk_toml_dir =
+          Yojson.Safe.Util.(json |> member "clerk_toml_dir" |> to_string)
+        in
+        let clerk_toml = process_clerk_toml clerk_toml_dir in
+        match clerk_toml with
+        | None -> Lwt.return `Null
+        | Some (config, _) ->
+          Lwt.return
+          @@ Option.fold ~none:(`Bool false)
+               ~some:(fun b -> `Bool b)
+               config.global.check_expected)
+
     method private list_entrypoints (params : Yojson.Safe.t option) :
         Yojson.Safe.t Lwt.t =
       let* () = server_initialized in
@@ -909,6 +926,9 @@ class catala_lsp_server =
         | WorkspaceSymbol _params -> Lwt.return_none
         | UnknownRequest { meth = "catala.listEntrypoints"; params } ->
           self#list_entrypoints
+            (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
+        | UnknownRequest { meth = "catala.getExpected"; params } ->
+          self#get_expected
             (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
         | UnknownRequest { meth = "catala.exceptionsAt"; params } ->
           self#exceptions_at

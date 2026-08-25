@@ -33,7 +33,7 @@ import {
 import type { Binary, RunArgs } from './shared/util_client';
 import { initTests, ResultController } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
-import { listEntrypoints } from './extension/lspRequests';
+import { checkExpected, listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
 import { TestMacroController } from './test-case-editor/TestMacroController';
 
@@ -740,7 +740,12 @@ export async function activate(
 
   // Always register the custom editor providers
   context.subscriptions.push(
-    TestCaseEditorProvider.register(context, codiconsCssPath, resultController)
+    TestCaseEditorProvider.register(
+      context,
+      codiconsCssPath,
+      resultController,
+      checkExpected(client)
+    )
   );
   logger.log(`Register "Catala Test case editor"`);
 
