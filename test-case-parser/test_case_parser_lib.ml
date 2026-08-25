@@ -18,6 +18,15 @@ module I = Desugared.Ast
 module O = Catala_types_t
 module J = Catala_types_j
 
+let _ =
+  Clerk_backend.
+    [
+      OCaml.config_backend;
+      Java.config_backend;
+      C.config_backend;
+      Python.config_backend;
+    ]
+
 let to_relative (p : File.t) = File.make_relative_to ~dir:(Sys.getcwd ()) p
 
 let lookup_clerk_toml from_dir =

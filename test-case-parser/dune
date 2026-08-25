@@ -1,7 +1,12 @@
 (library
  (name test_case_parser_lib)
  (modules test_case_parser_lib)
- (libraries catala.driver catala.clerk_lib catala_types_atd)
+ (libraries
+   catala.driver
+   catala.clerk_lib
+   catala_types_atd
+   catala.clerk_backend
+   catala.clerk_utils)
  (flags
   (:standard -open Catala_types_atd)))
 
@@ -9,10 +14,13 @@
  (name testcase)
  (modes plugin)
  (modules testcase)
- (libraries yojson atdgen-runtime test_case_parser_lib)
+ (libraries yojson atdgen-runtime test_case_parser_lib catala.clerk_utils)
  (embed_in_plugin_libraries
   otoml
+  ninja_utils
   catala.clerk_lib
+  catala.clerk_utils
+  catala.clerk_backend
   atdgen-runtime
   catala_types_atd
   test_case_parser_lib))
