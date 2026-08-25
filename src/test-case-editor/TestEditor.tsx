@@ -106,6 +106,15 @@ export default function TestEditor(props: Props): ReactElement {
   const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
 
+  // A failing run sends the user to what went wrong, and the scope results come
+  // first: when an output is also incorrect the expected-values section takes
+  // the focus, and the expected variables only get it when they are the sole
+  // culprit.
+  const focusVariableFailure =
+    props.runState?.results?.kind === 'Ok' &&
+    !props.runState.results.value.assert_failures &&
+    variableFailures.length > 0;
+
   useEffect(() => {
     const runState = props.runState;
     const shouldFocus =
@@ -219,6 +228,7 @@ export default function TestEditor(props: Props): ReactElement {
           trace={props.trace}
           runTrace={props.runTrace}
           failures={variableFailures}
+          focusFailure={focusVariableFailure}
           onChange={onVariablesChange}
         />
         <div

@@ -1,4 +1,10 @@
-import { type ReactElement, useState } from 'react';
+import {
+  type ReactElement,
+  type Ref,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { IntlShape } from 'react-intl';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { VscodeButton, VscodeTextfield } from '@vscode-elements/react-elements';
@@ -42,6 +48,13 @@ type Props = {
    * from the trace the editor happens to hold.
    */
   failures?: VariableFailure[];
+  /**
+   * Whether this section should claim the focus for its first mismatching row
+   * after the run that produced `failures`. The caller decides: a failing
+   * scope output outranks a mismatching variable and keeps the focus for
+   * itself.
+   */
+  focusFailure?: boolean;
   onChange(next: Map<string, TraceValue | null>): void;
 };
 
@@ -179,6 +192,7 @@ export default function ExpectedVariablesEditor({
   trace,
   runTrace,
   failures,
+  focusFailure,
   onChange,
 }: Props): ReactElement {
   const [showCatalog, setShowCatalog] = useState(false);
@@ -192,6 +206,29 @@ export default function ExpectedVariablesEditor({
       testVariables.set(name, value);
     }
   });
+
+  // The first row the compiler reported a mismatch on, in display order.
+  const firstFailure = [...testVariables.keys()].find((path) =>
+    failureByName.has(path)
+  );
+  const firstFailureRef = useRef<HTMLDivElement>(null);
+
+  // Same move as the expected-values section makes for a failing output: focus
+  // the offending row and bring it into view. `failures` is a fresh array on
+  // every run, so a variable that fails twice in a row is focused twice, while
+  // edits elsewhere — which leave the run results untouched — do not steal the
+  // focus back.
+  useEffect(() => {
+    const row = firstFailureRef.current;
+    if (focusFailure !== true || row === null) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      row.focus();
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+    return (): void => clearTimeout(timer);
+  }, [failures, focusFailure]);
 
   const [trVariablesAux, outputs] = traceVariablesForTest(
     trace ?? [],
@@ -235,6 +272,7 @@ export default function ExpectedVariablesEditor({
                   expected={tv}
                   computed={computedOf(path)}
                   failure={failureByName.get(path)}
+                  rowRef={path === firstFailure ? firstFailureRef : undefined}
                   onSet={setVar}
                   onRemove={remove}
                 />
@@ -288,6 +326,7 @@ function VariableRow({
   expected,
   computed,
   failure,
+  rowRef,
   onSet,
   onRemove,
 }: {
@@ -295,6 +334,7 @@ function VariableRow({
   expected: TraceValue | null;
   computed?: TraceValue;
   failure?: VariableFailure;
+  rowRef?: Ref<HTMLDivElement>;
   onSet(name: string, rv: TraceValue | null): void;
   onRemove(name: string): void;
 }): ReactElement {
@@ -310,9 +350,10 @@ function VariableRow({
   // compiler against the trace, with the runtime's own formatting rules, so it
   // is right where `traceValueEqual` on re-parsed JSON values may not be.
   const mismatch =
-    computed !== undefined &&
-    expected !== null &&
-    !traceValueEqual(expected, computed);
+    failure !== undefined ||
+    (computed !== undefined &&
+      expected !== null &&
+      !traceValueEqual(expected, computed));
 
   let comp = computed ? traceValueToRuntime(computed) : undefined;
   let compValu: RuntimeValue | undefined = comp
@@ -328,8 +369,16 @@ function VariableRow({
   }
 
   const inputStr = formatRuntimeValue(input, intl) ?? '';
+  // `tabIndex` is what makes the row focusable at all; -1 keeps it out of the
+  // tab order, so it is only ever reached by the jump above.
   return (
-    <div className="simple-item-vertical atomic-element">
+    <div
+      className={`simple-item-vertical atomic-element${
+        failure !== undefined ? ' diff-highlight' : ''
+      }`}
+      ref={rowRef}
+      tabIndex={failure !== undefined ? -1 : undefined}
+    >
       <label className="item-label body-1" style={{ textTransform: 'none' }}>
         {name}
       </label>
