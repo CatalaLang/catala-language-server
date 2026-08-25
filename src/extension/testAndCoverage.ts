@@ -116,7 +116,7 @@ async function clerkRunTest(
   cancellation: vscode.CancellationToken,
   with_coverage?: boolean
 ): Promise<ClerkTestRunResult | Error> {
-  const args = ['test', '--json', '--quiet']
+  const args = ['test', '--json']
     .concat(with_coverage ? ['--code-coverage'] : [])
     .concat(paths);
   return new Promise((resolve) => {
