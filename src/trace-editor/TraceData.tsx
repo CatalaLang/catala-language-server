@@ -76,7 +76,7 @@ export function DataPanel({
   test,
   setFilter,
   trace,
-  intl
+  intl,
 }: {
   test: TraceTest;
   setFilter: React.Dispatch<React.SetStateAction<string>>;
@@ -120,7 +120,8 @@ export function DataPanel({
       return {
         name,
         expected: tv !== undefined ? formatTraceValue(tv, intl) : undefined,
-        value: computed !== undefined ? formatTraceValue(computed, intl) : undefined,
+        value:
+          computed !== undefined ? formatTraceValue(computed, intl) : undefined,
         kind: io.value?.value.value.kind,
       };
     }
