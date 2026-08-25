@@ -371,11 +371,9 @@ function VariableRow({
   const inputStr = formatRuntimeValue(input, intl) ?? '';
   // `tabIndex` is what makes the row focusable at all; -1 keeps it out of the
   // tab order, so it is only ever reached by the jump above.
-  return (
+  let editor = (
     <div
-      className={`simple-item-vertical atomic-element${
-        failure !== undefined ? ' diff-highlight' : ''
-      }`}
+      className="simple-item-vertical atomic-element"
       ref={rowRef}
       tabIndex={failure !== undefined ? -1 : undefined}
     >
@@ -446,6 +444,17 @@ function VariableRow({
         />
       </div>
     </div>
+  );
+
+  return failure !== undefined ? (
+    <div className="diff-highlight atomic-diff">
+      {editor}
+      <div className="diff-actual">
+        <FormattedMessage id="diff.actual" />: {failure.current_value ?? ''}
+      </div>
+    </div>
+  ) : (
+    editor
   );
 }
 
