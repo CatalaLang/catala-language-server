@@ -19,6 +19,7 @@ import type {
   VariableFailure,
 } from '../generated/catala_types';
 import path from 'path';
+import { logger } from './logger';
 
 type ClerkLocation = {
   file: string;
@@ -28,6 +29,7 @@ type ClerkLocation = {
 type ClerkScopeTestResult = {
   scope_name: string;
   success: boolean;
+  expected: VariableFailure[];
   errors: Array<{
     // Absent when the failure does not come from clerk, e.g. one synthesized
     // by `ResultController.record`. Already read behind a guard.
@@ -139,6 +141,7 @@ export class ResultController {
     this.storage.update(`${LAST_TEST_RESULT_KEY}:${testId.id}`, {
       scope_name,
       success: !failures,
+      expected: results.kind === 'Ok' ? results.value.variable_failures : [],
       errors: results.kind === 'Error' ? [{ message: results.value }] : [],
       time: 0,
       date: new Date().toLocaleDateString('fr'),
@@ -215,6 +218,7 @@ async function clerkRunTest(
         const results = JSON.parse(
           output.toString()
         ) as ClerkTestAndCoverageResult;
+        logger.log(`Hausse du json: ${JSON.stringify(results)}`);
         if (results?.['test-results']) {
           resolve({ results, code: code ?? 0, err_msg: stderr });
         } else {
@@ -499,7 +503,7 @@ function updateTestItemWithClerkResult(
   run: vscode.TestRun,
   scopeTest: ClerkScopeTestResult
 ): void {
-  if (scopeTest.success) {
+  if (scopeTest.success && scopeTest.expected.length == 0) {
     run.passed(test_item, scopeTest.time);
   } else {
     const messages = scopeTest.errors.map((error) => {

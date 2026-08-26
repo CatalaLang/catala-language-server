@@ -53,7 +53,7 @@ export class TestMacroController {
             index,
             filename: filename,
             test: e.entrypoint.value,
-            success: res.success,
+            success: res.success && res.expected.length == 0,
             date: res.date,
           };
           this.tests.push(testEntrypoint);
@@ -179,7 +179,10 @@ export class TestMacroController {
                   kind: 'TestScopeResult',
                   value: {
                     entry: testElt.test,
-                    scope_success: res,
+                    scope_success: {
+                      success: res.success && res.expected.length == 0,
+                      date: res.date,
+                    },
                     index,
                     order,
                   },
@@ -224,7 +227,10 @@ export class TestMacroController {
                     kind: 'TestScopeResult',
                     value: {
                       entry: test.test,
-                      scope_success: res,
+                      scope_success: {
+                        success: res.success && res.expected.length == 0,
+                        date: res.date,
+                      },
                       index,
                       order,
                     },
