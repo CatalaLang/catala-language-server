@@ -132,7 +132,9 @@ export class ResultController {
     if (results.kind === 'Cancelled') return;
     const failures =
       results.kind === 'Ok'
-        ? results.value.assert_failures || results.value.diffs.length > 0
+        ? results.value.assert_failures ||
+          results.value.diffs.length > 0 ||
+          results.value.variable_failures.length > 0
         : true;
     this.storage.update(`${LAST_TEST_RESULT_KEY}:${testId.id}`, {
       scope_name,
