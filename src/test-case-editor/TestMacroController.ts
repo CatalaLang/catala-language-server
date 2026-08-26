@@ -53,7 +53,10 @@ export class TestMacroController {
             index,
             filename: filename,
             test: e.entrypoint.value,
-            success: res.success && res.expected.length == 0,
+            success:
+              res.success && res.expected !== undefined
+                ? res.expected.length == 0
+                : true,
             date: res.date,
           };
           this.tests.push(testEntrypoint);
