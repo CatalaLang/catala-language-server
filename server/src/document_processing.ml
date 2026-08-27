@@ -317,8 +317,8 @@ let surface_to_scopelang
       |> Scopelang.Ast.type_program
     in
     let jump_table =
-      lazy
-        (Jump_table.populate options.input_src ctx modules_content surface prg)
+      let input_src = options.input_src in
+      lazy (Jump_table.populate input_src ctx modules_content surface prg)
     in
     let used_modules : ModuleName.t File.Map.t =
       Ident.Map.bindings mod_uses |> File.Map.of_list
