@@ -22,6 +22,11 @@ open Format
 let locale_s locale =
   match locale with `En -> "en" | `Fr -> "fr" | `Pl -> assert false
 
+let not_exposed_s = function
+  | `En -> "not exposed"
+  | `Fr -> "non exposé"
+  | `Pl -> "nie odsłonięta"
+
 let _for_all = function
   | `En -> "anything of type"
   | `Fr -> "n'importe quel de type"
@@ -370,14 +375,23 @@ let pp_module
 
      > Invariant: an interface shall only contain [*Decl] elements, or [Topdef]
      > elements with [topdef_expr = None] *)
-  let pp_code_block fmt code_item =
+  let pp_code_block fmt (code_item, (vis : visibility)) =
+    let pp_vis ppf =
+      if vis = Private then fprintf ppf " # %s" (not_exposed_s locale)
+    in
     match Mark.remove code_item with
     | ScopeDecl sdecl ->
-      fprintf fmt "%s %s" (scope_s locale) (Mark.remove sdecl.scope_decl_name)
+      fprintf fmt "%s %s%t" (scope_s locale)
+        (Mark.remove sdecl.scope_decl_name)
+        pp_vis
     | StructDecl sdecl ->
-      fprintf fmt "%s %s" (struct_s locale) (Mark.remove sdecl.struct_decl_name)
+      fprintf fmt "%s %s%t" (struct_s locale)
+        (Mark.remove sdecl.struct_decl_name)
+        pp_vis
     | EnumDecl edecl ->
-      fprintf fmt "%s %s" (enum_s locale) (Mark.remove edecl.enum_decl_name)
+      fprintf fmt "%s %s%t" (enum_s locale)
+        (Mark.remove edecl.enum_decl_name)
+        pp_vis
     | Topdef top_def -> (
       match
         TopdefName.Map.bindings ctx.ctx_topdefs
@@ -388,16 +402,18 @@ let pp_module
       with
       | None -> () (* ?? *)
       | Some (_, (topdef_typ, _)) ->
-        pp_topdef locale fmt (Mark.remove top_def.topdef_name, topdef_typ))
+        fprintf fmt "%a%t" (pp_topdef locale)
+          (Mark.remove top_def.topdef_name, topdef_typ)
+          pp_vis)
     | AbstractTypeDecl t ->
-      fprintf fmt "%s %s" (external_type_s locale) (Mark.remove t)
+      fprintf fmt "%s %s%t" (external_type_s locale) (Mark.remove t) pp_vis
     | ScopeUse _ -> ()
   in
   match mcontent.module_items with
   | Interface items ->
     fprintf fmt "@[<v>%a@]"
       (pp_print_list ~pp_sep:pp_print_space pp_code_block)
-      (List.map Mark.remove items)
+      items
   | Code (ls : law_structure list) ->
     let rec loop = function
       | [] -> ()
@@ -407,10 +423,10 @@ let pp_module
       | LawHeading (_, ls) :: t ->
         loop ls;
         loop t
-      | CodeBlock (cb, _, _) :: t ->
+      | CodeBlock (cb, _, vis) :: t ->
         fprintf fmt "@[<v>%a@]"
           (pp_print_list ~pp_sep:pp_print_space pp_code_block)
-          cb;
+          (List.map (fun item -> item, if vis then Public else Private) cb);
         loop t
     in
     loop ls
