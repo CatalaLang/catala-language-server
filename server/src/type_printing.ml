@@ -437,6 +437,7 @@ let module_type
     fprintf ppf "%a@\n" (pp_module locale prg) module_content;
     if markdown then fprintf ppf "```"
   in
+  Format.pp_print_flush ppf ();
   Buffer.contents buf
 
 let typ_to_content ~markdown prg locale (kind : Jump_table.type_lookup) =
