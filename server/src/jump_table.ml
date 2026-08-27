@@ -451,11 +451,7 @@ let traverse_scope_def tctx (rule : typed rule) m : PMap.acc =
     let var, pos_l = var in
     let name = ScopeVar.to_string var in
     let hash = hash_info (module ScopeVar) var in
-    let id =
-      match rule with
-      | ScopeVarDefinition _ -> Some (ScopeVar.id var)
-      | _ -> None
-    in
+    let id = Some (ScopeVar.id var) in
     let var = Definition { name; hash; typ; id } in
     let m = List.fold_right (fun p -> PMap.add p var) pos_l m in
     let m = traverse_typ tctx typ m in
@@ -646,9 +642,14 @@ let populate_modules
     (acc : PMap.acc) : PMap.acc * (ModuleName.t -> mjump) =
   let module C = Map.Make (String) in
   let convert_map =
+    let init_map =
+      match prog.program_module_name with
+      | None -> C.empty
+      | Some (m, _) -> C.singleton (ModuleName.to_string m) m
+    in
     ModuleName.Map.fold
       (fun mname _ acc -> C.add (ModuleName.to_string mname) mname acc)
-      prog.program_modules C.empty
+      prog.program_modules init_map
   in
   let process_module_use
       acc
@@ -701,10 +702,13 @@ let populate_modules
       try
         let name = String.to_ascii (Mark.remove module_name) in
         let mname = C.find name convert_map in
-        let mcontent = ModuleName.Map.find mname modules_contents in
+        let is_stdlib =
+          ModuleName.Map.find_opt mname modules_contents
+          |> Option.map (fun c -> c.Surface.Ast.module_is_stdlib)
+          |> Option.value ~default:false
+        in
         let interface =
-          Surface.Parser_driver.load_interface
-            ~is_stdlib:mcontent.module_is_stdlib input_src
+          Surface.Parser_driver.load_interface ~is_stdlib input_src
         in
         let pos = Mark.get module_name in
         let mjump = make_mjump mname interface in
