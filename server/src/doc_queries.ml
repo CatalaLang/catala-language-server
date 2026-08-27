@@ -34,7 +34,7 @@ let all_symbols_as_warning (doc_id : Doc_id.t) processing_result =
     match processing_result with
     | Skipped | Faulty _ -> []
     | Partial (_, { jump_table = (lazy { pos_map; lookup_table }); _ })
-    | Valid { jump_table = (lazy { pos_map; lookup_table }); _ } ->
+    | Valid (_, { jump_table = (lazy { pos_map; lookup_table }); _ }) ->
       (* Displays the full position map in logs *)
       (* Log.info (fun m -> m "%a@." Jump_table.PMap.format pos_map); *)
       (* Generates warning diagnostic for each symbol *)

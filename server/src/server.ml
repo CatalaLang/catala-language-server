@@ -215,16 +215,21 @@ let unlocked_process_document
         false, { document with last_valid_result = Some result }, diags
       else false, document, diags
     end
-    | Valid result ->
+    | Valid (diags, result) ->
       let last_saved_intf =
         if document.buffer_state = Saved then Some result.sig_hash
         else document.last_saved_intf
       in
+      let diags =
+        if Doc_id.Map.is_empty diags then
+          (* We need to put an empty singleton in diags, otherwise the
+             underlying mechanism doesn't update the previous error... *)
+          Doc_id.Map.singleton document.document_id Range.Map.empty
+        else diags
+      in
       ( true,
         { document with last_valid_result = Some result; last_saved_intf },
-        (* We need to put an empty singleton in diags, otherwise the underlying
-           mechanism doesn't update the previous error... *)
-        Doc_id.Map.singleton document.document_id Range.Map.empty )
+        diags )
   in
   (* (\* Uncomment to display all symbols as warnings *\) *)
   (* let diags = *)
@@ -849,7 +854,7 @@ class catala_lsp_server =
                     in
                     match validation_result with
                     | Skipped | Faulty _ | Partial _ -> Lwt.return_none
-                    | Valid r -> Lwt.return_some r.prg)
+                    | Valid (_, r) -> Lwt.return_some r.prg)
                 in
                 list_entrypoints ~get_prog project params)
               all_projects

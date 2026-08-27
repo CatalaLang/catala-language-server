@@ -384,7 +384,7 @@ let process
     ?resolve_included_file doc_id options project
   @@ fun ({ prg; _ } as valid_result) ->
   let handle = function
-    | Ok () -> Valid valid_result
+    | Ok () -> Valid (lsp_errors_to_diag doc_id (get_errors ()), valid_result)
     | Error _errs ->
       Partial (lsp_errors_to_diag doc_id (get_errors ()), valid_result)
   in

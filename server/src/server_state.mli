@@ -30,8 +30,12 @@ type valid_result = {
 type processing_result =
   | Skipped
   | Faulty of diagnostics
+      (** The document is invalid: non-recoverable errors *)
   | Partial of diagnostics * valid_result
-  | Valid of valid_result
+      (** The document is partially invalid: the compiler was able to progress
+          but the document is still invalid *)
+  | Valid of diagnostics (* warnings only *) * valid_result
+      (** The document is valid: there can be potential warnings *)
 
 type buffer_state = Saved | Modified of { contents : string }
 

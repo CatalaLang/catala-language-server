@@ -32,7 +32,7 @@ type processing_result =
   | Skipped
   | Faulty of diagnostics
   | Partial of diagnostics * valid_result
-  | Valid of valid_result
+  | Valid of diagnostics (* warnings only *) * valid_result
 
 type buffer_state = Saved | Modified of { contents : string }
 
