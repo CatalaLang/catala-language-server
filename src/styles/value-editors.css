@@ -116,6 +116,108 @@
   opacity: 0.7;
 }
 
+/* Bool toggle switch (styled native checkbox) */
+.bool-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing8);
+  padding: var(--spacing8) var(--spacing16);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--control-text);
+  user-select: none;
+}
+
+.bool-toggle input[type='checkbox'] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* The track: pill shape rendered via ::before (background) and ::after (thumb) */
+.bool-toggle__track {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  border: 1.5px solid var(--stormgray300);
+  background-color: var(--stormgray100);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.bool-toggle__track::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  top: 3px;
+  left: 2px;
+  background-color: var(--stormgray400);
+  transition:
+    transform 0.15s,
+    background-color 0.15s;
+}
+
+/* True: accent track, thumb slides right */
+.bool-toggle input[type='checkbox']:checked ~ .bool-toggle__track {
+  background-color: var(--caribbean-green-600);
+  border-color: var(--caribbean-green-600);
+}
+.bool-toggle input[type='checkbox']:checked ~ .bool-toggle__track::after {
+  background-color: var(--stormgray00);
+  transform: translateX(16px);
+}
+
+/* Unset: dashed border + reduced opacity — signals "not yet filled in" */
+.bool-toggle--unset {
+  opacity: 0.8;
+}
+.bool-toggle--unset .bool-toggle__track {
+  border-style: dashed;
+  border-color: var(--stormgray300);
+  background-color: transparent;
+}
+.bool-toggle--unset .bool-toggle__track::after {
+  background-color: var(--stormgray300);
+}
+
+/* Disabled */
+.bool-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Strip the inherited input-field background — the pill is its own affordance */
+.bool-editor-wrapper,
+.vscode-dark .bool-editor-wrapper,
+.vscode-light .bool-editor-wrapper {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+/* Dark mode overrides */
+.vscode-dark .bool-toggle__track {
+  border-color: var(--stormgray700);
+  background-color: var(--stormgray900);
+}
+.vscode-dark .bool-toggle__track::after {
+  background-color: var(--stormgray600);
+}
+.vscode-dark .bool-toggle--unset .bool-toggle__track {
+  border-color: var(--stormgray700);
+  background-color: transparent;
+}
+.vscode-dark .bool-toggle--unset .bool-toggle__track::after {
+  background-color: var(--stormgray700);
+}
+
 /* Date inputs */
 .value-editor input[type='date'] {
   width: 100%;

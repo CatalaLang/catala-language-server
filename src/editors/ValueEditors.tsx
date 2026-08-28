@@ -552,21 +552,15 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
   const runtimeValue = props.valueDef?.value;
   const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const vProps = useValidationHint(isUnset ? 'unset' : 'valid');
-  const selectValue: 'unset' | 'true' | 'false' =
-    runtimeValue?.value.kind === 'Bool'
-      ? runtimeValue.value.value
-        ? 'true'
-        : 'false'
-      : 'unset';
+  const boolValue =
+    runtimeValue?.value.kind === 'Bool' ? runtimeValue.value.value : false;
 
-  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>): void => {
-    if (event.target.value === 'unset') {
-      props.onValueChange(makeUnset(runtimeValue));
-      return;
-    }
-    const boolValue = event.target.value === 'true';
-    const newValueRaw: RuntimeValueRaw = { kind: 'Bool', value: boolValue };
-    props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    // First interaction promotes unset → true; subsequent clicks toggle normally.
+    const newVal = isUnset ? true : event.target.checked;
+    props.onValueChange(
+      createRuntimeValue({ kind: 'Bool', value: newVal }, runtimeValue)
+    );
   };
 
   return (
@@ -574,23 +568,15 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
       className={`value-editor bool-editor-wrapper ${vProps.className}`}
       title={vProps.title}
     >
-      <select
-        value={selectValue}
-        onChange={handleChange}
-        disabled={props.editable === false}
-      >
-        <option value="unset">
-          {/* We leave the Unset option empty so as to avoid giving
-          the user the impression that it is a tri-state value (i.e. signal
-          that Unset is unexpected when running a test) */}
-        </option>
-        <option value="false">
-          <FormattedMessage id="false" />
-        </option>
-        <option value="true">
-          <FormattedMessage id="true" />
-        </option>
-      </select>
+      <label className="bool-toggle">
+        <input
+          type="checkbox"
+          checked={boolValue}
+          onChange={handleChange}
+          disabled={props.editable === false}
+        />
+        <span className="bool-toggle__track" />
+      </label>
     </div>
   );
 }

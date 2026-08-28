@@ -40,11 +40,11 @@ describe('ValueEditors - Unset handling', () => {
     expect(container.querySelector('.value-editor.unset')).toBeInTheDocument();
   });
 
-  it('BoolEditor shows unset underline initially (empty option is selected)', () => {
+  it('BoolEditor shows unset underline initially (checkbox is unchecked)', () => {
     const { container } = renderEditor({ kind: 'TBool' });
     expect(container.querySelector('.value-editor.unset')).toBeInTheDocument();
-    const select = screen.getByRole('combobox') as HTMLSelectElement;
-    expect(select.value).toBe('unset');
+    const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
   });
 
   it('ArrayEditor shows no unset indicator initially (empty array is valid)', () => {
