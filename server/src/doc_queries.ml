@@ -222,7 +222,7 @@ let get_hover_type ?(markdown = false) f p =
       let show_def_tree_s = function
         | `En -> "Show definition tree"
         | `Fr -> "Afficher l'arbre de définitions"
-        | `Pl -> assert false
+        | `Pl -> "Pokaż drzewo definicji"
       in
       Some
         (Printf.sprintf "\n\n[%s](command:catala.showExceptions?%s)"
