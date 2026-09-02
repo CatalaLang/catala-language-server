@@ -1,0 +1,12 @@
+> Module Opt_fr
+
+```catala-metadata
+déclaration champ d'application Prime:
+  entrée bonus contenu optionnel de argent
+  résultat total contenu argent
+```
+
+```catala
+champ d'application Prime:
+  définition total égal à 0,00 €
+```

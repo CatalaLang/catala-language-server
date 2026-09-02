@@ -154,7 +154,79 @@ type parse_results = [
   | ParseError of string (* compiler signals a parsing error *)
   | EmptyTestListMismatch (* buffer is non-empty, but empty test list returned *)
   | Results of test_list (* may be empty, that's fine as long as the buffer is empty too *)
+  (* The test no longer fits its scope; its values were recovered from the
+     file's own literals. *)
+  | BrokenTest of recovery
 ]
+
+type recovery = {
+  (* As last saved on disk, recovered by `partial-read`. Read-only. *)
+  original: test_list;
+  (* The same tests against the live signature, pre-filled where a recovered
+     value still fits. Editable. *)
+  rebuilt: test_list;
+  (* What the recovery could not do. Structured, so the editor renders it in
+     the reader's language. *)
+  notes: broken_note list;
+  (* The file the rebuild is saved to. *)
+  working_copy: string;
+  (* What was carried across, per field, and under which rule. *)
+  carry_outcomes: carry_record list;
+}
+
+type carry_record = {
+  testing_scope: string;
+  field: string;
+  outcome: carry_outcome;
+}
+
+(* What happened to one field. The first three carried: [Fits] claims only
+   what an ordinary read checks -- the value is acceptable at the live type --
+   not that the type is unchanged. The rest did not carry, and say why, so an
+   empty field that needs judgement is told from one that had nothing to
+   bring. *)
+type carry_outcome = [
+  | Fits
+  | Wrap
+  | Unwrap
+  | WasUnset (* the old test never set this field *)
+  | WasAbsentNowRequired (* the old value was Absent: no payload to take *)
+  | TypeChanged of string (* old -> new, as typ_name spells them: "integer -> money" *)
+] <ocaml repr="classic">
+
+(* Why the rebuild could not proceed. *)
+type broken_note = [
+  | ModuleNotFound of module_not_found
+  | ModuleWontCompile of module_error (* fixed in the module, not here *)
+  | ScopeNotFound of scope_not_found (* the renamed-scope case; the tester picks *)
+  | Other of module_error (* builds, has the scope; generate_test raised anyway *)
+] <ocaml repr="classic">
+
+(* The module is gone: the candidates are scopes anywhere in the project. *)
+type module_not_found = {
+  module_name: string;
+  candidates: scope_candidate list;
+}
+
+type module_error = {
+  name: string; (* module, or module.scope *)
+  error: string; (* the compiler's own message *)
+}
+
+type scope_not_found = {
+  module_name: string;
+  scope_name: string;
+  (* Every scope the module declares, best guess first. Ordered, never chosen. *)
+  candidates: scope_candidate list;
+}
+
+type scope_candidate = {
+  module_name: string;
+  name: string;
+  (* Of the recovered test's field names, how many this scope declares. *)
+  shared: int;
+  out_of: int;
+}
 
 type test_run_output = { (* do we need that type at all when the difference with `test_run` is minimal? *)
   test_outputs: test_outputs;
@@ -197,6 +269,9 @@ type confirm_action = [
   | DeleteAssertion
   | RunTestWithUnsetValues
   | ResetContextVar
+  (* replacing the original would drop the unset fields *)
+  | ReplaceOriginalWithUnsetValues
+  | DiscardWorkingCopy
 ]
 
 type confirm_request = {
@@ -217,6 +292,9 @@ type up_message = [
   | TestGenerateRequest of test_generate_request
   | OpenTestScopePicker
   | ConfirmRequest of confirm_request
+  | RetargetRequest of string (* rebuild against this scope: "Scope" or "Module.Scope" *)
+  | ReplaceOriginalRequest (* write the working copy over the original *)
+  | DiscardWorkingCopyRequest (* delete the working copy, start over *)
 ]
 
 type down_message = [

@@ -1,0 +1,12 @@
+> Module Spans
+
+```catala-metadata
+declaration scope Span:
+  input len content duration
+  output ok content boolean
+```
+
+```catala
+scope Span:
+  definition ok equals true
+```
