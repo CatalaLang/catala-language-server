@@ -28,6 +28,28 @@
       <array>
         <dict>
           <key>match</key>
+          <string>(\s*)(\#\[[^"\]]*)("[^"]*")?([^\]]*\])</string>
+          <key>captures</key>
+          <dict>
+            <key>2</key>
+            <dict>
+              <key>name</key>
+              <string>entity.other.attribute-name.catala_code_en</string>
+            </dict>
+            <key>3</key>
+            <dict>
+              <key>name</key>
+              <string>string.quoted.double.catala_code_en</string>
+            </dict>
+            <key>4</key>
+            <dict>
+              <key>name</key>
+              <string>entity.other.attribute-name.catala_code_en</string>
+            </dict>
+          </dict>
+        </dict>
+        <dict>
+          <key>match</key>
           <string>(\s*\#.*$)</string>
           <key>name</key>
           <string>comment.line.catala_code_en</string>
