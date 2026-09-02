@@ -194,6 +194,13 @@ function parseResultsToUiState(tests: ParseResults): UIState {
       return { state: 'error', message: tests.value };
     case 'EmptyTestListMismatch':
       throw new Error('Empty test list in a scope input editor');
+    case 'BrokenTest':
+      // A scope input editor edits ONE live scope, so there is no broken
+      // reading of it: recovery belongs to the test file editor.
+      return {
+        state: 'error',
+        message: 'This scope no longer matches its test',
+      };
     case 'Results':
       return { state: 'success', test: tests.value[0] };
     default:

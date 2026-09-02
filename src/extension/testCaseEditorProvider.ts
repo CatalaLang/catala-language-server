@@ -19,6 +19,8 @@ import {
   parseTestFile,
   generate,
   getAvailableScopes,
+  runRebuiltTest,
+  retargetBrokenTest,
 } from '../test-case-editor/testCaseCompilerInterop';
 import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
@@ -50,11 +52,29 @@ export class TestCaseEditorProvider
     this.testQueue = new PQueue({ concurrency: 1 });
   }
 
-  saveCustomDocument(
+  async saveCustomDocument(
     document: CatalaTestCaseDocument,
     cancellation: vscode.CancellationToken
-  ): Thenable<void> {
-    return document.save(cancellation);
+  ): Promise<void> {
+    await document.save(cancellation);
+    // Say where a broken test's save went, and when nothing was written.
+    if (document.parseResults.kind !== 'BrokenTest') return;
+    const rebuilt = document.rebuilt;
+    if (rebuilt === undefined || rebuilt.length === 0) {
+      vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'Nothing to save yet: this test has no rebuild to write. Your original values, shown on the left, are untouched.'
+        )
+      );
+      return;
+    }
+    vscode.window.setStatusBarMessage(
+      vscode.l10n.t(
+        'Saved the working copy to {0}. The original is untouched.',
+        document.parseResults.value.working_copy
+      ),
+      8000
+    );
   }
 
   saveCustomDocumentAs(
@@ -160,6 +180,11 @@ export class TestCaseEditorProvider
     function applyGuiEdit(
       typed_msg: Extract<UpMessage, { kind: 'GuiEdit' }>
     ): void {
+      // An edit to a broken test is an edit to its rebuild.
+      if (document.parseResults.kind === 'BrokenTest') {
+        document.setRebuilt(typed_msg.value[0], typed_msg.value[1]);
+        return;
+      }
       document.scheduleChange(typed_msg.value[0], typed_msg.value[1]);
     }
 
@@ -182,6 +207,27 @@ export class TestCaseEditorProvider
           break;
         }
         case 'TestRunRequest': {
+          // A broken test runs its rebuild from memory; no save first.
+          if (document.parseResults.kind === 'BrokenTest') {
+            const rebuilt = document.rebuilt;
+            postMessageToWebView({
+              kind: 'TestRunResults',
+              value: {
+                scope: typed_msg.value.scope,
+                reset_outputs: typed_msg.value.reset_outputs,
+                results:
+                  rebuilt === undefined || rebuilt.length === 0
+                    ? { kind: 'Error', value: 'Nothing to run yet.' }
+                    : runRebuiltTest(
+                        rebuilt,
+                        typed_msg.value.scope,
+                        document.language,
+                        document.uri.fsPath
+                      ),
+              },
+            });
+            break;
+          }
           // Always save before running the test (no prompt)
           try {
             await saveSpecificDocument(document.uri);
@@ -288,6 +334,50 @@ export class TestCaseEditorProvider
           } else {
             vscode.window.showErrorMessage(
               `Failed to generate test: ${results.value}`
+            );
+          }
+          break;
+        }
+        case 'RetargetRequest': {
+          const results = retargetBrokenTest(
+            document.uri.fsPath,
+            typed_msg.value
+          );
+          if (typeof results === 'string') {
+            vscode.window.showErrorMessage(results);
+            break;
+          }
+          document.retarget(results);
+          break;
+        }
+        case 'ReplaceOriginalRequest': {
+          try {
+            await document.replaceOriginal();
+            // Only clears the dirty marker; the file is already written.
+            await saveSpecificDocument(document.uri);
+          } catch (err) {
+            vscode.window.showErrorMessage(
+              vscode.l10n.t(
+                'Could not replace the original: {0}',
+                err instanceof Error ? err.message : String(err)
+              )
+            );
+          }
+          break;
+        }
+        case 'DiscardWorkingCopyRequest': {
+          try {
+            await document.discardWorkingCopy();
+            // Only clears the dirty marker; the reparse already happened.
+            await vscode.commands.executeCommand(
+              'workbench.action.files.revert'
+            );
+          } catch (err) {
+            vscode.window.showErrorMessage(
+              vscode.l10n.t(
+                'Could not discard the working copy: {0}',
+                err instanceof Error ? err.message : String(err)
+              )
             );
           }
           break;
@@ -401,9 +491,14 @@ export class TestCaseEditorProvider
           let prompt: string;
           let buttons: Array<{
             title: string;
-            action: 'Delete' | 'RunAnyway' | 'Reset';
+            action: 'Delete' | 'RunAnyway' | 'Reset' | 'Replace' | 'Discard';
           }>;
-          let successAction: 'Delete' | 'RunAnyway' | 'Reset';
+          let successAction:
+            | 'Delete'
+            | 'RunAnyway'
+            | 'Reset'
+            | 'Replace'
+            | 'Discard';
 
           switch (action.kind) {
             case 'DeleteArrayElement':
@@ -431,6 +526,24 @@ export class TestCaseEditorProvider
               );
               buttons = [{ title: vscode.l10n.t('Reset'), action: 'Reset' }];
               successAction = 'Reset';
+              break;
+            case 'ReplaceOriginalWithUnsetValues':
+              prompt = vscode.l10n.t(
+                'The working copy still has unset values. Replacing the original with it will drop those fields from the test. Replace anyway?'
+              );
+              buttons = [
+                { title: vscode.l10n.t('Replace anyway'), action: 'Replace' },
+              ];
+              successAction = 'Replace';
+              break;
+            case 'DiscardWorkingCopy':
+              prompt = vscode.l10n.t(
+                'Discard the working copy? The rebuild so far will be lost. The original is not affected.'
+              );
+              buttons = [
+                { title: vscode.l10n.t('Discard'), action: 'Discard' },
+              ];
+              successAction = 'Discard';
               break;
             default:
               assertUnreachable(action as never);
