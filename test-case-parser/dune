@@ -6,7 +6,8 @@
    catala.clerk_lib
    catala_types_atd
    catala.clerk_backend
-   catala.clerk_utils)
+   catala.clerk_utils
+   re)
  (flags
   (:standard -open Catala_types_atd)))
 

@@ -1,0 +1,16 @@
+> Module Items
+
+```catala-metadata
+declaration structure Line:
+  data amount content money
+  data taxed content boolean
+
+declaration scope Basket:
+  input lines content list of Line
+  output total content money
+```
+
+```catala
+scope Basket:
+  definition total equals $0.00
+```

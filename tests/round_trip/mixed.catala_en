@@ -1,0 +1,31 @@
+> Using Optionals
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "GUI owned"]
+declaration scope Gui_test:
+  output calc scope Optionals.Grant
+```
+
+```catala
+scope Gui_test:
+  definition calc.base equals $100.00
+  definition calc.bonus equals Absent
+  assertion (calc.total = $100.00)
+```
+
+```catala-metadata
+#[test]
+declaration scope Hand_written:
+  output calc scope Optionals.Grant
+```
+
+```catala
+scope Hand_written:
+  definition calc.base equals $250.00
+  definition calc.bonus equals Present content $10.00
+  assertion (calc.total > $0.00)
+  assertion (calc.total = $250.00)
+```

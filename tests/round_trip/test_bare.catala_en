@@ -1,0 +1,16 @@
+> Using Bare
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Bare constructor"]
+declaration scope Paint_bare:
+  output calc scope Bare.Paint
+```
+
+```catala
+scope Paint_bare:
+  definition calc.shade equals Present content Green
+  assertion (calc.done = true)
+```

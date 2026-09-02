@@ -13,6 +13,16 @@ let buffer_path =
   in
   arg
 
+let retarget =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["s"; "scope"] ~docv:"SCOPE"
+        ~doc:
+          "Rebuild against this scope rather than the one the test declares: \
+           $(b,SCOPE) in the tested module, or $(b,MODULE.SCOPE) anywhere in \
+           the project. For a test whose scope, or module, was renamed.")
+
 let with_defaults =
   Arg.(
     value
@@ -54,6 +64,29 @@ let cmd_read =
       $ Cli.Flags.Global.options
       $ buffer_path)
 
+let cmd_rebuild =
+  Cmd.v
+    Cmd.(
+      info "rebuild"
+        ~doc:
+          "For a test that no longer fits the scope it targets: print what was \
+           authored, the same tests against the live signature with whatever \
+           could be carried across, and what could not be done — as JSON. This \
+           is what the editor's recovery view renders.")
+    Term.(const Lib.rebuild_broken_test $ Cli.Flags.Global.options $ retarget)
+
+let cmd_partial_read =
+  Cmd.v
+    Cmd.(
+      info "partial-read"
+        ~doc:
+          "Read the tests of a file from its surface syntax alone, without \
+           typechecking: types are inferred from each literal, so the result \
+           is what the file itself proves and no more. This is the reader \
+           that still works when the scope under test has changed underneath \
+           the file, and it must agree with $(b,read) wherever both succeed.")
+    Term.(const Lib.read_partial_test $ Cli.Flags.Global.options)
+
 let cmd_run =
   Cmd.v
     Cmd.(
@@ -61,14 +94,17 @@ let cmd_run =
         ~doc:
           "Read and runs the specified test from the given catala test file, \
            and prints the actual results as JSON to stdout (in the same format \
-           as $(b,read)). Exits with 1 in case the test results differ from \
-           what was expected, 10 if the test could not be run.")
+           as $(b,read)). The exit code says whether the test could be RUN, \
+           not whether it passed: it is 0 even when assertions fail -- the \
+           result's $(b,assert_failures) and $(b,diffs) say so -- and non-zero \
+           only when the test could not be run at all.")
     Term.(
       const Lib.run_test_cmd
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
       $ Cli.Flags.ex_scope
-      $ Cli.Flags.scope_input)
+      $ Cli.Flags.scope_input
+      $ buffer_path)
 
 let cmd_write =
   Cmd.v
@@ -109,6 +145,8 @@ let register () =
     [
       cmd_generate;
       cmd_read;
+      cmd_partial_read;
+      cmd_rebuild;
       cmd_run;
       cmd_write;
       cmd_list_scopes;
@@ -145,13 +183,13 @@ let register () =
   match value with
   | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestTitle s)
   | _ -> failwith "unexpected test title");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-     ~contexts:(function
-     | Desugared.Name_resolution.Expression _ -> true
-     | _ -> false)
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
+    ~contexts:(function
+    | Desugared.Name_resolution.Expression _ -> true
+    | _ -> false)
   @@ fun ~pos:_ value ->
   match value with
   | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.ArrayItemLabel s)
-  | _ -> failwith "unexpected array item label")
+  | _ -> failwith "unexpected array item label"
 
 let () = register ()

@@ -1,0 +1,7 @@
+(test
+ (name carry_test)
+ (package catala-lsp)
+ (libraries test_case_parser_lib catala_types_atd tezt)
+ (modules carry_test)
+ (flags
+  (:standard -open Catala_types_atd)))

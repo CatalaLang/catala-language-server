@@ -1,0 +1,20 @@
+> Using Details
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Fields out of declaration order"]
+declaration scope Record_unordered:
+  output calc scope Details.Record
+```
+
+```catala
+scope Record_unordered:
+  definition calc.detail equals Details.Detail {
+    -- stamp: |2026-01-01|
+    -- rank: 3
+    -- fee: $12.00
+  }
+  assertion (calc.total = $12.00)
+```
