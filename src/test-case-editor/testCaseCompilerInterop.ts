@@ -5,6 +5,7 @@ import type {
   TestInputs,
 } from '../generated/catala_types';
 import {
+  readRecovery,
   readScopeDefList,
   readTestList,
   readTestRun,
@@ -55,6 +56,112 @@ function execBinary(
   }
 }
 
+/**
+ * Recover a test that no longer fits its scope. All the reasoning is in OCaml;
+ * this only asks and parses. Returns the rebuild's own refusal as a parse
+ * error, or null when there is nothing to show.
+ */
+function recoverBrokenTest(
+  bufferPath: string,
+  scope?: string
+): ParseResults | null {
+  const cwd = getCwd(bufferPath);
+  const result = execBinary(
+    catalaPath,
+    ['testcase', 'rebuild', ...(scope ? ['--scope', scope] : []), bufferPath],
+    { ...(cwd && { cwd }) }
+  );
+  if (!result.ok) {
+    logger.log(`rebuild could not recover: ${result.stderr}`);
+    // The refusal (e.g. mixed ownership) is more specific than the compiler's
+    // first error.
+    return result.stderr.trim() === ''
+      ? null
+      : { kind: 'ParseError', value: result.stderr };
+  }
+  try {
+    const view = readRecovery(JSON.parse(result.output));
+    if (view.original.length === 0) return null;
+    return { kind: 'BrokenTest', value: view };
+  } catch (error) {
+    logger.log(`rebuild returned unreadable JSON: ${String(error)}`);
+    return null;
+  }
+}
+
+/** Rebuild against a scope the tester chose; the refusal's text on failure. */
+export function retargetBrokenTest(
+  bufferPath: string,
+  scope: string
+): Extract<ParseResults, { kind: 'BrokenTest' }> | string {
+  const results = recoverBrokenTest(bufferPath, scope);
+  if (results === null) return `Could not rebuild against ${scope}.`;
+  if (results.kind !== 'BrokenTest') {
+    return results.kind === 'ParseError'
+      ? results.value
+      : `Could not rebuild against ${scope}.`;
+  }
+  return results;
+}
+
+/** A run that did not happen: raised to the window like the ordinary path. */
+function runFailed(message: string): TestRunResults {
+  logger.log(`rebuilt test could not be run: ${message}`);
+  window.showErrorMessage(message);
+  return { kind: 'Error', value: message };
+}
+
+/**
+ * Run a rebuilt test from stdin: the file on disk is the broken original, and
+ * running must not imply saving the working copy.
+ */
+export function runRebuiltTest(
+  tests: TestList,
+  testingScope: string,
+  lang: string,
+  bufferPath: string
+): TestRunResults {
+  const cwd = getCwd(bufferPath);
+  // A failure to run, not an exception: thrown, it escapes the message handler.
+  let source: string;
+  try {
+    source = atdToCatala(tests, lang);
+  } catch (error) {
+    return runFailed(String(error));
+  }
+  const result = execBinary(
+    catalaPath,
+    // --buffer-path locates the project for a test fed on stdin.
+    [
+      'testcase',
+      'run',
+      '-l',
+      lang,
+      '-s',
+      testingScope,
+      '--buffer-path',
+      bufferPath,
+      '-',
+    ],
+    { input: source, ...(cwd && { cwd }) }
+  );
+  // Only empty output means the test could not run.
+  const output = result.ok ? result.output : '';
+  if (output.trim() === '') {
+    return runFailed(result.ok ? 'The test could not be run.' : result.stderr);
+  }
+  try {
+    const {
+      test: { test_outputs },
+      assert_failures,
+      diffs,
+    } = readTestRun(JSON.parse(output));
+    return { kind: 'Ok', value: { test_outputs, assert_failures, diffs } };
+  } catch (error) {
+    return runFailed(String(error));
+  }
+}
+
 export function parseTestFile(
   content: string,
   lang: string,
@@ -66,7 +173,15 @@ export function parseTestFile(
     ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
     { input: content, ...(cwd && { cwd }) }
   );
-  if (!execResult.ok) return { kind: 'ParseError', value: execResult.stderr };
+  if (!execResult.ok) {
+    // Usually the scope moved underneath the test.
+    return (
+      recoverBrokenTest(bufferPath) ?? {
+        kind: 'ParseError',
+        value: execResult.stderr,
+      }
+    );
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(execResult.output);

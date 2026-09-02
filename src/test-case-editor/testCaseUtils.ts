@@ -1,4 +1,9 @@
-import type { Test, TestList, RuntimeValue } from '../generated/catala_types';
+import type {
+  ParseResults,
+  Test,
+  TestList,
+  RuntimeValue,
+} from '../generated/catala_types';
 import { isAtomicRaw } from '../diff/diff';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
@@ -82,4 +87,12 @@ export function renderAtomicValue(
     default:
       return 'Unknown value';
   }
+}
+
+/**
+ * The rebuild a recovery produced, if any: the right pane's state at open. The
+ * webview only posts subsequent edits.
+ */
+export function rebuiltFrom(results: ParseResults): TestList | undefined {
+  return results.kind === 'BrokenTest' ? results.value.rebuilt : undefined;
 }
