@@ -5,17 +5,20 @@ import {
   type Test,
   type TestList,
   type TestRunResults,
+  type Recovery,
   type PathSegment,
   type Diff,
   readDownMessage,
   writeUpMessage,
 } from '../generated/catala_types';
 import TestEditor from './TestEditor';
+import BrokenTestView from './BrokenTestView';
 import { assertUnreachable } from '../shared/util';
 import { pathEquals, isPathPrefix } from '../diff/highlight';
 import type { WebviewApi } from 'vscode-webview';
 import { setVsCodeApi } from '../shared/webviewApi';
-import { resolveConfirmResult } from '../messaging/confirm';
+import { confirm, resolveConfirmResult } from '../messaging/confirm';
+import { hasUnsetInTest } from '../editors/unsetValidation';
 
 // Note:
 //
@@ -39,6 +42,7 @@ type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
   | { state: 'emptyTestListMismatch' }
+  | { state: 'brokenTest'; view: Recovery }
   | { state: 'success'; tests: TestList };
 
 export type TestRunStatus = 'running' | 'success' | 'error' | 'cancelled';
@@ -93,9 +97,6 @@ export default function TestFileEditor({
         const newTestState = state.tests.filter(
           (test) => test.testing_scope !== testScope
         );
-        console.log('Deleting test:', testScope);
-        console.log('New test state:', newTestState);
-
         // optimistic update
         setState({ state: 'success', tests: newTestState });
 
@@ -255,6 +256,59 @@ export default function TestFileEditor({
     case 'emptyTestListMismatch': {
       return <EmptyTestListMismatchWarning vscode={vscode} />;
     }
+    case 'brokenTest': {
+      return (
+        <BrokenTestView
+          view={state.view}
+          onRebuildChange={(tests): void => {
+            vscode.postMessage(
+              writeUpMessage({ kind: 'GuiEdit', value: [tests, true] })
+            );
+          }}
+          runStates={testRunState}
+          onRetarget={(scope): void => {
+            vscode.postMessage(
+              writeUpMessage({ kind: 'RetargetRequest', value: scope })
+            );
+          }}
+          onReplace={async (rebuilt): Promise<void> => {
+            // Unset fields are dropped on the way out: ask.
+            if (
+              rebuilt.some((t) => hasUnsetInTest(t)) &&
+              !(await confirm('ReplaceOriginalWithUnsetValues'))
+            ) {
+              return;
+            }
+            vscode.postMessage(
+              writeUpMessage({ kind: 'ReplaceOriginalRequest' })
+            );
+          }}
+          onDiscard={async (): Promise<void> => {
+            if (!(await confirm('DiscardWorkingCopy'))) return;
+            vscode.postMessage(
+              writeUpMessage({ kind: 'DiscardWorkingCopyRequest' })
+            );
+          }}
+          onRun={(scope): void => {
+            setTestRunState((prev) => ({
+              ...prev,
+              [scope]: { status: 'running' },
+            }));
+            vscode.postMessage(
+              writeUpMessage({
+                kind: 'TestRunRequest',
+                value: {
+                  scope,
+                  reset_outputs: false,
+                  in_shell: false,
+                  debug: false,
+                },
+              })
+            );
+          }}
+        />
+      );
+    }
     case 'initializing':
       return (
         <strong>
@@ -361,6 +415,8 @@ function parseResultsToUiState(tests: ParseResults): UIState {
   switch (tests.kind) {
     case 'ParseError':
       return { state: 'error', message: tests.value };
+    case 'BrokenTest':
+      return { state: 'brokenTest', view: tests.value };
     case 'EmptyTestListMismatch':
       return { state: 'emptyTestListMismatch' };
     case 'Results':

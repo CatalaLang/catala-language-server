@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, type ReactNode, useState } from 'react';
 import { useIntl } from 'react-intl';
 import type { TestInputs, TestIo, ScopeDef } from '../generated/catala_types';
 import ValueEditor, {
@@ -89,6 +89,8 @@ type Props = {
   test_inputs: TestInputs;
   tested_scope: ScopeDef;
   onTestInputsChange(newValue: TestInputs): void;
+  /** Rendered next to an input's name (the recovery view's carry marks). */
+  labelExtra?: (inputName: string) => ReactNode;
 };
 
 export default function TestInputsEditor(props: Props): ReactElement {
@@ -105,19 +107,24 @@ export default function TestInputsEditor(props: Props): ReactElement {
         );
       }
 
-      const label = isContext ? (
-        <span className="context-var-label">
-          <span
-            className="context-var-badge"
-            title={intl.formatMessage({ id: 'testEditor.contextVarTitle' })}
-            aria-hidden="true"
-          >
-            C
-          </span>
-          {inputName}
-        </span>
-      ) : (
-        inputName
+      const label = (
+        <>
+          {isContext ? (
+            <span className="context-var-label">
+              <span
+                className="context-var-badge"
+                title={intl.formatMessage({ id: 'testEditor.contextVarTitle' })}
+                aria-hidden="true"
+              >
+                C
+              </span>
+              {inputName}
+            </span>
+          ) : (
+            inputName
+          )}
+          {props.labelExtra?.(inputName)}
+        </>
       );
 
       const rawValue = testIo.value?.value.value;

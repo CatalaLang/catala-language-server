@@ -321,3 +321,293 @@
 .context-var-reset-btn:hover {
   opacity: 1;
 }
+
+/* Broken test: authored values beside a rebuild -------------------------------
+   The left pane is history and must read as recessed and inert; the right pane
+   is an ordinary form. Both use the standard value editors, so only the frame
+   is styled here. */
+.broken-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing16);
+  padding: var(--spacing16);
+}
+.broken-banner {
+  display: flex;
+  gap: var(--spacing12);
+  align-items: flex-start;
+  padding: var(--spacing12);
+  border-radius: var(--spacing4);
+  border-left: 3px solid var(--error);
+}
+.broken-banner p {
+  display: block;
+  margin-top: var(--spacing4);
+  font-size: 12px;
+  max-width: 80ch;
+}
+.broken-notes {
+  margin: 0;
+  padding: var(--spacing8) var(--spacing12) var(--spacing8) var(--spacing32);
+  border-radius: var(--spacing4);
+  font-size: 12px;
+}
+.broken-test {
+  padding: var(--spacing12);
+  border-radius: 6px;
+}
+.broken-test-title {
+  margin: 0 0 var(--spacing12) 0;
+  font-size: var(--section-header-font-size);
+  font-weight: var(--section-header-font-weight);
+}
+.broken-panes {
+  display: grid;
+  /* The divider writes --broken-split; minmax(0, ...) keeps a long field name in
+     either pane from pushing the column wider than the tester asked for. */
+  grid-template-columns: minmax(0, var(--broken-split, 1fr)) auto minmax(0, 1fr);
+  gap: var(--spacing16);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  /* Stacked: there is no left and right to divide, so the inline width is
+     ignored and the handle steps out of the way. */
+  .broken-panes {
+    grid-template-columns: 1fr;
+  }
+  .broken-split {
+    display: none;
+  }
+}
+.broken-split {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: var(--spacing12);
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  border-radius: var(--spacing4);
+}
+.broken-split .codicon {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.broken-split:hover,
+.broken-split:focus-visible {
+  background: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
+}
+.broken-split:hover .codicon,
+.broken-split:focus-visible .codicon {
+  opacity: 0.9;
+}
+.broken-split:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+.broken-pane {
+  min-width: 0;
+  padding: var(--spacing12);
+  border-radius: var(--spacing4);
+}
+.broken-pane h4 {
+  margin: 0 0 var(--spacing8) 0;
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  color: var(--field-label-color);
+}
+.broken-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing4);
+  margin-bottom: var(--spacing8);
+}
+/* The compiler's own text, kept verbatim: it carries a file and a line, which
+   is what the tester needs, and reflowing it would break the caret line. */
+.broken-note-error {
+  margin: var(--spacing4) 0 0;
+  padding: var(--spacing8);
+  overflow-x: auto;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  white-space: pre;
+  border-radius: var(--spacing4);
+  background: var(--vscode-textCodeBlock-background);
+}
+.broken-candidates {
+  margin-top: var(--spacing8);
+}
+.broken-candidates ul {
+  margin: var(--spacing4) 0 0;
+  padding-left: var(--spacing16);
+}
+.broken-candidate {
+  padding: 2px var(--spacing8);
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: var(--spacing4);
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  cursor: pointer;
+}
+.broken-candidate:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+.broken-exit {
+  display: flex;
+  gap: var(--spacing8);
+  margin-top: var(--spacing8);
+}
+.broken-candidate-row {
+  display: flex;
+  gap: var(--spacing8);
+  align-items: center;
+  margin-top: var(--spacing8);
+}
+.broken-candidate-select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px var(--spacing4);
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  border-radius: var(--spacing4);
+}
+.broken-candidate-shared,
+.broken-candidates-hint {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.broken-candidate-shared {
+  margin-top: 2px;
+}
+.broken-empty {
+  display: block;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.vscode-dark .broken-banner,
+.vscode-dark .broken-test,
+.vscode-dark .broken-notes {
+  background: var(--level-2-background-dark);
+}
+.vscode-dark .broken-pane-authored {
+  background: var(--stormgray950);
+}
+.vscode-dark .broken-pane-rebuilt {
+  background: var(--level-3-background-dark);
+}
+.vscode-dark .broken-empty,
+.vscode-dark .broken-notes {
+  color: var(--stormgray500);
+}
+.vscode-light .broken-banner,
+.vscode-light .broken-test,
+.vscode-light .broken-notes {
+  background: var(--level-2-background);
+}
+.vscode-light .broken-pane-authored {
+  background: var(--stormgray100);
+}
+.vscode-light .broken-pane-rebuilt {
+  background: var(--level-3-background);
+}
+.vscode-light .broken-empty,
+.vscode-light .broken-notes {
+  color: var(--stormgray800);
+}
+
+.broken-test-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing12);
+  align-items: baseline;
+  margin: calc(-1 * var(--spacing8)) 0 var(--spacing12) 0;
+  font-size: 11px;
+}
+.broken-test-scope {
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+.vscode-dark .broken-test-meta {
+  color: var(--stormgray500);
+}
+.vscode-light .broken-test-meta {
+  color: var(--stormgray800);
+}
+
+.broken-subhead {
+  margin: var(--spacing16) 0 var(--spacing8) 0;
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  color: var(--field-label-color);
+}
+/* The right-hand pane is a draft until the tester replaces the original, and
+   should never be mistaken for the test itself. */
+.broken-draft-tag {
+  margin-left: var(--spacing8);
+  padding: 0 var(--spacing8);
+  border-radius: var(--spacing12);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+.broken-arrangement {
+  display: block;
+  margin-top: var(--spacing4);
+  font-size: 12px;
+}
+.broken-pane-rebuilt {
+  border: 1px dashed var(--control-border, currentColor);
+}
+.vscode-dark .broken-draft-tag {
+  background: var(--stormgray800);
+  color: var(--stormgray300);
+}
+.vscode-dark .broken-arrangement {
+  color: var(--stormgray500);
+}
+.vscode-light .broken-draft-tag {
+  background: var(--stormgray200);
+  color: var(--stormgray900);
+}
+.vscode-light .broken-arrangement {
+  color: var(--stormgray800);
+}
+
+.carry-mark {
+  margin-left: var(--spacing8);
+  font-size: 10px;
+  font-weight: 400;
+  font-style: italic;
+}
+.broken-run {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing12);
+  margin-top: var(--spacing16);
+  flex-wrap: wrap;
+}
+.run-control {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing8);
+}
+
+.vscode-dark .broken-pane-authored {
+  opacity: 0.85;
+}
+.vscode-dark .carry-done {
+  color: var(--success);
+}
+.vscode-dark .carry-open {
+  color: var(--stormgray500);
+}
+.vscode-light .broken-pane-authored {
+  opacity: 0.9;
+}
+.vscode-light .carry-done {
+  color: var(--success);
+}
+.vscode-light .carry-open {
+  color: var(--stormgray800);
+}

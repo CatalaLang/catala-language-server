@@ -1,4 +1,4 @@
-import { type ReactElement } from 'react';
+import { type ReactElement, type ReactNode } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { confirm } from '../messaging/confirm';
 import type {
@@ -16,6 +16,8 @@ type Props = {
   diffs?: Diff[];
   onDiffResolved?: (path: PathSegment[]) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
+  /** Rendered next to an output's name (the recovery view's carry marks). */
+  labelExtra?: (outputName: string) => ReactNode;
 };
 
 /* An editor for test outputs. Outputs are named and typed, and
@@ -41,6 +43,7 @@ export default function TestOutputsEditor({
   diffs = [],
   onDiffResolved,
   onInvalidateDiffs,
+  labelExtra,
 }: Props): ReactElement {
   const intl = useIntl();
   const { test_outputs, tested_scope } = test;
@@ -87,6 +90,7 @@ export default function TestOutputsEditor({
             <div key={outputName} className="test-output-row">
               <div className="test-output-label">
                 <label>{outputName}</label>
+                {labelExtra?.(outputName)}
                 {outputData?.value && (
                   <button
                     className="assertion-delete-btn"
