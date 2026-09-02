@@ -611,3 +611,65 @@
 .vscode-light .carry-open {
   color: var(--stormgray800);
 }
+
+/* The authored pane as an archived record. A muted hatched band down the
+   pane's left edge -- the visual language of "no entry / disabled" -- with
+   the lock seated inside it. Inside the pane, value editors lose their form
+   chrome so the values read as printed text: full contrast, nothing that
+   invites typing. */
+.broken-pane-authored {
+  position: relative;
+  cursor: default;
+  padding-left: calc(var(--spacing12) + 14px);
+}
+.broken-pane-authored::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 14px;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    var(--stormgray500) 4px 6px
+  );
+  opacity: 0.3;
+}
+/* The heading's own lock, seated in the band on a small clearing. */
+.broken-pane-authored > h4 > .codicon-lock {
+  position: absolute;
+  top: var(--spacing8);
+  left: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 14px; /* the clearing spans the band exactly */
+  padding: var(--spacing4) 0;
+  font-size: 12px;
+  text-align: center;
+  color: var(--stormgray500);
+}
+.vscode-dark .broken-pane-authored > h4 > .codicon-lock {
+  background: var(--stormgray950);
+}
+.vscode-light .broken-pane-authored > h4 > .codicon-lock {
+  background: var(--stormgray100);
+}
+.broken-pane-authored input,
+.broken-pane-authored select,
+.broken-pane-authored textarea {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
+  padding-left: 0;
+  cursor: default;
+  color: inherit;
+  opacity: 1;
+  appearance: none;
+}
+.vscode-dark .broken-pane-authored,
+.vscode-light .broken-pane-authored {
+  opacity: 1; /* legibility comes back; the hatch carries the message */
+}
