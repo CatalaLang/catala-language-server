@@ -53,12 +53,12 @@ let rows =
     {
       what = "a scalar whose type changed outright";
       old_typ = TMoney; new_typ = TDate; value = money 1000;
-      outcome = TypeChanged "money -> date"; carried = false;
+      outcome = TypeChanged (TMoney, TDate); carried = false;
     };
     {
       what = "an integer where money is now wanted: NOT a conversion";
       old_typ = TInt; new_typ = TMoney; value = int 5;
-      outcome = TypeChanged "integer -> money"; carried = false;
+      outcome = TypeChanged (TInt, TMoney); carried = false;
     };
 
     (* ---- the recovered type is unknown ---------------------------------- *)
@@ -101,7 +101,7 @@ let rows =
     {
       what = "a field that stopped being optional, and changed type too";
       old_typ = TOption TMoney; new_typ = TDate; value = present TMoney (money 1000);
-      outcome = TypeChanged "optional of money -> date"; carried = false;
+      outcome = TypeChanged (TOption TMoney, TDate); carried = false;
     };
     {
       (* Neither wrap nor unwrap; the payload descriptions differ anyway. *)
@@ -126,7 +126,10 @@ let rows =
       old_typ = TEnum (colour ["Red", None]);
       new_typ = TEnum (colour ["Green", None; "Blue", None]);
       value = red (colour ["Red", None]);
-      outcome = TypeChanged "M.Colour -> M.Colour"; carried = false;
+      outcome =
+        TypeChanged
+          ( TEnum (colour ["Red", None]),
+            TEnum (colour ["Green", None; "Blue", None]) ); carried = false;
     };
     {
       (* Fewer fields, in the test's own order: the ordinary case. *)
@@ -142,7 +145,9 @@ let rows =
       old_typ = TStruct (detail ["fee", TMoney]);
       new_typ = TStruct (detail ["fee", TDate]);
       value = struct_of (detail ["fee", TMoney]) ["fee", money 1200];
-      outcome = TypeChanged "M.Detail -> M.Detail"; carried = false;
+      outcome =
+        TypeChanged
+          (TStruct (detail ["fee", TMoney]), TStruct (detail ["fee", TDate])); carried = false;
     };
   ]
 
@@ -152,7 +157,8 @@ let show_outcome : O.carry_outcome -> string = function
   | Unwrap -> "Unwrap"
   | WasUnset -> "WasUnset"
   | WasAbsentNowRequired -> "WasAbsentNowRequired"
-  | TypeChanged s -> Printf.sprintf "TypeChanged %S" s
+  | TypeChanged (a, b) ->
+    Printf.sprintf "TypeChanged (%s -> %s)" (Lib.typ_name a) (Lib.typ_name b)
 
 let check_row r =
   let carried, outcome =

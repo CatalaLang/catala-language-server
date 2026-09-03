@@ -191,7 +191,7 @@ type carry_outcome = [
   | Unwrap
   | WasUnset (* the old test never set this field *)
   | WasAbsentNowRequired (* the old value was Absent: no payload to take *)
-  | TypeChanged of string (* old -> new, as typ_name spells them: "integer -> money" *)
+  | TypeChanged of (typ * typ) (* old, new: the UI spells them in the reader's language *)
 ] <ocaml repr="classic">
 
 (* Why the rebuild could not proceed. *)

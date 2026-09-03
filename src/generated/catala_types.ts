@@ -172,7 +172,7 @@ export type CarryOutcome =
 | { kind: 'Unwrap' }
 | { kind: 'WasUnset' }
 | { kind: 'WasAbsentNowRequired' }
-| { kind: 'TypeChanged'; value: string }
+| { kind: 'TypeChanged'; value: [Typ, Typ] }
 
 export type BrokenNote =
 | { kind: 'ModuleNotFound'; value: ModuleNotFound }
@@ -880,7 +880,7 @@ export function writeCarryOutcome(x: CarryOutcome, context: any = x): any {
     case 'WasAbsentNowRequired':
       return 'WasAbsentNowRequired'
     case 'TypeChanged':
-      return ['TypeChanged', _atd_write_string(x.value, x)]
+      return ['TypeChanged', ((x, context) => [writeTyp(x[0], x), writeTyp(x[1], x)])(x.value, x)]
   }
 }
 
@@ -906,7 +906,7 @@ export function readCarryOutcome(x: any, context: any = x): CarryOutcome {
     _atd_check_json_tuple(2, x, context)
     switch (x[0]) {
       case 'TypeChanged':
-        return { kind: 'TypeChanged', value: _atd_read_string(x[1], x) }
+        return { kind: 'TypeChanged', value: ((x, context): [Typ, Typ] => { _atd_check_json_tuple(2, x, context); return [readTyp(x[0], x), readTyp(x[1], x)] })(x[1], x) }
       default:
         _atd_bad_json('CarryOutcome', x, context)
         throw new Error('impossible')

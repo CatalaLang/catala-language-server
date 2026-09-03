@@ -1625,18 +1625,12 @@ let carry_rule ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
     match v.O.value with
     | O.Enum (_, (_, Some payload)) when inner = new_typ -> Some payload, O.Unwrap
     | O.Enum (_, (_, None)) -> None, O.WasAbsentNowRequired
-    | _ ->
-      ( None,
-        O.TypeChanged
-          (Printf.sprintf "%s -> %s" (typ_name old_typ) (typ_name new_typ)) ))
+    | _ -> None, O.TypeChanged (old_typ, new_typ))
   (* Not type equality: a recovered type is inferred from one literal and never
      equals the live one, even when nothing changed. [Fits] promises exactly
      what an ordinary read checks. *)
   | _ when value_fits new_typ v = Ok () -> Some v, O.Fits
-  | _ ->
-    ( None,
-      O.TypeChanged
-        (Printf.sprintf "%s -> %s" (typ_name old_typ) (typ_name new_typ)) )
+  | _ -> None, O.TypeChanged (old_typ, new_typ)
 
 let carry_value ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
     O.runtime_value option * O.carry_outcome =

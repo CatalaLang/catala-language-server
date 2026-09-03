@@ -12,6 +12,7 @@ import type {
   TestList,
 } from '../generated/catala_types';
 import ValueEditor from '../editors/ValueEditors';
+import { getTypeDisplayName } from '../editors/typeNameUtils';
 import {
   hasUnsetInTest,
   scrollToFirstInvalidOrUnset,
@@ -65,6 +66,7 @@ function CarryMark({
 }: {
   outcome: CarryOutcome;
 }): React.JSX.Element | null {
+  const intl = useIntl();
   if (outcome.kind === 'WasUnset') return null;
   if (outcome.kind === 'Fits') return null;
   const carried = outcome.kind === 'Wrap' || outcome.kind === 'Unwrap';
@@ -74,14 +76,16 @@ function CarryMark({
     WasAbsentNowRequired: 'broken.markWasAbsentNowRequired',
     TypeChanged: 'broken.markTypeChanged',
   }[outcome.kind as 'Wrap' | 'Unwrap' | 'WasAbsentNowRequired' | 'TypeChanged'];
+  const change =
+    outcome.kind === 'TypeChanged'
+      ? `${getTypeDisplayName(outcome.value[0], intl)} → ${getTypeDisplayName(
+          outcome.value[1],
+          intl
+        )}`
+      : '';
   return (
     <span className={`carry-mark ${carried ? 'carry-done' : 'carry-open'}`}>
-      <FormattedMessage
-        id={id}
-        values={{
-          change: outcome.kind === 'TypeChanged' ? outcome.value : '',
-        }}
-      />
+      <FormattedMessage id={id} values={{ change }} />
     </span>
   );
 }

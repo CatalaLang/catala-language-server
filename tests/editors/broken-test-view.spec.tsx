@@ -82,7 +82,10 @@ function view(overrides: Partial<Recovery> = {}): Recovery {
       {
         testing_scope: 'C_one',
         field: 'end_date',
-        outcome: { kind: 'TypeChanged', value: 'date -> B.EndDate' },
+        outcome: {
+          kind: 'TypeChanged',
+          value: [{ kind: 'TDate' }, endDateEnum],
+        },
       },
     ],
     ...overrides,
@@ -127,7 +130,8 @@ describe('BrokenTestView', () => {
 
   it('marks a field that could not be carried, with the reason', () => {
     renderView(view());
-    expect(screen.getByText(/date -> B.EndDate/)).toBeTruthy();
+    // Localized names, not raw catala type syntax.
+    expect(screen.getByText(/date → EndDate/)).toBeTruthy();
   });
 
   it('marks a conversion so it does not look like something the tester typed', () => {
@@ -283,11 +287,14 @@ describe('BrokenTestView', () => {
       {
         testing_scope: 'C_one',
         field: 'total',
-        outcome: { kind: 'TypeChanged', value: 'integer -> money' },
+        outcome: {
+          kind: 'TypeChanged',
+          value: [{ kind: 'TInt' }, { kind: 'TMoney' }],
+        },
       },
     ];
     renderView(v);
-    expect(screen.getByText(/integer -> money/)).toBeTruthy();
+    expect(screen.getByText(/integer → money/)).toBeTruthy();
   });
 
   it('lets the divider be moved from the keyboard', () => {
