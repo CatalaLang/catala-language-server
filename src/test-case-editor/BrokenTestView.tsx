@@ -3,6 +3,7 @@ import { FormattedMessage, useIntl } from 'react-intl';
 import type {
   BrokenNote,
   Recovery,
+  CarryIo,
   CarryOutcome,
   ScopeCandidate,
   CarryRecord,
@@ -48,14 +49,17 @@ type Props = {
   >;
 };
 
-/** The per-field outcomes for one test, keyed by field name. */
+/** The per-field outcomes for one test and one side, keyed by field name.
+ *  Sides are separate maps: a `context output` variable is both an input and
+ *  an output, and one side's outcome must not mask the other's. */
 function marksFor(
   carried: CarryRecord[],
-  testingScope: string
+  testingScope: string,
+  io: CarryIo['kind']
 ): Map<string, CarryOutcome> {
   return new Map(
     carried
-      .filter((c) => c.testing_scope === testingScope)
+      .filter((c) => c.testing_scope === testingScope && c.io.kind === io)
       .map((c) => [c.field, c.outcome])
   );
 }
@@ -325,7 +329,8 @@ function TestPanes({
   authored,
   rebuilt,
   onChange,
-  marks,
+  marksIn,
+  marksOut,
   runState,
   onRun,
   split,
@@ -335,7 +340,8 @@ function TestPanes({
   authored: Test | undefined;
   rebuilt: Test | undefined;
   onChange: (next: Test) => void;
-  marks: Map<string, CarryOutcome>;
+  marksIn: Map<string, CarryOutcome>;
+  marksOut: Map<string, CarryOutcome>;
   runState?: { status: TestRunStatus; results?: TestRunResults };
   onRun?: () => void;
   split: number;
@@ -347,10 +353,12 @@ function TestPanes({
     runState?.results?.kind === 'Ok' ? runState.results.value.diffs : [];
   const scope = meta?.tested_scope;
   const rebuiltPaneRef = useRef<HTMLDivElement>(null);
-  const markFor = (name: string): React.JSX.Element | null => {
-    const outcome = marks.get(name);
-    return outcome === undefined ? null : <CarryMark outcome={outcome} />;
-  };
+  const markFrom =
+    (marks: Map<string, CarryOutcome>) =>
+    (name: string): React.JSX.Element | null => {
+      const outcome = marks.get(name);
+      return outcome === undefined ? null : <CarryMark outcome={outcome} />;
+    };
   // Same guard as the ordinary editor: an unset value makes the run fail with
   // an interpreter error, so ask first.
   const runWithUnsetCheck = async (): Promise<void> => {
@@ -431,7 +439,7 @@ function TestPanes({
                 onTestInputsChange={(inputs): void =>
                   onChange({ ...rebuilt, test_inputs: inputs })
                 }
-                labelExtra={markFor}
+                labelExtra={markFrom(marksIn)}
               />
               {rebuilt.tested_scope.outputs.size > 0 && (
                 <>
@@ -445,7 +453,7 @@ function TestPanes({
                     test={rebuilt}
                     onTestChange={onChange}
                     diffs={runDiffs}
-                    labelExtra={markFor}
+                    labelExtra={markFrom(marksOut)}
                   />
                 </>
               )}
@@ -574,7 +582,12 @@ export default function BrokenTestView({
           key={authored.testing_scope + String(i)}
           authored={authored}
           rebuilt={rebuilt[i]}
-          marks={marksFor(view.carry_outcomes, authored.testing_scope)}
+          marksIn={marksFor(view.carry_outcomes, authored.testing_scope, 'In')}
+          marksOut={marksFor(
+            view.carry_outcomes,
+            authored.testing_scope,
+            'Out'
+          )}
           split={split}
           onSplit={moveSplit}
           picker={picker}

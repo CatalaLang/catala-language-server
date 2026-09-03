@@ -1937,16 +1937,16 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
           emit recovered [] []
         | live ->
           let carried = ref [] in
-          let record test field outcome =
+          let record test io field outcome =
             carried :=
-              { O.testing_scope = test; field = field; outcome = outcome }
+              { O.testing_scope = test; field; io; outcome }
               :: !carried
           in
           (* One entry per live field, so every blank field is explained.
              [when_missing] is what a field absent from the authored test
              means: an input was left unset, but an output was simply never
              asserted -- a healthy test, nothing to report. *)
-          let carry_record ~when_missing (t : O.test)
+          let carry_record ~io ~when_missing (t : O.test)
               (old_record : (string * O.test_io) list)
               (live_record : (string * O.test_io) list) =
             List.map
@@ -1957,15 +1957,15 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                     carry_value ~old_typ ~new_typ:live_io.typ vd.O.value
                   with
                   | Some v, outcome ->
-                    record t.O.testing_scope name outcome;
+                    record t.O.testing_scope io name outcome;
                     ( name,
                       { live_io with O.value = Some { O.value = v; pos = None } }
                     )
                   | None, outcome ->
-                    record t.O.testing_scope name outcome;
+                    record t.O.testing_scope io name outcome;
                     name, live_io)
                 | _ ->
-                  Option.iter (record t.O.testing_scope name) when_missing;
+                  Option.iter (record t.O.testing_scope io name) when_missing;
                   name, live_io)
               live_record
           in
@@ -1978,11 +1978,11 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                   title = t.O.title;
                   description = t.O.description;
                   test_inputs =
-                    carry_record ~when_missing:(Some O.WasUnset) t
+                    carry_record ~io:O.In ~when_missing:(Some O.WasUnset) t
                       t.O.test_inputs live.O.test_inputs;
                   test_outputs =
-                    carry_record ~when_missing:None t t.O.test_outputs
-                      live.O.test_outputs;
+                    carry_record ~io:O.Out ~when_missing:None t
+                      t.O.test_outputs live.O.test_outputs;
                 })
               recovered
           in
@@ -1993,7 +1993,8 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
             match saved with
             | None | Some [] -> rebuilt, List.rev !carried
             | Some saved ->
-              let still_blank scope field =
+              (* Which record answers a mark depends on the mark's side. *)
+              let still_blank scope side field =
                 match
                   List.find_opt
                     (fun (t : O.test) -> t.O.testing_scope = scope)
@@ -2001,8 +2002,13 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                 with
                 | None -> true
                 | Some t -> (
+                  let record =
+                    match side with
+                    | O.In -> t.O.test_inputs
+                    | O.Out -> t.O.test_outputs
+                  in
                   match
-                    List.assoc_opt field t.O.test_inputs
+                    List.assoc_opt field record
                     |> Option.fold ~none:None ~some:(fun (io : O.test_io) -> io.value)
                   with
                   | None -> true
@@ -2013,7 +2019,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                 |> List.filter (fun (r : O.carry_record) ->
                        match r.O.outcome with
                        | O.WasUnset | O.TypeChanged _ | O.WasAbsentNowRequired ->
-                         still_blank r.O.testing_scope r.O.field
+                         still_blank r.O.testing_scope r.O.io r.O.field
                        | _ -> true) )
           in
           emit recovered rebuilt carried))))

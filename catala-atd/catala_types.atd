@@ -177,8 +177,14 @@ type recovery = {
 type carry_record = {
   testing_scope: string;
   field: string;
+  (* A [context output] variable is both an input and an output, so its name
+     alone is ambiguous: without the side, one entry's outcome can mask the
+     other's in a name-keyed lookup. *)
+  io: carry_io;
   outcome: carry_outcome;
 }
+
+type carry_io = [ In | Out ] <ocaml repr="classic">
 
 (* What happened to one field. The first three carried: [Fits] claims only
    what an ordinary read checks -- the value is acceptable at the live type --
