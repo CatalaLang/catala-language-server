@@ -1030,7 +1030,10 @@ let rec value_fits (t : O.typ) (v : O.runtime_value) : (unit, string) Result.t =
   in
   match t, v.O.value with
   (* Value-less, so nothing to check. *)
-  | _, (O.Unset | O.NotOverridden | O.Empty) -> Ok ()
+  | _, (O.Unset | O.NotOverridden) -> Ok ()
+  (* The empty default exists only in run results and diffs; no reader
+     produces it, and the printer refuses it the same way. *)
+  | _, O.Empty -> assert false
   | O.TBool, O.Bool _
   | O.TInt, O.Integer _
   | O.TRat, O.Decimal _
@@ -1583,7 +1586,9 @@ let read_partial_tests options : (O.test list * string list, string) Result.t =
 (* Re-describe a value with the live type's declarations: a recovered one is
    inferred from a single literal (one constructor of a hundred, only the
    fields the test wrote, [unknown_enum_name]). Attributes are the value's own
-   and stay. *)
+   and stay. Only call on a value that [value_fits] the type: the asserts
+   below hold because fitting rejects a value the declaration has no place
+   for, and adoption must never be the one to drop it. *)
 let rec adopt_typ (t : O.typ) (v : O.runtime_value) : O.runtime_value =
   let value =
     match t, v.O.value with
@@ -1595,10 +1600,14 @@ let rec adopt_typ (t : O.typ) (v : O.runtime_value) : O.runtime_value =
       let payload =
         match List.assoc_opt ctor d.O.constructors with
         | Some (Some pt) -> Option.map (adopt_typ pt) payload
-        | _ -> payload
+        | Some None ->
+          assert (payload = None);
+          None
+        | None -> assert false
       in
       O.Enum (d, (ctor, payload))
     | O.TStruct d, O.Struct (_, fields) ->
+      assert (List.for_all (fun (n, _) -> List.mem_assoc n d.O.fields) fields);
       (* In declaration order, as an ordinary read has them: the same test
          must write the same bytes whichever reader it came through. *)
       let declared =
@@ -1607,10 +1616,7 @@ let rec adopt_typ (t : O.typ) (v : O.runtime_value) : O.runtime_value =
             Option.map (fun fv -> n, adopt_typ ft fv) (List.assoc_opt n fields))
           d.O.fields
       in
-      let undeclared =
-        List.filter (fun (n, _) -> not (List.mem_assoc n d.O.fields)) fields
-      in
-      O.Struct (d, declared @ undeclared)
+      O.Struct (d, declared)
     | O.TArray et, O.Array elems ->
       O.Array (Array.map (adopt_typ et) elems)
     | O.TTuple ts, O.Array elems when List.length ts = Array.length elems ->
