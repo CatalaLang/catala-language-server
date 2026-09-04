@@ -452,6 +452,24 @@ sed -i 's/^  -- Green$/  -- Green content money/' "$notes_scratch/payload/bare.c
 (cd "$notes_scratch/payload" && clerk start >/dev/null 2>&1 \
     && catala testcase rebuild test_bare.catala_en 2>/dev/null) > "$notes_scratch/payload.json"
 
+# ── context vars through a rebuild ──────────────────────────────────────────
+# A context var the test never overrode is not damage: the rebuilt field
+# defaults, like the authored one. z is `context output`: its In side must
+# stay silent while its assertion carries on the Out side.
+mkdir -p "$notes_scratch/ctx"
+cp clerk.toml test_context_vars.catala_en "$notes_scratch/ctx"/
+sed 's/\bx\b/amount/g' context_vars.catala_en > "$notes_scratch/ctx/context_vars.catala_en"
+(cd "$notes_scratch/ctx" && clerk start >/dev/null 2>&1 \
+    && catala testcase rebuild test_context_vars.catala_en 2>/dev/null) > "$notes_scratch/ctx.json"
+node -e '
+  const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const marks = d.carry_outcomes.map((c) =>
+    c.field + ":" + c.io + ":" + (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome)).sort();
+  const want = ["amount:In:WasUnset", "y:In:Fits", "z:Out:Fits"];
+  if (JSON.stringify(marks) !== JSON.stringify(want))
+    { console.error("FAIL: expected marks " + want + ", got " + marks); process.exit(1); }
+' "$notes_scratch/ctx.json" || exit 1
+
 for case in lostfield:detail:test_details payload:shade:test_bare; do
     dir=${case%%:*}; rest=${case#*:}; field=${rest%%:*}; test=${rest##*:}
     node -e '

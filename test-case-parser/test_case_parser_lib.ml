@@ -1985,7 +1985,16 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                     record t.O.testing_scope io name outcome;
                     name, live_io)
                 | _ ->
-                  Option.iter (record t.O.testing_scope io name) when_missing;
+                  (* A context var the test never overrode is not damage: the
+                     rebuilt field already defaults, like the authored one. *)
+                  let defaulting =
+                    match live_io.O.value with
+                    | Some { O.value = { O.value = O.NotOverridden; _ }; _ } ->
+                      true
+                    | _ -> false
+                  in
+                  if not defaulting then
+                    Option.iter (record t.O.testing_scope io name) when_missing;
                   name, live_io)
               live_record
           in
