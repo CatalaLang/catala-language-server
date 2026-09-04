@@ -1018,10 +1018,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
-(* Does [v] still inhabit [t]? Resolving a signature never compares the
-   authored literals against it, so without this check a drifted test reads
-   "successfully" -- and the editor then writes the new type's form back over
-   the old data. *)
+(* Does [v] still inhabit [t]? (recovery of drifted tests). *)
 let rec value_fits (t : O.typ) (v : O.runtime_value) : (unit, string) Result.t =
   let path segs msg =
     Error (if segs = "" then msg else Printf.sprintf "%s%s" segs msg)
@@ -1050,27 +1047,44 @@ let rec value_fits (t : O.typ) (v : O.runtime_value) : (unit, string) Result.t =
     | None -> Ok ()
     | Some p -> under (Printf.sprintf ".%s" ctor) (value_fits ot p))
   | O.TEnum d, O.Enum (_, (ctor, payload)) -> (
-    match List.assoc_opt ctor d.O.constructors with
-    | None ->
+    match List.assoc_opt ctor d.O.constructors, payload with
+    | None, _ ->
       mismatch
         (Printf.sprintf "one of %s"
            (String.concat " | " (List.map fst d.O.constructors)))
         (Printf.sprintf "%s.%s" d.O.enum_name ctor)
-    | Some None -> Ok ()
-    | Some (Some pt) -> (
-      match payload with
+    | Some None, None -> Ok ()
+    | Some None, Some _ ->
+      mismatch
+        (Printf.sprintf "bare %s" ctor)
+        (Printf.sprintf "%s with a payload" ctor)
+    | Some (Some _), None ->
+      mismatch
+        (Printf.sprintf "%s with a payload" ctor)
+        (Printf.sprintf "bare %s" ctor)
+    | Some (Some pt), Some p ->
+      under (Printf.sprintf ".%s" ctor) (value_fits pt p))
+  | O.TStruct d, O.Struct (_, fields) -> (
+    let declared =
+      List.fold_left
+        (fun acc (fname, ft) ->
+          match acc with
+          | Error _ -> acc
+          | Ok () -> (
+            match List.assoc_opt fname fields with
+            | None -> Ok () (* absent field: nothing to contradict the type *)
+            | Some fv -> under ("." ^ fname) (value_fits ft fv)))
+        (Ok ()) d.O.fields
+    in
+    match declared with
+    | Error _ -> declared
+    | Ok () -> (
+      match
+        List.find_opt (fun (n, _) -> not (List.mem_assoc n d.O.fields)) fields
+      with
       | None -> Ok ()
-      | Some p -> under (Printf.sprintf ".%s" ctor) (value_fits pt p)))
-  | O.TStruct d, O.Struct (_, fields) ->
-    List.fold_left
-      (fun acc (fname, ft) ->
-        match acc with
-        | Error _ -> acc
-        | Ok () -> (
-          match List.assoc_opt fname fields with
-          | None -> Ok () (* absent field: nothing to contradict the type *)
-          | Some fv -> under ("." ^ fname) (value_fits ft fv)))
-      (Ok ()) d.O.fields
+      | Some (n, _) ->
+        path ("." ^ n) (Printf.sprintf ": not a field of %s" d.O.struct_name)))
   | O.TArray et, O.Array elems ->
     let rec go i =
       if i >= Array.length elems then Ok ()

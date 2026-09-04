@@ -432,3 +432,39 @@ node -e '
   const p = d.diffs[0].path.map((s) => s[1]).join(".");
   if (!/total/.test(p)) { console.error("FAIL: the diff is not on total: " + p); process.exit(1); }
 ' "$notes_scratch/modfail.json" || exit 1
+
+# ── a value the live declaration no longer allows ───────────────────────────
+# A struct that lost a field the test filled, and an enum constructor that now
+# requires a payload. Neither value fits, and the rule these pin is stronger
+# than either case: whatever a rebuild carries, its working copy reads back.
+
+# the struct loses `stamp`, which the test fills
+mkdir -p "$notes_scratch/lostfield"
+cp clerk.toml details.catala_en test_details.catala_en "$notes_scratch/lostfield"/
+sed -i '/data stamp content date/d' "$notes_scratch/lostfield/details.catala_en"
+(cd "$notes_scratch/lostfield" && clerk start >/dev/null 2>&1 \
+    && catala testcase rebuild test_details.catala_en 2>/dev/null) > "$notes_scratch/lostfield.json"
+
+# the enum constructor the test wrote bare now wants a payload
+mkdir -p "$notes_scratch/payload"
+cp clerk.toml bare.catala_en test_bare.catala_en "$notes_scratch/payload"/
+sed -i 's/^  -- Green$/  -- Green content money/' "$notes_scratch/payload/bare.catala_en"
+(cd "$notes_scratch/payload" && clerk start >/dev/null 2>&1 \
+    && catala testcase rebuild test_bare.catala_en 2>/dev/null) > "$notes_scratch/payload.json"
+
+for case in lostfield:detail:test_details payload:shade:test_bare; do
+    dir=${case%%:*}; rest=${case#*:}; field=${rest%%:*}; test=${rest##*:}
+    node -e '
+      const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      const c = d.carry_outcomes.find((c) => c.field === process.argv[2]);
+      const k = c && (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome);
+      if (k !== "TypeChanged")
+        { console.error("FAIL: a value the declaration no longer allows must not fit: " + JSON.stringify(c)); process.exit(1); }
+      process.stdout.write(JSON.stringify(d.rebuilt));
+    ' "$notes_scratch/$dir.json" "$field" \
+        | catala testcase write --language en > "$notes_scratch/$dir/rebuilt.catala_en" || exit 1
+    (cd "$notes_scratch/$dir" \
+        && clerk typecheck rebuilt.catala_en >/dev/null 2>&1 \
+        && catala testcase read rebuilt.catala_en >/dev/null 2>&1) \
+        || { echo "FAIL: the $dir working copy does not read back"; exit 1; }
+done

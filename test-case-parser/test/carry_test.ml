@@ -27,6 +27,7 @@ let colour ctors =
   O.{ enum_name = "M.Colour"; constructors = ctors; ctor_attrs = [] }
 
 let red decl = O.{ value = Enum (decl, ("Red", None)); attrs = [] }
+let red_of decl v = O.{ value = Enum (decl, ("Red", Some v)); attrs = [] }
 
 let detail fields =
   O.{ struct_name = "M.Detail"; fields }
@@ -148,6 +149,41 @@ let rows =
       outcome =
         TypeChanged
           (TStruct (detail ["fee", TMoney]), TStruct (detail ["fee", TDate])); carried = false;
+    };
+
+    (* ---- the value claims more than the live declaration allows ---------- *)
+    (* Each of these once answered [Fits], and the written working copy did
+       not read back. A carried value must always survive an ordinary read. *)
+    {
+      what = "a struct that lost a field the test filled";
+      old_typ = TStruct (detail ["fee", TMoney; "stamp", TInt]);
+      new_typ = TStruct (detail ["fee", TMoney]);
+      value = struct_of (detail ["fee", TMoney; "stamp", TInt])
+                ["fee", money 1200; "stamp", int 3];
+      outcome =
+        TypeChanged
+          ( TStruct (detail ["fee", TMoney; "stamp", TInt]),
+            TStruct (detail ["fee", TMoney]) ); carried = false;
+    };
+    {
+      what = "an enum constructor that now requires a payload, value bare";
+      old_typ = TEnum (colour ["Red", None]);
+      new_typ = TEnum (colour ["Red", Some TMoney; "Green", None]);
+      value = red (colour ["Red", None]);
+      outcome =
+        TypeChanged
+          ( TEnum (colour ["Red", None]),
+            TEnum (colour ["Red", Some TMoney; "Green", None]) ); carried = false;
+    };
+    {
+      what = "an enum constructor that lost its payload, value has one";
+      old_typ = TEnum (colour ["Red", Some TMoney]);
+      new_typ = TEnum (colour ["Red", None; "Green", None]);
+      value = red_of (colour ["Red", Some TMoney]) (money 500);
+      outcome =
+        TypeChanged
+          ( TEnum (colour ["Red", Some TMoney]),
+            TEnum (colour ["Red", None; "Green", None]) ); carried = false;
     };
   ]
 
