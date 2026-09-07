@@ -542,3 +542,16 @@ echo "$out" | grep -q '"testing_scope"' \
     && { echo "FAIL: partial read kept a test whose assertion it cannot show"; exit 1; }
 echo "$out" | grep -q "Record_unordered" \
     || { echo "FAIL: the exclusion does not name the test"; exit 1; }
+
+# ── a scope use split across blocks ─────────────────────────────────────────
+# Catala merges a scope's uses; partial read must too, or every block after
+# the first would be silently dropped -- and deleted on promotion. Merged,
+# the split file must spell exactly like the canonical one.
+mkdir -p "$notes_scratch/split"
+sed 's/^  assertion (c.z = 198)$/```\n\n```catala\nscope C_test:\n  assertion (c.z = 198)/' \
+    test_context_vars.catala_en > "$notes_scratch/split/test_split.catala_en"
+catala testcase partial-read "$notes_scratch/split/test_split.catala_en" \
+    | catala testcase write --language en > "$notes_scratch/split/roundtrip.catala_en" \
+    || { echo "FAIL: partial read of a split scope use"; exit 1; }
+diff written2_test_context_vars.catala_en "$notes_scratch/split/roundtrip.catala_en" \
+    || { echo "FAIL: a second scope block was dropped or respelled"; exit 1; }

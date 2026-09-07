@@ -1563,13 +1563,25 @@ let read_partial_tests options : (O.test list * string list, string) Result.t =
         (fun ((decl : Surface.Ast.scope_decl), _) ->
           let name = Mark.remove decl.scope_decl_name in
           match
-            List.find_opt
+            List.filter
               (fun (u : Surface.Ast.scope_use) ->
                 String.equal (Mark.remove u.scope_use_name) name)
               uses
           with
-          | None -> None (* declared but never defined: not a test *)
-          | Some use ->
+          | [] -> None (* declared but never defined: not a test *)
+          | first :: _ as all ->
+            (* Catala merges a scope's uses across blocks; so must we, or
+               every block after the first is silently dropped -- and
+               deleted on promotion. *)
+            let use =
+              {
+                first with
+                Surface.Ast.scope_use_items =
+                  List.concat_map
+                    (fun (u : Surface.Ast.scope_use) -> u.scope_use_items)
+                    all;
+              }
+            in
             Some (name, read_partial_test_one decl use))
         decls
     in
