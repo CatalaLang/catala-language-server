@@ -67,12 +67,22 @@ grep -q 'assertion (grant\.total = \$1000\.00)' partial_test_optionals_roundtrip
     || { echo "FAIL: an expected output did not survive the partial read"; exit 1; }
 
 
-# Both readers must spell a type the same way; the typecheck above cannot see
-# a difference in name alone, since Catala infers a struct from its fields.
+# ── the readers must spell the overlap identically ──────────────────────────
+# The same file through read|write and partial-read|write, byte for byte:
+# write prints no types, so this compares exactly the spelling of every value,
+# name and attribute. test_bare is exempt by design: it authors a constructor
+# bare, and a partial read will not invent the enum name a full read learns
+# from the declaration.
+for f in test_implicit_import test_context_vars test_optionals test_items test_spans; do
+    catala testcase read $f.catala_en | catala testcase write --language en \
+        > written2_$f.catala_en
+    diff written2_$f.catala_en partial_${f}_roundtrip.catala_en \
+        || { echo "FAIL: the readers spell $f differently"; exit 1; }
+done
+
+# ...except what write does not render: both readers must type an optional as
+# TOption in the JSON, never as a bare enum -- written out, the two look alike.
 for reader in read partial-read; do
-    catala testcase $reader test_implicit_import.catala_en \
-        | grep -q '"struct_name":"Period.Period"' \
-        || { echo "FAIL: $reader does not qualify a struct with its module"; exit 1; }
     catala testcase $reader test_optionals.catala_en | grep -q '"TOption"' \
         || { echo "FAIL: $reader does not type an optional as TOption"; exit 1; }
     if catala testcase $reader test_optionals.catala_en | grep -q '"TEnum"'; then
@@ -80,13 +90,8 @@ for reader in read partial-read; do
     fi
 done
 
-# uids: the identity the array editor tracks rows by, and what the
-# original-vs-working-copy diff matches on
-for reader in read partial-read; do
-    n=$(catala testcase $reader test_items.catala_en | grep -o '"Uid"' | wc -l)
-    [ "$n" = 2 ] || { echo "FAIL: $reader recovered $n of 2 item uids"; exit 1; }
-done
-# ...and the write side must put them back, or the round trip loses them anyway.
+# ...and write must put uids back, or the round trip loses them anyway (a
+# writer dropping them would drop them on both sides of the diff above).
 n=$(grep -c 'testcase.uid' partial_test_items_roundtrip.catala_en)
 [ "$n" = 2 ] || { echo "FAIL: write emitted $n of 2 item uids"; exit 1; }
 
