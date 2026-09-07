@@ -123,10 +123,14 @@ for reader in read rebuild; do
         || { echo "FAIL: $reader does not name the offending test"; exit 1; }
 done
 
-# ...but a partial read recovers whatever it can and leaves the decision to
-# its caller.
-n=$(catala testcase partial-read mixed.catala_en | grep -o '"testing_scope"' | wc -l)
-[ "$n" = 2 ] || { echo "FAIL: partial read recovered $n of 2 scopes"; exit 1; }
+# ...but a partial read recovers what it can honestly show, one test at a
+# time: the GUI-owned test comes through, the hand-written one is excluded
+# with a warning naming it -- not quietly slimmed of its `>` assertion.
+out=$(catala testcase partial-read mixed.catala_en 2>&1)
+n=$(echo "$out" | grep -o '"testing_scope"' | wc -l)
+[ "$n" = 1 ] || { echo "FAIL: partial read recovered $n tests, wanted 1"; exit 1; }
+echo "$out" | grep -q "Hand_written" \
+    || { echo "FAIL: the exclusion does not name the hand-written test"; exit 1; }
 
 # ── rebuilding a struct ─────────────────────────────────────────────────────
 # test_details writes Detail's fields in another order than the module declares
@@ -519,3 +523,17 @@ err=$( (cd "$notes_scratch/mixed" && catala testcase rebuild test_details.catala
     && { echo "FAIL: rebuild accepted a file with a hand-written test"; exit 1; }
 echo "$err" | grep -q "HandWritten" \
     || { echo "FAIL: the refusal does not name the hand-written test"; exit 1; }
+
+# ── an assertion the pane cannot show refuses the test ──────────────────────
+# Partial read must not quietly slim a test: an assertion richer than
+# field = literal excludes the whole test with a warning, like an unreadable
+# definition. Skipped silently, promoting the working copy would delete it.
+mkdir -p "$notes_scratch/richassert"
+cp clerk.toml details.catala_en test_details.catala_en "$notes_scratch/richassert"/
+sed -i 's/^  assertion (calc.total = \$12\.00)$/  assertion (calc.total >= $12.00)/' \
+    "$notes_scratch/richassert/test_details.catala_en"
+out=$( (cd "$notes_scratch/richassert" && catala testcase partial-read test_details.catala_en) 2>&1 )
+echo "$out" | grep -q '"testing_scope"' \
+    && { echo "FAIL: partial read kept a test whose assertion it cannot show"; exit 1; }
+echo "$out" | grep -q "Record_unordered" \
+    || { echo "FAIL: the exclusion does not name the test"; exit 1; }

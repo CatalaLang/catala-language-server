@@ -1464,19 +1464,21 @@ let read_partial_test_one (scope_decl : Surface.Ast.scope_decl)
     | _ -> Error "invalid definition shape"
   in
   (* `assertion (calc.total = $0.00)` is an expected output. Only field =
-     literal is recognised; anything richer is left alone. *)
-  let rec convert_assertion (e : expression) : (string * O.test_io) option =
+     literal is readable; anything richer refuses the whole test, as the
+     ordinary read does -- skipped silently, promoting the working copy
+     would delete it. *)
+  let rec convert_assertion (e : expression) :
+      (string * O.test_io, string) Result.t =
     match Mark.remove e with
     (* `assertion (x = y)` carries its parentheses into the tree. *)
     | Paren inner -> convert_assertion inner
     | Binop ((Eq, _), lhs, rhs) -> (
       match Mark.remove lhs with
-      | Dotted (_, ((_path, (field, _)), _)) -> (
-        match convert_literal rhs with
-        | Ok (typ, rv) -> Some (field, O.{ typ; value = vlit rv })
-        | Error _ -> None)
-      | _ -> None)
-    | _ -> None
+      | Dotted (_, ((_path, (field, _)), _)) ->
+        let*? typ, rv = convert_literal rhs in
+        Ok (field, O.{ typ; value = vlit rv })
+      | _ -> Error "unsupported assertion")
+    | _ -> Error "unsupported assertion"
   in
   let convert_var_def = function
     | Definition d, _ -> begin
@@ -1490,10 +1492,18 @@ let read_partial_test_one (scope_decl : Surface.Ast.scope_decl)
     try Ok (List.filter_map convert_var_def scope_use.scope_use_items)
     with Err s -> Error s
   in
-  let recovered_outputs =
-    List.filter_map
-      (function Assertion e, _ -> convert_assertion e | _ -> None)
-      scope_use.scope_use_items
+  let*? recovered_outputs =
+    try
+      Ok
+        (List.filter_map
+           (function
+             | Assertion e, _ -> (
+               match convert_assertion e with
+               | Error s -> raise (Err s)
+               | Ok v -> Some v)
+             | _ -> None)
+           scope_use.scope_use_items)
+    with Err s -> Error s
   in
   let testing_scope = fst scope_decl.scope_decl_name in
   let*? tested_scope =
