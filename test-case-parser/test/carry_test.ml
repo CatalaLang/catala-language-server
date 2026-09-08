@@ -195,6 +195,7 @@ let show_outcome : O.carry_outcome -> string = function
   | WasAbsentNowRequired -> "WasAbsentNowRequired"
   | TypeChanged (a, b) ->
     Printf.sprintf "TypeChanged (%s -> %s)" (Lib.typ_name a) (Lib.typ_name b)
+  | Dropped -> "Dropped"
 
 let check_row r =
   let carried, outcome =
