@@ -191,7 +191,7 @@ describe('BrokenTestView', () => {
   });
 
   it('marks a conversion so it does not look like something the tester typed', () => {
-    renderView(
+    const container = renderView(
       view({
         outcomes: [
           {
@@ -202,7 +202,11 @@ describe('BrokenTestView', () => {
         ],
       })
     );
-    expect(screen.getByText(/now optional/)).toBeTruthy();
+    // Reassurance is an icon; the sentence lives in the tooltip.
+    const mark = container.querySelector('.carry-mark.carry-done');
+    expect(mark).toBeTruthy();
+    expect(mark!.getAttribute('title')).toMatch(/now optional/);
+    expect(screen.queryByText(/now optional/)).toBeNull();
   });
 
   it('says nothing about a field the test simply never set', () => {

@@ -86,8 +86,23 @@ function CarryMark({
           intl
         )}`
       : '';
+  if (carried) {
+    // Reassurance, read once: an icon, with the sentence one hover away.
+    // Only the marks that instruct (a value to supply) keep visible text.
+    const title = intl.formatMessage({ id });
+    return (
+      <span
+        className="carry-mark carry-done"
+        role="img"
+        aria-label={title}
+        title={title}
+      >
+        <span className="codicon codicon-check"></span>
+      </span>
+    );
+  }
   return (
-    <span className={`carry-mark ${carried ? 'carry-done' : 'carry-open'}`}>
+    <span className="carry-mark carry-open">
       <FormattedMessage id={id} values={{ change }} />
     </span>
   );
