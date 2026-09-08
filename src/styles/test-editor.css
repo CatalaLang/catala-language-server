@@ -410,8 +410,19 @@
   padding: var(--spacing12);
   border-radius: var(--spacing4);
 }
-.broken-pane h4 {
-  margin: 0 0 var(--spacing8) 0;
+/* The single header naming both columns; it follows the divider and stays
+   visible while the tests scroll. Horizontal padding mirrors .broken-test +
+   .broken-pane so the labels align with pane content. */
+.broken-panes-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--vscode-editor-background);
+  padding: var(--spacing8) var(--spacing12);
+}
+.broken-col-label {
+  margin: 0;
+  padding: 0 var(--spacing12);
   font-size: var(--field-label-font-size);
   font-weight: var(--field-label-font-weight);
   color: var(--field-label-color);
@@ -541,16 +552,6 @@
   font-weight: var(--field-label-font-weight);
   color: var(--field-label-color);
 }
-/* The right-hand pane is a draft until the tester replaces the original, and
-   should never be mistaken for the test itself. */
-.broken-draft-tag {
-  margin-left: var(--spacing8);
-  padding: 0 var(--spacing8);
-  border-radius: var(--spacing12);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: lowercase;
-}
 .broken-arrangement {
   display: block;
   margin-top: var(--spacing4);
@@ -559,16 +560,8 @@
 .broken-pane-rebuilt {
   border: 1px dashed var(--control-border, currentColor);
 }
-.vscode-dark .broken-draft-tag {
-  background: var(--stormgray800);
-  color: var(--stormgray300);
-}
 .vscode-dark .broken-arrangement {
   color: var(--stormgray500);
-}
-.vscode-light .broken-draft-tag {
-  background: var(--stormgray200);
-  color: var(--stormgray900);
 }
 .vscode-light .broken-arrangement {
   color: var(--stormgray800);

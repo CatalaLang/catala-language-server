@@ -441,10 +441,6 @@ function TestPanes({
         style={{ ['--broken-split']: `${split}%` } as React.CSSProperties}
       >
         <div className="broken-pane broken-pane-authored">
-          <h4>
-            <span className="codicon codicon-lock"></span>{' '}
-            <FormattedMessage id="broken.asAuthored" />
-          </h4>
           {authored === undefined ? (
             <p className="broken-empty">
               <FormattedMessage id="broken.nothingRecovered" />
@@ -465,13 +461,6 @@ function TestPanes({
         </div>
         <SplitHandle split={split} onSplit={onSplit} />
         <div className="broken-pane broken-pane-rebuilt" ref={rebuiltPaneRef}>
-          <h4>
-            <span className="codicon codicon-edit"></span>{' '}
-            <FormattedMessage id="broken.rebuild" />
-            <span className="broken-draft-tag">
-              <FormattedMessage id="broken.draftTag" />
-            </span>
-          </h4>
           {rebuilt === undefined ? (
             <>
               <p className="broken-empty">
@@ -641,6 +630,24 @@ export default function BrokenTestView({
 
       {!blocked && notes.length > 0 && (
         <ul className="broken-notes">{notes}</ul>
+      )}
+
+      {/* One header names the columns for every test below it. */}
+      {view.tests.length > 0 && (
+        <div
+          className="broken-panes broken-panes-header"
+          style={{ ['--broken-split']: `${split}%` } as React.CSSProperties}
+        >
+          <h4 className="broken-col-label">
+            <span className="codicon codicon-lock"></span>{' '}
+            <FormattedMessage id="broken.asAuthored" />
+          </h4>
+          <span />
+          <h4 className="broken-col-label">
+            <span className="codicon codicon-edit"></span>{' '}
+            <FormattedMessage id="broken.rebuild" />
+          </h4>
+        </div>
       )}
 
       {view.tests.map(({ authored, outcomes }, i) => {

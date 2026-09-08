@@ -132,8 +132,8 @@ describe('BrokenTestView', () => {
 
   it('renders both panes', () => {
     renderView(view());
-    expect(screen.getByText('As last saved')).toBeTruthy();
-    expect(screen.getByText('Rebuild against the current scope')).toBeTruthy();
+    expect(screen.getByText('Original')).toBeTruthy();
+    expect(screen.getByText('Repair copy')).toBeTruthy();
   });
 
   it('leaves a field whose type changed empty rather than guessing', () => {
@@ -435,7 +435,7 @@ describe('BrokenTestView', () => {
         ],
       })
     );
-    expect(screen.queryByText(/carried over for you/)).toBeNull();
+    expect(screen.queryByText(/Rebuild the test on the right/)).toBeNull();
     expect(screen.getByText(/cannot be rebuilt yet/)).toBeTruthy();
   });
 
