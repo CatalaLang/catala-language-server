@@ -486,3 +486,36 @@ for case in lostfield:detail:test_details payload:shade:test_bare; do
         && catala testcase read rebuilt.catala_en >/dev/null 2>&1) \
         || { echo "FAIL: the $dir working copy does not read back"; exit 1; }
 done
+
+# and the tripwire: ordinary read refuses the misfit original, naming the
+# spot. (Here the compiler itself refuses, at typechecking; check_tests_fit
+# behind it guards the same line for values the compiler cannot see.)
+err=$( (cd "$notes_scratch/lostfield" && catala testcase read test_details.catala_en) 2>&1 ) \
+    && { echo "FAIL: read accepted a test whose value no longer fits"; exit 1; }
+echo "$err" | grep -q "stamp" \
+    || { echo "FAIL: the refusal does not name the misfit field"; exit 1; }
+
+# ── mixed ownership at the rebuild door ─────────────────────────────────────
+# A drifted file never reaches read's ownership check (the compiler refuses
+# first), so rebuild re-checks from the surface (surface_scopes_by_ownership;
+# "the two must agree"). Routed into recovery instead, promoting the working
+# copy would delete the hand-written test.
+mkdir -p "$notes_scratch/mixed"
+cp "$notes_scratch/lostfield"/{clerk.toml,details.catala_en,test_details.catala_en} "$notes_scratch/mixed"/
+cat >> "$notes_scratch/mixed/test_details.catala_en" <<'EOF'
+
+```catala-metadata
+#[test]
+declaration scope HandWritten:
+  output ok content boolean
+```
+
+```catala
+scope HandWritten:
+  definition ok equals true
+```
+EOF
+err=$( (cd "$notes_scratch/mixed" && catala testcase rebuild test_details.catala_en) 2>&1 ) \
+    && { echo "FAIL: rebuild accepted a file with a hand-written test"; exit 1; }
+echo "$err" | grep -q "HandWritten" \
+    || { echo "FAIL: the refusal does not name the hand-written test"; exit 1; }
