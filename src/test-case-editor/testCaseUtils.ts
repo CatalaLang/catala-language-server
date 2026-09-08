@@ -94,5 +94,9 @@ export function renderAtomicValue(
  * webview only posts subsequent edits.
  */
 export function rebuiltFrom(results: ParseResults): TestList | undefined {
-  return results.kind === 'BrokenTest' ? results.value.rebuilt : undefined;
+  return results.kind === 'BrokenTest'
+    ? results.value.tests.flatMap((t) =>
+        t.rebuilt === undefined ? [] : [t.rebuilt]
+      )
+    : undefined;
 }

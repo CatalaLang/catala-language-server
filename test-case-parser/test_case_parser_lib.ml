@@ -1879,15 +1879,17 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
   let notes = ref [] in
   let note n = notes := n :: !notes in
   let workspace_file = Filename.basename test_file ^ ".updated" in
-  let emit recovered rebuilt carried =
+  let emit tests =
     write_stdout J.write_recovery
-      {
-        O.original = recovered;
-        rebuilt = rebuilt;
-        notes = List.rev !notes;
-        working_copy = workspace_file;
-        carry_outcomes = carried;
-      }
+      { O.tests; notes = List.rev !notes; working_copy = workspace_file }
+  in
+  (* No rebuild to offer (see the notes): authored tests alone. *)
+  let emit_bare recovered =
+    emit
+      (List.map
+         (fun (t : O.test) ->
+           { O.authored = t; rebuilt = None; outcomes = [] })
+         recovered)
   in
   (match surface_scopes_by_ownership (Driver.Passes.surface options) with
   | _ :: _, (_ :: _ as unowned) -> error_mixed_ownership unowned
@@ -1897,7 +1899,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
   | Ok (recovered, errors) -> (
     List.iter (fun e -> Message.warning "partial read: %s" e) errors;
     match recovered with
-    | [] -> emit [] [] []
+    | [] -> emit []
     | first :: _ -> (
       let scope = first.O.tested_scope in
       let workspace =
@@ -1930,7 +1932,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                  rank_project_scope_candidates ~from_dir
                    ~wanted_module:module_name ~field_names;
              });
-        emit recovered [] []
+        emit_bare recovered
       | Some module_file -> (
         (* Point the compiler at the module, not at the test that no longer
            typechecks. *)
@@ -1947,7 +1949,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
         with
         | exception e ->
           note (O.ModuleWontCompile { O.name = module_name; error = error_text e });
-          emit recovered [] []
+          emit_bare recovered
         | prg, _
           when not (Ident.Map.mem target_name prg.I.program_ctx.ctx_scope_index)
           ->
@@ -1959,7 +1961,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                  candidates =
                    rank_scope_candidates prg ~wanted:target_name ~field_names;
                });
-          emit recovered [] []
+          emit_bare recovered
         | program -> (
         match generate_test target_name ~program [] module_options with
         | exception e ->
@@ -1969,104 +1971,132 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                  O.name = module_name ^ "." ^ target_name;
                  error = error_text e;
                });
-          emit recovered [] []
+          emit_bare recovered
         | live ->
-          let carried = ref [] in
-          let record test io field outcome =
-            carried :=
-              { O.testing_scope = test; field; io; outcome }
-              :: !carried
-          in
-          (* One entry per live field, so every blank field is explained.
-             [when_missing] is what a field absent from the authored test
-             means: an input was left unset, but an output was simply never
-             asserted -- a healthy test, nothing to report. *)
-          let carry_record ~io ~when_missing (t : O.test)
-              (old_record : (string * O.test_io) list)
-              (live_record : (string * O.test_io) list) =
-            List.map
-              (fun (name, (live_io : O.test_io)) ->
-                match List.assoc_opt name old_record with
-                | Some { O.value = Some vd; typ = old_typ } -> (
-                  match
-                    carry_value ~old_typ ~new_typ:live_io.typ vd.O.value
-                  with
-                  | Some v, outcome ->
-                    record t.O.testing_scope io name outcome;
-                    ( name,
-                      { live_io with O.value = Some { O.value = v; pos = None } }
-                    )
-                  | None, outcome ->
-                    record t.O.testing_scope io name outcome;
+          let pair_of (t : O.test) : O.recovered_test =
+            let carried = ref [] in
+            let record io field outcome =
+              carried := { O.field; io; outcome } :: !carried
+            in
+            (* One entry per live field, so every blank field is explained.
+               [when_missing] is what a field absent from the authored test
+               means: an input was left unset, but an output was simply never
+               asserted -- a healthy test, nothing to report. *)
+            let carry_record ~io ~when_missing
+                (old_record : (string * O.test_io) list)
+                (live_record : (string * O.test_io) list) =
+              List.map
+                (fun (name, (live_io : O.test_io)) ->
+                  match List.assoc_opt name old_record with
+                  | Some { O.value = Some vd; typ = old_typ } -> (
+                    match
+                      carry_value ~old_typ ~new_typ:live_io.typ vd.O.value
+                    with
+                    | Some v, outcome ->
+                      record io name outcome;
+                      ( name,
+                        { live_io with O.value = Some { O.value = v; pos = None } }
+                      )
+                    | None, outcome ->
+                      record io name outcome;
+                      name, live_io)
+                  | _ ->
+                    (* A context var the test never overrode is not damage: the
+                       rebuilt field already defaults, like the authored one. *)
+                    let defaulting =
+                      match live_io.O.value with
+                      | Some { O.value = { O.value = O.NotOverridden; _ }; _ } ->
+                        true
+                      | _ -> false
+                    in
+                    if not defaulting then
+                      Option.iter (record io name) when_missing;
                     name, live_io)
-                | _ ->
-                  (* A context var the test never overrode is not damage: the
-                     rebuilt field already defaults, like the authored one. *)
-                  let defaulting =
-                    match live_io.O.value with
-                    | Some { O.value = { O.value = O.NotOverridden; _ }; _ } ->
-                      true
-                    | _ -> false
-                  in
-                  if not defaulting then
-                    Option.iter (record t.O.testing_scope io name) when_missing;
-                  name, live_io)
-              live_record
-          in
-          let rebuilt =
-            List.map
-              (fun (t : O.test) ->
-                {
-                  live with
-                  O.testing_scope = t.O.testing_scope;
-                  title = t.O.title;
-                  description = t.O.description;
-                  test_inputs =
-                    carry_record ~io:O.In ~when_missing:(Some O.WasUnset) t
-                      t.O.test_inputs live.O.test_inputs;
-                  test_outputs =
-                    carry_record ~io:O.Out ~when_missing:None t
-                      t.O.test_outputs live.O.test_outputs;
-                })
-              recovered
+                live_record
+            in
+            (* Authored fields the live signature lost: promotion deletes
+               them, and only a mark makes that a decision instead of an
+               accident. Only valued fields -- deleting nothing is not
+               damage. *)
+            let mark_dropped ~io (old_record : (string * O.test_io) list)
+                (live_record : (string * O.test_io) list) =
+              List.iter
+                (fun (name, (old_io : O.test_io)) ->
+                  if old_io.O.value <> None
+                     && not (List.mem_assoc name live_record)
+                  then record io name O.Dropped)
+                old_record
+            in
+            let rebuilt =
+              {
+                live with
+                O.testing_scope = t.O.testing_scope;
+                title = t.O.title;
+                description = t.O.description;
+                test_inputs =
+                  carry_record ~io:O.In ~when_missing:(Some O.WasUnset)
+                    t.O.test_inputs live.O.test_inputs;
+                test_outputs =
+                  carry_record ~io:O.Out ~when_missing:None t.O.test_outputs
+                    live.O.test_outputs;
+              }
+            in
+            mark_dropped ~io:O.In t.O.test_inputs live.O.test_inputs;
+            mark_dropped ~io:O.Out t.O.test_outputs live.O.test_outputs;
+            {
+              O.authored = t;
+              rebuilt = Some rebuilt;
+              outcomes = List.rev !carried;
+            }
           in
           (* A saved working copy wins over a fresh rebuild. It targets the
-             live scope, so an ordinary read works. A mark is answered once the
-             field holds a value. *)
-          let rebuilt, carried =
+             live scope, so an ordinary read works. Pairing is by testing
+             scope -- never by position: the working copy may have diverged
+             from the authored list. A mark is answered once the field holds
+             a value; [Dropped] is about the authored side and is never
+             answered. *)
+          let with_saved (pair : O.recovered_test) : O.recovered_test =
             match saved with
-            | None | Some [] -> rebuilt, List.rev !carried
-            | Some saved ->
-              (* Which record answers a mark depends on the mark's side. *)
-              let still_blank scope side field =
-                match
-                  List.find_opt
-                    (fun (t : O.test) -> t.O.testing_scope = scope)
-                    saved
-                with
-                | None -> true
-                | Some t -> (
+            | None | Some [] -> pair
+            | Some saved -> (
+              match
+                List.find_opt
+                  (fun (s : O.test) ->
+                    s.O.testing_scope = pair.O.authored.O.testing_scope)
+                  saved
+              with
+              | None -> pair
+              | Some s ->
+                (* Which record answers a mark depends on the mark's side. *)
+                let still_blank side field =
                   let record =
                     match side with
-                    | O.In -> t.O.test_inputs
-                    | O.Out -> t.O.test_outputs
+                    | O.In -> s.O.test_inputs
+                    | O.Out -> s.O.test_outputs
                   in
                   match
                     List.assoc_opt field record
-                    |> Option.fold ~none:None ~some:(fun (io : O.test_io) -> io.value)
+                    |> Option.fold ~none:None ~some:(fun (io : O.test_io) ->
+                           io.value)
                   with
                   | None -> true
-                  | Some vd -> vd.O.value.O.value = O.Unset)
-              in
-              ( saved,
-                List.rev !carried
-                |> List.filter (fun (r : O.carry_record) ->
-                       match r.O.outcome with
-                       | O.WasUnset | O.TypeChanged _ | O.WasAbsentNowRequired ->
-                         still_blank r.O.testing_scope r.O.io r.O.field
-                       | _ -> true) )
+                  | Some vd -> vd.O.value.O.value = O.Unset
+                in
+                {
+                  pair with
+                  O.rebuilt = Some s;
+                  outcomes =
+                    List.filter
+                      (fun (r : O.carry_record) ->
+                        match r.O.outcome with
+                        | O.WasUnset | O.TypeChanged _ | O.WasAbsentNowRequired
+                          ->
+                          still_blank r.O.io r.O.field
+                        | _ -> true)
+                      pair.O.outcomes;
+                })
           in
-          emit recovered rebuilt carried))))
+          emit (List.map (fun t -> with_saved (pair_of t)) recovered)))))
 
 let read_partial_test (options : Global.options) =
   match read_partial_tests options with

@@ -144,7 +144,7 @@ echo "$out" | grep -q "Hand_written" \
 catala testcase rebuild test_details.catala_en \
     | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));
                const bv=Array.isArray(d)?d[1]:d;
-               process.stdout.write(JSON.stringify(bv.rebuilt))' \
+               process.stdout.write(JSON.stringify(bv.tests.map((t)=>t.rebuilt)))' \
     | catala testcase write --language en > rebuilt_details.catala_en \
     || { echo "FAIL: could not write a rebuilt test"; exit 1; }
 
@@ -215,7 +215,7 @@ grep -q 'equals Present content Green' partial_test_bare_roundtrip.catala_en \
 catala testcase rebuild test_bare.catala_en \
     | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));
                const bv=Array.isArray(d)?d[1]:d;
-               process.stdout.write(JSON.stringify(bv.rebuilt))' \
+               process.stdout.write(JSON.stringify(bv.tests.map((t)=>t.rebuilt)))' \
     | catala testcase write --language en > rebuilt_bare.catala_en \
     || { echo "FAIL: could not write a rebuilt bare-constructor test"; exit 1; }
 grep -q 'equals Present content Bare.Colour.Green' rebuilt_bare.catala_en \
@@ -287,22 +287,28 @@ sed 's/\bbase\b/amount/g' optionals.catala_en > "$notes_scratch/field/optionals.
 node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   if (d.notes.length) { console.error("FAIL: a renamed field produced a note: " + JSON.stringify(d.notes)); process.exit(1); }
-  if (d.rebuilt.length !== 3) { console.error("FAIL: rebuilt " + d.rebuilt.length + " of 3 tests"); process.exit(1); }
+  const reb = d.tests.filter((t) => t.rebuilt !== undefined);
+  if (reb.length !== 3) { console.error("FAIL: rebuilt " + reb.length + " of 3 tests"); process.exit(1); }
+  const outcomes = d.tests.flatMap((t) => t.outcomes);
   const by = {};
-  for (const c of d.carry_outcomes) { const k = Array.isArray(c.outcome) ? c.outcome[0] : c.outcome; by[k] = (by[k] || 0) + 1; }
+  for (const c of outcomes) { const k = Array.isArray(c.outcome) ? c.outcome[0] : c.outcome; by[k] = (by[k] || 0) + 1; }
   // per test: amount (new) unset; bonus and total carried wherever the test set them
-  const amount = d.carry_outcomes.filter((c) => c.field === "amount").map((c) => c.outcome);
+  const amount = outcomes.filter((c) => c.field === "amount").map((c) => c.outcome);
   if (amount.length !== 3 || amount.some((o) => o !== "WasUnset"))
     { console.error("FAIL: the renamed field should be unset in all 3 tests: " + JSON.stringify(amount)); process.exit(1); }
-  const bonus = d.carry_outcomes.filter((c) => c.field === "bonus").map((c) => c.outcome);
+  const bonus = outcomes.filter((c) => c.field === "bonus").map((c) => c.outcome);
   if (bonus.length !== 3 || bonus.some((o) => o !== "Fits"))
     { console.error("FAIL: an unchanged field did not carry: " + JSON.stringify(bonus)); process.exit(1); }
   // total is asserted by two tests; the third never asserts it, and an output
   // a test does not assert is not damage to report
-  const total = d.carry_outcomes.filter((c) => c.field === "total").map((c) => c.outcome);
+  const total = outcomes.filter((c) => c.field === "total").map((c) => c.outcome);
   if (total.length !== 2 || total.some((o) => o !== "Fits"))
     { console.error("FAIL: expected two carried assertions on total and silence for the unasserted one: " + JSON.stringify(total)); process.exit(1); }
-  if (Object.keys(by).some((k) => k !== "Fits" && k !== "WasUnset"))
+  // the lost name is reported as deleted-on-promotion, in each test that set it
+  const base = outcomes.filter((c) => c.field === "base").map((c) => c.outcome);
+  if (base.length !== 3 || base.some((o) => o !== "Dropped"))
+    { console.error("FAIL: the lost field should be Dropped in all 3 tests: " + JSON.stringify(base)); process.exit(1); }
+  if (Object.keys(by).some((k) => k !== "Fits" && k !== "WasUnset" && k !== "Dropped"))
     { console.error("FAIL: unexpected outcomes " + JSON.stringify(by)); process.exit(1); }
 ' "$notes_scratch/field.json" || exit 1
 
@@ -321,7 +327,7 @@ node -e '
   if (!n) { console.error("FAIL: expected an Other note, got " + JSON.stringify(d.notes)); process.exit(1); }
   if (!/unsupported: function type/.test(n[1].error))
     { console.error("FAIL: the note does not say what was unsupported: " + n[1].error); process.exit(1); }
-  if (d.rebuilt.length !== 0) { console.error("FAIL: rebuilt against a scope the editor cannot describe"); process.exit(1); }
+  if (d.tests.some((t) => t.rebuilt !== undefined)) { console.error("FAIL: rebuilt against a scope the editor cannot describe"); process.exit(1); }
 ' "$notes_scratch/other.json" || exit 1
 
 # ── rebuilding against a scope the tester chose ─────────────────────────────
@@ -373,7 +379,7 @@ n=$(grep -o '"Fits"' "$notes_scratch/picked.json" | wc -l)
 # ...and the answer survives a save
 node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-  process.stdout.write(JSON.stringify(d.rebuilt));
+  process.stdout.write(JSON.stringify(d.tests.map((t) => t.rebuilt)));
 ' "$notes_scratch/picked.json" \
     | catala testcase write --language en > "$notes_scratch/picker/test_optionals.catala_en.updated"
 (cd "$notes_scratch/picker" && catala testcase rebuild test_optionals.catala_en 2>/dev/null) > "$notes_scratch/reopened.json"
@@ -411,7 +417,7 @@ grep -q '"module_name":"Benefits"' "$notes_scratch/modpicked.json" \
     || { echo "FAIL: the rebuild does not target the new module"; exit 1; }
 node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-  process.stdout.write(JSON.stringify(d.rebuilt));
+  process.stdout.write(JSON.stringify(d.tests.map((t) => t.rebuilt)));
 ' "$notes_scratch/modpicked.json" \
     | catala testcase write --language en > "$notes_scratch/modrename/test_optionals.catala_en.updated"
 grep -q '^> Using Benefits$' "$notes_scratch/modrename/test_optionals.catala_en.updated" \
@@ -481,9 +487,9 @@ sed 's/\bx\b/amount/g' context_vars.catala_en > "$notes_scratch/ctx/context_vars
     && catala testcase rebuild test_context_vars.catala_en 2>/dev/null) > "$notes_scratch/ctx.json"
 node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-  const marks = d.carry_outcomes.map((c) =>
+  const marks = d.tests.flatMap((t) => t.outcomes).map((c) =>
     c.field + ":" + c.io + ":" + (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome)).sort();
-  const want = ["amount:In:WasUnset", "y:In:Fits", "z:Out:Fits"];
+  const want = ["amount:In:WasUnset", "x:In:Dropped", "y:In:Fits", "z:Out:Fits"];
   if (JSON.stringify(marks) !== JSON.stringify(want))
     { console.error("FAIL: expected marks " + want + ", got " + marks); process.exit(1); }
 ' "$notes_scratch/ctx.json" || exit 1
@@ -492,11 +498,11 @@ for case in lostfield:detail:test_details payload:shade:test_bare; do
     dir=${case%%:*}; rest=${case#*:}; field=${rest%%:*}; test=${rest##*:}
     node -e '
       const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-      const c = d.carry_outcomes.find((c) => c.field === process.argv[2]);
+      const c = d.tests.flatMap((t) => t.outcomes).find((c) => c.field === process.argv[2]);
       const k = c && (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome);
       if (k !== "TypeChanged")
         { console.error("FAIL: a value the declaration no longer allows must not fit: " + JSON.stringify(c)); process.exit(1); }
-      process.stdout.write(JSON.stringify(d.rebuilt));
+      process.stdout.write(JSON.stringify(d.tests.map((t) => t.rebuilt)));
     ' "$notes_scratch/$dir.json" "$field" \
         | catala testcase write --language en > "$notes_scratch/$dir/rebuilt.catala_en" || exit 1
     (cd "$notes_scratch/$dir" \

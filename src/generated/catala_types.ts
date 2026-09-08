@@ -153,21 +153,24 @@ export type ParseResults =
 | { kind: 'BrokenTest'; value: Recovery }
 
 export type Recovery = {
-  original: TestList;
-  rebuilt: TestList;
+  tests: RecoveredTest[];
   notes: BrokenNote[];
   working_copy: string;
-  carry_outcomes: CarryRecord[];
+}
+
+export type RecoveredTest = {
+  authored: Test;
+  rebuilt?: Test;
+  outcomes: CarryRecord[];
 }
 
 export type CarryRecord = {
-  testing_scope: string;
   field: string;
-  io: CarryIo;
+  side: CarrySide;
   outcome: CarryOutcome;
 }
 
-export type CarryIo =
+export type CarrySide =
 | { kind: 'In' }
 | { kind: 'Out' }
 
@@ -178,6 +181,7 @@ export type CarryOutcome =
 | { kind: 'WasUnset' }
 | { kind: 'WasAbsentNowRequired' }
 | { kind: 'TypeChanged'; value: [Typ, Typ] }
+| { kind: 'Dropped' }
 
 export type BrokenNote =
 | { kind: 'ModuleNotFound'; value: ModuleNotFound }
@@ -838,43 +842,53 @@ export function readParseResults(x: any, context: any = x): ParseResults {
 
 export function writeRecovery(x: Recovery, context: any = x): any {
   return {
-    'original': _atd_write_required_field('Recovery', 'original', writeTestList, x.original, x),
-    'rebuilt': _atd_write_required_field('Recovery', 'rebuilt', writeTestList, x.rebuilt, x),
+    'tests': _atd_write_required_field('Recovery', 'tests', _atd_write_array(writeRecoveredTest), x.tests, x),
     'notes': _atd_write_required_field('Recovery', 'notes', _atd_write_array(writeBrokenNote), x.notes, x),
     'working_copy': _atd_write_required_field('Recovery', 'working_copy', _atd_write_string, x.working_copy, x),
-    'carry_outcomes': _atd_write_required_field('Recovery', 'carry_outcomes', _atd_write_array(writeCarryRecord), x.carry_outcomes, x),
   };
 }
 
 export function readRecovery(x: any, context: any = x): Recovery {
   return {
-    original: _atd_read_required_field('Recovery', 'original', readTestList, x['original'], x),
-    rebuilt: _atd_read_required_field('Recovery', 'rebuilt', readTestList, x['rebuilt'], x),
+    tests: _atd_read_required_field('Recovery', 'tests', _atd_read_array(readRecoveredTest), x['tests'], x),
     notes: _atd_read_required_field('Recovery', 'notes', _atd_read_array(readBrokenNote), x['notes'], x),
     working_copy: _atd_read_required_field('Recovery', 'working_copy', _atd_read_string, x['working_copy'], x),
-    carry_outcomes: _atd_read_required_field('Recovery', 'carry_outcomes', _atd_read_array(readCarryRecord), x['carry_outcomes'], x),
+  };
+}
+
+export function writeRecoveredTest(x: RecoveredTest, context: any = x): any {
+  return {
+    'authored': _atd_write_required_field('RecoveredTest', 'authored', writeTest, x.authored, x),
+    'rebuilt': _atd_write_optional_field(writeTest, x.rebuilt, x),
+    'outcomes': _atd_write_required_field('RecoveredTest', 'outcomes', _atd_write_array(writeCarryRecord), x.outcomes, x),
+  };
+}
+
+export function readRecoveredTest(x: any, context: any = x): RecoveredTest {
+  return {
+    authored: _atd_read_required_field('RecoveredTest', 'authored', readTest, x['authored'], x),
+    rebuilt: _atd_read_optional_field(readTest, x['rebuilt'], x),
+    outcomes: _atd_read_required_field('RecoveredTest', 'outcomes', _atd_read_array(readCarryRecord), x['outcomes'], x),
   };
 }
 
 export function writeCarryRecord(x: CarryRecord, context: any = x): any {
   return {
-    'testing_scope': _atd_write_required_field('CarryRecord', 'testing_scope', _atd_write_string, x.testing_scope, x),
     'field': _atd_write_required_field('CarryRecord', 'field', _atd_write_string, x.field, x),
-    'io': _atd_write_required_field('CarryRecord', 'io', writeCarryIo, x.io, x),
+    'side': _atd_write_required_field('CarryRecord', 'side', writeCarrySide, x.side, x),
     'outcome': _atd_write_required_field('CarryRecord', 'outcome', writeCarryOutcome, x.outcome, x),
   };
 }
 
 export function readCarryRecord(x: any, context: any = x): CarryRecord {
   return {
-    testing_scope: _atd_read_required_field('CarryRecord', 'testing_scope', _atd_read_string, x['testing_scope'], x),
     field: _atd_read_required_field('CarryRecord', 'field', _atd_read_string, x['field'], x),
-    io: _atd_read_required_field('CarryRecord', 'io', readCarryIo, x['io'], x),
+    side: _atd_read_required_field('CarryRecord', 'side', readCarrySide, x['side'], x),
     outcome: _atd_read_required_field('CarryRecord', 'outcome', readCarryOutcome, x['outcome'], x),
   };
 }
 
-export function writeCarryIo(x: CarryIo, context: any = x): any {
+export function writeCarrySide(x: CarrySide, context: any = x): any {
   switch (x.kind) {
     case 'In':
       return 'In'
@@ -883,14 +897,14 @@ export function writeCarryIo(x: CarryIo, context: any = x): any {
   }
 }
 
-export function readCarryIo(x: any, context: any = x): CarryIo {
+export function readCarrySide(x: any, context: any = x): CarrySide {
   switch (x) {
     case 'In':
       return { kind: 'In' }
     case 'Out':
       return { kind: 'Out' }
     default:
-      _atd_bad_json('CarryIo', x, context)
+      _atd_bad_json('CarrySide', x, context)
       throw new Error('impossible')
   }
 }
@@ -909,6 +923,8 @@ export function writeCarryOutcome(x: CarryOutcome, context: any = x): any {
       return 'WasAbsentNowRequired'
     case 'TypeChanged':
       return ['TypeChanged', ((x, context) => [writeTyp(x[0], x), writeTyp(x[1], x)])(x.value, x)]
+    case 'Dropped':
+      return 'Dropped'
   }
 }
 
@@ -925,6 +941,8 @@ export function readCarryOutcome(x: any, context: any = x): CarryOutcome {
         return { kind: 'WasUnset' }
       case 'WasAbsentNowRequired':
         return { kind: 'WasAbsentNowRequired' }
+      case 'Dropped':
+        return { kind: 'Dropped' }
       default:
         _atd_bad_json('CarryOutcome', x, context)
         throw new Error('impossible')

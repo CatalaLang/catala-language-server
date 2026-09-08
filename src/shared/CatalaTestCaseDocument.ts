@@ -116,9 +116,18 @@ export class CatalaTestCaseDocument
       this._parseResults.kind === 'BrokenTest' &&
       this._rebuilt !== undefined
     ) {
+      const byScope = new Map(this._rebuilt.map((t) => [t.testing_scope, t]));
       return {
         kind: 'BrokenTest',
-        value: { ...this._parseResults.value, rebuilt: this._rebuilt },
+        value: {
+          ...this._parseResults.value,
+          // Always the live entry -- absent from the live list means the
+          // rebuild no longer holds this test, and a save would not write it.
+          tests: this._parseResults.value.tests.map((pair) => ({
+            ...pair,
+            rebuilt: byScope.get(pair.authored.testing_scope),
+          })),
+        },
       };
     }
     return this._parseResults;

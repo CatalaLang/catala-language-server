@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import type {
+  CarryRecord,
   Recovery,
   Test,
   TestIo,
@@ -67,30 +68,42 @@ function rebuilt(): Test {
   };
 }
 
-function view(overrides: Partial<Recovery> = {}): Recovery {
+function view(
+  overrides: {
+    /** No rebuild to offer: the pair carries only the authored test. */
+    blocked?: boolean;
+    outcomes?: CarryRecord[];
+    notes?: Recovery['notes'];
+  } = {}
+): Recovery {
   return {
-    original: [authored()],
-    rebuilt: [rebuilt()],
-    notes: [],
-    working_copy: 'test_one.catala_en.updated',
-    carry_outcomes: [
+    tests: [
       {
-        testing_scope: 'C_one',
-        field: 'start_date',
-        io: { kind: 'In' },
-        outcome: { kind: 'Fits' },
-      },
-      {
-        testing_scope: 'C_one',
-        field: 'end_date',
-        io: { kind: 'In' },
-        outcome: {
-          kind: 'TypeChanged',
-          value: [{ kind: 'TDate' }, endDateEnum],
-        },
+        authored: authored(),
+        rebuilt: overrides.blocked ? undefined : rebuilt(),
+        outcomes:
+          overrides.outcomes ??
+          (overrides.blocked
+            ? []
+            : [
+                {
+                  field: 'start_date',
+                  io: { kind: 'In' },
+                  outcome: { kind: 'Fits' },
+                },
+                {
+                  field: 'end_date',
+                  io: { kind: 'In' },
+                  outcome: {
+                    kind: 'TypeChanged',
+                    value: [{ kind: 'TDate' }, endDateEnum],
+                  },
+                },
+              ]),
       },
     ],
-    ...overrides,
+    notes: overrides.notes ?? [],
+    working_copy: 'test_one.catala_en.updated',
   };
 }
 
@@ -139,9 +152,8 @@ describe('BrokenTestView', () => {
   it('marks a conversion so it does not look like something the tester typed', () => {
     renderView(
       view({
-        carry_outcomes: [
+        outcomes: [
           {
-            testing_scope: 'C_one',
             field: 'start_date',
             io: { kind: 'In' },
             outcome: { kind: 'Wrap' },
@@ -155,9 +167,8 @@ describe('BrokenTestView', () => {
   it('says nothing about a field the test simply never set', () => {
     renderView(
       view({
-        carry_outcomes: [
+        outcomes: [
           {
-            testing_scope: 'C_one',
             field: 'start_date',
             io: { kind: 'In' },
             outcome: { kind: 'WasUnset' },
@@ -189,11 +200,11 @@ describe('BrokenTestView', () => {
     // editor must be the one rendering them.
     const withOutputs: Recovery = view();
     const expected = io({ kind: 'TMoney' }, { value: moneyVal(100) });
-    withOutputs.original[0].test_outputs = new Map([['total', expected]]);
-    withOutputs.rebuilt[0].tested_scope.outputs = new Map([
+    withOutputs.tests[0].authored.test_outputs = new Map([['total', expected]]);
+    withOutputs.tests[0].rebuilt!.tested_scope.outputs = new Map([
       ['total', { kind: 'TMoney' }],
     ]);
-    withOutputs.rebuilt[0].test_outputs = new Map([['total', expected]]);
+    withOutputs.tests[0].rebuilt!.test_outputs = new Map([['total', expected]]);
     const container = renderView(withOutputs, {
       C_one: {
         status: 'error',
@@ -223,10 +234,10 @@ describe('BrokenTestView', () => {
     // A context var the test never overrode arrives as NotOverridden; the
     // rebuilt pane must render the ordinary placeholder, not an empty editor.
     const v = view();
-    v.rebuilt[0].tested_scope.inputs = new Map([
+    v.tests[0].rebuilt!.tested_scope.inputs = new Map([
       ['rate', { typ: { kind: 'TRat' }, is_context: true }],
     ]);
-    v.rebuilt[0].test_inputs = new Map([
+    v.tests[0].rebuilt!.test_inputs = new Map([
       ['rate', io({ kind: 'TRat' }, { value: rv({ kind: 'NotOverridden' }) })],
     ]);
     const container = renderView(v);
@@ -239,10 +250,10 @@ describe('BrokenTestView', () => {
 
   it('lets the tester override a context variable from the rebuilt pane', () => {
     const v = view();
-    v.rebuilt[0].tested_scope.inputs = new Map([
+    v.tests[0].rebuilt!.tested_scope.inputs = new Map([
       ['rate', { typ: { kind: 'TRat' }, is_context: true }],
     ]);
-    v.rebuilt[0].test_inputs = new Map([
+    v.tests[0].rebuilt!.test_inputs = new Map([
       ['rate', io({ kind: 'TRat' }, { value: rv({ kind: 'NotOverridden' }) })],
     ]);
     const container = renderView(v);
@@ -258,23 +269,22 @@ describe('BrokenTestView', () => {
     // emptied assertion; the input side's WasUnset (never overridden) must
     // neither mask it nor decorate the healthy input row.
     const v = view();
-    v.rebuilt[0].tested_scope.inputs = new Map([
+    const pair = v.tests[0];
+    pair.rebuilt!.tested_scope.inputs = new Map([
       ['z', { typ: { kind: 'TRat' }, is_context: true }],
     ]);
-    v.rebuilt[0].tested_scope.outputs = new Map([['z', { kind: 'TRat' }]]);
-    v.rebuilt[0].test_inputs = new Map([
+    pair.rebuilt!.tested_scope.outputs = new Map([['z', { kind: 'TRat' }]]);
+    pair.rebuilt!.test_inputs = new Map([
       ['z', io({ kind: 'TRat' }, { value: rv({ kind: 'NotOverridden' }) })],
     ]);
-    v.rebuilt[0].test_outputs = new Map([['z', io({ kind: 'TRat' })]]);
-    v.carry_outcomes = [
+    pair.rebuilt!.test_outputs = new Map([['z', io({ kind: 'TRat' })]]);
+    pair.outcomes = [
       {
-        testing_scope: 'C_one',
         field: 'z',
         io: { kind: 'In' },
         outcome: { kind: 'WasUnset' },
       },
       {
-        testing_scope: 'C_one',
         field: 'z',
         io: { kind: 'Out' },
         outcome: {
@@ -297,10 +307,12 @@ describe('BrokenTestView', () => {
     // The rebuild lists every scope output; one the test never asserted must
     // not render as an (empty-looking) expected value.
     const v = view();
-    v.rebuilt[0].tested_scope.outputs = new Map([
+    v.tests[0].rebuilt!.tested_scope.outputs = new Map([
       ['total', { kind: 'TMoney' }],
     ]);
-    v.rebuilt[0].test_outputs = new Map([['total', io({ kind: 'TMoney' })]]);
+    v.tests[0].rebuilt!.test_outputs = new Map([
+      ['total', io({ kind: 'TMoney' })],
+    ]);
     const container = renderView(v);
     expect(screen.getByText(/Add expected value/)).toBeTruthy();
     expect(
@@ -310,10 +322,12 @@ describe('BrokenTestView', () => {
 
   it('creates the assertion when the tester asks for it', () => {
     const v = view();
-    v.rebuilt[0].tested_scope.outputs = new Map([
+    v.tests[0].rebuilt!.tested_scope.outputs = new Map([
       ['total', { kind: 'TMoney' }],
     ]);
-    v.rebuilt[0].test_outputs = new Map([['total', io({ kind: 'TMoney' })]]);
+    v.tests[0].rebuilt!.test_outputs = new Map([
+      ['total', io({ kind: 'TMoney' })],
+    ]);
     const container = renderView(v);
     fireEvent.click(screen.getByText(/Add expected value/));
     expect(
@@ -323,14 +337,15 @@ describe('BrokenTestView', () => {
 
   it('keeps the carry mark on an output whose assertion could not follow', () => {
     const v = view();
-    v.rebuilt[0].tested_scope.outputs = new Map([
+    v.tests[0].rebuilt!.tested_scope.outputs = new Map([
       ['total', { kind: 'TMoney' }],
     ]);
-    v.rebuilt[0].test_outputs = new Map([['total', io({ kind: 'TMoney' })]]);
-    v.carry_outcomes = [
-      ...v.carry_outcomes,
+    v.tests[0].rebuilt!.test_outputs = new Map([
+      ['total', io({ kind: 'TMoney' })],
+    ]);
+    v.tests[0].outcomes = [
+      ...v.tests[0].outcomes,
       {
-        testing_scope: 'C_one',
         field: 'total',
         io: { kind: 'Out' },
         outcome: {
@@ -358,7 +373,7 @@ describe('BrokenTestView', () => {
   });
 
   it('still shows the authored values when there is nothing to rebuild against', () => {
-    renderView(view({ rebuilt: [] }));
+    renderView(view({ blocked: true }));
     expect(screen.getAllByDisplayValue('2999-12-31').length).toBe(1);
     expect(screen.getByText(/No current signature/)).toBeTruthy();
   });
@@ -366,7 +381,7 @@ describe('BrokenTestView', () => {
   it('does not tell the tester to rebuild when there is nothing to rebuild on', () => {
     renderView(
       view({
-        rebuilt: [],
+        blocked: true,
         notes: [
           {
             kind: 'ModuleWontCompile',
@@ -382,7 +397,7 @@ describe('BrokenTestView', () => {
   it("shows the compiler's own words when a module will not build", () => {
     renderView(
       view({
-        rebuilt: [],
+        blocked: true,
         notes: [
           {
             kind: 'ModuleWontCompile',
@@ -397,7 +412,7 @@ describe('BrokenTestView', () => {
   it('says a scope is gone rather than blaming the module that compiles fine', () => {
     renderView(
       view({
-        rebuilt: [],
+        blocked: true,
         notes: [
           {
             kind: 'ScopeNotFound',
@@ -427,7 +442,7 @@ describe('BrokenTestView', () => {
       <IntlProvider locale="en" messages={enMessages}>
         <BrokenTestView
           view={view({
-            rebuilt: [],
+            blocked: true,
             notes: [
               {
                 kind: 'ScopeNotFound',
@@ -478,7 +493,7 @@ describe('BrokenTestView', () => {
     fireEvent.click(screen.getByText(/Replace the original/));
     expect(replaced.length).toBe(1);
     expect(replaced[0][0].test_inputs.get('start_date')).toEqual(
-      view().rebuilt[0].test_inputs.get('start_date')
+      view().tests[0].rebuilt!.test_inputs.get('start_date')
     );
   });
 
@@ -487,7 +502,7 @@ describe('BrokenTestView', () => {
     render(
       <IntlProvider locale="en" messages={enMessages}>
         <BrokenTestView
-          view={view({ rebuilt: [] })}
+          view={view({ blocked: true })}
           onReplace={(): void => {}}
           onDiscard={(): void => {}}
         />
@@ -519,7 +534,7 @@ describe('BrokenTestView', () => {
       <IntlProvider locale="en" messages={enMessages}>
         <BrokenTestView
           view={view({
-            rebuilt: [],
+            blocked: true,
             notes: [
               {
                 kind: 'ModuleNotFound',
@@ -555,7 +570,7 @@ describe('BrokenTestView', () => {
     // The view arrives anew after a retarget; the right pane must follow it.
     const { rerender } = render(
       <IntlProvider locale="en" messages={enMessages}>
-        <BrokenTestView view={view({ rebuilt: [] })} />
+        <BrokenTestView view={view({ blocked: true })} />
       </IntlProvider>
     );
     expect(screen.getByText(/No current signature/)).toBeTruthy();

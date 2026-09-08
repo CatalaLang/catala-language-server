@@ -55,11 +55,7 @@ function execBinary(
   }
 }
 
-/**
- * Recover a test that no longer fits its scope. All the reasoning is in OCaml;
- * this only asks and parses. Returns the rebuild's own refusal as a parse
- * error, or null when there is nothing to show.
- */
+/** All the reasoning is in OCaml; this only asks and parses. */
 function recoverBrokenTest(
   bufferPath: string,
   scope?: string
@@ -72,15 +68,14 @@ function recoverBrokenTest(
   );
   if (!result.ok) {
     logger.log(`rebuild could not recover: ${result.stderr}`);
-    // The refusal (e.g. mixed ownership) is more specific than the compiler's
-    // first error.
+    // The refusal is more specific than the compiler's first error.
     return result.stderr.trim() === ''
       ? null
       : { kind: 'ParseError', value: result.stderr };
   }
   try {
     const view = readRecovery(JSON.parse(result.output));
-    if (view.original.length === 0) return null;
+    if (view.tests.length === 0) return null;
     return { kind: 'BrokenTest', value: view };
   } catch (error) {
     logger.log(`rebuild returned unreadable JSON: ${String(error)}`);
@@ -110,10 +105,7 @@ function runFailed(message: string): TestRunResults {
   return { kind: 'Error', value: message };
 }
 
-/**
- * Run a rebuilt test from stdin: the file on disk is the broken original, and
- * running must not imply saving the working copy.
- */
+/** From stdin: running must not imply saving the working copy. */
 export function runRebuiltTest(
   tests: TestList,
   testingScope: string,

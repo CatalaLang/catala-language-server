@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type {
   BrokenNote,
@@ -54,13 +54,10 @@ type Props = {
  *  an output, and one side's outcome must not mask the other's. */
 function marksFor(
   carried: CarryRecord[],
-  testingScope: string,
   io: CarryIo['kind']
 ): Map<string, CarryOutcome> {
   return new Map(
-    carried
-      .filter((c) => c.testing_scope === testingScope && c.io.kind === io)
-      .map((c) => [c.field, c.outcome])
+    carried.filter((c) => c.io.kind === io).map((c) => [c.field, c.outcome])
   );
 }
 
@@ -73,6 +70,8 @@ function CarryMark({
   const intl = useIntl();
   if (outcome.kind === 'WasUnset') return null;
   if (outcome.kind === 'Fits') return null;
+  // About an authored field, not a rebuilt one: the left pane's business.
+  if (outcome.kind === 'Dropped') return null;
   const carried = outcome.kind === 'Wrap' || outcome.kind === 'Unwrap';
   const id = {
     Wrap: 'broken.markWrapped',
@@ -484,12 +483,19 @@ export default function BrokenTestView({
   onDiscard,
   runStates,
 }: Props): React.JSX.Element {
-  const [rebuilt, setRebuilt] = useState<TestList>(view.rebuilt);
+  // The editable state stays a flat list (it is what a save writes); the
+  // pairing below is by testing scope, never by position.
+  const viewRebuilt = useMemo(
+    () =>
+      view.tests.flatMap((t) => (t.rebuilt === undefined ? [] : [t.rebuilt])),
+    [view.tests]
+  );
+  const [rebuilt, setRebuilt] = useState<TestList>(viewRebuilt);
   // A new view (retarget, undo, revert) is authoritative; it is never the
   // echo of an edit made here.
   useEffect(() => {
-    setRebuilt(view.rebuilt);
-  }, [view.rebuilt]);
+    setRebuilt(viewRebuilt);
+  }, [viewRebuilt]);
   // A scope gone from its module, or a module gone from the project: either
   // way the tester picks where the test goes now.
   const pickable = view.notes.find(
@@ -517,7 +523,7 @@ export default function BrokenTestView({
   };
 
   // Nothing to rebuild against: the notes are the message.
-  const blocked = view.rebuilt.length === 0;
+  const blocked = view.tests.every((t) => t.rebuilt === undefined);
   const notes = view.notes.map((n, i) => (
     <li key={n.kind + String(i)}>
       <Note note={n} />
@@ -577,31 +583,27 @@ export default function BrokenTestView({
         <ul className="broken-notes">{notes}</ul>
       )}
 
-      {view.original.map((authored, i) => (
-        <TestPanes
-          key={authored.testing_scope + String(i)}
-          authored={authored}
-          rebuilt={rebuilt[i]}
-          marksIn={marksFor(view.carry_outcomes, authored.testing_scope, 'In')}
-          marksOut={marksFor(
-            view.carry_outcomes,
-            authored.testing_scope,
-            'Out'
-          )}
-          split={split}
-          onSplit={moveSplit}
-          picker={picker}
-          runState={runStates?.[authored.testing_scope]}
-          onRun={
-            onRun === undefined
-              ? undefined
-              : (): void => onRun(authored.testing_scope)
-          }
-          onChange={(next): void =>
-            update(rebuilt.map((t, j) => (j === i ? next : t)))
-          }
-        />
-      ))}
+      {view.tests.map(({ authored, outcomes }, i) => {
+        const scope = authored.testing_scope;
+        const live = rebuilt.find((t) => t.testing_scope === scope);
+        return (
+          <TestPanes
+            key={scope + String(i)}
+            authored={authored}
+            rebuilt={live}
+            marksIn={marksFor(outcomes, 'In')}
+            marksOut={marksFor(outcomes, 'Out')}
+            split={split}
+            onSplit={moveSplit}
+            picker={picker}
+            runState={runStates?.[scope]}
+            onRun={onRun === undefined ? undefined : (): void => onRun(scope)}
+            onChange={(next): void =>
+              update(rebuilt.map((t) => (t.testing_scope === scope ? next : t)))
+            }
+          />
+        );
+      })}
     </div>
   );
 }

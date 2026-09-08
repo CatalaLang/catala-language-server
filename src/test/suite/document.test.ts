@@ -108,7 +108,7 @@ suite('Broken test document', function () {
     let results = doc.parseResults;
     assert.ok(results.kind === 'BrokenTest');
     assert.strictEqual(
-      results.value.rebuilt.length,
+      results.value.tests.filter((t) => t.rebuilt !== undefined).length,
       2,
       'parseResults reports the live rebuild'
     );
@@ -118,7 +118,7 @@ suite('Broken test document', function () {
     results = doc.parseResults;
     assert.ok(results.kind === 'BrokenTest');
     assert.strictEqual(
-      results.value.rebuilt.length,
+      results.value.tests.filter((t) => t.rebuilt !== undefined).length,
       3,
       'after undo, parseResults reports the stepped-back rebuild'
     );
@@ -126,7 +126,11 @@ suite('Broken test document', function () {
     lastEdit.redo();
     results = doc.parseResults;
     assert.ok(results.kind === 'BrokenTest');
-    assert.strictEqual(results.value.rebuilt.length, 2, 'redo steps forward');
+    assert.strictEqual(
+      results.value.tests.filter((t) => t.rebuilt !== undefined).length,
+      2,
+      'redo steps forward'
+    );
   });
 
   test('a blocked rebuild has nothing to save, and saving does not fail', async () => {

@@ -20,11 +20,9 @@ function test(scope: string): Test {
 
 function view(rebuilt: Test[]): Recovery {
   return {
-    original: [test('C_one')],
-    rebuilt: rebuilt,
+    tests: [{ authored: test('C_one'), rebuilt: rebuilt[0], outcomes: [] }],
     notes: [],
     working_copy: 'x.catala_en.updated',
-    carry_outcomes: [],
   };
 }
 
