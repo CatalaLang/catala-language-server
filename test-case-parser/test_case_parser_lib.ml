@@ -986,10 +986,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
               _ )
             when svar = subscope_var ->
             let scope_var = StructField.Map.find field scope_field_map in
-            (* One assertion per output. Only a hand edit can duplicate one
-               (the writer never does), the second would silently shadow the
-               first here -- and crash the run's diff on the count. A rich
-               assertion editor (say [foo > 30] and [foo < 50]) would have to
+            (* A rich-assertion editor (foo > 30 and foo < 50) would
                revisit this. *)
             if ScopeVar.Map.mem scope_var acc then
               Message.error ~pos
@@ -1514,8 +1511,6 @@ let read_partial_test_one (scope_decl : Surface.Ast.scope_decl)
            scope_use.scope_use_items)
     with Err s -> Error s
   in
-  (* The full reader refuses a field asserted twice; so must this one, or the
-     write-back would keep only one of the two. *)
   let*? () =
     match
       List.find_opt
@@ -1535,23 +1530,29 @@ let read_partial_test_one (scope_decl : Surface.Ast.scope_decl)
               { scope_decl_context_scope_sub_scope = (p, (sname, _)), _; _ },
             _ ) ->
           Some
-            {
-              O.name = sname;
-              module_name = List.hd (List.rev p) |> fst;
-              inputs =
-                List.map
-                  (fun (v, (i_io : O.test_io)) ->
-                    v, { O.typ = i_io.typ; is_context = false })
-                  test_inputs;
-              outputs =
-                List.map
-                  (fun (n, (io : O.test_io)) -> n, io.typ)
-                  recovered_outputs;
-              module_deps = [];
-            }
+            (match List.rev p with
+            | [] ->
+              Error
+                (Printf.sprintf "%S does not say which module it tests" sname)
+            | (m, _) :: _ ->
+              Ok
+                {
+                  O.name = sname;
+                  module_name = m;
+                  inputs =
+                    List.map
+                      (fun (v, (i_io : O.test_io)) ->
+                        v, { O.typ = i_io.typ; is_context = false })
+                      test_inputs;
+                  outputs =
+                    List.map
+                      (fun (n, (io : O.test_io)) -> n, io.typ)
+                      recovered_outputs;
+                  module_deps = [];
+                })
         | _ -> None)
       scope_decl.scope_decl_context
-    |> function None -> Error "tested scope not found" | Some v -> Ok v
+    |> function None -> Error "tested scope not found" | Some r -> r
   in
   Ok
     {
@@ -1592,9 +1593,7 @@ let read_partial_tests options : (O.test list * string list, string) Result.t =
           with
           | [] -> None (* declared but never defined: not a test *)
           | first :: _ as all ->
-            (* Catala merges a scope's uses across blocks; so must we, or
-               every block after the first is silently dropped -- and
-               deleted on promotion. *)
+            (* Catala merges a scope's uses across blocks; so must we. *)
             let use =
               {
                 first with
@@ -1714,8 +1713,6 @@ let error_text (e : exn) : string =
   | Unsupported msg -> "unsupported: " ^ msg
   | e -> Printexc.to_string e
 
-(* The nearest directory holding a clerk.toml, else [from_dir]. Same
-   primitive as clerk's own lookup (it stops at $HOME). *)
 let project_root (from_dir : string) : string =
   match
     File.find_in_parents ~cwd:(File.make_absolute from_dir) (fun dir ->
@@ -1726,11 +1723,7 @@ let project_root (from_dir : string) : string =
 
 module Scan = Clerk_utils.Scan
 
-(* Every Catala source under [dir], seen the way clerk sees a project:
-   clerk's own extension logic and its lexical module scan, so nothing here
-   can drift from what a build would resolve. Per-file failures are dropped
-   rather than raised -- this serves recovery, where broken files are the
-   normal case. *)
+(* Per-file failures dropped: broken files are recovery's normal case. *)
 let scan_catala_files (dir : string) : Scan.item list =
   File.scan_tree
     (fun f ->
@@ -1741,9 +1734,7 @@ let scan_catala_files (dir : string) : Scan.item list =
   |> Seq.concat_map (fun (_, _, items) -> List.to_seq items)
   |> List.of_seq
 
-(* The file declaring [> Module name], searched from the test outwards. Clerk
-   cannot resolve from a file that no longer typechecks, but its scanner is
-   lexical and can. *)
+(* Lexical scan: resolves in a project that does not compile. *)
 let find_module_file (name : string) (from_dir : string) : string option =
   let declares (it : Scan.item) =
     match it.Scan.module_def with
@@ -1755,7 +1746,6 @@ let find_module_file (name : string) (from_dir : string) : string option =
       (fun (it : Scan.item) -> it.Scan.file_name)
       (List.find_opt declares (scan_catala_files dir))
   in
-  (* Beside the test first: that is where a module almost always is. *)
   match find from_dir with
   | Some f -> Some f
   | None -> find (project_root from_dir)
@@ -1835,8 +1825,7 @@ let parse_target (t : string) : string option * string =
   | Some i -> Some (String.sub t 0 i), String.sub t (i + 1) (String.length t - i - 1)
   | None -> None, t
 
-(* An ordinary read, or None. For the working copy: [working_copy_ext] keeps clerk
-   away from it, and also hides the language, hence [~lang]. *)
+(* [working_copy_ext] hides the language, hence [~lang]. *)
 let read_tests_of_file ~(lang : Global.backend_lang) (file : string) :
     O.test list option =
   if not (Sys.file_exists file) then None
@@ -1895,9 +1884,7 @@ let rank_scope_candidates (prg : I.program) ~(wanted : string)
            | c -> c)
          | c -> c)
 
-(* The working copy's suffix. Not a Catala extension, so clerk's scan and
-   ours stay blind to it -- and it reads as what the file is: a repair in
-   progress, not a finished newer version. *)
+(* Not a Catala extension, so no scan sees it; matches TS workingCopyExt. *)
 let working_copy_ext = ".repair"
 
 let rebuild_broken_test (options : Global.options) (target : string option) =
@@ -1910,7 +1897,6 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
     write_stdout J.write_recovery
       { O.tests; notes = List.rev !notes; working_copy = workspace_file }
   in
-  (* No rebuild to offer (see the notes): authored tests alone. *)
   let emit_bare recovered =
     emit
       (List.map
@@ -2002,13 +1988,11 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
         | live ->
           let pair_of (t : O.test) : O.recovered_test =
             let carried = ref [] in
-            let record io field outcome =
-              carried := { O.field; io; outcome } :: !carried
+            let record side field outcome =
+              carried := { O.field; side; outcome } :: !carried
             in
-            (* One entry per live field, so every blank field is explained.
-               [when_missing] is what a field absent from the authored test
-               means: an input was left unset, but an output was simply never
-               asserted -- a healthy test, nothing to report. *)
+            (* One entry per live field. [when_missing]: an absent input
+               was left unset; an absent output was never asserted. *)
             let carry_record ~io ~when_missing
                 (old_record : (string * O.test_io) list)
                 (live_record : (string * O.test_io) list) =
@@ -2028,8 +2012,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                       record io name outcome;
                       name, live_io)
                   | _ ->
-                    (* A context var the test never overrode is not damage: the
-                       rebuilt field already defaults, like the authored one. *)
+                    (* A context var never overridden is not damage. *)
                     let defaulting =
                       match live_io.O.value with
                       | Some { O.value = { O.value = O.NotOverridden; _ }; _ } ->
@@ -2041,10 +2024,6 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                     name, live_io)
                 live_record
             in
-            (* Authored fields the live signature lost: promotion deletes
-               them, and only a mark makes that a decision instead of an
-               accident. Only valued fields -- deleting nothing is not
-               damage. *)
             let mark_dropped ~io (old_record : (string * O.test_io) list)
                 (live_record : (string * O.test_io) list) =
               List.iter
@@ -2076,12 +2055,8 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
               outcomes = List.rev !carried;
             }
           in
-          (* A saved working copy wins over a fresh rebuild. It targets the
-             live scope, so an ordinary read works. Pairing is by testing
-             scope -- never by position: the working copy may have diverged
-             from the authored list. A mark is answered once the field holds
-             a value; [Dropped] is about the authored side and is never
-             answered. *)
+          (* A mark is answered once its field holds a value; [Dropped]
+             never. *)
           let with_saved (pair : O.recovered_test) : O.recovered_test =
             match saved with
             | None | Some [] -> pair
@@ -2094,7 +2069,6 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
               with
               | None -> pair
               | Some s ->
-                (* Which record answers a mark depends on the mark's side. *)
                 let still_blank side field =
                   let record =
                     match side with
@@ -2118,7 +2092,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                         match r.O.outcome with
                         | O.WasUnset | O.TypeChanged _ | O.WasAbsentNowRequired
                           ->
-                          still_blank r.O.io r.O.field
+                          still_blank r.O.side r.O.field
                         | _ -> true)
                       pair.O.outcomes;
                 })
@@ -2310,12 +2284,8 @@ let write_catala_test ppf t lang =
   let open O in
   let strings = get_lang_strings lang in
   let sscope_var =
-    let sname =
-      match Filename.extension t.tested_scope.name with
-      | "" -> t.tested_scope.name
-      | s -> String.sub s 1 (String.length s - 1)
-    in
-    String.to_snake_case sname
+    (* The scope part of a possibly qualified name, like [parse_target]. *)
+    String.to_snake_case (snd (parse_target t.tested_scope.name))
   in
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala-metadata@,";
@@ -2839,22 +2809,9 @@ let run_test include_dirs options testing_scope =
   let test_run = { O.test; O.assert_failures; O.diffs } in
   write_stdout J.write_test_run test_run
 
-(* The interpreter dynloads each imported module as a native plugin
-   (`_build/**/ocaml/<Module>.cmxs`). `clerk run --prepare-only` builds them
-   without interpreting anything: the target's dependencies, and -- pointed
-   at a module file -- that module's own plugin, resyncing `_build` for what
-   it touches. It does not need the target to compile, only its imports to
-   resolve.
-
-   Clerk looks clerk.toml up from its own cwd, and ours is the editor's
-   workspace folder -- possibly far above the file's project (a workspace
-   holding several projects): resolve the project from the file, not from
-   where we happen to stand. *)
-let absolute (f : string) : string =
-  if Filename.is_relative f then Filename.concat (Sys.getcwd ()) f else f
-
+(* Clerk resolves clerk.toml from its cwd; ours is the workspace folder. *)
 let file_project_root (f : string) : string option =
-  let root = project_root (Filename.dirname (absolute f)) in
+  let root = project_root (Filename.dirname (File.make_absolute f)) in
   if Sys.file_exists (Filename.concat root "clerk.toml") then Some root
   else None
 
@@ -2866,7 +2823,7 @@ let prepare_runtime_plugins (file : string) =
       (Sys.command
          (Printf.sprintf "cd %s && clerk run --prepare-only %s >/dev/null 2>&1"
             (Filename.quote root)
-            (Filename.quote (absolute file))))
+            (Filename.quote (File.make_absolute file))))
 
 let build_runtime_plugins ?buffer_path (options : Global.options) =
   let file =
@@ -2884,12 +2841,7 @@ let build_runtime_plugins ?buffer_path (options : Global.options) =
     if Sys.file_exists "clerk.toml" then
       ignore (Sys.command "clerk build >/dev/null 2>&1")
 
-(* A test fed on stdin may sit beside a broken original ([buffer_path]) that
-   clerk cannot compile. The plugins its run needs are those of the modules
-   the test imports -- live files that compile by construction -- so prepare
-   each of them directly and go on from the text. Reading the text as
-   [Contents] at [buffer_path] is what lets module resolution find the
-   project from the file rather than from the cwd. *)
+(* [Contents] at [buffer_path] anchors module resolution to the file. *)
 let run_test_cmd include_dirs options test_scope_name scope_input_opt buffer_path
     =
   let options =

@@ -11,7 +11,23 @@ function cleanup(){
     rm -f rebuilt_bare.catala_en
     rm -f opt_fr_roundtrip.catala_fr
     rm -f written_*.catala_en written2_*.catala_en
-    rm -f dup_assert.catala_en
+    rm -f dup_assert.catala_en unqual.catala_en
+
+# ── a test that does not name its module ────────────────────────────────────
+# Only a hand edit unqualifies the tested scope; guessing a module would
+# rebuild against the wrong one. Refused with a reason, never a bare crash.
+sed 's/scope Optionals\.Grant/scope Grant/' test_optionals.catala_en > unqual.catala_en
+out=$(catala testcase partial-read unqual.catala_en 2>&1)
+n=$(echo "$out" | grep -o '"testing_scope"' | wc -l)
+[ "$n" = 0 ] || { echo "FAIL: partial read kept $n unqualified tests"; exit 1; }
+echo "$out" | grep -q "does not say which module" \
+    || { echo "FAIL: the refusal does not explain the missing module"; exit 1; }
+if catala testcase rebuild unqual.catala_en >/dev/null 2>&1; then
+    echo "FAIL: rebuild accepted a test that does not name its module"; exit 1
+fi
+catala testcase rebuild unqual.catala_en 2>&1 | grep -q "does not say which module" \
+    || { echo "FAIL: the rebuild refusal does not explain the missing module"; exit 1; }
+rm -f unqual.catala_en
     rm -rf _build
     rm -rf "$notes_scratch"
 }
@@ -506,7 +522,7 @@ sed 's/\bx\b/amount/g' context_vars.catala_en > "$notes_scratch/ctx/context_vars
 node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   const marks = d.tests.flatMap((t) => t.outcomes).map((c) =>
-    c.field + ":" + c.io + ":" + (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome)).sort();
+    c.field + ":" + c.side + ":" + (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome)).sort();
   const want = ["amount:In:WasUnset", "x:In:Dropped", "y:In:Fits", "z:Out:Fits"];
   if (JSON.stringify(marks) !== JSON.stringify(want))
     { console.error("FAIL: expected marks " + want + ", got " + marks); process.exit(1); }
