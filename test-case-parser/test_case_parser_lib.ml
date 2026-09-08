@@ -2819,29 +2819,32 @@ let build_runtime_plugins ?buffer_path (options : Global.options) =
       (* Nothing to point at: the declared targets are the best guess left. *)
       ignore (Sys.command "clerk build >/dev/null 2>&1")
 
-(* A test fed on stdin has no file clerk can build the plugins from, and
-   [buffer_path] may be the broken original, which clerk refuses before
-   building anything. Write the text beside it under a name clerk accepts,
-   build, remove, and go on from the text. *)
+(* A test fed on stdin may sit beside a broken original ([buffer_path]) that
+   clerk cannot compile. The plugins its run needs are those of the modules
+   the test imports -- live files that compile by construction -- so prepare
+   each of them directly and go on from the text. *)
 let run_test_cmd include_dirs options test_scope_name scope_input_opt buffer_path
     =
   let options =
     match options.Global.input_src, buffer_path with
     | Global.Stdin _, Some b when Sys.file_exists "clerk.toml" ->
       let text = In_channel.input_all stdin in
-      let tmp =
-        Filename.concat (Filename.dirname b)
-          (Filename.remove_extension (Filename.basename b)
-          ^ "__run" ^ Filename.extension b)
+      let options =
+        Global.enforce_options ~input_src:(Global.Contents (text, b)) ()
       in
-      Fun.protect
-        ~finally:(fun () -> try Sys.remove tmp with _ -> ())
-        (fun () ->
-          Out_channel.with_open_text tmp (fun oc -> Out_channel.output_string oc text);
-          ignore
-            (Sys.command
-               (Printf.sprintf "clerk test %s >/dev/null 2>&1" (Filename.quote tmp))));
-      Global.enforce_options ~input_src:(Global.Contents (text, b)) ()
+      (match Driver.Passes.surface options with
+      | prg ->
+        List.iter
+          (fun (u : Surface.Ast.module_use) ->
+            match
+              find_module_file (Mark.remove u.mod_use_name)
+                (Filename.dirname b)
+            with
+            | Some f -> prepare_runtime_plugins f
+            | None -> ())
+          prg.Surface.Ast.program_used_modules
+      | exception _ -> ());
+      options
     | _ ->
       build_runtime_plugins ?buffer_path options;
       options
