@@ -207,6 +207,8 @@ export class TestCaseEditorProvider
           break;
         }
         case 'TestRunRequest': {
+          // The last keystroke may still sit in the batching window.
+          document.flushPendingEdits();
           // A broken test runs its rebuild from memory; no save first.
           if (document.parseResults.kind === 'BrokenTest') {
             const rebuilt = document.rebuilt;

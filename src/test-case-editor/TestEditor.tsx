@@ -37,12 +37,13 @@ export default function TestEditor(props: Props): ReactElement {
   const intl = useIntl();
 
   function onTestInputsChange(newValue: TestInputs): void {
+    // Batched: one undo stop per burst. A run flushes the window first.
     props.onTestChange(
       {
         ...props.test,
         test_inputs: newValue,
       },
-      false
+      true
     );
   }
 
@@ -241,7 +242,7 @@ export default function TestEditor(props: Props): ReactElement {
           <TestOutputsEditor
             test={props.test}
             onTestChange={(test) => {
-              props.onTestChange(test, false);
+              props.onTestChange(test, true);
             }}
             diffs={
               props.runState?.results?.kind === 'Ok'

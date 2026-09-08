@@ -17,8 +17,7 @@ import { rebuiltFrom } from '../test-case-editor/testCaseUtils';
 import { logger } from '../extension/logger';
 import type { integer } from 'vscode-languageclient';
 
-/** The working copy's suffix; must match the OCaml side's [working_copy_ext].
- *  Not a Catala extension, so nothing scans or compiles it. */
+/** Must match the OCaml side's [working_copy_ext]. */
 const workingCopyExt = '.repair';
 
 function stampIoUids(io: TestIo): TestIo {
@@ -29,20 +28,40 @@ function stampIoUids(io: TestIo): TestIo {
   };
 }
 
-function stampParseResultsUids(results: ParseResults): ParseResults {
-  if (results.kind !== 'Results') return results;
+function stampTestUids(test: Test): Test {
   return {
-    kind: 'Results',
-    value: results.value.map((test) => ({
-      ...test,
-      test_inputs: new Map(
-        Array.from(test.test_inputs, ([k, v]) => [k, stampIoUids(v)])
-      ),
-      test_outputs: new Map(
-        Array.from(test.test_outputs, ([k, v]) => [k, stampIoUids(v)])
-      ),
-    })),
+    ...test,
+    test_inputs: new Map(
+      Array.from(test.test_inputs, ([k, v]) => [k, stampIoUids(v)])
+    ),
+    test_outputs: new Map(
+      Array.from(test.test_outputs, ([k, v]) => [k, stampIoUids(v)])
+    ),
   };
+}
+
+function stampParseResultsUids(results: ParseResults): ParseResults {
+  switch (results.kind) {
+    case 'Results':
+      return { kind: 'Results', value: results.value.map(stampTestUids) };
+    case 'BrokenTest':
+      return {
+        kind: 'BrokenTest',
+        value: {
+          ...results.value,
+          tests: results.value.tests.map((pair) => ({
+            ...pair,
+            authored: stampTestUids(pair.authored),
+            rebuilt:
+              pair.rebuilt === undefined
+                ? undefined
+                : stampTestUids(pair.rebuilt),
+          })),
+        },
+      };
+    default:
+      return results;
+  }
 }
 
 /**
@@ -113,10 +132,7 @@ export class CatalaTestCaseDocument
   }
 
   public get parseResults(): ParseResults {
-    /* Always what a save would write: the live rebuild lives outside
-       _parseResults (see _rebuilt above), so readers get it patched in --
-       or an Update after undo would show the initial rebuild while a save
-       writes the stepped-back one. */
+    /* Always what a save would write: the live rebuild patched in. */
     if (
       this._parseResults.kind === 'BrokenTest' &&
       this._rebuilt !== undefined
@@ -126,8 +142,7 @@ export class CatalaTestCaseDocument
         kind: 'BrokenTest',
         value: {
           ...this._parseResults.value,
-          // Always the live entry -- absent from the live list means the
-          // rebuild no longer holds this test, and a save would not write it.
+          // Absent from the live list: a save would not write it.
           tests: this._parseResults.value.tests.map((pair) => ({
             ...pair,
             rebuilt: byScope.get(pair.authored.testing_scope),
@@ -136,6 +151,12 @@ export class CatalaTestCaseDocument
       };
     }
     return this._parseResults;
+  }
+
+  /** Apply anything still in the batching window. */
+  public flushPendingEdits(): void {
+    this._editManager.sync();
+    this._rebuildManager.sync();
   }
 
   async save(cancellation: vscode.CancellationToken): Promise<void> {
@@ -150,9 +171,6 @@ export class CatalaTestCaseDocument
   ): Promise<void> {
     /* Never over the original, which stays authoritative until replaced. */
     if (this._parseResults.kind === 'BrokenTest') {
-      /* Save As has no target during a repair: the working copy lives next
-         to the original, and VS Code would retarget the tab to a file this
-         branch never writes. Refusing keeps the editor where it is. */
       if (targetResource.toString() !== this.uri.toString()) {
         throw new Error(
           'Save As is unavailable while a test is being repaired: the working copy lives next to the original. Use "Replace original" to finish.'
@@ -240,8 +258,7 @@ export class CatalaTestCaseDocument
   /** Dirties the document; leaves the parse results alone. */
   _commitRebuilt(tests: TestList): void {
     const previous = this._rebuilt;
-    // A re-emit of the same content (a blur, a normalisation pass) must not
-    // become an undo stop nobody can see past.
+    // An identical re-emit is not an undo stop.
     if (
       previous !== undefined &&
       JSON.stringify(writeTestList(previous)) ===
@@ -293,8 +310,16 @@ export class CatalaTestCaseDocument
   private async deleteWorkingCopy(): Promise<void> {
     try {
       await vscode.workspace.fs.delete(this.workingCopyUri);
-    } catch {
-      /* there was none */
+    } catch (err) {
+      // FileNotFound is normal; a stale .repair outliving a Replace is not.
+      if (
+        !(err instanceof vscode.FileSystemError) ||
+        err.code !== 'FileNotFound'
+      ) {
+        logger.log(
+          `could not delete the working copy ${this.workingCopyUri.fsPath}: ${String(err)}`
+        );
+      }
     }
   }
 
@@ -327,8 +352,7 @@ export class CatalaTestCaseDocument
     if (this._parseResults.kind !== 'BrokenTest') {
       throw new Error('Only a broken test has a working copy to discard.');
     }
-    // An edit still in its batching window would fire after the revert and
-    // quietly resurrect what the tester just threw away.
+    // A pending batched edit would fire after the revert.
     this._editManager.cancel();
     this._rebuildManager.cancel();
     await this.deleteWorkingCopy();
@@ -344,6 +368,13 @@ export class CatalaTestCaseDocument
   // 'makeEdit' in sample
   _setContents(tests: TestList): void {
     const lastRev = this._parseResults;
+    if (
+      lastRev.kind === 'Results' &&
+      JSON.stringify(writeTestList(lastRev.value)) ===
+        JSON.stringify(writeTestList(tests))
+    ) {
+      return;
+    }
     const thisRev = (this._parseResults = { kind: 'Results', value: tests });
 
     this._onDidChange.fire({
@@ -397,7 +428,6 @@ class EditManager {
     }
   }
 
-  /** Drop whatever is waiting in the batching window, unapplied. */
   public cancel(): void {
     clearTimeout(this._timeout);
     this._currentChange = undefined;
