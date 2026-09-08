@@ -55,7 +55,7 @@ jobs:
         run: |
           opam exec -- dune runtest
           npm run webview:test
-          xvfb-run -a npm run test
+          xvfb-run -a opam exec -- npm run test
           (cd tests/round_trip && opam exec -- ./round_trip.sh)
           (cd tests/regressions && opam exec -- ./enum_path_test.sh)
           (cd tests/regressions && opam exec -- ./output_module_deps_test.sh)
