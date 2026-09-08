@@ -386,9 +386,11 @@ grep -q '"name":"Attribution"' "$notes_scratch/reopened.json" \
 # The module itself is gone (renamed): candidates come from anywhere in the
 # project, surface-parsed only, and a qualified `--scope` retargets the test.
 # The working copy then names the new module, so reopening remembers it.
+# The new module is a literate `.catala_en.md` file: discovery must fold the
+# `.md` into the extension or such modules are invisible.
 mkdir -p "$notes_scratch/modrename"
 cp clerk.toml test_optionals.catala_en "$notes_scratch/modrename"/
-sed 's/^> Module Optionals$/> Module Benefits/' optionals.catala_en > "$notes_scratch/modrename/benefits.catala_en"
+sed 's/^> Module Optionals$/> Module Benefits/' optionals.catala_en > "$notes_scratch/modrename/benefits.catala_en.md"
 (cd "$notes_scratch/modrename" && clerk start >/dev/null 2>&1 \
     && catala testcase rebuild test_optionals.catala_en 2>/dev/null) > "$notes_scratch/modrename.json"
 node -e '

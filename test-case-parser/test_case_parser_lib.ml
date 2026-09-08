@@ -1720,8 +1720,10 @@ let project_root (from_dir : string) : string =
    [_]-prefixed entries, the same convention as clerk's own discovery. *)
 let catala_files_under (dir : string) : string list =
   let catala_file f =
-    let e = Filename.extension f in
-    if String.length e > 8 && String.starts_with ~prefix:".catala_" e then
+    (* [File.extension] folds a literate [.md] into the extension
+       ("catala_fr.md"), so this sees such modules too. *)
+    let e = File.extension f in
+    if String.length e > 7 && String.starts_with ~prefix:"catala_" e then
       Some f
     else None
   in
