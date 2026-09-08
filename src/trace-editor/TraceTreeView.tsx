@@ -397,7 +397,7 @@ function filterMatches(
   el: TraceElement,
   filters: string[],
   intl: IntlShape
-): boolean {
+): string[] {
   const { label, detail } = describe(el.element, intl);
   const value =
     el.value !== undefined ? formatTraceValue(el.value, intl) : undefined;
@@ -410,7 +410,13 @@ function filterMatches(
   ]
     .join(' ')
     .toLowerCase();
-  return filters.every((filter) => text.includes(filter));
+  let remaining_filters = [];
+  for (let filter of filters) {
+    if (!text.includes(filter)) {
+      remaining_filters.push(filter);
+    }
+  }
+  return remaining_filters;
 }
 
 function subtreeMatches(
@@ -418,11 +424,13 @@ function subtreeMatches(
   filters: string[],
   intl: IntlShape
 ): boolean {
-  if (filterMatches(el, filters, intl)) {
+  let remaining_filters = filterMatches(el, filters, intl);
+  let rem_length = remaining_filters.length;
+  if (rem_length == 0) {
     return true;
   }
   const children = Array.isArray(el.trace) ? el.trace : [];
-  return children.some((c) => subtreeMatches(c, filters, intl));
+  return children.some((c) => subtreeMatches(c, remaining_filters, intl));
 }
 
 function indexedSegment(
@@ -704,9 +712,7 @@ function TraceNode({
   if (filtering && !subtreeMatches(node, filters, intl)) {
     return null;
   }
-  const childFilters =
-    filtering && !filterMatches(node, filters, intl) ? filters : [];
-
+  const childFilters = filtering ? filterMatches(node, filters, intl) : [];
   let matchBackground: string | undefined;
   if (
     expected &&
