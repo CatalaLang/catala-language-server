@@ -399,6 +399,7 @@ function TestPanes({
   onSplit: (pct: number) => void;
   picker?: React.JSX.Element;
 }): React.JSX.Element {
+  const intl = useIntl();
   const meta = authored ?? rebuilt;
   const runDiffs =
     runState?.results?.kind === 'Ok' ? runState.results.value.diffs : [];
@@ -470,6 +471,24 @@ function TestPanes({
             </>
           ) : (
             <>
+              {/* Where the working copy now points, shown only when that
+                  differs from what the file was written against -- the one
+                  fact a rename or a picker retarget changes. */}
+              {authored !== undefined &&
+                (rebuilt.tested_scope.name !== authored.tested_scope.name ||
+                  rebuilt.tested_scope.module_name !==
+                    authored.tested_scope.module_name) && (
+                  <div
+                    className="broken-retargeted"
+                    title={intl.formatMessage({ id: 'broken.retargeted' })}
+                  >
+                    <span className="codicon codicon-arrow-right"></span>{' '}
+                    <span className="broken-test-scope">
+                      {rebuilt.tested_scope.module_name}.
+                      {rebuilt.tested_scope.name}
+                    </span>
+                  </div>
+                )}
               {/* The ordinary editor's inputs component, so context variables
                   keep their badge and "computed default" placeholder instead
                   of showing as an anonymous empty field. */}

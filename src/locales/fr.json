@@ -76,6 +76,7 @@
   "broken.explanation": "Vos valeurs apparaissent à gauche, telles qu’enregistrées — rien n’est perdu. Elles ne sont pas modifiables ici, car elles ne correspondent plus au champ d’application. Reconstruisez le test à droite.",
   "broken.asAuthored": "Original",
   "broken.rebuild": "Copie de travail",
+  "broken.retargeted": "La copie de travail vise désormais ce champ d’application.",
   "broken.nothingRecovered": "Rien n’a pu être récupéré pour ce test.",
   "broken.noSignature": "Aucune signature actuelle pour reconstruire.",
   "broken.noteModuleNotFound": "Fichier déclarant le module {name} introuvable : il n’y a donc rien pour reconstruire.",

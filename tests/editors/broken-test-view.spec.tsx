@@ -156,6 +156,23 @@ describe('BrokenTestView', () => {
     expect(container.querySelectorAll('.fate-attention').length).toBe(1);
   });
 
+  it('names the new target when the rebuild points elsewhere', () => {
+    const v = view();
+    v.tests[0].rebuilt!.tested_scope = {
+      ...v.tests[0].rebuilt!.tested_scope,
+      name: 'ComputeBenefit',
+    };
+    const container = renderView(v);
+    const line = container.querySelector('.broken-retargeted');
+    expect(line).toBeTruthy();
+    expect(line!.textContent).toContain('B.ComputeBenefit');
+  });
+
+  it('stays quiet about the target when it did not move', () => {
+    const container = renderView(view());
+    expect(container.querySelector('.broken-retargeted')).toBeNull();
+  });
+
   it('says the rebuild is ready when every field is set', () => {
     const container = renderView(view());
     expect(container.querySelectorAll('.readiness-ready').length).toBe(1);

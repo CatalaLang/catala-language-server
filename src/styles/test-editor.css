@@ -410,9 +410,7 @@
   padding: var(--spacing12);
   border-radius: var(--spacing4);
 }
-/* The single header naming both columns; it follows the divider and stays
-   visible while the tests scroll. Horizontal padding mirrors .broken-test +
-   .broken-pane so the labels align with pane content. */
+/* Padding mirrors .broken-test + .broken-pane so labels align. */
 .broken-panes-header {
   position: sticky;
   top: 0;
@@ -539,6 +537,11 @@
 .broken-test-scope {
   font-family: var(--vscode-editor-font-family, monospace);
 }
+.broken-retargeted {
+  margin-bottom: var(--spacing8);
+  font-size: var(--field-label-font-size);
+  color: var(--field-label-color);
+}
 .vscode-dark .broken-test-meta {
   color: var(--stormgray500);
 }
@@ -572,12 +575,10 @@
   font-size: 10px;
   font-weight: 400;
   font-style: italic;
-  /* The mark sits inside a field label, whose capitalize is meant for
-     identifiers; the mark is a sentence. */
+  /* the label's capitalize is for identifiers; the mark is a sentence */
   text-transform: none;
 }
 
-/* The authored pane's fate dots: what became of each line, at a glance. */
 .fate-mark {
   display: inline-block;
   width: 7px;
@@ -597,7 +598,6 @@
   background: var(--error);
 }
 
-/* Run readiness, next to the run button: quiet when everything is set. */
 .readiness-chip {
   display: inline-flex;
   align-items: center;

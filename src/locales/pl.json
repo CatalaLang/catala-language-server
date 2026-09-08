@@ -76,6 +76,7 @@
   "broken.explanation": "Your values are shown on the left, as last saved — nothing has been lost. They cannot be edited here, because they no longer match the scope. Rebuild the test on the right.",
   "broken.asAuthored": "Original",
   "broken.rebuild": "Working copy",
+  "broken.retargeted": "The working copy targets this scope now.",
   "broken.nothingRecovered": "Nothing could be recovered for this test.",
   "broken.noSignature": "No current signature to rebuild against yet.",
   "broken.noteModuleNotFound": "Could not find the file declaring module {name}, so there is nothing to rebuild against yet.",
