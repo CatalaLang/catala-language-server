@@ -49,6 +49,17 @@ export function scrollToFirstInvalidOrUnset(
   }, delay);
 }
 
+/** How many fields (inputs and outputs together) still hold an Unset
+ *  somewhere. Field granularity: one deep hole counts once. */
+export function countUnsetFields(test: Test): number {
+  const fieldHas = (io: { value?: { value: RuntimeValue } }): boolean =>
+    io.value !== undefined && containsUnset(io.value.value);
+  return (
+    [...test.test_inputs.values()].filter(fieldHas).length +
+    [...test.test_outputs.values()].filter(fieldHas).length
+  );
+}
+
 export function hasUnsetInTest(
   test: Test,
   options: {

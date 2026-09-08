@@ -9,6 +9,7 @@ import {
 } from '../generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
+import { ReadinessChip } from './RunControl';
 import { type TestRunStatus } from './TestFileEditor';
 import { confirm } from '../messaging/confirm';
 import {
@@ -196,6 +197,7 @@ export default function TestEditor(props: Props): ReactElement {
                 ></span>{' '}
                 {intl.formatMessage({ id: 'testEditor.runTest' })}
               </button>
+              <ReadinessChip test={props.test} onJump={scrollToFirstUnset} />
             </div>
             <div className="test-result">
               {props.runState?.status === 'success' &&

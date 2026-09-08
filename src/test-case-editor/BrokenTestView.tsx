@@ -21,7 +21,7 @@ import {
 import { confirm } from '../messaging/confirm';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
-import RunControl from './RunControl';
+import RunControl, { ReadinessChip } from './RunControl';
 import type { TestRunStatus } from './TestFileEditor';
 
 /**
@@ -502,6 +502,14 @@ function TestPanes({
                 results={runState?.results}
                 onRun={runWithUnsetCheck}
                 labelId="broken.runWorkingCopy"
+              />
+              <ReadinessChip
+                test={rebuilt}
+                onJump={(): void =>
+                  scrollToFirstInvalidOrUnset(
+                    rebuiltPaneRef.current ?? document
+                  )
+                }
               />
             </div>
           )}

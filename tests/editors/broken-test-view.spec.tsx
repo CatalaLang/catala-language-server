@@ -156,6 +156,23 @@ describe('BrokenTestView', () => {
     expect(container.querySelectorAll('.fate-attention').length).toBe(1);
   });
 
+  it('says the rebuild is ready when every field is set', () => {
+    const container = renderView(view());
+    expect(container.querySelectorAll('.readiness-ready').length).toBe(1);
+    expect(container.querySelectorAll('.readiness-unfilled').length).toBe(0);
+  });
+
+  it('counts the unfilled fields and offers to jump to the first', () => {
+    const v = view();
+    v.tests[0].rebuilt!.test_inputs = new Map<string, TestIo>([
+      ['end_date', io(endDateEnum, { value: rv({ kind: 'Unset' }) })],
+    ]);
+    const container = renderView(v);
+    const chip = container.querySelector('.readiness-unfilled');
+    expect(chip).toBeTruthy();
+    expect(chip!.textContent).toContain('1 field to fill');
+  });
+
   it('warns on the authored side when promotion would delete a field', () => {
     const container = renderView(
       view({
