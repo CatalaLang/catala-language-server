@@ -93,13 +93,47 @@ function CarryMark({
   );
 }
 
+/** The authored side's marginal note: what became of this line. A dot, with
+ *  the sentence one hover away -- the pane must stay quiet, it is inert. */
+function FateMark({
+  outcome,
+}: {
+  outcome: CarryOutcome | undefined;
+}): React.JSX.Element | null {
+  const intl = useIntl();
+  if (outcome === undefined || outcome.kind === 'WasUnset') return null;
+  const fate =
+    outcome.kind === 'Dropped'
+      ? 'dropped'
+      : outcome.kind === 'TypeChanged' ||
+          outcome.kind === 'WasAbsentNowRequired'
+        ? 'attention'
+        : 'carried';
+  const title = intl.formatMessage({
+    id: {
+      dropped: 'broken.fateDropped',
+      attention: 'broken.fateAttention',
+      carried: 'broken.fateCarried',
+    }[fate],
+  });
+  // Spelled out, not assembled: PurgeCSS reads these statically.
+  const cls = {
+    dropped: 'fate-mark fate-dropped',
+    attention: 'fate-mark fate-attention',
+    carried: 'fate-mark fate-carried',
+  }[fate];
+  return <span className={cls} role="img" aria-label={title} title={title} />;
+}
+
 /** The authored pane's fields: read-only, and only what the test actually
  *  set -- an empty box here would read as data gone missing. The rebuilt pane
  *  uses the ordinary editor's own components instead. */
 function Fields({
   record,
+  marks,
 }: {
   record: Map<string, TestIo>;
+  marks?: Map<string, CarryOutcome>;
 }): React.JSX.Element {
   const entries = [...record.entries()].filter(
     ([, io]) => io.value !== undefined
@@ -108,7 +142,10 @@ function Fields({
     <>
       {entries.map(([name, io]) => (
         <div className="broken-field" key={name}>
-          <span className="item-label">{name}</span>
+          <span className="item-label">
+            {name}
+            <FateMark outcome={marks?.get(name)} />
+          </span>
           <ValueEditor
             testIO={io}
             editable={false}
@@ -399,13 +436,13 @@ function TestPanes({
             </p>
           ) : (
             <>
-              <Fields record={authored.test_inputs} />
+              <Fields record={authored.test_inputs} marks={marksIn} />
               {authored.test_outputs.size > 0 && (
                 <>
                   <h5 className="broken-subhead">
                     <FormattedMessage id="broken.expected" />
                   </h5>
-                  <Fields record={authored.test_outputs} />
+                  <Fields record={authored.test_outputs} marks={marksOut} />
                 </>
               )}
             </>

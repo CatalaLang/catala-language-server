@@ -149,6 +149,30 @@ describe('BrokenTestView', () => {
     expect(screen.getByText(/date → EndDate/)).toBeTruthy();
   });
 
+  it('annotates the authored pane with each field\u2019s fate', () => {
+    const container = renderView(view());
+    // start_date carried, end_date did not: one quiet dot, one warning dot.
+    expect(container.querySelectorAll('.fate-carried').length).toBe(1);
+    expect(container.querySelectorAll('.fate-attention').length).toBe(1);
+  });
+
+  it('warns on the authored side when promotion would delete a field', () => {
+    const container = renderView(
+      view({
+        outcomes: [
+          {
+            field: 'end_date',
+            io: { kind: 'In' },
+            outcome: { kind: 'Dropped' },
+          },
+        ],
+      })
+    );
+    expect(container.querySelectorAll('.fate-dropped').length).toBe(1);
+    // ...and the rebuilt pane says nothing about it: not its field.
+    expect(container.querySelectorAll('.carry-mark').length).toBe(0);
+  });
+
   it('marks a conversion so it does not look like something the tester typed', () => {
     renderView(
       view({
