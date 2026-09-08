@@ -286,14 +286,6 @@
   border-radius: 5px;
 }
 
-.inclusion-filter {
-  background-color: var(--vscode-notebookStatusSuccessIcon-foreground);
-}
-
-.exclusion-filter {
-  background-color: var(--vscode-errorForeground);
-}
-
 .selected-filter {
   color: var(--vscode-button-foreground);
   background-color: var(--vscode-button-background);

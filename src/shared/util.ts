@@ -11,14 +11,20 @@ function escapeRegExp(text: string): string {
 /** A piece of text, and whether it is one of the searched terms. */
 export type TextChunk = { text: string; match: boolean };
 
+export type Filter = {
+  filter: string;
+  option: 'include' | 'ignore' | 'exclude';
+};
 /**
  * Cuts `text` around every occurrence of any of `terms`, case insensitively.
  * Used by the views to highlight the part of a text that made a filter match.
  * Empty terms are ignored, and no term at all yields the whole text as a single
  * unmatched chunk.
  */
-export function splitOnTerms(text: string, terms: string[]): TextChunk[] {
-  const searched = terms.filter((term) => term.length > 0).map(escapeRegExp);
+export function splitOnTerms(text: string, terms: Filter[]): TextChunk[] {
+  const searched = terms
+    .filter((term) => term.filter.length > 0 && term.option == 'include')
+    .map((filter) => escapeRegExp(filter.filter));
   if (searched.length === 0) {
     return [{ text, match: false }];
   }
@@ -29,3 +35,17 @@ export function splitOnTerms(text: string, terms: string[]): TextChunk[] {
     .map((chunk, index) => ({ text: chunk, match: index % 2 === 1 }))
     .filter((chunk) => chunk.text.length > 0);
 }
+
+/* Kept out of [pinStyle] so the colour can follow a per-pin boolean. */
+export const pinBackground = (
+  highlighted: 'include' | 'ignore' | 'exclude'
+): string => {
+  switch (highlighted) {
+    case 'include':
+      return 'var(--vscode-notebookStatusSuccessIcon-foreground)';
+    case 'ignore':
+      return 'var(--vscode-errorForeground)';
+    case 'exclude':
+      return 'var(--vscode-errorForeground)';
+  }
+};

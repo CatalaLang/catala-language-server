@@ -16,6 +16,8 @@ import type { TraceElement, TraceTest } from './traceUtils';
 import { readTraceTest } from './traceUtils';
 import TraceTreeView, { type ExpandCommand } from './TraceTreeView';
 import { DataPanel } from './TraceData';
+import type {Filter} from '../shared/util';
+import { pinBackground} from '../shared/util'
 
 type RunState =
   | { status: 'idle' }
@@ -36,6 +38,7 @@ function fieldValue(e: Event): string {
   return (e.target as { value?: string } | null)?.value ?? '';
 }
 
+
 export default function TraceEditor({ vscode }: Props): ReactElement {
   const intl = useIntl();
   const [cwd, setCwd] = useState('');
@@ -51,7 +54,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
   const [filter, setFilter] = useState('');
   // Filters the user chose to keep. They accumulate with each other and with
   // the live one: an entry has to match all of them.
-  const [savedFilters, setSavedFilters] = useState<string[]>([]);
+  const [savedFilters, setSavedFilters] = useState<Filter[]>([]);
 
   // Always hand a new array to the setter: React skips the re-render when an
   // updater returns the very same reference.
@@ -60,11 +63,11 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
     if (trimmed === '') {
       return;
     }
-    setSavedFilters((old) => (old.includes(trimmed) ? old : [...old, trimmed]));
+    setSavedFilters((old) => (old.some((filter) => filter.filter == trimmed) ? old : [...old, { filter: trimmed, option: 'include' }]));
   };
 
   const removeFilter = (toRemove: string): void => {
-    setSavedFilters((old) => old.filter((current) => current !== toRemove));
+    setSavedFilters((old) => old.filter((current) => current.filter !== toRemove));
   };
 
   useEffect(() => {
@@ -256,7 +259,7 @@ function TraceResult({
   test?: TraceTest;
   filter: string;
   setFilter: React.Dispatch<React.SetStateAction<string>>;
-  savedFilters: string[];
+  savedFilters: Filter[];
   saveFilter: (filter: string) => void;
   removeFilter: (filter: string) => void;
 }): ReactElement | null {
@@ -373,7 +376,8 @@ function TraceResult({
               <FilterPins filters={savedFilters} removeFilter={removeFilter} />
               <TraceTreeView
                 trace={runState.trace}
-                filters={[...savedFilters, filter]}
+                filters={savedFilters}
+                // filters={[...savedFilters, filter]}
                 cwd={cwd}
                 expand={expand}
                 test={test}
@@ -417,7 +421,7 @@ function FilterPins({
   filters,
   removeFilter,
 }: {
-  filters: string[];
+  filters: Filter[];
   removeFilter: (filter: string) => void;
 }): ReactElement | null {
   const intl = useIntl();
@@ -427,13 +431,18 @@ function FilterPins({
   return (
     <div style={pinsStyle}>
       {filters.map((filter) => (
-        <span key={filter} style={pinStyle}>
-          <span>{filter}</span>
+        <span
+          key={filter.filter}
+          style={{
+            ...pinStyle,
+            backgroundColor: pinBackground(filter.option),
+          }}
+        >
+          <span>{filter.filter}</span>
           <span
             className="codicon codicon-close"
             title={intl.formatMessage({ id: 'trace.removeFilter' })}
-            style={{ cursor: 'pointer' }}
-            onClick={() => removeFilter(filter)}
+            onClick={() => removeFilter(filter.filter)}
           />
         </span>
       ))}
@@ -529,15 +538,17 @@ const pinsStyle: React.CSSProperties = {
   margin: '0 0 8px 0',
 };
 
+
+
 const pinStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 4,
   padding: '2px 6px',
   borderRadius: 4,
-  background: 'var(--vscode-badge-background)',
   color: 'var(--vscode-badge-foreground)',
   fontFamily: 'var(--vscode-editor-font-family, monospace)',
+  cursor: 'pointer',
 };
 
 const preStyle: React.CSSProperties = {

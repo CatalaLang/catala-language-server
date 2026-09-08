@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import type { JsonValue } from '../shared/util_client';
+import type { Filter} from '../shared/util';
 import { splitOnTerms } from '../shared/util';
 import { getVsCodeApi } from '../shared/webviewApi';
 import type { TraceDownMessage, TraceUpMessage } from './messages';
@@ -52,7 +53,7 @@ const ExpandContext = createContext<ExpandCommand | null>(null);
  * to the children of a node that matches (so that a matching subtree is shown
  * whole), which would leave those children unhighlighted.
  */
-const FilterContext = createContext<string[]>([]);
+const FilterContext = createContext<Filter[]>([]);
 
 /**
  * Renders `text` with the parts matched by the filters highlighted, so that the
@@ -395,9 +396,9 @@ function asCodeLocation(v: JsonValue | undefined): CodeLocation | undefined {
  */
 function filterMatches(
   el: TraceElement,
-  filters: string[],
+  filters: Filter[],
   intl: IntlShape
-): string[] {
+): Filter[] {
   const { label, detail } = describe(el.element, intl);
   const value =
     el.value !== undefined ? formatTraceValue(el.value, intl) : undefined;
@@ -412,7 +413,11 @@ function filterMatches(
     .toLowerCase();
   let remaining_filters = [];
   for (let filter of filters) {
-    if (!text.includes(filter)) {
+    if (text.includes(filter.filter) && (filter.option == 'include')) {
+      continue;
+    } else if (!text.includes(filter.filter) && (filter.option == 'exclude')) {
+      continue;
+    } else {
       remaining_filters.push(filter);
     }
   }
@@ -421,7 +426,7 @@ function filterMatches(
 
 function subtreeMatches(
   el: TraceElement,
-  filters: string[],
+  filters: Filter[],
   intl: IntlShape
 ): boolean {
   let remaining_filters = filterMatches(el, filters, intl);
@@ -510,7 +515,7 @@ export default function TraceTreeView({
   test,
 }: {
   trace: TraceElement[];
-  filters?: string[];
+  filters?: Filter[];
   cwd?: string;
   expand?: ExpandCommand | null;
   test?: TraceTest;
@@ -541,8 +546,8 @@ export default function TraceTreeView({
   // Normalised once here: the matching is case insensitive, and a blank term
   // would match everything, so it is dropped rather than kept as a no-op.
   const f = (filters ?? [])
-    .map((filter) => filter.trim().toLowerCase())
-    .filter((filter) => filter.length > 0);
+    .map((filter) => { return { filter: filter.filter.trim().toLowerCase(), option: filter.option }; })
+    .filter((filter) => filter.filter.length > 0);
   const anyVisible =
     f.length > 0 ? roots.some((el) => subtreeMatches(el, f, intl)) : true;
   if (!anyVisible) {
@@ -607,7 +612,7 @@ function TraceNode({
 }: {
   te: TraceElement;
   depth: number;
-  filters: string[];
+  filters: Filter[];
   prefix: string;
   tested_scope?: string;
 }): ReactElement | null {
@@ -637,10 +642,10 @@ function TraceNode({
 
   const [node, displayName, isMerged]: [TraceElement, string, boolean] =
     te.element.kind === 'scope_var' &&
-    typeof te.element.name === 'string' &&
-    te.trace?.length === 1 &&
-    te.trace[0].element.kind === 'scope_call' &&
-    typeof te.trace[0].element.name === 'string'
+      typeof te.element.name === 'string' &&
+      te.trace?.length === 1 &&
+      te.trace[0].element.kind === 'scope_call' &&
+      typeof te.trace[0].element.name === 'string'
       ? [te.trace[0], `${te.element.name}.${te.trace[0].element.name}`, true]
       : [te, te.element.name as string, false];
 
@@ -648,9 +653,9 @@ function TraceNode({
   const hasChildren = children.length > 0;
   const containerValue =
     te.element.kind !== 'if_branching' &&
-    te.element.kind !== 'scope_call' &&
-    te.value !== undefined &&
-    formatTraceValue(te.value, intl) === undefined
+      te.element.kind !== 'scope_call' &&
+      te.value !== undefined &&
+      formatTraceValue(te.value, intl) === undefined
       ? formatTraceValue(te.value, intl, 'en', true)
       : undefined;
   const expandable =
@@ -732,14 +737,14 @@ function TraceNode({
 
   const described: Described = isMerged
     ? {
-        symbol: '→',
-        label: intl.formatMessage(
-          { id: 'trace.computationOf' },
-          { name: `${detail(te.element.name)} (${detail(node.element.name)})` }
-        ),
-        tone: 'scope',
-        showsValue: true,
-      }
+      symbol: '→',
+      label: intl.formatMessage(
+        { id: 'trace.computationOf' },
+        { name: `${detail(te.element.name)} (${detail(node.element.name)})` }
+      ),
+      tone: 'scope',
+      showsValue: true,
+    }
     : describe(node.element, intl);
   const accentColor =
     node.element.kind === 'assertion'
