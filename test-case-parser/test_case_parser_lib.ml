@@ -1692,64 +1692,51 @@ let error_text (e : exn) : string =
   | Unsupported msg -> "unsupported: " ^ msg
   | e -> Printexc.to_string e
 
-let levenshtein (a : string) (b : string) : int =
-  let la = String.length a and lb = String.length b in
-  let prev = Array.init (lb + 1) Fun.id and cur = Array.make (lb + 1) 0 in
-  for i = 1 to la do
-    cur.(0) <- i;
-    for j = 1 to lb do
-      let cost = if a.[i - 1] = b.[j - 1] then 0 else 1 in
-      cur.(j) <- min (min (prev.(j) + 1) (cur.(j - 1) + 1)) (prev.(j - 1) + cost)
-    done;
-    Array.blit cur 0 prev 0 (lb + 1)
-  done;
-  prev.(lb)
-
-(* The nearest directory holding a clerk.toml, else [from_dir]. *)
+(* The nearest directory holding a clerk.toml, else [from_dir]. Same
+   primitive as clerk's own lookup (it stops at $HOME). *)
 let project_root (from_dir : string) : string =
-  let rec up dir n =
-    if n = 0 then dir
-    else if Sys.file_exists (Filename.concat dir "clerk.toml") then dir
-    else
-      let parent = Filename.dirname dir in
-      if String.equal parent dir then dir else up parent (n - 1)
-  in
-  up from_dir 12
+  match
+    File.find_in_parents ~cwd:(File.make_absolute from_dir) (fun dir ->
+        File.(exists (dir / "clerk.toml")))
+  with
+  | Some (dir, _) -> dir
+  | None -> from_dir
 
-(* Every Catala source under [dir]. [File.scan_tree] skips hidden and
-   [_]-prefixed entries, the same convention as clerk's own discovery. *)
-let catala_files_under (dir : string) : string list =
-  let catala_file f =
-    (* [File.extension] folds a literate [.md] into the extension
-       ("catala_fr.md"), so this sees such modules too. *)
-    let e = File.extension f in
-    if String.length e > 7 && String.starts_with ~prefix:"catala_" e then
-      Some f
-    else None
-  in
-  File.scan_tree catala_file dir
-  |> Seq.concat_map (fun (_, _, files) -> List.to_seq files)
+module Scan = Clerk_utils.Scan
+
+(* Every Catala source under [dir], seen the way clerk sees a project:
+   clerk's own extension logic and its lexical module scan, so nothing here
+   can drift from what a build would resolve. Per-file failures are dropped
+   rather than raised -- this serves recovery, where broken files are the
+   normal case. *)
+let scan_catala_files (dir : string) : Scan.item list =
+  File.scan_tree
+    (fun f ->
+      match Scan.get_lang f with
+      | None -> None
+      | Some lang -> ( try Some (Scan.catala_file f lang) with _ -> None))
+    dir
+  |> Seq.concat_map (fun (_, _, items) -> List.to_seq items)
   |> List.of_seq
 
-(* The name in a `> Module NAME` line, if the file declares one. *)
-let module_decl_re =
-  Re.(compile (seq [bol; str "> Module "; group (rep1 (compl [space]))]))
-
-let declared_module (content : string) : string option =
-  Option.map
-    (fun g -> Re.Group.get g 1)
-    (Re.exec_opt module_decl_re content)
-
 (* The file declaring [> Module name], searched from the test outwards. Clerk
-   cannot resolve from a file that no longer typechecks. *)
+   cannot resolve from a file that no longer typechecks, but its scanner is
+   lexical and can. *)
 let find_module_file (name : string) (from_dir : string) : string option =
-  let declares f =
-    try declared_module (File.contents f) = Some name with _ -> false
+  let declares (it : Scan.item) =
+    match it.Scan.module_def with
+    | Some m -> String.equal (Mark.remove m) name
+    | None -> false
+  in
+  let find dir =
+    Option.map
+      (fun (it : Scan.item) -> it.Scan.file_name)
+      (List.find_opt declares (scan_catala_files dir))
   in
   (* Beside the test first: that is where a module almost always is. *)
-  match List.find_opt declares (catala_files_under from_dir) with
+  match find from_dir with
   | Some f -> Some f
-  | None -> List.find_opt declares (catala_files_under (project_root from_dir))
+  | None -> find (project_root from_dir)
 
 (* Scopes anywhere in the project that declare some of the test's field names,
    for a test whose module is gone. Surface-parsed only: no module need
@@ -1760,14 +1747,16 @@ let rank_project_scope_candidates ~(from_dir : string) ~(wanted_module : string)
   let mentions_a_field content =
     List.exists (fun f -> Re.execp (Re.compile (Re.str f)) content) field_names
   in
-  let candidates_of file =
-    match File.contents file with
-    | exception _ -> []
-    | content -> (
-      match declared_module content with
-      | None -> []
-      | Some _ when not (mentions_a_field content) -> []
-      | Some module_name -> (
+  let candidates_of (it : Scan.item) =
+    match it.Scan.module_def with
+    | None -> []
+    | Some module_def -> (
+      let module_name = Mark.remove module_def in
+      let file = it.Scan.file_name in
+      match File.contents file with
+      | exception _ -> []
+      | content when not (mentions_a_field content) -> []
+      | _ -> (
         match
           Driver.Passes.surface
             (Global.enforce_options ~input_src:(Global.FileName file)
@@ -1803,15 +1792,15 @@ let rank_project_scope_candidates ~(from_dir : string) ~(wanted_module : string)
                   })
             (surface_scope_decls prg)))
   in
-  catala_files_under (project_root from_dir)
+  scan_catala_files (project_root from_dir)
   |> List.concat_map candidates_of
   |> List.sort (fun (a : O.scope_candidate) (b : O.scope_candidate) ->
          match compare b.shared a.shared with
          | 0 -> (
            match
              compare
-               (levenshtein wanted_module a.module_name)
-               (levenshtein wanted_module b.module_name)
+               (Suggestions.levenshtein_distance wanted_module a.module_name)
+               (Suggestions.levenshtein_distance wanted_module b.module_name)
            with
            | 0 -> compare (a.module_name, a.name) (b.module_name, b.name)
            | c -> c)
@@ -1876,7 +1865,9 @@ let rank_scope_candidates (prg : I.program) ~(wanted : string)
          match compare b.shared a.shared with
          | 0 -> (
            match
-             compare (levenshtein wanted a.name) (levenshtein wanted b.name)
+             compare
+               (Suggestions.levenshtein_distance wanted a.name)
+               (Suggestions.levenshtein_distance wanted b.name)
            with
            | 0 -> compare a.name b.name
            | c -> c)
