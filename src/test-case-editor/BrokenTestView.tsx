@@ -642,7 +642,7 @@ export default function BrokenTestView({
             <span className="codicon codicon-lock"></span>{' '}
             <FormattedMessage id="broken.asAuthored" />
           </h4>
-          <span />
+          <SplitHandle split={split} onSplit={moveSplit} />
           <h4 className="broken-col-label">
             <span className="codicon codicon-edit"></span>{' '}
             <FormattedMessage id="broken.rebuild" />

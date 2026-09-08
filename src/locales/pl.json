@@ -75,7 +75,7 @@
   "broken.title": "Ten test nie pasuje już do zakresu, którego dotyczy",
   "broken.explanation": "Twoje wartości są pokazane po lewej, tak jak zostały ostatnio zapisane — nic nie zostało utracone. Nie można ich tu edytować, bo nie pasują już do zakresu. Odbuduj test po prawej.",
   "broken.asAuthored": "Oryginał",
-  "broken.rebuild": "Kopia naprawcza",
+  "broken.rebuild": "Kopia robocza",
   "broken.nothingRecovered": "Nie udało się nic odzyskać z tego testu.",
   "broken.noSignature": "Brak bieżącej sygnatury, względem której można odbudować.",
   "broken.noteModuleNotFound": "Nie znaleziono pliku deklarującego moduł {name}, więc nie ma jeszcze względem czego odbudowywać.",

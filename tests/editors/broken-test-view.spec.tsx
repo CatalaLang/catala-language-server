@@ -133,7 +133,7 @@ describe('BrokenTestView', () => {
   it('renders both panes', () => {
     renderView(view());
     expect(screen.getByText('Original')).toBeTruthy();
-    expect(screen.getByText('Repair copy')).toBeTruthy();
+    expect(screen.getByText('Working copy')).toBeTruthy();
   });
 
   it('leaves a field whose type changed empty rather than guessing', () => {
