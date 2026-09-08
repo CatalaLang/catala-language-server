@@ -108,6 +108,19 @@ export class CatalaTestCaseDocument
   }
 
   public get parseResults(): ParseResults {
+    /* Always what a save would write: the live rebuild lives outside
+       _parseResults (see _rebuilt above), so readers get it patched in --
+       or an Update after undo would show the initial rebuild while a save
+       writes the stepped-back one. */
+    if (
+      this._parseResults.kind === 'BrokenTest' &&
+      this._rebuilt !== undefined
+    ) {
+      return {
+        kind: 'BrokenTest',
+        value: { ...this._parseResults.value, rebuilt: this._rebuilt },
+      };
+    }
     return this._parseResults;
   }
 
@@ -123,18 +136,23 @@ export class CatalaTestCaseDocument
   ): Promise<void> {
     /* Never over the original, which stays authoritative until replaced. */
     if (this._parseResults.kind === 'BrokenTest') {
+      /* Save As has no target during a repair: the working copy lives next
+         to the original, and VS Code would retarget the tab to a file this
+         branch never writes. Refusing keeps the editor where it is. */
+      if (targetResource.toString() !== this.uri.toString()) {
+        throw new Error(
+          'Save As is unavailable while a test is being repaired: the working copy lives next to the original. Use "Replace original" to finish.'
+        );
+      }
       if (this._rebuilt === undefined || this._rebuilt.length === 0) {
         // Nothing to write, but a plain save must still succeed or a dirty
         // flag (a restored session, say) can never be cleared.
-        if (targetResource.toString() === this.uri.toString()) return;
-        throw new Error(
-          'Nothing to save yet: this test could not be rebuilt against its scope.'
-        );
+        return;
       }
       const source = atdToCatala(this._rebuilt, this.language);
       if (cancellation.isCancellationRequested) return;
       await vscode.workspace.fs.writeFile(
-        vscode.Uri.file(targetResource.fsPath + '.updated'),
+        this.workingCopyUri,
         Buffer.from(source, 'utf-8')
       );
       return;
@@ -305,10 +323,8 @@ export class CatalaTestCaseDocument
       document: this,
       label: 'edit',
       undo: (): void => {
-        if (lastRev !== undefined) {
-          this._parseResults = lastRev;
-          this._onDidChangeDocument.fire({ document: this });
-        }
+        this._parseResults = lastRev;
+        this._onDidChangeDocument.fire({ document: this });
       },
       redo: (): void => {
         this._parseResults = thisRev;

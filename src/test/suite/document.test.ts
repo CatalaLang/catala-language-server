@@ -88,6 +88,47 @@ suite('Broken test document', function () {
     assert.ok(fs.readFileSync(file).equals(original), 'original untouched');
   });
 
+  test('undo steps the rebuild back, and parseResults says so', async () => {
+    const dir = project('field renamed');
+    const uri = vscode.Uri.file(path.join(dir, 'test_optionals.catala_en'));
+
+    const doc = await CatalaTestCaseDocument.create(uri, undefined);
+    assert.strictEqual(doc.parseResults.kind, 'BrokenTest');
+    const initial = doc.rebuilt;
+    assert.ok(initial?.length === 3);
+
+    // The edit VS Code would put on the undo stack.
+    let lastEdit:
+      | vscode.CustomDocumentEditEvent<CatalaTestCaseDocument>
+      | undefined;
+    doc.onDidChange((e) => (lastEdit = e));
+
+    doc.setRebuilt(initial.slice(1), false);
+    assert.strictEqual(doc.rebuilt?.length, 2);
+    let results = doc.parseResults;
+    assert.ok(results.kind === 'BrokenTest');
+    assert.strictEqual(
+      results.value.rebuilt.length,
+      2,
+      'parseResults reports the live rebuild'
+    );
+
+    assert.ok(lastEdit !== undefined);
+    lastEdit.undo();
+    results = doc.parseResults;
+    assert.ok(results.kind === 'BrokenTest');
+    assert.strictEqual(
+      results.value.rebuilt.length,
+      3,
+      'after undo, parseResults reports the stepped-back rebuild'
+    );
+
+    lastEdit.redo();
+    results = doc.parseResults;
+    assert.ok(results.kind === 'BrokenTest');
+    assert.strictEqual(results.value.rebuilt.length, 2, 'redo steps forward');
+  });
+
   test('a blocked rebuild has nothing to save, and saving does not fail', async () => {
     const dir = project('module renamed');
     const file = path.join(dir, 'test_optionals.catala_en');
