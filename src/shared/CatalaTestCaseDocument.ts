@@ -313,6 +313,10 @@ export class CatalaTestCaseDocument
     if (this._parseResults.kind !== 'BrokenTest') {
       throw new Error('Only a broken test has a working copy to discard.');
     }
+    // An edit still in its batching window would fire after the revert and
+    // quietly resurrect what the tester just threw away.
+    this._editManager.cancel();
+    this._rebuildManager.cancel();
     await this.deleteWorkingCopy();
     await this.revert(new vscode.CancellationTokenSource().token);
   }
@@ -377,6 +381,12 @@ class EditManager {
 
       this._currentChange = undefined;
     }
+  }
+
+  /** Drop whatever is waiting in the batching window, unapplied. */
+  public cancel(): void {
+    clearTimeout(this._timeout);
+    this._currentChange = undefined;
   }
 
   public scheduleChange(testList: TestList, mayBeBatched: boolean): void {

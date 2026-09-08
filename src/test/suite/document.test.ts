@@ -88,6 +88,29 @@ suite('Broken test document', function () {
     assert.ok(fs.readFileSync(file).equals(original), 'original untouched');
   });
 
+  test('discard forgets an edit still sitting in the batching window', async () => {
+    const dir = project('field renamed');
+    const uri = vscode.Uri.file(path.join(dir, 'test_optionals.catala_en'));
+
+    const doc = await CatalaTestCaseDocument.create(uri, undefined);
+    const initial = doc.rebuilt;
+    assert.ok(initial?.length === 3);
+
+    // A batched edit: its 350 ms timer is still pending when we discard.
+    doc.setRebuilt(initial.slice(1), true);
+    await doc.discardWorkingCopy();
+    // Let a stray timer fire; it must not resurrect the discarded edit.
+    await new Promise((r) => setTimeout(r, 500));
+
+    const results = doc.parseResults;
+    assert.ok(results.kind === 'BrokenTest');
+    assert.strictEqual(
+      results.value.tests.filter((t) => t.rebuilt !== undefined).length,
+      3,
+      'the discarded edit stayed discarded'
+    );
+  });
+
   test('undo steps the rebuild back, and parseResults says so', async () => {
     const dir = project('field renamed');
     const uri = vscode.Uri.file(path.join(dir, 'test_optionals.catala_en'));
