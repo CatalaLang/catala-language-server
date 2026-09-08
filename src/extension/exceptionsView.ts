@@ -6,7 +6,7 @@ import { clerkPath, getCwd } from '../shared/util_client';
 import { exceptionsAt } from './lspRequests';
 import type { ExceptionsArgs } from './lspRequests';
 
-export type RulePos = {
+type RulePos = {
   filename: string;
   start_line: number;
   start_column: number;
@@ -14,13 +14,13 @@ export type RulePos = {
   end_column: number;
   law_headings?: string[];
 };
-export type ExceptionRule = { pos: RulePos; condition_text?: string };
-export type ExceptionNode = {
+type ExceptionRule = { pos: RulePos; condition_text?: string };
+type ExceptionNode = {
   label: string;
   rules: ExceptionRule[];
   exceptions: ExceptionNode[];
 };
-export type ExceptionsResult = {
+type ExceptionsResult = {
   scope: string;
   variable: string;
   is_condition: boolean;

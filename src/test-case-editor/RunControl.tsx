@@ -37,7 +37,7 @@ export function ReadinessChip({
   );
 }
 
-export type RunControlProps = {
+type RunControlProps = {
   status?: TestRunStatus;
   results?: TestRunResults;
   onRun: () => void;
