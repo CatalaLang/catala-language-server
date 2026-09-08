@@ -777,6 +777,12 @@ export async function activate(
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('catala.trace.viewWithFilter', () =>
+      TraceEditorProvider.viewWithFilter()
+    )
+  );
+
+  context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       'catala.exceptionsView',
       exceptionsViewProvider

@@ -79,7 +79,7 @@ export function DataPanel({
   intl,
 }: {
   test: TraceTest;
-  setFilter: React.Dispatch<React.SetStateAction<string>>;
+  setFilter: (filter: string) => void;
   trace?: TraceElement[];
   intl: IntlShape;
 }): ReactElement {
@@ -189,7 +189,7 @@ function VarRowView({
   setFilter,
 }: {
   row: VarRow;
-  setFilter: React.Dispatch<React.SetStateAction<string>>;
+  setFilter: (filter: string) => void;
 }): ReactElement {
   const comparable =
     !row.noExpected && row.expected !== undefined && row.value !== undefined;

@@ -5,6 +5,7 @@
   "view.catala.openAllTests.title": "Catala Tests",
   "view.catala.switches.title": "Catala switches",
   "view.catala.help.title": "Help and feedback",
+  "command.catala.trace.viewWithFilter.title": "View with filter",
   "command.catala.showExceptions.title": "Show definition tree",
   "command.catala.showExceptionsAtCursor.title": "Show definition tree",
   "view.catala.exceptionsView.name": "Definition tree",

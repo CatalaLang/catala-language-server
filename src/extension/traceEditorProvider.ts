@@ -68,6 +68,14 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
     }
   >();
 
+  private static activePanel: vscode.WebviewPanel | undefined;
+
+  public static viewWithFilter(): void {
+    void TraceEditorProvider.activePanel?.webview.postMessage({
+      kind: 'viewWithFilter',
+    } satisfies TraceDownMessage);
+  }
+
   public static openWith(
     uri: vscode.Uri,
     inputs: TraceEditorInputs
@@ -258,9 +266,20 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
       panel: webviewPanel,
       sendInit,
     });
+    if (webviewPanel.active) {
+      TraceEditorProvider.activePanel = webviewPanel;
+    }
+    webviewPanel.onDidChangeViewState(() => {
+      if (webviewPanel.active) {
+        TraceEditorProvider.activePanel = webviewPanel;
+      }
+    });
     webviewPanel.onDidDispose(() => {
       if (TraceEditorProvider.openEditors.get(file)?.panel === webviewPanel) {
         TraceEditorProvider.openEditors.delete(file);
+      }
+      if (TraceEditorProvider.activePanel === webviewPanel) {
+        TraceEditorProvider.activePanel = undefined;
       }
     });
   }
@@ -269,8 +288,6 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'ui.js')
     );
-    // vscode-elements' icon component looks up this stylesheet by id to load
-    // the Codicons font into its shadow DOM.
     const codiconsUri = webview.asWebviewUri(
       vscode.Uri.joinPath(
         this.context.extensionUri,

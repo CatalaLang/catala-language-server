@@ -5,19 +5,19 @@ import {
   VscodeButton,
   VscodeOption,
   VscodeProgressRing,
-  VscodeRadio,
-  VscodeRadioGroup,
   VscodeSingleSelect,
   VscodeTextfield,
 } from '@vscode-elements/react-elements';
 import { setVsCodeApi } from '../shared/webviewApi';
 import type { TraceDownMessage, TraceUpMessage } from './messages';
 import type { TraceElement, TraceTest } from './traceUtils';
-import { readTraceTest } from './traceUtils';
-import TraceTreeView, { type ExpandCommand } from './TraceTreeView';
+import { fieldValue, readTraceTest } from './traceUtils';
+import {
+  TracePanel,
+  codeBlockStyle,
+  type FilterCommand,
+} from './TraceTreeView';
 import { DataPanel } from './TraceData';
-import type { Filter } from '../shared/util';
-import { pinBackground, switchFilter, titlePin } from '../shared/util';
 
 type RunState =
   | { status: 'idle' }
@@ -25,18 +25,11 @@ type RunState =
   | { status: 'success'; trace: TraceElement[] }
   | { status: 'error'; message: string };
 
-type OutputView = 'tree' | 'json';
-
 type Props = {
   vscode: WebviewApi<unknown>;
 };
 
 type ScopeWithInfo = [string, TraceTest | undefined];
-
-/** Read the `value` off the target of a vscode-elements form event. */
-function fieldValue(e: Event): string {
-  return (e.target as { value?: string } | null)?.value ?? '';
-}
 
 export default function TraceEditor({ vscode }: Props): ReactElement {
   const intl = useIntl();
@@ -49,45 +42,14 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
   const [scopePreset, setScopePreset] = useState(false);
   const [runState, setRunState] = useState<RunState>({ status: 'idle' });
   const [initialized, setInitialized] = useState(false);
-  // What is currently typed in the search field: it filters live, as before.
-  const [filter, setFilter] = useState('');
-  // Filters the user chose to keep. They accumulate with each other and with
-  // the live one: an entry has to match all of them.
-  const [savedFilters, setSavedFilters] = useState<Filter[]>([]);
+  // The filters themselves belong to each trace panel. The data panel only
+  // asks for one, which the panel then owns like a typed one.
+  const [filterRequest, setFilterRequest] = useState<FilterCommand | null>(
+    null
+  );
 
-  // Always hand a new array to the setter: React skips the re-render when an
-  // updater returns the very same reference.
-  const saveFilter = (newFilter: string): void => {
-    const trimmed = newFilter.trim();
-    if (trimmed === '') {
-      return;
-    }
-    setSavedFilters((old) =>
-      old.some((filter) => filter.filter == trimmed)
-        ? old
-        : [...old, { filter: trimmed, option: 'include' }]
-    );
-  };
-
-  // Always hand a new array to the setter: React skips the re-render when an
-  // updater returns the very same reference.
-  const onClickFilter = (filter: string): void => {
-    setSavedFilters((old) =>
-      old.map((pin) => {
-        if (filter == pin.filter) {
-          return switchFilter(pin);
-        } else {
-          return pin;
-        }
-      })
-    );
-  };
-
-  const removeFilter = (toRemove: string): void => {
-    setSavedFilters((old) =>
-      old.filter((current) => current.filter !== toRemove)
-    );
-  };
+  const requestFilter = (filter: string): void =>
+    setFilterRequest((prev) => ({ filter, nonce: (prev?.nonce ?? 0) + 1 }));
 
   useEffect(() => {
     setVsCodeApi(vscode);
@@ -229,7 +191,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         <SplitPane
           left={
             <DataPanel
-              setFilter={setFilter}
+              setFilter={requestFilter}
               test={scope[1]}
               trace={runState.status === 'success' ? runState.trace : undefined}
               intl={intl}
@@ -237,12 +199,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
           }
           right={
             <TraceResult
-              filter={filter}
-              onClickFilter={onClickFilter}
-              setFilter={setFilter}
-              savedFilters={savedFilters}
-              saveFilter={saveFilter}
-              removeFilter={removeFilter}
+              filterRequest={filterRequest}
               runState={runState}
               cwd={cwd}
               test={scope[1]}
@@ -251,12 +208,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         />
       ) : (
         <TraceResult
-          filter={filter}
-          setFilter={setFilter}
-          onClickFilter={onClickFilter}
-          savedFilters={savedFilters}
-          saveFilter={saveFilter}
-          removeFilter={removeFilter}
+          filterRequest={filterRequest}
           runState={runState}
           cwd={cwd}
         />
@@ -269,29 +221,13 @@ function TraceResult({
   runState,
   cwd,
   test,
-  filter,
-  setFilter,
-  savedFilters,
-  onClickFilter,
-  saveFilter,
-  removeFilter,
+  filterRequest,
 }: {
   runState: RunState;
   cwd: string;
   test?: TraceTest;
-  filter: string;
-  setFilter: React.Dispatch<React.SetStateAction<string>>;
-  savedFilters: Filter[];
-  onClickFilter: (filter: string) => void;
-  saveFilter: (filter: string) => void;
-  removeFilter: (filter: string) => void;
+  filterRequest: FilterCommand | null;
 }): ReactElement | null {
-  const intl = useIntl();
-  const [view, setView] = useState<OutputView>('tree');
-  const [expand, setExpand] = useState<ExpandCommand | null>(null);
-  const expandAll = (open: boolean): void =>
-    setExpand((prev) => ({ open, nonce: (prev?.nonce ?? 0) + 1 }));
-
   switch (runState.status) {
     case 'idle':
       return null;
@@ -307,181 +243,23 @@ function TraceResult({
           <p style={{ color: 'var(--vscode-errorForeground)' }}>
             <FormattedMessage id="trace.error" />
           </p>
-          <pre style={preStyle}>{runState.message}</pre>
+          <pre style={codeBlockStyle}>{runState.message}</pre>
         </div>
       );
     case 'success':
       return (
-        <div>
-          <div
-            style={{
-              display: 'flex',
-              gap: 16,
-              alignItems: 'center',
-              margin: 0,
-            }}
-          >
-            <span style={{ fontWeight: 600 }}>
-              <FormattedMessage id="trace.label" />
-            </span>
-            <VscodeRadioGroup
-              variant="horizontal"
-              onChange={(e) => setView(fieldValue(e) as OutputView)}
-            >
-              <VscodeRadio
-                value="tree"
-                label={intl.formatMessage({ id: 'trace.view.tree' })}
-                checked={view === 'tree'}
-              />
-              <VscodeRadio
-                value="json"
-                label={intl.formatMessage({ id: 'trace.view.json' })}
-                checked={view === 'json'}
-              />
-            </VscodeRadioGroup>
-          </div>
-          {view === 'tree' ? (
-            <>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'center',
-                  margin: '8px 0',
-                }}
-              >
-                <VscodeTextfield
-                  placeholder={intl.formatMessage({
-                    id: 'trace.filterPlaceholder',
-                  })}
-                  value={filter}
-                  onInput={(e) => setFilter(fieldValue(e))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      saveFilter(filter);
-                      setFilter('');
-                    }
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  <span
-                    className="codicon codicon-save"
-                    slot="content-after"
-                    title={intl.formatMessage({ id: 'trace.saveFilter' })}
-                    style={{ cursor: 'pointer' }}
-                    // Keep the focus in the field so that the user can chain
-                    // several filters without clicking back into it.
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      saveFilter(filter);
-                      setFilter('');
-                    }}
-                  />
-                </VscodeTextfield>
-                <VscodeButton
-                  icon="expand-all"
-                  secondary
-                  title={intl.formatMessage({ id: 'trace.expandAllTitle' })}
-                  onClick={() => expandAll(true)}
-                >
-                  <FormattedMessage id="trace.expandAll" />
-                </VscodeButton>
-                <VscodeButton
-                  icon="collapse-all"
-                  secondary
-                  title={intl.formatMessage({ id: 'trace.collapseAllTitle' })}
-                  onClick={() => expandAll(false)}
-                >
-                  <FormattedMessage id="trace.collapseAll" />
-                </VscodeButton>
-              </div>
-              <FilterPins
-                onClickFilter={onClickFilter}
-                filters={savedFilters}
-                removeFilter={removeFilter}
-              />
-              <TraceTreeView
-                trace={runState.trace}
-                filters={savedFilters}
-                // filters={[...savedFilters, filter]}
-                cwd={cwd}
-                expand={expand}
-                test={test}
-              />
-            </>
-          ) : (
-            <>
-              <div style={{ margin: '8px 0' }}>
-                <VscodeButton
-                  icon="copy"
-                  secondary
-                  title={intl.formatMessage({ id: 'trace.copyJson' })}
-                  onClick={() => {
-                    void navigator.clipboard.writeText(
-                      JSON.stringify(runState.trace, null, 2)
-                    );
-                  }}
-                >
-                  <FormattedMessage id="trace.copyJson" />
-                </VscodeButton>
-              </div>
-              <pre style={preStyle}>
-                {JSON.stringify(runState.trace, null, 2)}
-              </pre>
-            </>
-          )}
-        </div>
+        <TracePanel
+          trace={runState.trace}
+          cwd={cwd}
+          test={test}
+          filterRequest={filterRequest}
+        />
       );
   }
 }
 
 function post(vscode: WebviewApi<unknown>, message: TraceUpMessage): void {
   vscode.postMessage(message);
-}
-
-/**
- * The saved filters, each removable. Renders nothing at all when there is none,
- * so the layout is unchanged as long as the user only uses the live search.
- */
-function FilterPins({
-  filters,
-  removeFilter,
-  onClickFilter,
-}: {
-  filters: Filter[];
-  removeFilter: (filter: string) => void;
-  onClickFilter: (filter: string) => void;
-}): ReactElement | null {
-  const intl = useIntl();
-  if (filters.length === 0) {
-    return null;
-  }
-  return (
-    <div style={pinsStyle}>
-      {filters.map((filter) => (
-        <span
-          key={filter.filter}
-          onClick={(e) => {
-            e.preventDefault();
-            onClickFilter(filter.filter);
-          }}
-          style={{
-            ...pinStyle,
-            ...pinBackground(filter.option),
-          }}
-          title={titlePin(intl, filter)}
-        >
-          <span>{filter.filter}</span>
-          <span
-            className="codicon codicon-close"
-            title={intl.formatMessage({ id: 'trace.removeFilter' })}
-            onClick={() => removeFilter(filter.filter)}
-          />
-        </span>
-      ))}
-    </div>
-  );
 }
 
 function SplitPane({
@@ -563,34 +341,4 @@ const fieldStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 4,
-};
-
-const pinsStyle: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 6,
-  margin: '0 0 8px 0',
-};
-
-const pinStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 4,
-  padding: '2px 6px',
-  borderRadius: 4,
-  color: 'var(--vscode-badge-foreground)',
-  fontFamily: 'var(--vscode-editor-font-family, monospace)',
-  cursor: 'pointer',
-};
-
-const preStyle: React.CSSProperties = {
-  background:
-    'var(--vscode-textCodeBlock-background, var(--vscode-editor-background))',
-  border: '1px solid var(--vscode-panel-border, transparent)',
-  padding: 10,
-  borderRadius: 2,
-  overflow: 'auto',
-  maxHeight: '70vh',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
 };

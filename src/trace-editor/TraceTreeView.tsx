@@ -2,20 +2,36 @@ import {
   type CSSProperties,
   type MouseEvent,
   type ReactElement,
+  type ReactNode,
+  Fragment,
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
+import {
+  VscodeButton,
+  VscodeRadio,
+  VscodeRadioGroup,
+  VscodeTextfield,
+} from '@vscode-elements/react-elements';
 import type { JsonValue } from '../shared/util_client';
 import type { Filter } from '../shared/util';
-import { splitOnTerms } from '../shared/util';
+import {
+  pinBackground,
+  splitOnTerms,
+  switchFilter,
+  titlePin,
+} from '../shared/util';
 import { getVsCodeApi } from '../shared/webviewApi';
 import type { TraceDownMessage, TraceUpMessage } from './messages';
 import type { CodeLocation, TraceElement, TraceKind } from './traceUtils';
 import {
   type TraceValue,
   type TraceTest,
+  fieldValue,
   formatTraceValue,
   traceValueEqual,
   traceValueFromRuntime,
@@ -32,6 +48,9 @@ type Expected = {
 };
 
 export type ExpandCommand = { open: boolean; nonce: number };
+export type FilterCommand = { filter: string; nonce: number };
+
+type OutputView = 'tree' | 'json';
 
 type Tone = 'scope' | 'branch' | 'error' | 'plain';
 
@@ -41,6 +60,7 @@ type Described = {
   detail?: string;
   tone: Tone;
   showsValue: boolean;
+  showsCode: boolean;
 };
 
 const ExpectedContext = createContext<Expected | null>(null);
@@ -54,11 +74,15 @@ const ExpandContext = createContext<ExpandCommand | null>(null);
  * whole), which would leave those children unhighlighted.
  */
 const FilterContext = createContext<Filter[]>([]);
-
 /**
- * Renders `text` with the parts matched by the filters highlighted, so that the
- * user sees what kept an entry in the tree.
+ * How a snippet asks for a further panel, filtered on the text the user
+ * selected in it. Null when the tree is shown outside of a `TracePanel`: there
+ * is then nowhere to put that panel, and the snippets offer nothing.
  */
+const SpawnPanelContext = createContext<((filter: string) => void) | null>(
+  null
+);
+
 function Highlight({ text }: { text: string }): ReactElement {
   const filters = useContext(FilterContext);
   return (
@@ -97,6 +121,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.name),
         tone: 'scope',
         showsValue: true,
+        showsCode: true,
       };
     case 'scope_var': {
       const label =
@@ -111,6 +136,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.name),
         tone: 'plain',
         showsValue: true,
+        showsCode: kind.input !== 'only_input',
       };
     }
     case 'local_var':
@@ -120,6 +146,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.name),
         tone: 'plain',
         showsValue: true,
+        showsCode: true,
       };
     case 'local_tup':
       return {
@@ -130,6 +157,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
           : undefined,
         tone: 'plain',
         showsValue: true,
+        showsCode: true,
       };
     case 'function_call':
       return {
@@ -138,6 +166,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.name),
         tone: 'scope',
         showsValue: true,
+        showsCode: true,
       };
     case 'branch_condition':
       return {
@@ -145,6 +174,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         label: t('trace.kind.condition'),
         tone: 'branch',
         showsValue: true,
+        showsCode: true,
       };
     case 'if_branching':
       return {
@@ -152,6 +182,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         label: t('trace.kind.branchTaken'),
         tone: 'branch',
         showsValue: false,
+        showsCode: true,
       };
     case 'match_branching':
       return {
@@ -160,6 +191,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.constructor as unknown as JsonValue),
         tone: 'branch',
         showsValue: false,
+        showsCode: true,
       };
     case 'assertion':
       return {
@@ -167,6 +199,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         label: t('trace.kind.assertion'),
         tone: 'plain',
         showsValue: false,
+        showsCode: true,
       };
     case 'exception':
       return {
@@ -175,6 +208,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: kind.label !== undefined ? detail(kind.label) : undefined,
         tone: 'plain',
         showsValue: false,
+        showsCode: true,
       };
     case 'error':
       return {
@@ -185,6 +219,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
           .join(': '),
         tone: 'error',
         showsValue: false,
+        showsCode: true,
       };
     default:
       return {
@@ -192,6 +227,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         label: kind.kind,
         tone: 'plain',
         showsValue: false,
+        showsCode: true,
       };
   }
 }
@@ -212,10 +248,6 @@ function toneColor(tone: Tone): string | undefined {
 function relatedLocations(kind: TraceKind): CodeLocation[] {
   const rp = kind.related_pos;
   return Array.isArray(rp) ? (rp as unknown as CodeLocation[]) : [];
-}
-
-function isSingleLine(pos?: CodeLocation): pos is CodeLocation {
-  return !!pos && pos.start.line === pos.end.line;
 }
 
 function posText(pos?: CodeLocation): string {
@@ -267,6 +299,32 @@ function PosLink({
   );
 }
 
+const snippetContextAttribute = JSON.stringify({
+  webviewSection: 'traceSnippet',
+  preventDefaultContextMenuItems: false,
+});
+
+let viewWithFilterTarget: ((filter: string) => void) | null = null;
+let viewWithFilterListenerAttached = false;
+
+function armViewWithFilter(spawn: (filter: string) => void): void {
+  viewWithFilterTarget = spawn;
+  if (viewWithFilterListenerAttached) {
+    return;
+  }
+  viewWithFilterListenerAttached = true;
+  window.addEventListener('message', (event: MessageEvent): void => {
+    const m = event.data as TraceDownMessage;
+    if (m?.kind !== 'viewWithFilter') {
+      return;
+    }
+    const text = window.getSelection()?.toString().trim() ?? '';
+    if (text !== '' && viewWithFilterTarget !== null) {
+      viewWithFilterTarget(text);
+    }
+  });
+}
+
 const extractCache = new Map<string, string | null>();
 const pendingExtracts = new Map<number, (line: string | null) => void>();
 let extractSeq = 0;
@@ -315,21 +373,19 @@ async function fetchExtract(
   });
 }
 
-function SourceLine({
+function SnippetBlock({
   pos,
-  text,
+  children,
 }: {
   pos: CodeLocation;
-  text: string;
+  children: ReactNode;
 }): ReactElement {
   const cwd = useContext(CwdContext);
+  const spawnPanel = useContext(SpawnPanelContext);
   const intl = useIntl();
-  const a = Math.max(0, pos.start.character - 1);
-  const b = Math.max(a, pos.end.character - 1);
-  const before = text.slice(0, a);
-  const mid = text.slice(a, b);
-  const after = text.slice(b);
-  const onClick = (): void => {
+  const [hover, setHover] = useState(false);
+  const openLocation = (e: MouseEvent): void => {
+    e.stopPropagation();
     const message: TraceUpMessage = {
       kind: 'openLocation',
       file: resolvePath(cwd, pos.file),
@@ -338,44 +394,107 @@ function SourceLine({
     };
     getVsCodeApi().postMessage(message);
   };
+  const label = intl.formatMessage(
+    { id: 'trace.openLocation' },
+    { target: posText(pos) }
+  );
+  const onContextMenu = (): void => {
+    if (spawnPanel !== null) {
+      armViewWithFilter(spawnPanel);
+    }
+  };
   return (
-    <pre
-      style={sourceStyle}
-      onClick={onClick}
-      title={intl.formatMessage(
-        { id: 'trace.openLocation' },
-        { target: posText(pos) }
-      )}
+    <div
+      style={snippetStyle}
+      onContextMenu={onContextMenu}
+      data-vscode-context={
+        spawnPanel === null ? undefined : snippetContextAttribute
+      }
     >
-      {before}
-      <mark style={markStyle}>{mid || ' '}</mark>
-      {after}
-    </pre>
+      <pre style={sourceStyle}>{children}</pre>
+      <button
+        type="button"
+        style={
+          hover
+            ? { ...openButtonStyle, ...openButtonHoverStyle }
+            : openButtonStyle
+        }
+        onClick={openLocation}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        title={label}
+        aria-label={label}
+      >
+        <span className="codicon codicon-go-to-file" />
+      </button>
+    </div>
   );
 }
 
-function LocationExtract({ pos }: { pos: CodeLocation }): ReactElement | null {
+function LocationSnippet({ pos }: { pos: CodeLocation }): ReactElement | null {
   const cwd = useContext(CwdContext);
-  if (pos.start.line !== pos.end.line) {
-    return null;
-  }
-  const line = pos.start.line;
-  const [source, setSource] = useState<{ text: string | null; line: number }>({
-    text: null,
-    line,
-  });
+  const startLine = pos.start.line;
+  const endLine = Math.max(startLine, pos.end.line);
+  const [lines, setLines] = useState<(string | null)[] | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void fetchExtract(resolvePath(cwd, pos.file), line).then((text) => {
-      if (!cancelled) {
-        setSource({ line, text });
-      }
+    const nums: number[] = [];
+    for (let l = startLine; l <= endLine; l++) nums.push(l);
+    void Promise.all(
+      nums.map((l) => fetchExtract(resolvePath(cwd, pos.file), l))
+    ).then((texts) => {
+      if (!cancelled) setLines(texts);
     });
     return (): void => {
       cancelled = true;
     };
   }, [cwd, pos]);
-  return source.text ? <SourceLine pos={pos} text={source.text} /> : null;
+
+  if (lines === null || lines.every((l) => l === null)) {
+    return null;
+  }
+  const last = lines.length - 1;
+  return (
+    <SnippetBlock pos={pos}>
+      {lines.map((line, i) => {
+        const text = line ?? '';
+        const from = i === 0 ? Math.max(0, pos.start.character - 1) : 0;
+        const to =
+          i === last ? Math.max(from, pos.end.character - 1) : text.length;
+        const mid = text.slice(from, to);
+        return (
+          <Fragment key={i}>
+            {text.slice(0, from)}
+            <mark style={markStyle}>{mid || ' '}</mark>
+            {text.slice(to)}
+            {i < last ? '\n' : ''}
+          </Fragment>
+        );
+      })}
+    </SnippetBlock>
+  );
+}
+
+function Pill({
+  labelId,
+  active,
+  onToggle,
+}: {
+  labelId: string;
+  active: boolean;
+  onToggle: () => void;
+}): ReactElement {
+  return (
+    <span
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      style={active ? { ...pillStyle, ...pillActiveStyle } : pillStyle}
+    >
+      <FormattedMessage id={labelId} />
+    </span>
+  );
 }
 
 function asCodeLocation(v: JsonValue | undefined): CodeLocation | undefined {
@@ -390,10 +509,6 @@ function asCodeLocation(v: JsonValue | undefined): CodeLocation | undefined {
   return undefined;
 }
 
-/**
- * An entry matches when **every** term is found in its own text: the terms
- * accumulate, exactly like the saved filters of the general test list.
- */
 function filterMatches(
   el: TraceElement,
   filters: Filter[],
@@ -511,20 +626,352 @@ function subtreeHasMismatch(
   return false;
 }
 
+function stepInto(
+  te: TraceElement,
+  prefix: string,
+  testedScope: string | undefined,
+  stepIndices: Map<TraceElement, number>
+): {
+  children: TraceElement[];
+  prefix: string;
+  testedScope: string | undefined;
+} {
+  const merged =
+    te.element.kind === 'scope_var' &&
+    typeof te.element.name === 'string' &&
+    te.trace?.length === 1 &&
+    te.trace[0].element.kind === 'scope_call' &&
+    typeof te.trace[0].element.name === 'string';
+  const node = merged && te.trace ? te.trace[0] : te;
+  const displayName = merged
+    ? `${te.element.name as string}.${node.element.name as string}`
+    : (te.element.name as string);
+  let childPrefix = prefix;
+  let nextTestedScope = testedScope;
+  if (
+    (node.element.kind === 'scope_call' ||
+      node.element.kind === 'scope_var' ||
+      node.element.kind === 'local_var') &&
+    typeof node.element.name === 'string'
+  ) {
+    if (node.element.name === testedScope) {
+      nextTestedScope = undefined;
+    } else {
+      const segment = indexedSegment(node, displayName, stepIndices);
+      childPrefix = prefix ? `${prefix}.${segment}` : segment;
+    }
+  }
+  return {
+    children: node.trace ?? [],
+    prefix: childPrefix,
+    testedScope: nextTestedScope,
+  };
+}
+
+function closestFilterMatch(
+  roots: TraceElement[],
+  filters: Filter[],
+  intl: IntlShape,
+  stepIndices: Map<TraceElement, number>,
+  testedScope: string | undefined
+): {
+  roots: TraceElement[];
+  prefix: string;
+  testedScope: string | undefined;
+} {
+  let level = roots;
+  let prefix = '';
+  let scope = testedScope;
+  // A pin an ancestor already satisfied is spent, exactly as `subtreeMatches`
+  // hands its children what is left of the list.
+  let active = filters;
+  // The parent reached so far, starting with the whole trace.
+  let closest = { roots, prefix, testedScope: scope };
+  for (;;) {
+    const matching = level.filter((el) => subtreeMatches(el, active, intl));
+    // Nothing here, or matches spread over several siblings: their closest
+    // common parent is the one we came from.
+    if (matching.length !== 1) {
+      return closest;
+    }
+    const [only] = matching;
+    closest = { roots: [only], prefix, testedScope: scope };
+    const [remaining, excluded] = filterMatches(only, active, intl);
+    // Nothing left for a descendant to satisfy: this node is itself what the
+    // pins caught, and its subtree is shown whole from here.
+    if (excluded || remaining.every((pin) => pin.option === 'exclude')) {
+      return closest;
+    }
+    const stepped = stepInto(only, prefix, scope, stepIndices);
+    if (stepped.children.length === 0) {
+      return closest;
+    }
+    level = stepped.children;
+    active = remaining;
+    prefix = stepped.prefix;
+    scope = stepped.testedScope;
+  }
+}
+
 // -- Components ---------------------------------------------------------------
 
-export default function TraceTreeView({
+export function TracePanel({
+  trace,
+  cwd,
+  test,
+  label,
+  filterRequest,
+  initialFilter,
+  fromClosestMatch,
+  onClose,
+}: {
+  trace: TraceElement[];
+  cwd?: string;
+  test?: TraceTest;
+  label?: ReactNode;
+  filterRequest?: FilterCommand | null;
+  initialFilter?: string;
+  fromClosestMatch?: boolean;
+  onClose?: () => void;
+}): ReactElement {
+  const intl = useIntl();
+  const [view, setView] = useState<OutputView>('tree');
+  const [expand, setExpand] = useState<ExpandCommand | null>(null);
+  const [filter, setFilter] = useState(initialFilter ?? '');
+  const [savedFilters, setSavedFilters] = useState<Filter[]>([]);
+  const [derived, setDerived] = useState<{ id: number; filter: string }[]>([]);
+  const nextDerivedId = useRef(1);
+
+  const expandAll = (open: boolean): void =>
+    setExpand((prev) => ({ open, nonce: (prev?.nonce ?? 0) + 1 }));
+
+  const spawnPanel = useCallback((spawnFilter: string): void => {
+    const id = nextDerivedId.current++;
+    setDerived((old) => [...old, { id, filter: spawnFilter }]);
+  }, []);
+
+  // Always hand a new array to the setter: React skips the re-render when an
+  // updater returns the very same reference.
+  const saveFilter = (newFilter: string): void => {
+    const trimmed = newFilter.trim();
+    if (trimmed === '') {
+      return;
+    }
+    setSavedFilters((old) =>
+      old.some((pin) => pin.filter === trimmed)
+        ? old
+        : [...old, { filter: trimmed, option: 'include' }]
+    );
+  };
+
+  // Clicking a pin cycles it through include, exclude and ignore.
+  const onClickFilter = (clicked: string): void => {
+    setSavedFilters((old) =>
+      old.map((pin) => (pin.filter === clicked ? switchFilter(pin) : pin))
+    );
+  };
+
+  const removeFilter = (toRemove: string): void => {
+    setSavedFilters((old) => old.filter((pin) => pin.filter !== toRemove));
+  };
+
+  useEffect(() => {
+    if (filterRequest) {
+      setFilter(filterRequest.filter);
+    }
+  }, [filterRequest]);
+
+  return (
+    <div>
+      <div style={panelHeaderStyle}>
+        <span style={{ fontWeight: 600 }}>
+          {label ?? <FormattedMessage id="trace.label" />}
+        </span>
+        <VscodeRadioGroup
+          variant="horizontal"
+          onChange={(e) => setView(fieldValue(e) as OutputView)}
+        >
+          <VscodeRadio
+            value="tree"
+            label={intl.formatMessage({ id: 'trace.view.tree' })}
+            checked={view === 'tree'}
+          />
+          <VscodeRadio
+            value="json"
+            label={intl.formatMessage({ id: 'trace.view.json' })}
+            checked={view === 'json'}
+          />
+        </VscodeRadioGroup>
+        {onClose && (
+          <span
+            className="codicon codicon-close"
+            role="button"
+            title={intl.formatMessage({ id: 'trace.closePanel' })}
+            style={{ marginLeft: 'auto', cursor: 'pointer' }}
+            onClick={onClose}
+          />
+        )}
+      </div>
+      {view === 'tree' ? (
+        <>
+          <div style={panelToolbarStyle}>
+            <VscodeTextfield
+              placeholder={intl.formatMessage({
+                id: 'trace.filterPlaceholder',
+              })}
+              value={filter}
+              onInput={(e) => setFilter(fieldValue(e))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveFilter(filter);
+                  setFilter('');
+                }
+              }}
+              style={{ flex: 1 }}
+            >
+              <span
+                className="codicon codicon-save"
+                slot="content-after"
+                title={intl.formatMessage({ id: 'trace.saveFilter' })}
+                style={{ cursor: 'pointer' }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  saveFilter(filter);
+                  setFilter('');
+                }}
+              />
+            </VscodeTextfield>
+            <VscodeButton
+              icon="expand-all"
+              secondary
+              title={intl.formatMessage({ id: 'trace.expandAllTitle' })}
+              onClick={() => expandAll(true)}
+            >
+              <FormattedMessage id="trace.expandAll" />
+            </VscodeButton>
+            <VscodeButton
+              icon="collapse-all"
+              secondary
+              title={intl.formatMessage({ id: 'trace.collapseAllTitle' })}
+              onClick={() => expandAll(false)}
+            >
+              <FormattedMessage id="trace.collapseAll" />
+            </VscodeButton>
+          </div>
+          <FilterPins
+            filters={savedFilters}
+            removeFilter={removeFilter}
+            onClickFilter={onClickFilter}
+          />
+          <SpawnPanelContext.Provider value={spawnPanel}>
+            <TraceTreeView
+              trace={trace}
+              // Only the saved pins filter: the live field is what is being
+              // typed, and is turned into a pin on Enter.
+              filters={savedFilters}
+              cwd={cwd}
+              expand={expand}
+              test={test}
+              fromClosestMatch={fromClosestMatch}
+            />
+          </SpawnPanelContext.Provider>
+        </>
+      ) : (
+        <>
+          <div style={{ margin: '8px 0' }}>
+            <VscodeButton
+              icon="copy"
+              secondary
+              title={intl.formatMessage({ id: 'trace.copyJson' })}
+              onClick={() => {
+                void navigator.clipboard.writeText(
+                  JSON.stringify(trace, null, 2)
+                );
+              }}
+            >
+              <FormattedMessage id="trace.copyJson" />
+            </VscodeButton>
+          </div>
+          <pre style={codeBlockStyle}>{JSON.stringify(trace, null, 2)}</pre>
+        </>
+      )}
+      {derived.map((d) => (
+        <div key={d.id} style={derivedPanelStyle}>
+          <TracePanel
+            trace={trace}
+            cwd={cwd}
+            test={test}
+            initialFilter={d.filter}
+            fromClosestMatch
+            label={
+              <FormattedMessage
+                id="trace.filteredView"
+                values={{ filter: d.filter }}
+              />
+            }
+            onClose={() =>
+              setDerived((old) => old.filter((o) => o.id !== d.id))
+            }
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FilterPins({
+  filters,
+  removeFilter,
+  onClickFilter,
+}: {
+  filters: Filter[];
+  removeFilter: (filter: string) => void;
+  onClickFilter: (filter: string) => void;
+}): ReactElement | null {
+  const intl = useIntl();
+  if (filters.length === 0) {
+    return null;
+  }
+  return (
+    <div style={pinsStyle}>
+      {filters.map((filter) => (
+        <span
+          key={filter.filter}
+          onClick={(e) => {
+            e.preventDefault();
+            onClickFilter(filter.filter);
+          }}
+          style={{ ...pinStyle, ...pinBackground(filter.option) }}
+          title={titlePin(intl, filter)}
+        >
+          <span>{filter.filter}</span>
+          <span
+            className="codicon codicon-close"
+            title={intl.formatMessage({ id: 'trace.removeFilter' })}
+            style={{ cursor: 'pointer' }}
+            onClick={() => removeFilter(filter.filter)}
+          />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TraceTreeView({
   trace,
   filters,
   cwd,
   expand,
   test,
+  fromClosestMatch = false,
 }: {
   trace: TraceElement[];
   filters?: Filter[];
   cwd?: string;
   expand?: ExpandCommand | null;
   test?: TraceTest;
+  fromClosestMatch?: boolean;
 }): ReactElement {
   const intl = useIntl();
 
@@ -543,14 +990,12 @@ export default function TraceTreeView({
 
   if (roots.length === 0) {
     return (
-      <p style={{ color: 'var(--vscode-descriptionForeground)' }}>
+      <p style={treeMessageStyle}>
         <FormattedMessage id="trace.empty" />
       </p>
     );
   }
 
-  // Normalised once here: the matching is case insensitive, and a blank term
-  // would match everything, so it is dropped rather than kept as a no-op.
   const f = (filters ?? [])
     .map((filter) => {
       return {
@@ -563,7 +1008,7 @@ export default function TraceTreeView({
     f.length > 0 ? roots.some((el) => subtreeMatches(el, f, intl)) : true;
   if (!anyVisible) {
     return (
-      <p style={{ color: 'var(--vscode-descriptionForeground)' }}>
+      <p style={treeMessageStyle}>
         <FormattedMessage id="trace.noMatches" />
       </p>
     );
@@ -586,7 +1031,20 @@ export default function TraceTreeView({
     expected = { variables: test.variables, output };
   }
 
-  const testedScope = test ? test.tested_scope.name : undefined;
+  let testedScope = test ? test.tested_scope.name : undefined;
+  let rootPrefix = '';
+  if (fromClosestMatch && f.length > 0) {
+    const closest = closestFilterMatch(
+      roots,
+      f,
+      intl,
+      stepIndices,
+      testedScope
+    );
+    roots = closest.roots;
+    rootPrefix = closest.prefix;
+    testedScope = closest.testedScope;
+  }
 
   return (
     <CwdContext.Provider value={cwd ?? ''}>
@@ -601,7 +1059,7 @@ export default function TraceTreeView({
                     te={el}
                     depth={0}
                     filters={f}
-                    prefix=""
+                    prefix={rootPrefix}
                     tested_scope={testedScope}
                   />
                 ))}
@@ -641,17 +1099,11 @@ function TraceNode({
   const stepIndices = useContext(IndexContext);
   const intl = useIntl();
 
-  const singleLinePos =
-    te.element.kind !== 'scope_var' && isSingleLine(te.pos)
-      ? te.pos
-      : undefined;
-
   const fulfilled =
     te.element.kind === 'exception' &&
     te.value?.kind === 'bool' &&
     te.value.value === true;
   const consPos = fulfilled ? asCodeLocation(te.element.cons_pos) : undefined;
-  const consSingleLine = isSingleLine(consPos) ? consPos : undefined;
 
   const [node, displayName, isMerged]: [TraceElement, string, boolean] =
     te.element.kind === 'scope_var' &&
@@ -671,24 +1123,15 @@ function TraceNode({
     formatTraceValue(te.value, intl) === undefined
       ? formatTraceValue(te.value, intl, 'en', true)
       : undefined;
-  const expandable =
-    hasChildren ||
-    !!singleLinePos ||
-    !!consSingleLine ||
-    containerValue !== undefined;
-  const onlyContainerValue =
-    containerValue !== undefined &&
-    !hasChildren &&
-    !singleLinePos &&
-    !consSingleLine;
+  const related =
+    node.element.kind === 'error' ? relatedLocations(node.element) : [];
+  const expandable = hasChildren || !!consPos || related.length > 0;
 
   const defaultExpanded =
-    node.element.kind === 'assertion'
-      ? hasChildren
-      : onlyContainerValue
-        ? false
-        : depth < 1;
+    node.element.kind === 'assertion' ? hasChildren : depth < 1;
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [showValue, setShowValue] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   useEffect(() => {
     setExpanded(
       filters.some((f) => f.option == 'include') ? true : defaultExpanded
@@ -699,6 +1142,8 @@ function TraceNode({
   useEffect(() => {
     if (expandCmd) {
       setExpanded(expandCmd.open);
+      setShowValue(expandCmd.open);
+      setShowCode(expandCmd.open);
     }
   }, [expandCmd]);
 
@@ -759,16 +1204,16 @@ function TraceNode({
         ),
         tone: 'scope',
         showsValue: true,
+        showsCode: true,
       }
     : describe(node.element, intl);
+  const snippetPos = described.showsCode ? te.pos : undefined;
   const accentColor =
     node.element.kind === 'assertion'
       ? !node.trace
         ? 'var(--vscode-testing-iconPassed, var(--vscode-charts-green))'
         : 'var(--vscode-errorForeground)'
       : toneColor(described.tone);
-  const related =
-    node.element.kind === 'error' ? relatedLocations(node.element) : [];
 
   return (
     <li style={liStyle}>
@@ -800,17 +1245,38 @@ function TraceNode({
           </span>
         )}
         <ValueView te={te} described={described} />
+        {(containerValue !== undefined || snippetPos) && (
+          <span style={pillsStyle}>
+            {containerValue !== undefined && (
+              <Pill
+                labelId="trace.value"
+                active={showValue}
+                onToggle={() => setShowValue((v) => !v)}
+              />
+            )}
+            {snippetPos && (
+              <Pill
+                labelId="trace.code"
+                active={showCode}
+                onToggle={() => setShowCode((v) => !v)}
+              />
+            )}
+          </span>
+        )}
       </div>
+      {showValue && containerValue !== undefined && (
+        <div style={openContentStyle}>
+          <pre style={containerValueStyle}>{containerValue}</pre>
+        </div>
+      )}
+      {showCode && snippetPos && (
+        <div style={openContentStyle}>
+          <LocationSnippet pos={snippetPos} />
+        </div>
+      )}
       {open && (
         <div style={openContentStyle}>
-          {containerValue !== undefined &&
-            (onlyContainerValue ? (
-              <pre style={containerValueStyle}>{containerValue}</pre>
-            ) : (
-              <ContainerValue value={containerValue} />
-            ))}
-          {singleLinePos && <LocationExtract pos={singleLinePos} />}
-          {consSingleLine && (
+          {consPos && (
             <>
               <div
                 style={{ ...consequenceLabelStyle, color: toneColor('branch') }}
@@ -818,7 +1284,7 @@ function TraceNode({
                 {'⊸ '}
                 <FormattedMessage id="trace.consequence" />
               </div>
-              <LocationExtract pos={consSingleLine} />
+              <LocationSnippet pos={consPos} />
             </>
           )}
           {related.length > 0 && (
@@ -848,22 +1314,6 @@ function TraceNode({
         </div>
       )}
     </li>
-  );
-}
-
-function ContainerValue({ value }: { value: string }): ReactElement {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <div style={containerValueLabelStyle} onClick={() => setOpen((o) => !o)}>
-        <span
-          className={`codicon codicon-chevron-${open ? 'down' : 'right'}`}
-          style={chevronStyle}
-        />
-        <FormattedMessage id="trace.value" />
-      </div>
-      {open && <pre style={containerValueStyle}>{value}</pre>}
-    </div>
   );
 }
 
@@ -915,14 +1365,78 @@ function ValueView({
 
 // -- Styles -------------------------------------------------------------------
 
+const panelHeaderStyle: CSSProperties = {
+  display: 'flex',
+  gap: 16,
+  alignItems: 'center',
+  margin: 0,
+};
+
+const derivedPanelStyle: CSSProperties = {
+  marginTop: 12,
+  paddingTop: 8,
+  borderTop: '1px solid var(--vscode-panel-border, transparent)',
+};
+
+const panelToolbarStyle: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  alignItems: 'center',
+  margin: '8px 0',
+};
+
+const pinsStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 6,
+  margin: '0 0 8px 0',
+};
+
+// The background is not set here: `pinBackground` gives it the colour of the
+// pin's own option, and clicking cycles through them.
+const pinStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '2px 6px',
+  borderRadius: 4,
+  color: 'var(--vscode-badge-foreground)',
+  fontFamily: 'var(--vscode-editor-font-family, monospace)',
+  cursor: 'pointer',
+};
+
+export const codeBlockStyle: CSSProperties = {
+  background:
+    'var(--vscode-textCodeBlock-background, var(--vscode-editor-background))',
+  border: '1px solid var(--vscode-panel-border, transparent)',
+  padding: 10,
+  borderRadius: 2,
+  overflow: 'auto',
+  maxHeight: '70vh',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+};
+
+const treeFrameStyle: CSSProperties = {
+  border: '1px solid var(--vscode-panel-border, var(--vscode-contrastBorder))',
+  borderRadius: 4,
+  padding: 6,
+};
+
 const rootListStyle: CSSProperties = {
+  ...treeFrameStyle,
   listStyle: 'none',
   margin: 0,
-  padding: 0,
   fontFamily: 'var(--vscode-editor-font-family, monospace)',
   fontSize: 'var(--vscode-editor-font-size, 13px)',
   maxHeight: '70vh',
   overflow: 'auto',
+};
+
+const treeMessageStyle: CSSProperties = {
+  ...treeFrameStyle,
+  margin: 0,
+  color: 'var(--vscode-descriptionForeground)',
 };
 
 const childListStyle: CSSProperties = {
@@ -950,13 +1464,26 @@ const openContentStyle: CSSProperties = {
   paddingLeft: 16,
 };
 
-const containerValueLabelStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
+const pillsStyle: CSSProperties = {
+  display: 'inline-flex',
+  gap: 4,
+  marginLeft: 16,
+};
+
+const pillStyle: CSSProperties = {
   cursor: 'pointer',
+  userSelect: 'none',
+  fontSize: '0.8em',
+  padding: '0 6px',
+  borderRadius: 8,
+  border: '1px solid currentColor',
   color: 'var(--vscode-descriptionForeground)',
-  fontStyle: 'italic',
+};
+
+const pillActiveStyle: CSSProperties = {
+  background: 'var(--vscode-badge-background)',
+  color: 'var(--vscode-badge-foreground)',
+  borderColor: 'transparent',
 };
 
 const containerValueStyle: CSSProperties = {
@@ -996,10 +1523,6 @@ const valueStyle: CSSProperties = {
   textOverflow: 'ellipsis',
 };
 
-// Same colors as the editor's search highlight. `color: inherit` cancels the
-// black on yellow a browser applies to <mark> by default, which would fight
-// with the tone colors of the tree, and nothing here may alter the metrics of
-// the text: the rows are laid out on a single line.
 const filterMatchStyle: CSSProperties = {
   backgroundColor:
     'var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33))',
@@ -1007,17 +1530,45 @@ const filterMatchStyle: CSSProperties = {
   borderRadius: 2,
 };
 
-const sourceStyle: CSSProperties = {
+const snippetStyle: CSSProperties = {
+  position: 'relative',
   margin: '2px 0 4px 22px',
-  padding: '2px 6px',
+};
+
+const sourceStyle: CSSProperties = {
+  margin: 0,
+  padding: '2px 40px 2px 6px',
   background:
     'var(--vscode-textCodeBlock-background, var(--vscode-editor-background))',
   border: '1px solid var(--vscode-panel-border, transparent)',
   borderRadius: 2,
   overflowX: 'auto',
   whiteSpace: 'pre',
-  cursor: 'pointer',
+  userSelect: 'text',
   fontFamily: 'var(--vscode-editor-font-family, monospace)',
+};
+
+const openButtonStyle: CSSProperties = {
+  position: 'absolute',
+  top: 2,
+  right: 8,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 20,
+  height: 20,
+  padding: 0,
+  border: 'none',
+  borderRadius: 3,
+  cursor: 'pointer',
+  background: 'transparent',
+  color: 'var(--vscode-icon-foreground, var(--vscode-foreground))',
+  opacity: 0.6,
+};
+
+const openButtonHoverStyle: CSSProperties = {
+  background: 'var(--vscode-toolbar-hoverBackground, transparent)',
+  opacity: 1,
 };
 
 const markStyle: CSSProperties = {
