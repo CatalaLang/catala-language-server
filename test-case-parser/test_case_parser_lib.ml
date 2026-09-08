@@ -2796,38 +2796,57 @@ let run_test include_dirs options testing_scope =
    without interpreting anything: the target's dependencies, and -- pointed
    at a module file -- that module's own plugin, resyncing `_build` for what
    it touches. It does not need the target to compile, only its imports to
-   resolve. *)
+   resolve.
+
+   Clerk looks clerk.toml up from its own cwd, and ours is the editor's
+   workspace folder -- possibly far above the file's project (a workspace
+   holding several projects): resolve the project from the file, not from
+   where we happen to stand. *)
+let absolute (f : string) : string =
+  if Filename.is_relative f then Filename.concat (Sys.getcwd ()) f else f
+
+let file_project_root (f : string) : string option =
+  let root = project_root (Filename.dirname (absolute f)) in
+  if Sys.file_exists (Filename.concat root "clerk.toml") then Some root
+  else None
+
 let prepare_runtime_plugins (file : string) =
-  ignore
-    (Sys.command
-       (Printf.sprintf "clerk run --prepare-only %s >/dev/null 2>&1"
-          (Filename.quote file)))
+  match file_project_root file with
+  | None -> ()
+  | Some root ->
+    ignore
+      (Sys.command
+         (Printf.sprintf "cd %s && clerk run --prepare-only %s >/dev/null 2>&1"
+            (Filename.quote root)
+            (Filename.quote (absolute file))))
 
 let build_runtime_plugins ?buffer_path (options : Global.options) =
-  if Sys.file_exists "clerk.toml" then
-    let file =
-      let f = Global.input_src_file options.Global.input_src in
-      if Sys.file_exists f then Some f
-      else
-        match buffer_path with
-        | Some b when Sys.file_exists b -> Some b
-        | _ -> None
-    in
-    match file with
-    | Some f -> prepare_runtime_plugins f
-    | None ->
-      (* Nothing to point at: the declared targets are the best guess left. *)
+  let file =
+    let f = Global.input_src_file options.Global.input_src in
+    if Sys.file_exists f then Some f
+    else
+      match buffer_path with
+      | Some b when Sys.file_exists b -> Some b
+      | _ -> None
+  in
+  match file with
+  | Some f -> prepare_runtime_plugins f
+  | None ->
+    (* Nothing to point at: the declared targets are the best guess left. *)
+    if Sys.file_exists "clerk.toml" then
       ignore (Sys.command "clerk build >/dev/null 2>&1")
 
 (* A test fed on stdin may sit beside a broken original ([buffer_path]) that
    clerk cannot compile. The plugins its run needs are those of the modules
    the test imports -- live files that compile by construction -- so prepare
-   each of them directly and go on from the text. *)
+   each of them directly and go on from the text. Reading the text as
+   [Contents] at [buffer_path] is what lets module resolution find the
+   project from the file rather than from the cwd. *)
 let run_test_cmd include_dirs options test_scope_name scope_input_opt buffer_path
     =
   let options =
     match options.Global.input_src, buffer_path with
-    | Global.Stdin _, Some b when Sys.file_exists "clerk.toml" ->
+    | Global.Stdin _, Some b ->
       let text = In_channel.input_all stdin in
       let options =
         Global.enforce_options ~input_src:(Global.Contents (text, b)) ()

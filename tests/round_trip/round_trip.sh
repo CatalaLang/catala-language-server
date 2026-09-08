@@ -430,6 +430,13 @@ grep -q '"assert_failures":false' "$notes_scratch/modrun.json" \
 if [ -e "$notes_scratch/modrename/test_optionals__run.catala_en" ]; then
     echo "FAIL: the run left its temporary file behind"; exit 1
 fi
+# ...and from OUTSIDE the project: the editor's cwd is the workspace folder,
+# which may sit far above the project. Resolution must come from buffer-path.
+(cd "$notes_scratch" \
+    && catala testcase run -l en -s Grant_absent --buffer-path modrename/test_optionals.catala_en - \
+         < modrename/test_optionals.catala_en.updated 2>/dev/null) > "$notes_scratch/modrun_outside.json"
+grep -q '"assert_failures":false' "$notes_scratch/modrun_outside.json" \
+    || { echo "FAIL: the run does not work from outside the project"; exit 1; }
 # ...and a run that FAILS reports what it disagrees with, not just that it did.
 sed 's/\.total = \$1000\.00)/.total = $999.00)/' \
     "$notes_scratch/modrename/test_optionals.catala_en.updated" > "$notes_scratch/modrename/failing.txt"
