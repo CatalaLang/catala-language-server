@@ -579,6 +579,9 @@
   font-size: 10px;
   font-weight: 400;
   font-style: italic;
+  /* The mark sits inside a field label, whose capitalize is meant for
+     identifiers; the mark is a sentence. */
+  text-transform: none;
 }
 .broken-run {
   display: flex;
