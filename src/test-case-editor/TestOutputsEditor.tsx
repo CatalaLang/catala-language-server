@@ -16,6 +16,7 @@ type Props = {
   diffs?: Diff[];
   onDiffResolved?: (path: PathSegment[]) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
+  readOnly?: boolean;
   /** Rendered next to an output's name (the recovery view's carry marks). */
   labelExtra?: (outputName: string) => ReactNode;
 };
@@ -43,6 +44,7 @@ export default function TestOutputsEditor({
   diffs = [],
   onDiffResolved,
   onInvalidateDiffs,
+  readOnly,
   labelExtra,
 }: Props): ReactElement {
   const intl = useIntl();
@@ -91,7 +93,7 @@ export default function TestOutputsEditor({
               <div className="test-output-label">
                 <label>{outputName}</label>
                 {labelExtra?.(outputName)}
-                {outputData?.value && (
+                {outputData?.value && !readOnly && (
                   <button
                     className="assertion-delete-btn"
                     title={intl.formatMessage({ id: 'assertion.delete' })}
@@ -107,6 +109,7 @@ export default function TestOutputsEditor({
               {outputData?.value ? (
                 <AssertionValueEditor
                   testIO={outputData}
+                  editable={!readOnly}
                   onValueChange={(newValue) =>
                     onAssertValueChange(outputName, newValue)
                   }
@@ -115,7 +118,7 @@ export default function TestOutputsEditor({
                   onDiffResolved={onDiffResolved}
                   onInvalidateDiffs={onInvalidateDiffs}
                 />
-              ) : (
+              ) : readOnly ? null : (
                 <div className="assertion-editor">
                   <button
                     className="button-action-dvp"

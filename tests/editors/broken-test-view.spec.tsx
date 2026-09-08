@@ -149,6 +149,16 @@ describe('BrokenTestView', () => {
     expect(screen.getByText(/date → EndDate/)).toBeTruthy();
   });
 
+  it('renders the authored pane with the ordinary editors, inert', () => {
+    const container = renderView(view());
+    const pane = container.querySelector('.broken-pane-authored')!;
+    // Same layout as the right pane...
+    expect(pane.querySelector('.composite-editor')).toBeTruthy();
+    // ...but nothing editable and nothing to click except tabs.
+    expect(pane.querySelectorAll('input:not([disabled])').length).toBe(0);
+    expect(pane.querySelectorAll('button:not(.tab)').length).toBe(0);
+  });
+
   it('annotates the authored pane with each field\u2019s fate', () => {
     const container = renderView(view());
     // start_date carried, end_date did not: one quiet dot, one warning dot.

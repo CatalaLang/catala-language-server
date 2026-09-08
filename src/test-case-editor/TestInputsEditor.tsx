@@ -12,6 +12,7 @@ type InputFieldProps = {
   inputName: string;
   testIo: TestIo;
   isContext: boolean;
+  readOnly?: boolean;
   onTestInputChange(newValue: TestIo): void;
 };
 
@@ -19,6 +20,7 @@ function InputField({
   inputName,
   testIo,
   isContext,
+  readOnly,
   onTestInputChange,
 }: InputFieldProps): ReactElement {
   const intl = useIntl();
@@ -57,9 +59,11 @@ function InputField({
         <span className="context-var-default-text">
           {intl.formatMessage({ id: 'testEditor.usingComputedDefault' })}
         </span>
-        <button className="button-action-dvp body-b3" onClick={startOverride}>
-          {intl.formatMessage({ id: 'testEditor.override' })}
-        </button>
+        {!readOnly && (
+          <button className="button-action-dvp body-b3" onClick={startOverride}>
+            {intl.formatMessage({ id: 'testEditor.override' })}
+          </button>
+        )}
       </div>
     );
   }
@@ -69,10 +73,11 @@ function InputField({
       <ValueEditor
         testIO={testIo}
         onValueChange={onTestInputChange}
+        editable={!readOnly}
         currentPath={[{ kind: 'StructField', value: inputName }]}
         diffs={[]}
       />
-      {isContext && (
+      {isContext && !readOnly && (
         <button
           className="context-var-reset-btn"
           onClick={resetToDefault}
@@ -89,6 +94,7 @@ type Props = {
   test_inputs: TestInputs;
   tested_scope: ScopeDef;
   onTestInputsChange(newValue: TestInputs): void;
+  readOnly?: boolean;
   /** Rendered next to an input's name (the recovery view's carry marks). */
   labelExtra?: (inputName: string) => ReactNode;
 };
@@ -143,6 +149,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
             inputName={inputName}
             testIo={testIo}
             isContext={isContext}
+            readOnly={props.readOnly}
             onTestInputChange={onTestInputChange}
           />
         ),

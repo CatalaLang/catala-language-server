@@ -9,10 +9,8 @@ import type {
   CarryRecord,
   TestRunResults,
   Test,
-  TestIo,
   TestList,
 } from '../generated/catala_types';
-import ValueEditor from '../editors/ValueEditors';
 import { getTypeDisplayName } from '../editors/typeNameUtils';
 import {
   hasUnsetInTest,
@@ -143,37 +141,9 @@ function FateMark({
   return <span className={cls} role="img" aria-label={title} title={title} />;
 }
 
-/** Read-only, and only the fields the test set. */
-function Fields({
-  record,
-  marks,
-}: {
-  record: Map<string, TestIo>;
-  marks?: Map<string, CarryOutcome>;
-}): React.JSX.Element {
-  const entries = [...record.entries()].filter(
-    ([, io]) => io.value !== undefined
-  );
-  return (
-    <>
-      {entries.map(([name, io]) => (
-        <div className="broken-field" key={name}>
-          <span className="item-label">
-            {name}
-            <FateMark outcome={marks?.get(name)} />
-          </span>
-          <ValueEditor
-            testIO={io}
-            editable={false}
-            onValueChange={(): void => {}}
-            currentPath={[{ kind: 'StructField', value: name }]}
-            diffs={[]}
-          />
-        </div>
-      ))}
-    </>
-  );
-}
+const fateFrom =
+  (marks: Map<string, CarryOutcome>) =>
+  (name: string): React.JSX.Element => <FateMark outcome={marks.get(name)} />;
 
 function Note({ note }: { note: BrokenNote }): React.JSX.Element {
   switch (note.kind) {
@@ -445,13 +415,26 @@ function TestPanes({
             </p>
           ) : (
             <>
-              <Fields record={authored.test_inputs} marks={marksIn} />
+              {/* The ordinary editors, read-only: same layout as the right
+                  pane, so the two sides stay comparable. */}
+              <TestInputsEditor
+                test_inputs={authored.test_inputs}
+                tested_scope={authored.tested_scope}
+                onTestInputsChange={(): void => {}}
+                readOnly
+                labelExtra={fateFrom(marksIn)}
+              />
               {authored.test_outputs.size > 0 && (
                 <>
                   <h5 className="broken-subhead">
                     <FormattedMessage id="broken.expected" />
                   </h5>
-                  <Fields record={authored.test_outputs} marks={marksOut} />
+                  <TestOutputsEditor
+                    test={authored}
+                    onTestChange={(): void => {}}
+                    readOnly
+                    labelExtra={fateFrom(marksOut)}
+                  />
                 </>
               )}
             </>

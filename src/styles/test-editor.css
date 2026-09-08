@@ -425,12 +425,6 @@
   font-weight: var(--field-label-font-weight);
   color: var(--field-label-color);
 }
-.broken-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing4);
-  margin-bottom: var(--spacing8);
-}
 /* The compiler's own text, kept verbatim: it carries a file and a line, which
    is what the tester needs, and reflowing it would break the caret line. */
 .broken-note-error {

@@ -15,6 +15,7 @@ type Props = {
   diffs?: Diff[];
   currentPath: PathSegment[];
   highlightDiffs?: boolean;
+  editable?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
@@ -78,6 +79,7 @@ export default function AssertionValueEditor({
   diffs = [],
   currentPath,
   highlightDiffs = true,
+  editable,
   onDiffResolved,
   onInvalidateDiffs,
 }: Props): ReactElement {
@@ -98,6 +100,7 @@ export default function AssertionValueEditor({
       <ValueEditor
         testIO={testIO}
         onValueChange={onValueChange}
+        editable={editable}
         editorHook={editorHook}
         currentPath={currentPath}
         diffs={diffs}
