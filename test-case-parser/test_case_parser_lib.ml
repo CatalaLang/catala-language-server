@@ -986,6 +986,15 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
               _ )
             when svar = subscope_var ->
             let scope_var = StructField.Map.find field scope_field_map in
+            (* One assertion per output. Only a hand edit can duplicate one
+               (the writer never does), the second would silently shadow the
+               first here -- and crash the run's diff on the count. A rich
+               assertion editor (say [foo > 30] and [foo < 50]) would have to
+               revisit this. *)
+            if ScopeVar.Map.mem scope_var acc then
+              Message.error ~pos
+                "%a is asserted twice; keep one assertion per output."
+                ScopeVar.format scope_var;
             ScopeVar.Map.add scope_var
               {
                 O.value = get_value prg.program_lang prg.program_ctx value;
@@ -1504,6 +1513,19 @@ let read_partial_test_one (scope_decl : Surface.Ast.scope_decl)
              | _ -> None)
            scope_use.scope_use_items)
     with Err s -> Error s
+  in
+  (* The full reader refuses a field asserted twice; so must this one, or the
+     write-back would keep only one of the two. *)
+  let*? () =
+    match
+      List.find_opt
+        (fun (f, _) ->
+          List.length (List.filter (fun (g, _) -> String.equal f g)
+                         recovered_outputs) > 1)
+        recovered_outputs
+    with
+    | Some (f, _) -> Error (Printf.sprintf "%S is asserted twice" f)
+    | None -> Ok ()
   in
   let testing_scope = fst scope_decl.scope_decl_name in
   let*? tested_scope =

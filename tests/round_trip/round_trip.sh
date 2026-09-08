@@ -11,6 +11,7 @@ function cleanup(){
     rm -f rebuilt_bare.catala_en
     rm -f opt_fr_roundtrip.catala_fr
     rm -f written_*.catala_en written2_*.catala_en
+    rm -f dup_assert.catala_en
     rm -rf _build
     rm -rf "$notes_scratch"
 }
@@ -136,6 +137,23 @@ n=$(echo "$out" | grep -o '"testing_scope"' | wc -l)
 [ "$n" = 1 ] || { echo "FAIL: partial read recovered $n tests, wanted 1"; exit 1; }
 echo "$out" | grep -q "Hand_written" \
     || { echo "FAIL: the exclusion does not name the hand-written test"; exit 1; }
+
+# ── a field asserted twice ──────────────────────────────────────────────────
+# Only a hand edit produces it; kept, one assertion would silently shadow the
+# other (and the run's diff used to crash on the count). Both readers refuse,
+# naming the field; partial read keeps the clean tests.
+sed 's/^  assertion (calc\.total = \$1000\.00)$/&\n&/' test_optionals.catala_en > dup_assert.catala_en
+if catala testcase read dup_assert.catala_en >/dev/null 2>&1; then
+    echo "FAIL: read accepted a field asserted twice"; exit 1
+fi
+catala testcase read dup_assert.catala_en 2>&1 | grep -q "asserted twice" \
+    || { echo "FAIL: the refusal does not say the field is asserted twice"; exit 1; }
+out=$(catala testcase partial-read dup_assert.catala_en 2>&1)
+n=$(echo "$out" | grep -o '"testing_scope"' | wc -l)
+[ "$n" = 1 ] || { echo "FAIL: partial read kept $n tests, wanted the 1 clean one"; exit 1; }
+echo "$out" | grep -q "asserted twice" \
+    || { echo "FAIL: the exclusion does not say why"; exit 1; }
+rm -f dup_assert.catala_en
 
 # ── rebuilding a struct ─────────────────────────────────────────────────────
 # test_details writes Detail's fields in another order than the module declares
