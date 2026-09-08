@@ -207,6 +207,23 @@ export default function TestFileEditor({
     }
   }
 
+  /* preventDefault keeps the focused input's native undo from eating
+     Ctrl+Z; the key still reaches the workbench, which owns the document's
+     undo. Only here: the scope-input webview has no document. */
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')
+      ) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return (): void => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
       const message = readDownMessage(event.data);
