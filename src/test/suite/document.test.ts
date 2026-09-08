@@ -88,6 +88,24 @@ suite('Broken test document', function () {
     assert.ok(fs.readFileSync(file).equals(original), 'original untouched');
   });
 
+  test('re-committing identical content is not an undo stop', async () => {
+    const dir = project('field renamed');
+    const uri = vscode.Uri.file(path.join(dir, 'test_optionals.catala_en'));
+
+    const doc = await CatalaTestCaseDocument.create(uri, undefined);
+    const initial = doc.rebuilt;
+    assert.ok(initial?.length === 3);
+
+    let edits = 0;
+    doc.onDidChange(() => (edits += 1));
+    // The same content again, as a blur or normalisation pass would send it.
+    doc.setRebuilt(structuredClone(initial), false);
+    assert.strictEqual(edits, 0, 'a no-op change landed on the undo stack');
+    // A real change still registers.
+    doc.setRebuilt(initial.slice(1), false);
+    assert.strictEqual(edits, 1);
+  });
+
   test('discard forgets an edit still sitting in the batching window', async () => {
     const dir = project('field renamed');
     const uri = vscode.Uri.file(path.join(dir, 'test_optionals.catala_en'));

@@ -6,6 +6,7 @@ import type {
   TestList,
   TestOutputs,
 } from '../generated/catala_types';
+import { writeTestList } from '../generated/catala_types';
 import { ensureArrayUids } from '../editors/tableArrayUtils';
 import { atdToCatala } from '../test-case-editor/testCaseCompilerInterop';
 import {
@@ -235,6 +236,15 @@ export class CatalaTestCaseDocument
   /** Dirties the document; leaves the parse results alone. */
   _commitRebuilt(tests: TestList): void {
     const previous = this._rebuilt;
+    // A re-emit of the same content (a blur, a normalisation pass) must not
+    // become an undo stop nobody can see past.
+    if (
+      previous !== undefined &&
+      JSON.stringify(writeTestList(previous)) ===
+        JSON.stringify(writeTestList(tests))
+    ) {
+      return;
+    }
     this._rebuilt = tests;
     this._onDidChange.fire({
       document: this,
