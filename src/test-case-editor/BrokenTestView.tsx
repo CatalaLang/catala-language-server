@@ -3,7 +3,7 @@ import { FormattedMessage, useIntl } from 'react-intl';
 import type {
   BrokenNote,
   Recovery,
-  CarryIo,
+  CarrySide,
   CarryOutcome,
   ScopeCandidate,
   CarryRecord,
@@ -19,6 +19,7 @@ import {
   scrollToFirstInvalidOrUnset,
 } from '../editors/unsetValidation';
 import { confirm } from '../messaging/confirm';
+import { rebuiltOf } from './testCaseUtils';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
 import RunControl, { ReadinessChip } from './RunControl';
@@ -49,19 +50,16 @@ type Props = {
   >;
 };
 
-/** The per-field outcomes for one test and one side, keyed by field name.
- *  Sides are separate maps: a `context output` variable is both an input and
- *  an output, and one side's outcome must not mask the other's. */
+/** One side's outcomes by field name. */
 function marksFor(
   carried: CarryRecord[],
-  io: CarryIo['kind']
+  side: CarrySide['kind']
 ): Map<string, CarryOutcome> {
   return new Map(
-    carried.filter((c) => c.io.kind === io).map((c) => [c.field, c.outcome])
+    carried.filter((c) => c.side.kind === side).map((c) => [c.field, c.outcome])
   );
 }
 
-/** What became of one field. Silent when there was nothing to carry. */
 function CarryMark({
   outcome,
 }: {
@@ -70,15 +68,23 @@ function CarryMark({
   const intl = useIntl();
   if (outcome.kind === 'WasUnset') return null;
   if (outcome.kind === 'Fits') return null;
-  // About an authored field, not a rebuilt one: the left pane's business.
   if (outcome.kind === 'Dropped') return null;
   const carried = outcome.kind === 'Wrap' || outcome.kind === 'Unwrap';
-  const id = {
-    Wrap: 'broken.markWrapped',
-    Unwrap: 'broken.markUnwrapped',
-    WasAbsentNowRequired: 'broken.markWasAbsentNowRequired',
-    TypeChanged: 'broken.markTypeChanged',
-  }[outcome.kind as 'Wrap' | 'Unwrap' | 'WasAbsentNowRequired' | 'TypeChanged'];
+  let id: string;
+  switch (outcome.kind) {
+    case 'Wrap':
+      id = 'broken.markWrapped';
+      break;
+    case 'Unwrap':
+      id = 'broken.markUnwrapped';
+      break;
+    case 'WasAbsentNowRequired':
+      id = 'broken.markWasAbsentNowRequired';
+      break;
+    case 'TypeChanged':
+      id = 'broken.markTypeChanged';
+      break;
+  }
   const change =
     outcome.kind === 'TypeChanged'
       ? `${getTypeDisplayName(outcome.value[0], intl)} → ${getTypeDisplayName(
@@ -87,8 +93,6 @@ function CarryMark({
         )}`
       : '';
   if (carried) {
-    // Reassurance, read once: an icon, with the sentence one hover away.
-    // Only the marks that instruct (a value to supply) keep visible text.
     const title = intl.formatMessage({ id });
     return (
       <span
@@ -108,8 +112,7 @@ function CarryMark({
   );
 }
 
-/** The authored side's marginal note: what became of this line. A dot, with
- *  the sentence one hover away -- the pane must stay quiet, it is inert. */
+/** What became of this line: a dot, the sentence in its tooltip. */
 function FateMark({
   outcome,
 }: {
@@ -140,9 +143,7 @@ function FateMark({
   return <span className={cls} role="img" aria-label={title} title={title} />;
 }
 
-/** The authored pane's fields: read-only, and only what the test actually
- *  set -- an empty box here would read as data gone missing. The rebuilt pane
- *  uses the ordinary editor's own components instead. */
+/** Read-only, and only the fields the test set. */
 function Fields({
   record,
   marks,
@@ -174,7 +175,6 @@ function Fields({
   );
 }
 
-/** Why the rebuild could not proceed, in the viewer's language. */
 function Note({ note }: { note: BrokenNote }): React.JSX.Element {
   switch (note.kind) {
     case 'ModuleNotFound':
@@ -225,9 +225,7 @@ function clampSplit(pct: number): number {
   return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, pct));
 }
 
-/* Where the tester last left the divider. A webview is reloaded on every edit
-   session, and having to drag it back each time is what makes a split view
-   annoying rather than useful. */
+/* The divider position survives webview reloads. */
 function storedSplit(): number {
   try {
     const raw = localStorage.getItem(SPLIT_KEY);
@@ -411,8 +409,7 @@ function TestPanes({
       const outcome = marks.get(name);
       return outcome === undefined ? null : <CarryMark outcome={outcome} />;
     };
-  // Same guard as the ordinary editor: an unset value makes the run fail with
-  // an interpreter error, so ask first.
+  // An unset value fails the run with an interpreter error: ask first.
   const runWithUnsetCheck = async (): Promise<void> => {
     if (rebuilt !== undefined && hasUnsetInTest(rebuilt)) {
       scrollToFirstInvalidOrUnset(rebuiltPaneRef.current ?? document);
@@ -471,9 +468,6 @@ function TestPanes({
             </>
           ) : (
             <>
-              {/* Where the working copy now points, shown only when that
-                  differs from what the file was written against -- the one
-                  fact a rename or a picker retarget changes. */}
               {authored !== undefined &&
                 (rebuilt.tested_scope.name !== authored.tested_scope.name ||
                   rebuilt.tested_scope.module_name !==
@@ -489,9 +483,6 @@ function TestPanes({
                     </span>
                   </div>
                 )}
-              {/* The ordinary editor's inputs component, so context variables
-                  keep their badge and "computed default" placeholder instead
-                  of showing as an anonymous empty field. */}
               <TestInputsEditor
                 test_inputs={rebuilt.test_inputs}
                 tested_scope={rebuilt.tested_scope}
@@ -505,9 +496,6 @@ function TestPanes({
                   <h5 className="broken-subhead">
                     <FormattedMessage id="broken.expected" />
                   </h5>
-                  {/* The ordinary editor's outputs component: an output the
-                      test does not assert offers to add the assertion, rather
-                      than showing a blank value that reads as an empty one. */}
                   <TestOutputsEditor
                     test={rebuilt}
                     onTestChange={onChange}
@@ -551,21 +539,12 @@ export default function BrokenTestView({
   onDiscard,
   runStates,
 }: Props): React.JSX.Element {
-  // The editable state stays a flat list (it is what a save writes); the
-  // pairing below is by testing scope, never by position.
-  const viewRebuilt = useMemo(
-    () =>
-      view.tests.flatMap((t) => (t.rebuilt === undefined ? [] : [t.rebuilt])),
-    [view.tests]
-  );
+  const viewRebuilt = useMemo(() => rebuiltOf(view.tests), [view.tests]);
   const [rebuilt, setRebuilt] = useState<TestList>(viewRebuilt);
-  // A new view (retarget, undo, revert) is authoritative; it is never the
-  // echo of an edit made here.
+  // A new view (retarget, undo, revert) is authoritative.
   useEffect(() => {
     setRebuilt(viewRebuilt);
   }, [viewRebuilt]);
-  // A scope gone from its module, or a module gone from the project: either
-  // way the tester picks where the test goes now.
   const pickable = view.notes.find(
     (n) => n.kind === 'ScopeNotFound' || n.kind === 'ModuleNotFound'
   );
@@ -579,7 +558,6 @@ export default function BrokenTestView({
         onRetarget={onRetarget}
       />
     ) : undefined;
-  // One divider for the whole view.
   const [split, setSplit] = useState<number>(storedSplit);
   const update = (next: TestList): void => {
     setRebuilt(next);
@@ -590,7 +568,6 @@ export default function BrokenTestView({
     storeSplit(pct);
   };
 
-  // Nothing to rebuild against: the notes are the message.
   const blocked = view.tests.every((t) => t.rebuilt === undefined);
   const notes = view.notes.map((n, i) => (
     <li key={n.kind + String(i)}>
@@ -623,7 +600,6 @@ export default function BrokenTestView({
                   values={{ file: <code>{view.working_copy}</code> }}
                 />
               </p>
-              {/* The two ways out, next to the sentence that promises them. */}
               <div className="broken-exit">
                 <button
                   className="broken-candidate"
@@ -651,7 +627,6 @@ export default function BrokenTestView({
         <ul className="broken-notes">{notes}</ul>
       )}
 
-      {/* One header names the columns for every test below it. */}
       {view.tests.length > 0 && (
         <div
           className="broken-panes broken-panes-header"

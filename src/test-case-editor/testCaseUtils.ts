@@ -1,4 +1,5 @@
 import type {
+  RecoveredTest,
   ParseResults,
   Test,
   TestList,
@@ -93,10 +94,12 @@ export function renderAtomicValue(
  * The rebuild a recovery produced, if any: the right pane's state at open. The
  * webview only posts subsequent edits.
  */
+export function rebuiltOf(tests: RecoveredTest[]): TestList {
+  return tests.flatMap((t) => (t.rebuilt === undefined ? [] : [t.rebuilt]));
+}
+
 export function rebuiltFrom(results: ParseResults): TestList | undefined {
   return results.kind === 'BrokenTest'
-    ? results.value.tests.flatMap((t) =>
-        t.rebuilt === undefined ? [] : [t.rebuilt]
-      )
+    ? rebuiltOf(results.value.tests)
     : undefined;
 }
