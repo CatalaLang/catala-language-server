@@ -177,8 +177,14 @@ type recovery = {
 type carry_record = {
   testing_scope: string;
   field: string;
+  (* A [context output] variable is both an input and an output, so its name
+     alone is ambiguous: without the side, one entry's outcome can mask the
+     other's in a name-keyed lookup. *)
+  io: carry_io;
   outcome: carry_outcome;
 }
+
+type carry_io = [ In | Out ] <ocaml repr="classic">
 
 (* What happened to one field. The first three carried: [Fits] claims only
    what an ordinary read checks -- the value is acceptable at the live type --
@@ -191,7 +197,7 @@ type carry_outcome = [
   | Unwrap
   | WasUnset (* the old test never set this field *)
   | WasAbsentNowRequired (* the old value was Absent: no payload to take *)
-  | TypeChanged of string (* old -> new, as typ_name spells them: "integer -> money" *)
+  | TypeChanged of (typ * typ) (* old, new: the UI spells them in the reader's language *)
 ] <ocaml repr="classic">
 
 (* Why the rebuild could not proceed. *)

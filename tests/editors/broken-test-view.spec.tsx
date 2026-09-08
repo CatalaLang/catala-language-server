@@ -77,12 +77,17 @@ function view(overrides: Partial<Recovery> = {}): Recovery {
       {
         testing_scope: 'C_one',
         field: 'start_date',
+        io: { kind: 'In' },
         outcome: { kind: 'Fits' },
       },
       {
         testing_scope: 'C_one',
         field: 'end_date',
-        outcome: { kind: 'TypeChanged', value: 'date -> B.EndDate' },
+        io: { kind: 'In' },
+        outcome: {
+          kind: 'TypeChanged',
+          value: [{ kind: 'TDate' }, endDateEnum],
+        },
       },
     ],
     ...overrides,
@@ -127,7 +132,8 @@ describe('BrokenTestView', () => {
 
   it('marks a field that could not be carried, with the reason', () => {
     renderView(view());
-    expect(screen.getByText(/date -> B.EndDate/)).toBeTruthy();
+    // Localized names, not raw catala type syntax.
+    expect(screen.getByText(/date → EndDate/)).toBeTruthy();
   });
 
   it('marks a conversion so it does not look like something the tester typed', () => {
@@ -137,6 +143,7 @@ describe('BrokenTestView', () => {
           {
             testing_scope: 'C_one',
             field: 'start_date',
+            io: { kind: 'In' },
             outcome: { kind: 'Wrap' },
           },
         ],
@@ -152,6 +159,7 @@ describe('BrokenTestView', () => {
           {
             testing_scope: 'C_one',
             field: 'start_date',
+            io: { kind: 'In' },
             outcome: { kind: 'WasUnset' },
           },
         ],
@@ -244,6 +252,47 @@ describe('BrokenTestView', () => {
     ).not.toBeNull();
   });
 
+  it("keeps a context output's two sides apart: the assertion's mark is not masked", () => {
+    // z is `context output`: it appears in both records, so it produces one
+    // carry record per side. The output side's TypeChanged explains the
+    // emptied assertion; the input side's WasUnset (never overridden) must
+    // neither mask it nor decorate the healthy input row.
+    const v = view();
+    v.rebuilt[0].tested_scope.inputs = new Map([
+      ['z', { typ: { kind: 'TRat' }, is_context: true }],
+    ]);
+    v.rebuilt[0].tested_scope.outputs = new Map([['z', { kind: 'TRat' }]]);
+    v.rebuilt[0].test_inputs = new Map([
+      ['z', io({ kind: 'TRat' }, { value: rv({ kind: 'NotOverridden' }) })],
+    ]);
+    v.rebuilt[0].test_outputs = new Map([['z', io({ kind: 'TRat' })]]);
+    v.carry_outcomes = [
+      {
+        testing_scope: 'C_one',
+        field: 'z',
+        io: { kind: 'In' },
+        outcome: { kind: 'WasUnset' },
+      },
+      {
+        testing_scope: 'C_one',
+        field: 'z',
+        io: { kind: 'Out' },
+        outcome: {
+          kind: 'TypeChanged',
+          value: [{ kind: 'TMoney' }, { kind: 'TRat' }],
+        },
+      },
+    ];
+    const container = renderView(v);
+    // The explanation survives, exactly once, and on the outputs side.
+    const marks = container.querySelectorAll('.carry-mark');
+    expect(marks.length).toBe(1);
+    expect(marks[0].textContent).toMatch(/money → decimal/);
+    expect(
+      container.querySelector('.test-output-row .carry-mark')
+    ).not.toBeNull();
+  });
+
   it('offers to add an assertion for an unasserted output, not a blank value', () => {
     // The rebuild lists every scope output; one the test never asserted must
     // not render as an (empty-looking) expected value.
@@ -283,11 +332,15 @@ describe('BrokenTestView', () => {
       {
         testing_scope: 'C_one',
         field: 'total',
-        outcome: { kind: 'TypeChanged', value: 'integer -> money' },
+        io: { kind: 'Out' },
+        outcome: {
+          kind: 'TypeChanged',
+          value: [{ kind: 'TInt' }, { kind: 'TMoney' }],
+        },
       },
     ];
     renderView(v);
-    expect(screen.getByText(/integer -> money/)).toBeTruthy();
+    expect(screen.getByText(/integer → money/)).toBeTruthy();
   });
 
   it('lets the divider be moved from the keyboard', () => {

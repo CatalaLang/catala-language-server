@@ -163,8 +163,13 @@ export type Recovery = {
 export type CarryRecord = {
   testing_scope: string;
   field: string;
+  io: CarryIo;
   outcome: CarryOutcome;
 }
+
+export type CarryIo =
+| { kind: 'In' }
+| { kind: 'Out' }
 
 export type CarryOutcome =
 | { kind: 'Fits' }
@@ -172,7 +177,7 @@ export type CarryOutcome =
 | { kind: 'Unwrap' }
 | { kind: 'WasUnset' }
 | { kind: 'WasAbsentNowRequired' }
-| { kind: 'TypeChanged'; value: string }
+| { kind: 'TypeChanged'; value: [Typ, Typ] }
 
 export type BrokenNote =
 | { kind: 'ModuleNotFound'; value: ModuleNotFound }
@@ -855,6 +860,7 @@ export function writeCarryRecord(x: CarryRecord, context: any = x): any {
   return {
     'testing_scope': _atd_write_required_field('CarryRecord', 'testing_scope', _atd_write_string, x.testing_scope, x),
     'field': _atd_write_required_field('CarryRecord', 'field', _atd_write_string, x.field, x),
+    'io': _atd_write_required_field('CarryRecord', 'io', writeCarryIo, x.io, x),
     'outcome': _atd_write_required_field('CarryRecord', 'outcome', writeCarryOutcome, x.outcome, x),
   };
 }
@@ -863,8 +869,30 @@ export function readCarryRecord(x: any, context: any = x): CarryRecord {
   return {
     testing_scope: _atd_read_required_field('CarryRecord', 'testing_scope', _atd_read_string, x['testing_scope'], x),
     field: _atd_read_required_field('CarryRecord', 'field', _atd_read_string, x['field'], x),
+    io: _atd_read_required_field('CarryRecord', 'io', readCarryIo, x['io'], x),
     outcome: _atd_read_required_field('CarryRecord', 'outcome', readCarryOutcome, x['outcome'], x),
   };
+}
+
+export function writeCarryIo(x: CarryIo, context: any = x): any {
+  switch (x.kind) {
+    case 'In':
+      return 'In'
+    case 'Out':
+      return 'Out'
+  }
+}
+
+export function readCarryIo(x: any, context: any = x): CarryIo {
+  switch (x) {
+    case 'In':
+      return { kind: 'In' }
+    case 'Out':
+      return { kind: 'Out' }
+    default:
+      _atd_bad_json('CarryIo', x, context)
+      throw new Error('impossible')
+  }
 }
 
 export function writeCarryOutcome(x: CarryOutcome, context: any = x): any {
@@ -880,7 +908,7 @@ export function writeCarryOutcome(x: CarryOutcome, context: any = x): any {
     case 'WasAbsentNowRequired':
       return 'WasAbsentNowRequired'
     case 'TypeChanged':
-      return ['TypeChanged', _atd_write_string(x.value, x)]
+      return ['TypeChanged', ((x, context) => [writeTyp(x[0], x), writeTyp(x[1], x)])(x.value, x)]
   }
 }
 
@@ -906,7 +934,7 @@ export function readCarryOutcome(x: any, context: any = x): CarryOutcome {
     _atd_check_json_tuple(2, x, context)
     switch (x[0]) {
       case 'TypeChanged':
-        return { kind: 'TypeChanged', value: _atd_read_string(x[1], x) }
+        return { kind: 'TypeChanged', value: ((x, context): [Typ, Typ] => { _atd_check_json_tuple(2, x, context); return [readTyp(x[0], x), readTyp(x[1], x)] })(x[1], x) }
       default:
         _atd_bad_json('CarryOutcome', x, context)
         throw new Error('impossible')

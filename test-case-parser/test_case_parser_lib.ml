@@ -1018,10 +1018,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
-(* Does [v] still inhabit [t]? Resolving a signature never compares the
-   authored literals against it, so without this check a drifted test reads
-   "successfully" -- and the editor then writes the new type's form back over
-   the old data. *)
+(* Does [v] still inhabit [t]? (recovery of drifted tests). *)
 let rec value_fits (t : O.typ) (v : O.runtime_value) : (unit, string) Result.t =
   let path segs msg =
     Error (if segs = "" then msg else Printf.sprintf "%s%s" segs msg)
@@ -1033,7 +1030,10 @@ let rec value_fits (t : O.typ) (v : O.runtime_value) : (unit, string) Result.t =
   in
   match t, v.O.value with
   (* Value-less, so nothing to check. *)
-  | _, (O.Unset | O.NotOverridden | O.Empty) -> Ok ()
+  | _, (O.Unset | O.NotOverridden) -> Ok ()
+  (* The empty default exists only in run results and diffs; no reader
+     produces it, and the printer refuses it the same way. *)
+  | _, O.Empty -> assert false
   | O.TBool, O.Bool _
   | O.TInt, O.Integer _
   | O.TRat, O.Decimal _
@@ -1050,27 +1050,44 @@ let rec value_fits (t : O.typ) (v : O.runtime_value) : (unit, string) Result.t =
     | None -> Ok ()
     | Some p -> under (Printf.sprintf ".%s" ctor) (value_fits ot p))
   | O.TEnum d, O.Enum (_, (ctor, payload)) -> (
-    match List.assoc_opt ctor d.O.constructors with
-    | None ->
+    match List.assoc_opt ctor d.O.constructors, payload with
+    | None, _ ->
       mismatch
         (Printf.sprintf "one of %s"
            (String.concat " | " (List.map fst d.O.constructors)))
         (Printf.sprintf "%s.%s" d.O.enum_name ctor)
-    | Some None -> Ok ()
-    | Some (Some pt) -> (
-      match payload with
+    | Some None, None -> Ok ()
+    | Some None, Some _ ->
+      mismatch
+        (Printf.sprintf "bare %s" ctor)
+        (Printf.sprintf "%s with a payload" ctor)
+    | Some (Some _), None ->
+      mismatch
+        (Printf.sprintf "%s with a payload" ctor)
+        (Printf.sprintf "bare %s" ctor)
+    | Some (Some pt), Some p ->
+      under (Printf.sprintf ".%s" ctor) (value_fits pt p))
+  | O.TStruct d, O.Struct (_, fields) -> (
+    let declared =
+      List.fold_left
+        (fun acc (fname, ft) ->
+          match acc with
+          | Error _ -> acc
+          | Ok () -> (
+            match List.assoc_opt fname fields with
+            | None -> Ok () (* absent field: nothing to contradict the type *)
+            | Some fv -> under ("." ^ fname) (value_fits ft fv)))
+        (Ok ()) d.O.fields
+    in
+    match declared with
+    | Error _ -> declared
+    | Ok () -> (
+      match
+        List.find_opt (fun (n, _) -> not (List.mem_assoc n d.O.fields)) fields
+      with
       | None -> Ok ()
-      | Some p -> under (Printf.sprintf ".%s" ctor) (value_fits pt p)))
-  | O.TStruct d, O.Struct (_, fields) ->
-    List.fold_left
-      (fun acc (fname, ft) ->
-        match acc with
-        | Error _ -> acc
-        | Ok () -> (
-          match List.assoc_opt fname fields with
-          | None -> Ok () (* absent field: nothing to contradict the type *)
-          | Some fv -> under ("." ^ fname) (value_fits ft fv)))
-      (Ok ()) d.O.fields
+      | Some (n, _) ->
+        path ("." ^ n) (Printf.sprintf ": not a field of %s" d.O.struct_name)))
   | O.TArray et, O.Array elems ->
     let rec go i =
       if i >= Array.length elems then Ok ()
@@ -1569,7 +1586,9 @@ let read_partial_tests options : (O.test list * string list, string) Result.t =
 (* Re-describe a value with the live type's declarations: a recovered one is
    inferred from a single literal (one constructor of a hundred, only the
    fields the test wrote, [unknown_enum_name]). Attributes are the value's own
-   and stay. *)
+   and stay. Only call on a value that [value_fits] the type: the asserts
+   below hold because fitting rejects a value the declaration has no place
+   for, and adoption must never be the one to drop it. *)
 let rec adopt_typ (t : O.typ) (v : O.runtime_value) : O.runtime_value =
   let value =
     match t, v.O.value with
@@ -1581,10 +1600,14 @@ let rec adopt_typ (t : O.typ) (v : O.runtime_value) : O.runtime_value =
       let payload =
         match List.assoc_opt ctor d.O.constructors with
         | Some (Some pt) -> Option.map (adopt_typ pt) payload
-        | _ -> payload
+        | Some None ->
+          assert (payload = None);
+          None
+        | None -> assert false
       in
       O.Enum (d, (ctor, payload))
     | O.TStruct d, O.Struct (_, fields) ->
+      assert (List.for_all (fun (n, _) -> List.mem_assoc n d.O.fields) fields);
       (* In declaration order, as an ordinary read has them: the same test
          must write the same bytes whichever reader it came through. *)
       let declared =
@@ -1593,10 +1616,7 @@ let rec adopt_typ (t : O.typ) (v : O.runtime_value) : O.runtime_value =
             Option.map (fun fv -> n, adopt_typ ft fv) (List.assoc_opt n fields))
           d.O.fields
       in
-      let undeclared =
-        List.filter (fun (n, _) -> not (List.mem_assoc n d.O.fields)) fields
-      in
-      O.Struct (d, declared @ undeclared)
+      O.Struct (d, declared)
     | O.TArray et, O.Array elems ->
       O.Array (Array.map (adopt_typ et) elems)
     | O.TTuple ts, O.Array elems when List.length ts = Array.length elems ->
@@ -1625,18 +1645,12 @@ let carry_rule ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
     match v.O.value with
     | O.Enum (_, (_, Some payload)) when inner = new_typ -> Some payload, O.Unwrap
     | O.Enum (_, (_, None)) -> None, O.WasAbsentNowRequired
-    | _ ->
-      ( None,
-        O.TypeChanged
-          (Printf.sprintf "%s -> %s" (typ_name old_typ) (typ_name new_typ)) ))
+    | _ -> None, O.TypeChanged (old_typ, new_typ))
   (* Not type equality: a recovered type is inferred from one literal and never
      equals the live one, even when nothing changed. [Fits] promises exactly
      what an ordinary read checks. *)
   | _ when value_fits new_typ v = Ok () -> Some v, O.Fits
-  | _ ->
-    ( None,
-      O.TypeChanged
-        (Printf.sprintf "%s -> %s" (typ_name old_typ) (typ_name new_typ)) )
+  | _ -> None, O.TypeChanged (old_typ, new_typ)
 
 let carry_value ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
     O.runtime_value option * O.carry_outcome =
@@ -1943,16 +1957,16 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
           emit recovered [] []
         | live ->
           let carried = ref [] in
-          let record test field outcome =
+          let record test io field outcome =
             carried :=
-              { O.testing_scope = test; field = field; outcome = outcome }
+              { O.testing_scope = test; field; io; outcome }
               :: !carried
           in
           (* One entry per live field, so every blank field is explained.
              [when_missing] is what a field absent from the authored test
              means: an input was left unset, but an output was simply never
              asserted -- a healthy test, nothing to report. *)
-          let carry_record ~when_missing (t : O.test)
+          let carry_record ~io ~when_missing (t : O.test)
               (old_record : (string * O.test_io) list)
               (live_record : (string * O.test_io) list) =
             List.map
@@ -1963,15 +1977,24 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                     carry_value ~old_typ ~new_typ:live_io.typ vd.O.value
                   with
                   | Some v, outcome ->
-                    record t.O.testing_scope name outcome;
+                    record t.O.testing_scope io name outcome;
                     ( name,
                       { live_io with O.value = Some { O.value = v; pos = None } }
                     )
                   | None, outcome ->
-                    record t.O.testing_scope name outcome;
+                    record t.O.testing_scope io name outcome;
                     name, live_io)
                 | _ ->
-                  Option.iter (record t.O.testing_scope name) when_missing;
+                  (* A context var the test never overrode is not damage: the
+                     rebuilt field already defaults, like the authored one. *)
+                  let defaulting =
+                    match live_io.O.value with
+                    | Some { O.value = { O.value = O.NotOverridden; _ }; _ } ->
+                      true
+                    | _ -> false
+                  in
+                  if not defaulting then
+                    Option.iter (record t.O.testing_scope io name) when_missing;
                   name, live_io)
               live_record
           in
@@ -1984,11 +2007,11 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                   title = t.O.title;
                   description = t.O.description;
                   test_inputs =
-                    carry_record ~when_missing:(Some O.WasUnset) t
+                    carry_record ~io:O.In ~when_missing:(Some O.WasUnset) t
                       t.O.test_inputs live.O.test_inputs;
                   test_outputs =
-                    carry_record ~when_missing:None t t.O.test_outputs
-                      live.O.test_outputs;
+                    carry_record ~io:O.Out ~when_missing:None t
+                      t.O.test_outputs live.O.test_outputs;
                 })
               recovered
           in
@@ -1999,7 +2022,8 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
             match saved with
             | None | Some [] -> rebuilt, List.rev !carried
             | Some saved ->
-              let still_blank scope field =
+              (* Which record answers a mark depends on the mark's side. *)
+              let still_blank scope side field =
                 match
                   List.find_opt
                     (fun (t : O.test) -> t.O.testing_scope = scope)
@@ -2007,8 +2031,13 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                 with
                 | None -> true
                 | Some t -> (
+                  let record =
+                    match side with
+                    | O.In -> t.O.test_inputs
+                    | O.Out -> t.O.test_outputs
+                  in
                   match
-                    List.assoc_opt field t.O.test_inputs
+                    List.assoc_opt field record
                     |> Option.fold ~none:None ~some:(fun (io : O.test_io) -> io.value)
                   with
                   | None -> true
@@ -2019,7 +2048,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                 |> List.filter (fun (r : O.carry_record) ->
                        match r.O.outcome with
                        | O.WasUnset | O.TypeChanged _ | O.WasAbsentNowRequired ->
-                         still_blank r.O.testing_scope r.O.field
+                         still_blank r.O.testing_scope r.O.io r.O.field
                        | _ -> true) )
           in
           emit recovered rebuilt carried))))
