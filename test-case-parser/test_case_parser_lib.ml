@@ -2791,14 +2791,18 @@ let run_test include_dirs options testing_scope =
   let test_run = { O.test; O.assert_failures; O.diffs } in
   write_stdout J.write_test_run test_run
 
-(* The interpreter dynloads each imported module as a native plugin. `clerk
-   build DIR/ocaml/M.cmxs` reports success without writing M.cmxs ("cmxs" is
-   not a selectable extension in clerk's OCaml backend; the plugin is only
-   reachable through the internal `@catala-obj/<mod>` target -- upstream bug),
-   and a bare `clerk build` builds the project's declared targets, which for a
-   Java project are no plugins at all. `clerk test FILE` interprets, so it
-   pulls the plugins in even when FILE itself no longer compiles; running the
-   file's tests is the price. *)
+(* The interpreter dynloads each imported module as a native plugin
+   (`_build/**/ocaml/<Module>.cmxs`). `clerk run --prepare-only` builds them
+   without interpreting anything: the target's dependencies, and -- pointed
+   at a module file -- that module's own plugin, resyncing `_build` for what
+   it touches. It does not need the target to compile, only its imports to
+   resolve. *)
+let prepare_runtime_plugins (file : string) =
+  ignore
+    (Sys.command
+       (Printf.sprintf "clerk run --prepare-only %s >/dev/null 2>&1"
+          (Filename.quote file)))
+
 let build_runtime_plugins ?buffer_path (options : Global.options) =
   if Sys.file_exists "clerk.toml" then
     let file =
@@ -2810,10 +2814,7 @@ let build_runtime_plugins ?buffer_path (options : Global.options) =
         | _ -> None
     in
     match file with
-    | Some f ->
-      ignore
-        (Sys.command
-           (Printf.sprintf "clerk test %s >/dev/null 2>&1" (Filename.quote f)))
+    | Some f -> prepare_runtime_plugins f
     | None ->
       (* Nothing to point at: the declared targets are the best guess left. *)
       ignore (Sys.command "clerk build >/dev/null 2>&1")

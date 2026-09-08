@@ -17,8 +17,7 @@ import {
 } from '../generated/catala_types';
 import { logger } from '../extension/logger';
 import { Uri, window, workspace } from 'vscode';
-import path from 'path';
-import { clerkPath, catalaPath, shellArg } from '../shared/util_client';
+import { catalaPath, shellArg } from '../shared/util_client';
 
 function getCwd(bufferPath: string): string | undefined {
   return workspace.getWorkspaceFolder(Uri.file(bufferPath))?.uri?.fsPath;
@@ -244,22 +243,9 @@ export function runTestScope(
     filename,
     ...inputArgs,
   ];
+  // Runtime plugins are prepared by the testcase backend itself
+  // (`prepare_runtime_plugins`); no clerk invocation is needed here.
   const cwd = getCwd(filename);
-  if (cwd) {
-    const relFilename = path.relative(cwd, filename);
-    //compile dependencies (hack), do not fail on asserts
-    const clerkResult = execBinary(
-      clerkPath,
-      ['run', '-c--no-fail-on-assert', relFilename],
-      { cwd }
-    );
-    if (!clerkResult.ok) {
-      window.showErrorMessage(clerkResult.stderr);
-      return { kind: 'Error', value: clerkResult.stderr };
-    }
-  }
-  // Here we *do* want to fail on asserts, as we catch failures through
-  // the `register_lsp_error_notifier` hook.
   const execResult = execBinary(catalaPath, args, {
     ...(cwd && { cwd }),
     ...(inputJson !== undefined && { input: inputJson }),
