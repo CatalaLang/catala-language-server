@@ -13,7 +13,7 @@
   "testEditor.descriptionPlaceholder": "Wprowadź opis testu...",
   "testEditor.runTest": "Uruchom test",
   "testEditor.ready": "Wszystkie pola wypełnione",
-  "testEditor.unfilled": "{count, plural, one {1 pole do wypełnienia} few {# pola do wypełnienia} other {# pól do wypełnienia}}",
+  "testEditor.unfilled": "{count, plural, one {1 wartość do wypełnienia} few {# wartości do wypełnienia} other {# wartości do wypełnienia}}",
   "testEditor.jumpToUnfilled": "Przejdź do pierwszego niewypełnionego pola",
   "scopeEditor.run": "Uruchom",
   "scopeEditor.shell_run": "Uruchom w terminalu",

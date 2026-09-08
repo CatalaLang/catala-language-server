@@ -9,7 +9,7 @@
   "testFile.openTextEditor": "Ouvrir dans l'éditeur de texte",
   "testEditor.runTest": "Lancer le calcul",
   "testEditor.ready": "Tous les champs sont remplis",
-  "testEditor.unfilled": "{count, plural, one {1 champ à remplir} other {# champs à remplir}}",
+  "testEditor.unfilled": "{count, plural, one {1 valeur à remplir} other {# valeurs à remplir}}",
   "testEditor.jumpToUnfilled": "Aller au premier champ non rempli",
   "scopeEditor.run": "Exécuter",
   "scopeEditor.shell_run": "Exécuter dans un terminal",

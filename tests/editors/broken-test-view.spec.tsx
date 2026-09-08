@@ -162,6 +162,28 @@ describe('BrokenTestView', () => {
     expect(container.querySelectorAll('.readiness-unfilled').length).toBe(0);
   });
 
+  it('counts a blank record as the values its declaration asks for', () => {
+    const v = view();
+    const period: Typ = {
+      kind: 'TStruct',
+      value: {
+        struct_name: 'B.Period',
+        fields: new Map<string, Typ>([
+          ['first_day', { kind: 'TDate' }],
+          ['last_day', { kind: 'TDate' }],
+        ]),
+        field_attrs: new Map(),
+      },
+    };
+    v.tests[0].rebuilt!.test_inputs = new Map<string, TestIo>([
+      ['period', io(period, { value: rv({ kind: 'Unset' }) })],
+    ]);
+    const container = renderView(v);
+    expect(
+      container.querySelector('.readiness-unfilled')!.textContent
+    ).toContain('2 values to fill');
+  });
+
   it('counts the unfilled fields and offers to jump to the first', () => {
     const v = view();
     v.tests[0].rebuilt!.test_inputs = new Map<string, TestIo>([
@@ -170,7 +192,7 @@ describe('BrokenTestView', () => {
     const container = renderView(v);
     const chip = container.querySelector('.readiness-unfilled');
     expect(chip).toBeTruthy();
-    expect(chip!.textContent).toContain('1 field to fill');
+    expect(chip!.textContent).toContain('1 value to fill');
   });
 
   it('warns on the authored side when promotion would delete a field', () => {

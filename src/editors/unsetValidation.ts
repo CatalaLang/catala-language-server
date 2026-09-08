@@ -4,7 +4,7 @@
  * not treated as Unset — it is valid and does not block test runs.
  */
 
-import type { RuntimeValue, Test } from '../generated/catala_types';
+import type { RuntimeValue, Test, Typ } from '../generated/catala_types';
 
 /** Recursively checks whether a RuntimeValue contains any Unset values. */
 function containsUnset(rv: RuntimeValue): boolean {
@@ -49,14 +49,55 @@ export function scrollToFirstInvalidOrUnset(
   }, delay);
 }
 
-/** How many fields (inputs and outputs together) still hold an Unset
- *  somewhere. Field granularity: one deep hole counts once. */
-export function countUnsetFields(test: Test): number {
-  const fieldHas = (io: { value?: { value: RuntimeValue } }): boolean =>
-    io.value !== undefined && containsUnset(io.value.value);
+/** An Unset weighed by its type: a blank record counts its declared
+ *  fields, recursively; anything else counts once. */
+function holesOfType(typ: Typ): number {
+  if (typ.kind === 'TStruct') {
+    return [...typ.value.fields.values()].reduce(
+      (n, t) => n + holesOfType(t),
+      0
+    );
+  }
+  return 1;
+}
+
+function countUnset(rv: RuntimeValue, typ: Typ | undefined): number {
+  switch (rv.value.kind) {
+    case 'Unset':
+      return typ === undefined ? 1 : holesOfType(typ);
+    case 'Array': {
+      const elt = typ?.kind === 'TArray' ? typ.value : undefined;
+      return rv.value.value.reduce((n, v) => n + countUnset(v, elt), 0);
+    }
+    case 'Struct': {
+      const fields = typ?.kind === 'TStruct' ? typ.value.fields : undefined;
+      const map = rv.value.value[1];
+      return [...map.entries()].reduce(
+        (n, [name, v]) => n + countUnset(v, fields?.get(name)),
+        0
+      );
+    }
+    case 'Enum': {
+      const [, [ctor, payload]] = rv.value.value;
+      if (!payload?.value) return 0;
+      const pTyp =
+        typ?.kind === 'TEnum'
+          ? (typ.value.constructors.get(ctor)?.value ?? undefined)
+          : undefined;
+      return countUnset(payload.value, pTyp);
+    }
+    default:
+      return 0;
+  }
+}
+
+/** How many values (inputs and outputs together) are still to fill. */
+export function countUnsetValues(test: Test): number {
+  const holes = (io: { typ: Typ; value?: { value: RuntimeValue } }): number =>
+    io.value === undefined ? 0 : countUnset(io.value.value, io.typ);
   return (
-    [...test.test_inputs.values()].filter(fieldHas).length +
-    [...test.test_outputs.values()].filter(fieldHas).length
+    [...test.test_inputs.values()].reduce((n, io) => n + holes(io), 0) +
+    [...test.test_outputs.values()].reduce((n, io) => n + holes(io), 0)
   );
 }
 

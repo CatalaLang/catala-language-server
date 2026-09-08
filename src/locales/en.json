@@ -13,7 +13,7 @@
   "testEditor.descriptionPlaceholder": "Enter test description...",
   "testEditor.runTest": "Run test",
   "testEditor.ready": "All fields set",
-  "testEditor.unfilled": "{count, plural, one {1 field to fill} other {# fields to fill}}",
+  "testEditor.unfilled": "{count, plural, one {1 value to fill} other {# values to fill}}",
   "testEditor.jumpToUnfilled": "Jump to the first unfilled field",
   "scopeEditor.run": "Run",
   "scopeEditor.shell_run": "Run in terminal",
