@@ -54,11 +54,11 @@ suite('Broken test document', function () {
     assert.strictEqual(doc.rebuilt?.length, 3);
 
     await doc.saveAs(uri, token);
-    assert.ok(fs.existsSync(file + '.updated'), 'saved to the working copy');
+    assert.ok(fs.existsSync(file + '.repair'), 'saved to the working copy');
     assert.ok(fs.readFileSync(file).equals(original), 'original untouched');
 
     await doc.replaceOriginal();
-    assert.ok(!fs.existsSync(file + '.updated'), 'working copy removed');
+    assert.ok(!fs.existsSync(file + '.repair'), 'working copy removed');
     assert.strictEqual(doc.parseResults.kind, 'Results');
     const replaced = fs.readFileSync(file, 'utf8');
     assert.notStrictEqual(replaced, original.toString());
@@ -79,10 +79,10 @@ suite('Broken test document', function () {
 
     const doc = await CatalaTestCaseDocument.create(uri, undefined);
     await doc.saveAs(uri, token);
-    assert.ok(fs.existsSync(file + '.updated'));
+    assert.ok(fs.existsSync(file + '.repair'));
 
     await doc.discardWorkingCopy();
-    assert.ok(!fs.existsSync(file + '.updated'), 'working copy removed');
+    assert.ok(!fs.existsSync(file + '.repair'), 'working copy removed');
     assert.strictEqual(doc.parseResults.kind, 'BrokenTest');
     assert.strictEqual(doc.rebuilt?.length, 3);
     assert.ok(fs.readFileSync(file).equals(original), 'original untouched');
@@ -184,7 +184,7 @@ suite('Broken test document', function () {
     assert.strictEqual(doc.rebuilt?.length, 0);
 
     await doc.saveAs(uri, token);
-    assert.ok(!fs.existsSync(file + '.updated'), 'nothing written');
+    assert.ok(!fs.existsSync(file + '.repair'), 'nothing written');
     await assert.rejects(
       doc.replaceOriginal(),
       /could not be rebuilt/,

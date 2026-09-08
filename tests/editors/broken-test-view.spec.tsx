@@ -88,12 +88,12 @@ function view(
             : [
                 {
                   field: 'start_date',
-                  io: { kind: 'In' },
+                  side: { kind: 'In' },
                   outcome: { kind: 'Fits' },
                 },
                 {
                   field: 'end_date',
-                  io: { kind: 'In' },
+                  side: { kind: 'In' },
                   outcome: {
                     kind: 'TypeChanged',
                     value: [{ kind: 'TDate' }, endDateEnum],
@@ -103,7 +103,7 @@ function view(
       },
     ],
     notes: overrides.notes ?? [],
-    working_copy: 'test_one.catala_en.updated',
+    working_copy: 'test_one.catala_en.repair',
   };
 }
 
@@ -218,7 +218,7 @@ describe('BrokenTestView', () => {
         outcomes: [
           {
             field: 'end_date',
-            io: { kind: 'In' },
+            side: { kind: 'In' },
             outcome: { kind: 'Dropped' },
           },
         ],
@@ -235,7 +235,7 @@ describe('BrokenTestView', () => {
         outcomes: [
           {
             field: 'start_date',
-            io: { kind: 'In' },
+            side: { kind: 'In' },
             outcome: { kind: 'Wrap' },
           },
         ],
@@ -254,7 +254,7 @@ describe('BrokenTestView', () => {
         outcomes: [
           {
             field: 'start_date',
-            io: { kind: 'In' },
+            side: { kind: 'In' },
             outcome: { kind: 'WasUnset' },
           },
         ],
@@ -365,12 +365,12 @@ describe('BrokenTestView', () => {
     pair.outcomes = [
       {
         field: 'z',
-        io: { kind: 'In' },
+        side: { kind: 'In' },
         outcome: { kind: 'WasUnset' },
       },
       {
         field: 'z',
-        io: { kind: 'Out' },
+        side: { kind: 'Out' },
         outcome: {
           kind: 'TypeChanged',
           value: [{ kind: 'TMoney' }, { kind: 'TRat' }],
@@ -431,7 +431,7 @@ describe('BrokenTestView', () => {
       ...v.tests[0].outcomes,
       {
         field: 'total',
-        io: { kind: 'Out' },
+        side: { kind: 'Out' },
         outcome: {
           kind: 'TypeChanged',
           value: [{ kind: 'TInt' }, { kind: 'TMoney' }],

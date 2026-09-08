@@ -17,6 +17,10 @@ import { rebuiltFrom } from '../test-case-editor/testCaseUtils';
 import { logger } from '../extension/logger';
 import type { integer } from 'vscode-languageclient';
 
+/** The working copy's suffix; must match the OCaml side's [working_copy_ext].
+ *  Not a Catala extension, so nothing scans or compiles it. */
+const workingCopyExt = '.repair';
+
 function stampIoUids(io: TestIo): TestIo {
   if (!io.value) return io;
   return {
@@ -196,7 +200,7 @@ export class CatalaTestCaseDocument
   ): Promise<vscode.CustomDocumentBackup> {
     /* The working copy is the backup; restoring reopens the original, whose
        rebuild finds the copy. (Writing under the backup path put it at
-       `<backup>.updated` while VS Code restored from `<backup>`: ENOENT.) */
+       `<backup>.repair` while VS Code restored from `<backup>`: ENOENT.) */
     if (this._parseResults.kind === 'BrokenTest') {
       await this.saveAs(this.uri, cancellation);
       return { id: this.uri.toString(), delete: async (): Promise<void> => {} };
@@ -283,7 +287,7 @@ export class CatalaTestCaseDocument
   }
 
   private get workingCopyUri(): vscode.Uri {
-    return vscode.Uri.file(this.uri.fsPath + '.updated');
+    return vscode.Uri.file(this.uri.fsPath + workingCopyExt);
   }
 
   private async deleteWorkingCopy(): Promise<void> {

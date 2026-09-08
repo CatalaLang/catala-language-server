@@ -1835,7 +1835,7 @@ let parse_target (t : string) : string option * string =
   | Some i -> Some (String.sub t 0 i), String.sub t (i + 1) (String.length t - i - 1)
   | None -> None, t
 
-(* An ordinary read, or None. For the working copy: `.updated` keeps clerk
+(* An ordinary read, or None. For the working copy: [working_copy_ext] keeps clerk
    away from it, and also hides the language, hence [~lang]. *)
 let read_tests_of_file ~(lang : Global.backend_lang) (file : string) :
     O.test list option =
@@ -1895,12 +1895,17 @@ let rank_scope_candidates (prg : I.program) ~(wanted : string)
            | c -> c)
          | c -> c)
 
+(* The working copy's suffix. Not a Catala extension, so clerk's scan and
+   ours stay blind to it -- and it reads as what the file is: a repair in
+   progress, not a finished newer version. *)
+let working_copy_ext = ".repair"
+
 let rebuild_broken_test (options : Global.options) (target : string option) =
   let test_file = Global.input_src_file options.Global.input_src in
   let lang = Cli.file_lang test_file in
   let notes = ref [] in
   let note n = notes := n :: !notes in
-  let workspace_file = Filename.basename test_file ^ ".updated" in
+  let workspace_file = Filename.basename test_file ^ working_copy_ext in
   let emit tests =
     write_stdout J.write_recovery
       { O.tests; notes = List.rev !notes; working_copy = workspace_file }

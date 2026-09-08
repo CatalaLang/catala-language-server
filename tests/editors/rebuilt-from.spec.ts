@@ -22,7 +22,7 @@ function view(rebuilt: Test[]): Recovery {
   return {
     tests: [{ authored: test('C_one'), rebuilt: rebuilt[0], outcomes: [] }],
     notes: [],
-    working_copy: 'x.catala_en.updated',
+    working_copy: 'x.catala_en.repair',
   };
 }
 

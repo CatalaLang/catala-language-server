@@ -399,7 +399,7 @@ node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   process.stdout.write(JSON.stringify(d.tests.map((t) => t.rebuilt)));
 ' "$notes_scratch/picked.json" \
-    | catala testcase write --language en > "$notes_scratch/picker/test_optionals.catala_en.updated"
+    | catala testcase write --language en > "$notes_scratch/picker/test_optionals.catala_en.repair"
 (cd "$notes_scratch/picker" && catala testcase rebuild test_optionals.catala_en 2>/dev/null) > "$notes_scratch/reopened.json"
 grep -q '"notes":\[\]' "$notes_scratch/reopened.json" \
     || { echo "FAIL: reopening forgot which scope the tester chose"; exit 1; }
@@ -437,8 +437,8 @@ node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   process.stdout.write(JSON.stringify(d.tests.map((t) => t.rebuilt)));
 ' "$notes_scratch/modpicked.json" \
-    | catala testcase write --language en > "$notes_scratch/modrename/test_optionals.catala_en.updated"
-grep -q '^> Using Benefits$' "$notes_scratch/modrename/test_optionals.catala_en.updated" \
+    | catala testcase write --language en > "$notes_scratch/modrename/test_optionals.catala_en.repair"
+grep -q '^> Using Benefits$' "$notes_scratch/modrename/test_optionals.catala_en.repair" \
     || { echo "FAIL: the working copy does not use the new module"; exit 1; }
 (cd "$notes_scratch/modrename" && catala testcase rebuild test_optionals.catala_en 2>/dev/null) > "$notes_scratch/modreopened.json"
 grep -q '"notes":\[\]' "$notes_scratch/modreopened.json" \
@@ -448,7 +448,7 @@ grep -q '"notes":\[\]' "$notes_scratch/modreopened.json" \
 # module must get built although clerk refuses the original.
 (cd "$notes_scratch/modrename" \
     && catala testcase run -l en -s Grant_absent --buffer-path test_optionals.catala_en - \
-         < test_optionals.catala_en.updated 2>/dev/null) > "$notes_scratch/modrun.json"
+         < test_optionals.catala_en.repair 2>/dev/null) > "$notes_scratch/modrun.json"
 grep -q '"assert_failures":false' "$notes_scratch/modrun.json" \
     || { echo "FAIL: the retargeted working copy could not be run"; exit 1; }
 if [ -e "$notes_scratch/modrename/test_optionals__run.catala_en" ]; then
@@ -458,12 +458,12 @@ fi
 # which may sit far above the project. Resolution must come from buffer-path.
 (cd "$notes_scratch" \
     && catala testcase run -l en -s Grant_absent --buffer-path modrename/test_optionals.catala_en - \
-         < modrename/test_optionals.catala_en.updated 2>/dev/null) > "$notes_scratch/modrun_outside.json"
+         < modrename/test_optionals.catala_en.repair 2>/dev/null) > "$notes_scratch/modrun_outside.json"
 grep -q '"assert_failures":false' "$notes_scratch/modrun_outside.json" \
     || { echo "FAIL: the run does not work from outside the project"; exit 1; }
 # ...and a run that FAILS reports what it disagrees with, not just that it did.
 sed 's/\.total = \$1000\.00)/.total = $999.00)/' \
-    "$notes_scratch/modrename/test_optionals.catala_en.updated" > "$notes_scratch/modrename/failing.txt"
+    "$notes_scratch/modrename/test_optionals.catala_en.repair" > "$notes_scratch/modrename/failing.txt"
 (cd "$notes_scratch/modrename" \
     && catala testcase run -l en -s Grant_absent --buffer-path test_optionals.catala_en - \
          < failing.txt 2>/dev/null) > "$notes_scratch/modfail.json"
