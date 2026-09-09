@@ -526,6 +526,12 @@ export function fieldValue(e: Event): string {
   return (e.target as { value?: string } | null)?.value ?? '';
 }
 
+/** A location as `file:line`, the way both the tree and a snippet name one. */
+export function posText(pos?: CodeLocation): string {
+  if (!pos) return '';
+  return `${pos.file}:${pos.start.line}`;
+}
+
 /**
  * Height left for the panels under the editor's header. The editor measures it
  * and sets it on their container; each panel caps itself with it. Declared

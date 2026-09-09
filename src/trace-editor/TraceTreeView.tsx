@@ -3,7 +3,6 @@ import {
   type MouseEvent,
   type ReactElement,
   type ReactNode,
-  Fragment,
   createContext,
   useCallback,
   useContext,
@@ -26,7 +25,13 @@ import {
   titlePin,
 } from '../shared/util';
 import { getVsCodeApi } from '../shared/webviewApi';
-import type { TraceDownMessage, TraceUpMessage } from './messages';
+import type { TraceUpMessage } from './messages';
+import {
+  CwdContext,
+  LocationSnippet,
+  SpawnPanelContext,
+  resolvePath,
+} from './LocationSnippet';
 import type { CodeLocation, TraceElement, TraceKind } from './traceUtils';
 import {
   type TraceValue,
@@ -34,6 +39,7 @@ import {
   PANEL_HEIGHT_VAR,
   fieldValue,
   formatTraceValue,
+  posText,
   traceValueEqual,
   traceValueFromRuntime,
   traceVariablesForTest,
@@ -66,23 +72,8 @@ type Described = {
 
 const ExpectedContext = createContext<Expected | null>(null);
 const IndexContext = createContext<Map<TraceElement, number>>(new Map());
-const CwdContext = createContext<string>('');
 const ExpandContext = createContext<ExpandCommand | null>(null);
-/**
- * The filters the user typed or saved, for highlighting purposes only.
- * `TraceNode` cannot use its own `filters` prop for that: it hands an empty list
- * to the children of a node that matches (so that a matching subtree is shown
- * whole), which would leave those children unhighlighted.
- */
 const FilterContext = createContext<Filter[]>([]);
-/**
- * How a snippet asks for a further panel, filtered on the text the user
- * selected in it. Null when the tree is shown outside of a `TracePanel`: there
- * is then nowhere to put that panel, and the snippets offer nothing.
- */
-const SpawnPanelContext = createContext<((filter: string) => void) | null>(
-  null
-);
 
 function Highlight({ text }: { text: string }): ReactElement {
   const filters = useContext(FilterContext);
@@ -99,13 +90,6 @@ function Highlight({ text }: { text: string }): ReactElement {
       )}
     </>
   );
-}
-
-function resolvePath(cwd: string, file: string): string {
-  if (!cwd || file.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(file)) {
-    return file;
-  }
-  return `${cwd.replace(/[\\/]+$/, '')}/${file}`;
 }
 
 function detail(x: JsonValue): string {
@@ -251,12 +235,6 @@ function relatedLocations(kind: TraceKind): CodeLocation[] {
   return Array.isArray(rp) ? (rp as unknown as CodeLocation[]) : [];
 }
 
-function posText(pos?: CodeLocation): string {
-  if (!pos) return '';
-  const line = pos.start.line;
-  return `${pos.file}:${line}`;
-}
-
 function formatPos(
   pos: CodeLocation | undefined,
   inline = false
@@ -297,182 +275,6 @@ function PosLink({
     >
       <Highlight text={text} />
     </a>
-  );
-}
-
-const snippetContextAttribute = JSON.stringify({
-  webviewSection: 'traceSnippet',
-  preventDefaultContextMenuItems: false,
-});
-
-let viewWithFilterTarget: ((filter: string) => void) | null = null;
-let viewWithFilterListenerAttached = false;
-
-function armViewWithFilter(spawn: (filter: string) => void): void {
-  viewWithFilterTarget = spawn;
-  if (viewWithFilterListenerAttached) {
-    return;
-  }
-  viewWithFilterListenerAttached = true;
-  window.addEventListener('message', (event: MessageEvent): void => {
-    const m = event.data as TraceDownMessage;
-    if (m?.kind !== 'viewWithFilter') {
-      return;
-    }
-    const text = window.getSelection()?.toString().trim() ?? '';
-    if (text !== '' && viewWithFilterTarget !== null) {
-      viewWithFilterTarget(text);
-    }
-  });
-}
-
-const extractCache = new Map<string, string | null>();
-const pendingExtracts = new Map<number, (line: string | null) => void>();
-let extractSeq = 0;
-let extractListenerAttached = false;
-
-function ensureExtractListener(): void {
-  if (extractListenerAttached) {
-    return;
-  }
-  extractListenerAttached = true;
-  window.addEventListener('message', (event: MessageEvent): void => {
-    const m = event.data as TraceDownMessage;
-    if (m?.kind === 'extract') {
-      const callback = pendingExtracts.get(m.id);
-      if (callback) {
-        pendingExtracts.delete(m.id);
-        callback(m.text);
-      }
-    }
-  });
-}
-
-async function fetchExtract(
-  file: string,
-  line: number
-): Promise<string | null> {
-  const key = `${file}:${line}`;
-  const cached = extractCache.get(key);
-  if (cached !== undefined) {
-    return Promise.resolve(cached);
-  }
-  ensureExtractListener();
-  const id = extractSeq++;
-  return new Promise<string | null>((resolve) => {
-    pendingExtracts.set(id, resolve);
-    const message: TraceUpMessage = {
-      kind: 'requestExtract',
-      id,
-      file,
-      line,
-    };
-    getVsCodeApi().postMessage(message);
-  }).then((result) => {
-    extractCache.set(key, result);
-    return result;
-  });
-}
-
-function SnippetBlock({
-  pos,
-  children,
-}: {
-  pos: CodeLocation;
-  children: ReactNode;
-}): ReactElement {
-  const cwd = useContext(CwdContext);
-  const spawnPanel = useContext(SpawnPanelContext);
-  const intl = useIntl();
-  const [hover, setHover] = useState(false);
-  const openLocation = (e: MouseEvent): void => {
-    e.stopPropagation();
-    const message: TraceUpMessage = {
-      kind: 'openLocation',
-      file: resolvePath(cwd, pos.file),
-      start: pos.start,
-      end: pos.end,
-    };
-    getVsCodeApi().postMessage(message);
-  };
-  const label = intl.formatMessage(
-    { id: 'trace.openLocation' },
-    { target: posText(pos) }
-  );
-  const onContextMenu = (): void => {
-    if (spawnPanel !== null) {
-      armViewWithFilter(spawnPanel);
-    }
-  };
-  return (
-    <div
-      style={snippetStyle}
-      onContextMenu={onContextMenu}
-      data-vscode-context={
-        spawnPanel === null ? undefined : snippetContextAttribute
-      }
-    >
-      <pre style={sourceStyle}>{children}</pre>
-      <button
-        type="button"
-        style={
-          hover
-            ? { ...openButtonStyle, ...openButtonHoverStyle }
-            : openButtonStyle
-        }
-        onClick={openLocation}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        title={label}
-        aria-label={label}
-      >
-        <span className="codicon codicon-go-to-file" />
-      </button>
-    </div>
-  );
-}
-
-function LocationSnippet({ pos }: { pos: CodeLocation }): ReactElement | null {
-  const cwd = useContext(CwdContext);
-  const startLine = pos.start.line;
-  const endLine = Math.max(startLine, pos.end.line);
-  const [lines, setLines] = useState<(string | null)[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const nums: number[] = [];
-    for (let l = startLine; l <= endLine; l++) nums.push(l);
-    void Promise.all(
-      nums.map((l) => fetchExtract(resolvePath(cwd, pos.file), l))
-    ).then((texts) => {
-      if (!cancelled) setLines(texts);
-    });
-    return (): void => {
-      cancelled = true;
-    };
-  }, [cwd, pos]);
-
-  if (lines === null || lines.every((l) => l === null)) {
-    return null;
-  }
-  const last = lines.length - 1;
-  return (
-    <SnippetBlock pos={pos}>
-      {lines.map((line, i) => {
-        const text = line ?? '';
-        const from = i === 0 ? Math.max(0, pos.start.character - 1) : 0;
-        const to =
-          i === last ? Math.max(from, pos.end.character - 1) : text.length;
-        const mid = text.slice(from, to);
-        return (
-          <Fragment key={i}>
-            {text.slice(0, from)}
-            <mark style={markStyle}>{mid || ' '}</mark>
-            {text.slice(to)}
-            {i < last ? '\n' : ''}
-          </Fragment>
-        );
-      })}
-    </SnippetBlock>
   );
 }
 
@@ -683,23 +485,16 @@ function closestFilterMatch(
   let level = roots;
   let prefix = '';
   let scope = testedScope;
-  // A pin an ancestor already satisfied is spent, exactly as `subtreeMatches`
-  // hands its children what is left of the list.
   let active = filters;
-  // The parent reached so far, starting with the whole trace.
   let closest = { roots, prefix, testedScope: scope };
   for (;;) {
     const matching = level.filter((el) => subtreeMatches(el, active, intl));
-    // Nothing here, or matches spread over several siblings: their closest
-    // common parent is the one we came from.
     if (matching.length !== 1) {
       return closest;
     }
     const [only] = matching;
     closest = { roots: [only], prefix, testedScope: scope };
     const [remaining, excluded] = filterMatches(only, active, intl);
-    // Nothing left for a descendant to satisfy: this node is itself what the
-    // pins caught, and its subtree is shown whole from here.
     if (excluded || remaining.every((pin) => pin.option === 'exclude')) {
       return closest;
     }
@@ -758,8 +553,6 @@ export function TracePanel({
     setDerived((old) => [...old, { id, filter: spawnFilter }]);
   }, []);
 
-  // Always hand a new array to the setter: React skips the re-render when an
-  // updater returns the very same reference.
   const saveFilter = (newFilter: string): void => {
     const trimmed = newFilter.trim();
     if (trimmed === '') {
@@ -772,7 +565,6 @@ export function TracePanel({
     );
   };
 
-  // Clicking a pin cycles it through include, exclude and ignore.
   const onClickFilter = (clicked: string): void => {
     setSavedFilters((old) =>
       old.map((pin) => (pin.filter === clicked ? switchFilter(pin) : pin))
@@ -875,8 +667,6 @@ export function TracePanel({
           <SpawnPanelContext.Provider value={spawnPanel}>
             <TraceTreeView
               trace={trace}
-              // Only the saved pins filter: the live field is what is being
-              // typed, and is turned into a pin on Enter.
               filters={savedFilters}
               cwd={cwd}
               expand={expand}
@@ -1096,12 +886,6 @@ function TraceNode({
   if (te.element.kind === 'exception' && depth === 1) return null;
 
   const filtering = filters.length > 0;
-  // `filters` is a fresh array on every render, so it cannot be used as an
-  // effect dependency: the effect below would re-run each time and keep
-  // resetting the manual expand/collapse state. This joined key compares by
-  // value instead. The option is part of the key so that flipping a pin
-  // between include and exclude re-runs the effect. The separator is a
-  // character no filter can contain.
   const filterKey = filters.map((f) => `${f.option}:${f.filter}`).join('\n');
   const expected = useContext(ExpectedContext);
   const stepIndices = useContext(IndexContext);
@@ -1400,8 +1184,6 @@ const pinsStyle: CSSProperties = {
   margin: '0 0 8px 0',
 };
 
-// The background is not set here: `pinBackground` gives it the colour of the
-// pin's own option, and clicking cycles through them.
 const pinStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -1437,7 +1219,6 @@ const rootListStyle: CSSProperties = {
   margin: 0,
   fontFamily: 'var(--vscode-editor-font-family, monospace)',
   fontSize: 'var(--vscode-editor-font-size, 13px)',
-  // Same room as the data panel opposite, so the two panes end level.
   maxHeight: `var(${PANEL_HEIGHT_VAR}, 70vh)`,
   overflow: 'auto',
 };
@@ -1535,53 +1316,6 @@ const valueStyle: CSSProperties = {
 const filterMatchStyle: CSSProperties = {
   backgroundColor:
     'var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33))',
-  color: 'inherit',
-  borderRadius: 2,
-};
-
-const snippetStyle: CSSProperties = {
-  position: 'relative',
-  margin: '2px 0 4px 22px',
-};
-
-const sourceStyle: CSSProperties = {
-  margin: 0,
-  padding: '2px 40px 2px 6px',
-  background:
-    'var(--vscode-textCodeBlock-background, var(--vscode-editor-background))',
-  border: '1px solid var(--vscode-panel-border, transparent)',
-  borderRadius: 2,
-  overflowX: 'auto',
-  whiteSpace: 'pre',
-  userSelect: 'text',
-  fontFamily: 'var(--vscode-editor-font-family, monospace)',
-};
-
-const openButtonStyle: CSSProperties = {
-  position: 'absolute',
-  top: 2,
-  right: 8,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: 20,
-  height: 20,
-  padding: 0,
-  border: 'none',
-  borderRadius: 3,
-  cursor: 'pointer',
-  background: 'transparent',
-  color: 'var(--vscode-icon-foreground, var(--vscode-foreground))',
-  opacity: 0.6,
-};
-
-const openButtonHoverStyle: CSSProperties = {
-  background: 'var(--vscode-toolbar-hoverBackground, transparent)',
-  opacity: 1,
-};
-
-const markStyle: CSSProperties = {
-  background: 'var(--vscode-editor-findMatchHighlightBackground, yellow)',
   color: 'inherit',
   borderRadius: 2,
 };

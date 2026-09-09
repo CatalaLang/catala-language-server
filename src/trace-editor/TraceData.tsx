@@ -57,8 +57,6 @@ function pathSegments(name: string): string[] {
   return name.split('.').filter((segment) => segment !== '');
 }
 
-// Places a variable the trace never produced where its path says it belongs,
-// creating the steps along the way when the trace has none of them either.
 function insertAt(
   nodes: DataNode[],
   segments: string[],
@@ -87,7 +85,6 @@ function insertAt(
   });
 }
 
-// Re-applied after the insertions, which append rather than order.
 function sortTree(nodes: DataNode[]): DataNode[] {
   return leavesFirst(
     nodes.map((node) =>
@@ -98,10 +95,6 @@ function sortTree(nodes: DataNode[]): DataNode[] {
   );
 }
 
-// Every variable the trace produced, in the shape the trace already has: its
-// steps are the groups, its values the rows. `matched` collects the expected
-// paths that were found, so the ones the trace never produced can be put back
-// afterwards.
 function nodesFromTrace(
   variables: TraceVariable[],
   prefix: string,
@@ -313,8 +306,6 @@ export function DataPanel({
     matched,
     intl
   );
-  // The expectations the trace never produced go back under the steps their
-  // path names. Only a problem once there is a trace to have produced them.
   for (const [name, expected] of test.variables) {
     if (matched.has(name)) {
       continue;
