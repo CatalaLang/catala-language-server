@@ -1,4 +1,4 @@
-import type { IntlShape } from "react-intl";
+import type { IntlShape } from 'react-intl';
 
 // For exhaustiveness checks
 export function assertUnreachable(x: never): never {
@@ -82,8 +82,7 @@ export function titlePin(intl: IntlShape, filter: Filter): string {
       return intl.formatMessage(
         {
           id: 'generalTests.filterPin.exclusion',
-          defaultMessage:
-            'Je ne veux pas que "{filter}" apparaisse',
+          defaultMessage: 'Je ne veux pas que "{filter}" apparaisse',
         },
         { filter: filter.filter }
       );
@@ -91,8 +90,7 @@ export function titlePin(intl: IntlShape, filter: Filter): string {
       return intl.formatMessage(
         {
           id: 'generalTests.filterPin.ignore',
-          defaultMessage:
-            'Ignorer le filtre "{filter}"',
+          defaultMessage: 'Ignorer le filtre "{filter}"',
         },
         { filter: filter.filter }
       );
