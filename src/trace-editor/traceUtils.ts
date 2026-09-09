@@ -514,6 +514,10 @@ export function stepIndexMap(trace: TraceElement[]): Map<TraceElement, number> {
   return map;
 }
 
+export function fieldValue(e: Event): string {
+  return (e.target as { value?: string } | null)?.value ?? '';
+}
+
 export function variableSegment(v: TraceVariable): string {
   return v.kind === 'step' && v.index !== undefined
     ? `${v.name}[${v.index}]`

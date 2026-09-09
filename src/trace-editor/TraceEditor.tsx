@@ -13,9 +13,9 @@ import {
 import { setVsCodeApi } from '../shared/webviewApi';
 import type { TraceDownMessage, TraceUpMessage } from './messages';
 import type { TraceElement, TraceTest } from './traceUtils';
-import { readTraceTest } from './traceUtils';
-import TraceTreeView, { type ExpandCommand } from './TraceTreeView';
+import { fieldValue, readTraceTest } from './traceUtils';
 import { DataPanel } from './TraceData';
+import TraceTreeView from './TraceTreeView';
 
 type RunState =
   | { status: 'idle' }
@@ -31,11 +31,6 @@ type Props = {
 
 type ScopeWithInfo = [string, TraceTest | undefined];
 
-/** Read the `value` off the target of a vscode-elements form event. */
-function fieldValue(e: Event): string {
-  return (e.target as { value?: string } | null)?.value ?? '';
-}
-
 export default function TraceEditor({ vscode }: Props): ReactElement {
   const intl = useIntl();
   const [cwd, setCwd] = useState('');
@@ -43,10 +38,10 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
     new Map()
   );
   const [scope, setScope] = useState<ScopeWithInfo>(['', undefined]);
-  // Whether the scope was preset via the editor's inputs (hides the scope form).
   const [scopePreset, setScopePreset] = useState(false);
   const [runState, setRunState] = useState<RunState>({ status: 'idle' });
   const [initialized, setInitialized] = useState(false);
+  const [filter, setFilter] = useState('');
 
   useEffect(() => {
     setVsCodeApi(vscode);
@@ -140,10 +135,15 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h2>
-        <FormattedMessage id="trace.viewer.title" />
-        {(scopePreset || scopes.size === 1) && scope[0] && `  —  ${scope[0]}`}
-      </h2>
+      <div style={titleRowStyle}>
+        <h2 style={{ margin: 0 }}>
+          <FormattedMessage id="trace.viewer.title" />
+          {(scopePreset || scopes.size === 1) && scope[0] && `  —  ${scope[0]}`}
+        </h2>
+        <VscodeButton icon="play" disabled={running} onClick={onRunScope}>
+          <FormattedMessage id={running ? 'trace.running' : 'trace.run'} />
+        </VscodeButton>
+      </div>
 
       {!scopePreset && scopes.size > 1 && (
         <label style={fieldStyle}>
@@ -179,45 +179,54 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         </label>
       )}
 
-      <div>
-        <VscodeButton icon="play" disabled={running} onClick={onRunScope}>
-          <FormattedMessage id={running ? 'trace.running' : 'trace.run'} />
-        </VscodeButton>
-      </div>
-
       {scope[1] !== undefined ? (
         <SplitPane
           left={
             <DataPanel
+              setFilter={setFilter}
               test={scope[1]}
               trace={runState.status === 'success' ? runState.trace : undefined}
               intl={intl}
             />
           }
-          right={<TraceResult runState={runState} cwd={cwd} test={scope[1]} />}
+          right={
+            <TraceResult
+              filter={filter}
+              setFilter={setFilter}
+              runState={runState}
+              cwd={cwd}
+              test={scope[1]}
+            />
+          }
         />
       ) : (
-        <TraceResult runState={runState} cwd={cwd} />
+        <TraceResult
+          filter={filter}
+          setFilter={setFilter}
+          runState={runState}
+          cwd={cwd}
+        />
       )}
     </div>
   );
 }
 
 function TraceResult({
+  filter,
+  setFilter,
   runState,
   cwd,
   test,
 }: {
   runState: RunState;
+  filter: string;
+  setFilter: (filter: string) => void;
   cwd: string;
   test?: TraceTest;
 }): ReactElement | null {
   const intl = useIntl();
   const [view, setView] = useState<OutputView>('tree');
-  const [filter, setFilter] = useState('');
-  const [expand, setExpand] = useState<ExpandCommand | null>(null);
-  const expandAll = (open: boolean): void =>
-    setExpand((prev) => ({ open, nonce: (prev?.nonce ?? 0) + 1 }));
+  const [expand, setExpand] = useState<boolean | null>(null);
 
   switch (runState.status) {
     case 'idle':
@@ -289,7 +298,7 @@ function TraceResult({
                   icon="expand-all"
                   secondary
                   title={intl.formatMessage({ id: 'trace.expandAllTitle' })}
-                  onClick={() => expandAll(true)}
+                  onClick={() => setExpand(true)}
                 >
                   <FormattedMessage id="trace.expandAll" />
                 </VscodeButton>
@@ -297,7 +306,7 @@ function TraceResult({
                   icon="collapse-all"
                   secondary
                   title={intl.formatMessage({ id: 'trace.collapseAllTitle' })}
-                  onClick={() => expandAll(false)}
+                  onClick={() => setExpand(false)}
                 >
                   <FormattedMessage id="trace.collapseAll" />
                 </VscodeButton>
@@ -368,7 +377,6 @@ function SplitPane({
       }
       const rect = containerRef.current.getBoundingClientRect();
       const w = e.clientX - rect.left;
-      // Keep a minimum width for both panes.
       setLeftWidth(Math.max(120, Math.min(w, rect.width - 120)));
     };
     const onUp = (): void => {
@@ -414,6 +422,12 @@ function SplitPane({
     </div>
   );
 }
+
+const titleRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 16,
+};
 
 const fieldStyle: React.CSSProperties = {
   display: 'flex',

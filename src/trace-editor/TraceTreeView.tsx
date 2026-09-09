@@ -44,7 +44,7 @@ type Described = {
 const ExpectedContext = createContext<Expected | null>(null);
 const IndexContext = createContext<Map<TraceElement, number>>(new Map());
 const CwdContext = createContext<string>('');
-const ExpandContext = createContext<ExpandCommand | null>(null);
+const ExpandContext = createContext<boolean | null>(null);
 
 function resolvePath(cwd: string, file: string): string {
   if (!cwd || file.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(file)) {
@@ -471,7 +471,7 @@ export default function TraceTreeView({
   trace: TraceElement[];
   filter?: string;
   cwd?: string;
-  expand?: ExpandCommand | null;
+  expand?: boolean | null;
   test?: TraceTest;
 }): ReactElement {
   const intl = useIntl();
@@ -624,8 +624,8 @@ function TraceNode({
 
   const expandCmd = useContext(ExpandContext);
   useEffect(() => {
-    if (expandCmd) {
-      setExpanded(expandCmd.open);
+    if (expandCmd != null) {
+      setExpanded(expandCmd);
     }
   }, [expandCmd]);
 
@@ -844,7 +844,6 @@ const rootListStyle: CSSProperties = {
   padding: 0,
   fontFamily: 'var(--vscode-editor-font-family, monospace)',
   fontSize: 'var(--vscode-editor-font-size, 13px)',
-  maxHeight: '70vh',
   overflow: 'auto',
 };
 
