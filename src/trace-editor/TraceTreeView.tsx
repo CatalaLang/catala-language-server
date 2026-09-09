@@ -934,8 +934,6 @@ function TraceNode({
   useEffect(() => {
     if (expandCmd) {
       setExpanded(expandCmd.open);
-      setShowValue(expandCmd.open);
-      setShowCode(expandCmd.open);
     }
   }, [expandCmd]);
 
