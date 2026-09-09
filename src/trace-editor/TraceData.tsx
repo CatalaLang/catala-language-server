@@ -15,11 +15,13 @@ import {
   type TraceElement,
   type TraceTest,
   type TraceValue,
+  type TraceVariable,
   PANEL_HEIGHT_VAR,
-  findTraceValue,
   traceVariablesForTest,
   formatTraceValue,
   traceValueFromRuntime,
+  variablePath,
+  variableSegment,
 } from './traceUtils';
 
 const ExpandContext = createContext<ExpandCommand | null>(null);
@@ -51,36 +53,91 @@ function leavesFirst(nodes: DataNode[]): DataNode[] {
   return [...nodes.filter((n) => !isFoldable(n)), ...nodes.filter(isFoldable)];
 }
 
-type PathEntry = { segments: string[]; node: DataNode };
-
 function pathSegments(name: string): string[] {
   return name.split('.').filter((segment) => segment !== '');
 }
 
-function groupByPath(entries: PathEntry[], prefix: string): DataNode[] {
-  const leaves: DataNode[] = [];
-  const groups = new Map<string, PathEntry[]>();
-  for (const { segments, node } of entries) {
-    const [head, ...rest] = segments;
-    if (head === undefined) {
-      continue;
-    }
-    if (rest.length === 0) {
-      leaves.push({ ...node, label: head });
-    } else {
-      const group = groups.get(head);
-      if (group === undefined) {
-        groups.set(head, [{ segments: rest, node }]);
-      } else {
-        group.push({ segments: rest, node });
-      }
-    }
+// Places a variable the trace never produced where its path says it belongs,
+// creating the steps along the way when the trace has none of them either.
+function insertAt(
+  nodes: DataNode[],
+  segments: string[],
+  prefix: string,
+  leaf: DataNode
+): DataNode[] {
+  const [head, ...rest] = segments;
+  if (head === undefined) {
+    return nodes;
   }
-  const containers = [...groups.entries()].map(([head, rest]) => {
-    const path = prefix ? `${prefix}.${head}` : head;
-    return { label: head, path, children: groupByPath(rest, path) };
+  const path = prefix ? `${prefix}.${head}` : head;
+  if (rest.length === 0) {
+    return [...nodes, { ...leaf, label: head, path }];
+  }
+  const index = nodes.findIndex((node) => node.path === path);
+  if (index === -1) {
+    return [
+      ...nodes,
+      { label: head, path, children: insertAt([], rest, path, leaf) },
+    ];
+  }
+  const parent = nodes[index];
+  return nodes.with(index, {
+    ...parent,
+    children: insertAt(parent.children ?? [], rest, path, leaf),
   });
-  return leavesFirst([...leaves, ...containers]);
+}
+
+// Re-applied after the insertions, which append rather than order.
+function sortTree(nodes: DataNode[]): DataNode[] {
+  return leavesFirst(
+    nodes.map((node) =>
+      node.children === undefined
+        ? node
+        : { ...node, children: sortTree(node.children) }
+    )
+  );
+}
+
+// Every variable the trace produced, in the shape the trace already has: its
+// steps are the groups, its values the rows. `matched` collects the expected
+// paths that were found, so the ones the trace never produced can be put back
+// afterwards.
+function nodesFromTrace(
+  variables: TraceVariable[],
+  prefix: string,
+  expected: Map<string, TraceValue | null>,
+  matched: Set<string>,
+  intl: IntlShape
+): DataNode[] {
+  return leavesFirst(
+    variables.map((variable): DataNode => {
+      const label = variableSegment(variable);
+      const path = variablePath(prefix, variable);
+      if (expected.has(path)) {
+        matched.add(path);
+      }
+      if (variable.kind === 'step') {
+        return {
+          label,
+          path,
+          children: nodesFromTrace(
+            variable.variables,
+            path,
+            expected,
+            matched,
+            intl
+          ),
+        };
+      }
+      return buildNode(
+        label,
+        path,
+        expected.get(path) ?? undefined,
+        variable.value,
+        intl
+      );
+    })
+  );
 }
 
 function isStruct(
@@ -248,19 +305,26 @@ export function DataPanel({
   );
 
   const hasTraceVars = trVariables.length > 0;
-  const internalNodes = groupByPath(
-    [...test.variables.entries()].map(([name, expected]) => {
-      const computed = findTraceValue(name, trVariables);
-      return {
-        segments: pathSegments(name),
-        node: {
-          ...buildNode(name, name, expected ?? undefined, computed, intl),
-          missing: hasTraceVars && computed === undefined,
-        },
-      };
-    }),
-    ''
+  const matched = new Set<string>();
+  let internalNodes = nodesFromTrace(
+    trVariables,
+    '',
+    test.variables,
+    matched,
+    intl
   );
+  // The expectations the trace never produced go back under the steps their
+  // path names. Only a problem once there is a trace to have produced them.
+  for (const [name, expected] of test.variables) {
+    if (matched.has(name)) {
+      continue;
+    }
+    internalNodes = insertAt(internalNodes, pathSegments(name), '', {
+      ...buildNode(name, name, expected ?? undefined, undefined, intl),
+      missing: hasTraceVars,
+    });
+  }
+  internalNodes = sortTree(internalNodes);
 
   const outputNodes = leavesFirst(
     [...test.test_outputs.entries()].map(([name, io]) =>
