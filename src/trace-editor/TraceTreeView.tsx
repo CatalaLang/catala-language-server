@@ -31,6 +31,7 @@ import type { CodeLocation, TraceElement, TraceKind } from './traceUtils';
 import {
   type TraceValue,
   type TraceTest,
+  PANEL_HEIGHT_VAR,
   fieldValue,
   formatTraceValue,
   traceValueEqual,
@@ -1429,7 +1430,8 @@ const rootListStyle: CSSProperties = {
   margin: 0,
   fontFamily: 'var(--vscode-editor-font-family, monospace)',
   fontSize: 'var(--vscode-editor-font-size, 13px)',
-  maxHeight: '70vh',
+  // Same room as the data panel opposite, so the two panes end level.
+  maxHeight: `var(${PANEL_HEIGHT_VAR}, 70vh)`,
   overflow: 'auto',
 };
 

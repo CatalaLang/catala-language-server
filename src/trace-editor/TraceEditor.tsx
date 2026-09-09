@@ -1,4 +1,10 @@
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import {
+  type ReactElement,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type { WebviewApi } from 'vscode-webview';
 import {
@@ -11,7 +17,7 @@ import {
 import { setVsCodeApi } from '../shared/webviewApi';
 import type { TraceDownMessage, TraceUpMessage } from './messages';
 import type { TraceElement, TraceTest } from './traceUtils';
-import { fieldValue, readTraceTest } from './traceUtils';
+import { PANEL_HEIGHT_VAR, fieldValue, readTraceTest } from './traceUtils';
 import {
   TracePanel,
   codeBlockStyle,
@@ -31,6 +37,8 @@ type Props = {
 
 type ScopeWithInfo = [string, TraceTest | undefined];
 
+const BOTTOM_MARGIN = 12;
+
 export default function TraceEditor({ vscode }: Props): ReactElement {
   const intl = useIntl();
   const [cwd, setCwd] = useState('');
@@ -38,12 +46,9 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
     new Map()
   );
   const [scope, setScope] = useState<ScopeWithInfo>(['', undefined]);
-  // Whether the scope was preset via the editor's inputs (hides the scope form).
   const [scopePreset, setScopePreset] = useState(false);
   const [runState, setRunState] = useState<RunState>({ status: 'idle' });
   const [initialized, setInitialized] = useState(false);
-  // The filters themselves belong to each trace panel. The data panel only
-  // asks for one, which the panel then owns like a typed one.
   const [filterRequest, setFilterRequest] = useState<FilterCommand | null>(
     null
   );
@@ -130,6 +135,23 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
 
   const running = runState.status === 'running';
 
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState<string>();
+  useLayoutEffect(() => {
+    const element = resultsRef.current;
+    if (element === null) {
+      return;
+    }
+    const measure = (): void => {
+      const top = element.getBoundingClientRect().top + window.scrollY;
+      setPanelHeight(`calc(100vh - ${Math.round(top)}px - ${BOTTOM_MARGIN}px)`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    return (): void => observer.disconnect();
+  }, [initialized, scopePreset, scopes.size]);
+
   if (!initialized) {
     return (
       <div
@@ -142,10 +164,15 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h2>
-        <FormattedMessage id="trace.viewer.title" />
-        {(scopePreset || scopes.size === 1) && scope[0] && `  —  ${scope[0]}`}
-      </h2>
+      <div style={titleRowStyle}>
+        <h2 style={{ margin: 0 }}>
+          <FormattedMessage id="trace.viewer.title" />
+          {(scopePreset || scopes.size === 1) && scope[0] && `  —  ${scope[0]}`}
+        </h2>
+        <VscodeButton icon="play" disabled={running} onClick={onRunScope}>
+          <FormattedMessage id={running ? 'trace.running' : 'trace.run'} />
+        </VscodeButton>
+      </div>
 
       {!scopePreset && scopes.size > 1 && (
         <label style={fieldStyle}>
@@ -181,38 +208,39 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         </label>
       )}
 
-      <div>
-        <VscodeButton icon="play" disabled={running} onClick={onRunScope}>
-          <FormattedMessage id={running ? 'trace.running' : 'trace.run'} />
-        </VscodeButton>
+      <div
+        ref={resultsRef}
+        style={{ [PANEL_HEIGHT_VAR]: panelHeight } as React.CSSProperties}
+      >
+        {scope[1] !== undefined ? (
+          <SplitPane
+            left={
+              <DataPanel
+                setFilter={requestFilter}
+                test={scope[1]}
+                trace={
+                  runState.status === 'success' ? runState.trace : undefined
+                }
+                intl={intl}
+              />
+            }
+            right={
+              <TraceResult
+                filterRequest={filterRequest}
+                runState={runState}
+                cwd={cwd}
+                test={scope[1]}
+              />
+            }
+          />
+        ) : (
+          <TraceResult
+            filterRequest={filterRequest}
+            runState={runState}
+            cwd={cwd}
+          />
+        )}
       </div>
-
-      {scope[1] !== undefined ? (
-        <SplitPane
-          left={
-            <DataPanel
-              setFilter={requestFilter}
-              test={scope[1]}
-              trace={runState.status === 'success' ? runState.trace : undefined}
-              intl={intl}
-            />
-          }
-          right={
-            <TraceResult
-              filterRequest={filterRequest}
-              runState={runState}
-              cwd={cwd}
-              test={scope[1]}
-            />
-          }
-        />
-      ) : (
-        <TraceResult
-          filterRequest={filterRequest}
-          runState={runState}
-          cwd={cwd}
-        />
-      )}
     </div>
   );
 }
@@ -290,7 +318,6 @@ function SplitPane({
       }
       const rect = containerRef.current.getBoundingClientRect();
       const w = e.clientX - rect.left;
-      // Keep a minimum width for both panes.
       setLeftWidth(Math.max(120, Math.min(w, rect.width - 120)));
     };
     const onUp = (): void => {
@@ -336,6 +363,12 @@ function SplitPane({
     </div>
   );
 }
+
+const titleRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 16,
+};
 
 const fieldStyle: React.CSSProperties = {
   display: 'flex',

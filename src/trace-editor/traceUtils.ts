@@ -526,6 +526,13 @@ export function fieldValue(e: Event): string {
   return (e.target as { value?: string } | null)?.value ?? '';
 }
 
+/**
+ * Height left for the panels under the editor's header. The editor measures it
+ * and sets it on their container; each panel caps itself with it. Declared
+ * here rather than in either of them, since those two import each other.
+ */
+export const PANEL_HEIGHT_VAR = '--trace-panel-height';
+
 export function variableSegment(v: TraceVariable): string {
   return v.kind === 'step' && v.index !== undefined
     ? `${v.name}[${v.index}]`

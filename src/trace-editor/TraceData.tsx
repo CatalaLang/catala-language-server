@@ -1,47 +1,206 @@
-import type { CSSProperties, ReactElement } from 'react';
+import {
+  type CSSProperties,
+  type ReactElement,
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import type { IntlShape } from 'react-intl';
 import { FormattedMessage } from 'react-intl';
+import { VscodeButton } from '@vscode-elements/react-elements';
 import type { TestIo } from '../generated/catala_types';
+import type { ExpandCommand } from './TraceTreeView';
 import {
   type TraceElement,
   type TraceTest,
   type TraceValue,
+  PANEL_HEIGHT_VAR,
   findTraceValue,
   traceVariablesForTest,
   formatTraceValue,
   traceValueFromRuntime,
 } from './traceUtils';
 
-// -- Value formatting ---------------------------------------------------------
+const ExpandContext = createContext<ExpandCommand | null>(null);
 
-type Leaf = { path: string; kind: string; value?: string };
-
-function flattenValue(path: string, tv: TraceValue, intl: IntlShape): Leaf[] {
-  switch (tv.kind) {
-    case 'struct':
-      if (Object.keys(tv.fields).length === 0)
-        return [{ path, kind: 'struct' }];
-      return Object.entries(tv.fields).flatMap(([field, v]) =>
-        flattenValue(`${path}.${field}`, v, intl)
-      );
-    case 'array':
-      if (tv.values.length === 0) return [{ path, kind: 'array' }];
-      return tv.values.flatMap(([v, label], i) =>
-        flattenValue(`${path}[${label ?? i}]`, v, intl)
-      );
-    case 'enum':
-      return tv.value === undefined
-        ? [{ path, kind: 'enum', value: tv.ctor }]
-        : flattenValue(`${path}.${tv.ctor}`, tv.value, intl);
-    default:
-      return [{ path, kind: tv.kind, value: formatTraceValue(tv, intl) }];
-  }
+function useExpandAll(setOpen: (open: boolean) => void): void {
+  const command = useContext(ExpandContext);
+  useEffect(() => {
+    if (command) {
+      setOpen(command.open);
+    }
+  }, [command, setOpen]);
 }
 
-function flattenIo(name: string, io: TestIo, intl: IntlShape): Leaf[] {
-  if (!io.value) return [];
-  const tv = traceValueFromRuntime(io.value.value);
-  return tv === undefined ? [] : flattenValue(name, tv, intl);
+type DataNode = {
+  label: string;
+  path: string;
+  kind?: string;
+  expected?: string;
+  value?: string;
+  children?: DataNode[];
+  missing?: boolean;
+};
+
+function isFoldable(node: DataNode): boolean {
+  return node.children !== undefined && node.children.length > 0;
+}
+
+function leavesFirst(nodes: DataNode[]): DataNode[] {
+  return [...nodes.filter((n) => !isFoldable(n)), ...nodes.filter(isFoldable)];
+}
+
+type PathEntry = { segments: string[]; node: DataNode };
+
+function pathSegments(name: string): string[] {
+  return name.split('.').filter((segment) => segment !== '');
+}
+
+function groupByPath(entries: PathEntry[], prefix: string): DataNode[] {
+  const leaves: DataNode[] = [];
+  const groups = new Map<string, PathEntry[]>();
+  for (const { segments, node } of entries) {
+    const [head, ...rest] = segments;
+    if (head === undefined) {
+      continue;
+    }
+    if (rest.length === 0) {
+      leaves.push({ ...node, label: head });
+    } else {
+      const group = groups.get(head);
+      if (group === undefined) {
+        groups.set(head, [{ segments: rest, node }]);
+      } else {
+        group.push({ segments: rest, node });
+      }
+    }
+  }
+  const containers = [...groups.entries()].map(([head, rest]) => {
+    const path = prefix ? `${prefix}.${head}` : head;
+    return { label: head, path, children: groupByPath(rest, path) };
+  });
+  return leavesFirst([...leaves, ...containers]);
+}
+
+function isStruct(
+  v?: TraceValue
+): v is Extract<TraceValue, { kind: 'struct' }> {
+  return v?.kind === 'struct';
+}
+
+function isArray(v?: TraceValue): v is Extract<TraceValue, { kind: 'array' }> {
+  return v?.kind === 'array';
+}
+
+function isWrapper(
+  v?: TraceValue
+): v is Extract<TraceValue, { kind: 'enum' }> & { value: TraceValue } {
+  return v?.kind === 'enum' && v.value !== undefined;
+}
+
+function buildNode(
+  label: string,
+  path: string,
+  expected: TraceValue | undefined,
+  computed: TraceValue | undefined,
+  intl: IntlShape
+): DataNode {
+  const shape = expected ?? computed;
+
+  if (isStruct(expected) || isStruct(computed)) {
+    const fields = [
+      ...new Set([
+        ...(isStruct(expected) ? Object.keys(expected.fields) : []),
+        ...(isStruct(computed) ? Object.keys(computed.fields) : []),
+      ]),
+    ];
+    if (fields.length === 0) {
+      return { label, path, kind: 'struct', value: '{}' };
+    }
+    return {
+      label,
+      path,
+      kind: 'struct',
+      children: leavesFirst(
+        fields.map((field) =>
+          buildNode(
+            field,
+            `${path}.${field}`,
+            isStruct(expected) ? expected.fields[field] : undefined,
+            isStruct(computed) ? computed.fields[field] : undefined,
+            intl
+          )
+        )
+      ),
+    };
+  }
+
+  if (isArray(expected) || isArray(computed)) {
+    const exp = isArray(expected) ? expected.values : [];
+    const comp = isArray(computed) ? computed.values : [];
+    const length = Math.max(exp.length, comp.length);
+    if (length === 0) {
+      return { label, path, kind: 'array', value: '[]' };
+    }
+    return {
+      label,
+      path,
+      kind: 'array',
+      children: Array.from({ length }, (_, i) => {
+        const item = exp[i]?.[1] ?? comp[i]?.[1] ?? String(i);
+        return buildNode(
+          `[${item}]`,
+          `${path}[${item}]`,
+          exp[i]?.[0],
+          comp[i]?.[0],
+          intl
+        );
+      }),
+    };
+  }
+
+  const sameCtor =
+    !isWrapper(expected) ||
+    !isWrapper(computed) ||
+    expected.ctor === computed.ctor;
+  if (sameCtor && (isWrapper(expected) || isWrapper(computed))) {
+    const ctor = isWrapper(expected)
+      ? expected.ctor
+      : (computed as { ctor: string }).ctor;
+    return {
+      label,
+      path,
+      kind: 'enum',
+      children: [
+        buildNode(
+          ctor,
+          `${path}.${ctor}`,
+          isWrapper(expected) ? expected.value : undefined,
+          isWrapper(computed) ? computed.value : undefined,
+          intl
+        ),
+      ],
+    };
+  }
+
+  return {
+    label,
+    path,
+    kind: shape?.kind,
+    expected: expected !== undefined ? leafText(expected, intl) : undefined,
+    value: computed !== undefined ? leafText(computed, intl) : undefined,
+  };
+}
+
+function leafText(v: TraceValue, intl: IntlShape): string | undefined {
+  return v.kind === 'enum' && v.value !== undefined
+    ? v.ctor
+    : formatTraceValue(v, intl);
+}
+
+function ioValue(io: TestIo | undefined): TraceValue | undefined {
+  return io?.value ? traceValueFromRuntime(io.value.value) : undefined;
 }
 
 // -- Type icons ---------------------------------------------------------------
@@ -64,13 +223,7 @@ function typeIcon(kind?: string): string {
 
 // -- Components ----------------------------------------------------------------
 
-type VarRow = {
-  name: string;
-  expected?: string;
-  value?: string;
-  noExpected?: boolean;
-  kind?: string;
-};
+type SetFilter = (filter: string) => void;
 
 export function DataPanel({
   test,
@@ -79,7 +232,7 @@ export function DataPanel({
   intl,
 }: {
   test: TraceTest;
-  setFilter: (filter: string) => void;
+  setFilter: SetFilter;
   trace?: TraceElement[];
   intl: IntlShape;
 }): ReactElement {
@@ -88,43 +241,31 @@ export function DataPanel({
     test.tested_scope.name
   );
 
-  const inputRows: VarRow[] = [...test.test_inputs.entries()].flatMap(
-    ([name, io]) =>
-      flattenIo(name, io, intl).map((leaf) => ({
-        name: leaf.path,
-        value: leaf.value,
-        noExpected: true,
-        kind: leaf.kind,
-      }))
+  const inputNodes = leavesFirst(
+    [...test.test_inputs.entries()].map(([name, io]) =>
+      buildNode(name, name, undefined, ioValue(io), intl)
+    )
   );
 
-  const internalRows: VarRow[] = [...test.variables.entries()].map(
-    ([name, expected]) => {
+  const hasTraceVars = trVariables.length > 0;
+  const internalNodes = groupByPath(
+    [...test.variables.entries()].map(([name, expected]) => {
       const computed = findTraceValue(name, trVariables);
       return {
-        name,
-        expected: expected ? formatTraceValue(expected, intl) : undefined,
-        value: computed ? formatTraceValue(computed, intl) : undefined,
-        kind: expected ? expected.kind : undefined,
+        segments: pathSegments(name),
+        node: {
+          ...buildNode(name, name, expected ?? undefined, computed, intl),
+          missing: hasTraceVars && computed === undefined,
+        },
       };
-    }
+    }),
+    ''
   );
 
-  const outputRows: VarRow[] = [...test.test_outputs.entries()].map(
-    ([name, io]) => {
-      const tv =
-        io.value !== undefined
-          ? traceValueFromRuntime(io.value.value)
-          : undefined;
-      const computed = trOutputs[name];
-      return {
-        name,
-        expected: tv !== undefined ? formatTraceValue(tv, intl) : undefined,
-        value:
-          computed !== undefined ? formatTraceValue(computed, intl) : undefined,
-        kind: io.value?.value.value.kind,
-      };
-    }
+  const outputNodes = leavesFirst(
+    [...test.test_outputs.entries()].map(([name, io]) =>
+      buildNode(name, name, ioValue(io), trOutputs[name], intl)
+    )
   );
 
   return (
@@ -132,7 +273,7 @@ export function DataPanel({
       <table style={tableStyle}>
         <thead>
           <tr>
-            <th style={thStyle}>
+            <th style={nameThStyle}>
               <FormattedMessage id="trace.col.name" />
             </th>
             <th style={thStyle}>
@@ -144,98 +285,233 @@ export function DataPanel({
           </tr>
         </thead>
         <tbody>
-          <SectionRow id="trace.section.inputs" />
-          {inputRows.map((r, i) => (
-            <VarRowView
-              key={`in-${r.name}-${i}`}
-              row={r}
-              setFilter={setFilter}
-            />
-          ))}
-          <SectionRow id="trace.section.internal" />
-          {internalRows.map((r, i) => (
-            <VarRowView
-              key={`int-${r.name}-${i}`}
-              row={r}
-              setFilter={setFilter}
-            />
-          ))}
-          <SectionRow id="trace.section.outputs" />
-          {outputRows.map((r, i) => (
-            <VarRowView
-              key={`out-${r.name}-${i}`}
-              row={r}
-              setFilter={setFilter}
-            />
-          ))}
+          <Section id="trace.section.inputs" intl={intl} first>
+            {inputNodes.map((node, i) => (
+              <NodeRow
+                key={`in-${node.path}-${i}`}
+                node={node}
+                crumbs={[]}
+                noExpected
+                setFilter={setFilter}
+              />
+            ))}
+          </Section>
+          <Section id="trace.section.internal" intl={intl}>
+            {internalNodes.map((node, i) => (
+              <NodeRow
+                key={`int-${node.path}-${i}`}
+                node={node}
+                crumbs={[]}
+                setFilter={setFilter}
+              />
+            ))}
+          </Section>
+          <Section id="trace.section.outputs" intl={intl}>
+            {outputNodes.map((node, i) => (
+              <NodeRow
+                key={`out-${node.path}-${i}`}
+                node={node}
+                crumbs={[]}
+                setFilter={setFilter}
+              />
+            ))}
+          </Section>
         </tbody>
       </table>
     </div>
   );
 }
 
-function SectionRow({ id }: { id: string }): ReactElement {
+function Section({
+  id,
+  intl,
+  first,
+  children,
+}: {
+  id: string;
+  intl: IntlShape;
+  first?: boolean;
+  children: ReactElement[];
+}): ReactElement {
+  const [open, setOpen] = useState(true);
+  const [expand, setExpand] = useState<ExpandCommand | null>(null);
+  const expandAll = (all: boolean): void => {
+    if (all) {
+      setOpen(true);
+    }
+    setExpand((prev) => ({ open: all, nonce: (prev?.nonce ?? 0) + 1 }));
+  };
+
   return (
-    <tr>
-      <td colSpan={3} style={sectionStyle}>
-        <FormattedMessage id={id} />
-      </td>
-    </tr>
+    <>
+      {!first && (
+        <tr aria-hidden>
+          <td colSpan={3} style={sectionGapStyle} />
+        </tr>
+      )}
+      <tr style={{ cursor: 'pointer' }} onClick={() => setOpen((o) => !o)}>
+        <td colSpan={3} style={sectionStyle}>
+          <div style={sectionHeaderStyle}>
+            <span style={nameCellStyle}>
+              <span
+                style={chevronStyle}
+                className={`codicon codicon-chevron-${open ? 'down' : 'right'}`}
+              />
+              <FormattedMessage id={id} />
+            </span>
+            <span
+              style={sectionActionsStyle}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <VscodeButton
+                icon="expand-all"
+                secondary
+                title={intl.formatMessage({ id: 'trace.expandAllTitle' })}
+                onClick={() => expandAll(true)}
+              />
+              <VscodeButton
+                icon="collapse-all"
+                secondary
+                title={intl.formatMessage({ id: 'trace.collapseAllTitle' })}
+                onClick={() => expandAll(false)}
+              />
+            </span>
+          </div>
+        </td>
+      </tr>
+      {open && (
+        <ExpandContext.Provider value={expand}>
+          {children}
+        </ExpandContext.Provider>
+      )}
+    </>
   );
 }
 
-function VarRowView({
-  row,
+function Breadcrumb({ crumbs }: { crumbs: string[] }): ReactElement {
+  const last = crumbs.length - 1;
+  return (
+    <>
+      {crumbs.map((crumb, i) => (
+        <span key={i}>
+          {i > 0 && !crumb.startsWith('[') && (
+            <span style={crumbSeparatorStyle}>/</span>
+          )}
+          <span style={i === last ? crumbLastStyle : crumbStyle}>{crumb}</span>
+        </span>
+      ))}
+    </>
+  );
+}
+
+function NodeRow({
+  node,
+  crumbs,
+  noExpected,
   setFilter,
 }: {
-  row: VarRow;
-  setFilter: (filter: string) => void;
+  node: DataNode;
+  crumbs: string[];
+  noExpected?: boolean;
+  setFilter: SetFilter;
 }): ReactElement {
+  const [open, setOpen] = useState(false);
+  useExpandAll(setOpen);
+  const children = node.children;
+  const missing = node.missing;
+  const selfCrumbs = [...crumbs, node.label];
+  const warning =
+    'var(--vscode-inputValidation-warningBackground, rgba(255, 200, 0, 0.2))';
+
+  if (children !== undefined && children.length > 0) {
+    return (
+      <>
+        <tr
+          style={{
+            cursor: 'pointer',
+            background: missing ? warning : undefined,
+          }}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <td colSpan={3} style={pathRowStyle}>
+            <span style={nameCellStyle}>
+              <span
+                style={chevronStyle}
+                className={`codicon codicon-chevron-${open ? 'down' : 'right'}`}
+              />
+              <span style={typeIconStyle} title={node.kind}>
+                {typeIcon(node.kind)}
+              </span>
+              <span>
+                <Breadcrumb crumbs={selfCrumbs} />
+              </span>
+            </span>
+          </td>
+        </tr>
+        {open &&
+          children.map((child, i) => (
+            <NodeRow
+              key={`${child.path}-${i}`}
+              node={child}
+              crumbs={selfCrumbs}
+              noExpected={noExpected}
+              setFilter={setFilter}
+            />
+          ))}
+      </>
+    );
+  }
+
   const comparable =
-    !row.noExpected && row.expected !== undefined && row.value !== undefined;
-  const background = !comparable
-    ? undefined
-    : row.expected === row.value
-      ? 'var(--vscode-diffEditor-insertedTextBackground, rgba(35, 200, 60, 0.2))'
-      : 'var(--vscode-diffEditor-removedTextBackground, rgba(255, 50, 50, 0.2))';
+    !noExpected && node.expected !== undefined && node.value !== undefined;
+  const background = missing
+    ? warning
+    : !comparable
+      ? undefined
+      : node.expected === node.value
+        ? 'var(--vscode-diffEditor-insertedTextBackground, rgba(35, 200, 60, 0.2))'
+        : 'var(--vscode-diffEditor-removedTextBackground, rgba(255, 50, 50, 0.2))';
+
   return (
     <tr style={{ background }}>
-      <td style={{ ...tdStyle, fontWeight: 600 }}>
-        <span
-          onClick={(e) => {
-            e.preventDefault();
-            let simpleName = row.name.split('.').pop() ?? '';
-            setFilter(simpleName);
-          }}
-          style={nameCellStyle}
-        >
-          <span style={typeIconStyle} title={row.kind}>
-            {typeIcon(row.kind)}
+      <td style={nameTdStyle}>
+        <span style={nameCellStyle}>
+          <span style={chevronStyle} />
+          <span style={typeIconStyle} title={node.kind}>
+            {typeIcon(node.kind)}
           </span>
-          <span>{row.name}</span>
+          <span
+            style={{ cursor: 'pointer' }}
+            onClick={(e) => {
+              e.preventDefault();
+              setFilter(node.label);
+            }}
+          >
+            {node.label}
+          </span>
         </span>
       </td>
-      {row.noExpected ? (
+      {noExpected ? (
         <td style={disabledCellStyle}>—</td>
       ) : (
         <td
           style={tdStyle}
           onClick={(e) => {
             e.preventDefault();
-            setFilter(row.expected ?? '');
+            setFilter(node.expected ?? '');
           }}
         >
-          {row.expected ?? ''}
+          {node.expected ?? ''}
         </td>
       )}
       <td
         style={tdStyle}
         onClick={(e) => {
           e.preventDefault();
-          setFilter(row.value ?? '');
+          setFilter(node.value ?? '');
         }}
       >
-        {row.value ?? ''}
+        {node.value ?? ''}
       </td>
     </tr>
   );
@@ -246,11 +522,10 @@ function VarRowView({
 const ioPanelStyle: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
-  padding: '8px 12px',
   border: '1px solid var(--vscode-panel-border, transparent)',
   borderRadius: 2,
   fontSize: '0.9em',
-  maxHeight: '70vh',
+  maxHeight: `var(${PANEL_HEIGHT_VAR}, 70vh)`,
   overflow: 'auto',
 };
 
@@ -274,17 +549,81 @@ const tdStyle: CSSProperties = {
   verticalAlign: 'top',
 };
 
-const sectionStyle: CSSProperties = {
+const ROW_INSET = 8;
+
+const nameTdStyle: CSSProperties = {
+  ...tdStyle,
   fontWeight: 600,
-  padding: '10px 0 2px',
+  paddingLeft: ROW_INSET,
+};
+
+const nameThStyle: CSSProperties = {
+  ...thStyle,
+  paddingLeft: ROW_INSET,
+};
+
+const sectionStyle: CSSProperties = {
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  fontSize: '0.9em',
+  padding: `6px 6px 5px ${ROW_INSET}px`,
+  background: 'var(--vscode-editorGroupHeader-tabsBackground, transparent)',
+  color: 'var(--vscode-foreground)',
+  borderTop: '1px solid var(--vscode-panel-border, transparent)',
   borderBottom: '1px solid var(--vscode-panel-border, transparent)',
 };
 
+const sectionHeaderStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+};
+
+const sectionActionsStyle: CSSProperties = {
+  display: 'flex',
+  flex: '0 0 auto',
+  gap: 2,
+  cursor: 'default',
+};
+
+const sectionGapStyle: CSSProperties = {
+  height: 16,
+  padding: 0,
+};
+
+const pathRowStyle: CSSProperties = {
+  padding: `2px 6px 2px ${ROW_INSET}px`,
+  background: 'var(--vscode-sideBarSectionHeader-background)',
+};
+
+const crumbStyle: CSSProperties = {
+  color: 'var(--vscode-descriptionForeground)',
+  fontWeight: 400,
+};
+
+const crumbLastStyle: CSSProperties = {
+  fontWeight: 600,
+};
+
+const crumbSeparatorStyle: CSSProperties = {
+  color: 'var(--vscode-descriptionForeground)',
+  margin: '0 0.4em',
+};
+
 const nameCellStyle: CSSProperties = {
-  cursor: 'pointer',
   display: 'inline-flex',
-  alignItems: 'baseline',
+  alignItems: 'center',
   gap: 4,
+};
+
+const chevronStyle: CSSProperties = {
+  flex: '0 0 auto',
+  width: 16,
+  marginRight: 4,
+  textAlign: 'center',
+  cursor: 'pointer',
 };
 
 const typeIconStyle: CSSProperties = {
