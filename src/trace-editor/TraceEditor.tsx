@@ -16,8 +16,8 @@ import type { TraceElement, TraceTest } from './traceUtils';
 import { readTraceTest } from './traceUtils';
 import TraceTreeView, { type ExpandCommand } from './TraceTreeView';
 import { DataPanel } from './TraceData';
-import type {Filter} from '../shared/util';
-import { pinBackground} from '../shared/util'
+import type { Filter } from '../shared/util';
+import { pinBackground, switchFilter, titlePin } from '../shared/util';
 
 type RunState =
   | { status: 'idle' }
@@ -37,7 +37,6 @@ type ScopeWithInfo = [string, TraceTest | undefined];
 function fieldValue(e: Event): string {
   return (e.target as { value?: string } | null)?.value ?? '';
 }
-
 
 export default function TraceEditor({ vscode }: Props): ReactElement {
   const intl = useIntl();
@@ -63,11 +62,31 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
     if (trimmed === '') {
       return;
     }
-    setSavedFilters((old) => (old.some((filter) => filter.filter == trimmed) ? old : [...old, { filter: trimmed, option: 'include' }]));
+    setSavedFilters((old) =>
+      old.some((filter) => filter.filter == trimmed)
+        ? old
+        : [...old, { filter: trimmed, option: 'include' }]
+    );
+  };
+
+  // Always hand a new array to the setter: React skips the re-render when an
+  // updater returns the very same reference.
+  const onClickFilter = (filter: string): void => {
+    setSavedFilters((old) =>
+      old.map((pin) => {
+        if (filter == pin.filter) {
+          return switchFilter(pin);
+        } else {
+          return pin;
+        }
+      })
+    );
   };
 
   const removeFilter = (toRemove: string): void => {
-    setSavedFilters((old) => old.filter((current) => current.filter !== toRemove));
+    setSavedFilters((old) =>
+      old.filter((current) => current.filter !== toRemove)
+    );
   };
 
   useEffect(() => {
@@ -219,6 +238,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
           right={
             <TraceResult
               filter={filter}
+              onClickFilter={onClickFilter}
               setFilter={setFilter}
               savedFilters={savedFilters}
               saveFilter={saveFilter}
@@ -233,6 +253,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         <TraceResult
           filter={filter}
           setFilter={setFilter}
+          onClickFilter={onClickFilter}
           savedFilters={savedFilters}
           saveFilter={saveFilter}
           removeFilter={removeFilter}
@@ -251,6 +272,7 @@ function TraceResult({
   filter,
   setFilter,
   savedFilters,
+  onClickFilter,
   saveFilter,
   removeFilter,
 }: {
@@ -260,6 +282,7 @@ function TraceResult({
   filter: string;
   setFilter: React.Dispatch<React.SetStateAction<string>>;
   savedFilters: Filter[];
+  onClickFilter: (filter: string) => void;
   saveFilter: (filter: string) => void;
   removeFilter: (filter: string) => void;
 }): ReactElement | null {
@@ -373,7 +396,11 @@ function TraceResult({
                   <FormattedMessage id="trace.collapseAll" />
                 </VscodeButton>
               </div>
-              <FilterPins filters={savedFilters} removeFilter={removeFilter} />
+              <FilterPins
+                onClickFilter={onClickFilter}
+                filters={savedFilters}
+                removeFilter={removeFilter}
+              />
               <TraceTreeView
                 trace={runState.trace}
                 filters={savedFilters}
@@ -420,9 +447,11 @@ function post(vscode: WebviewApi<unknown>, message: TraceUpMessage): void {
 function FilterPins({
   filters,
   removeFilter,
+  onClickFilter,
 }: {
   filters: Filter[];
   removeFilter: (filter: string) => void;
+  onClickFilter: (filter: string) => void;
 }): ReactElement | null {
   const intl = useIntl();
   if (filters.length === 0) {
@@ -433,10 +462,15 @@ function FilterPins({
       {filters.map((filter) => (
         <span
           key={filter.filter}
+          onClick={(e) => {
+            e.preventDefault();
+            onClickFilter(filter.filter);
+          }}
           style={{
             ...pinStyle,
-            backgroundColor: pinBackground(filter.option),
+            ...pinBackground(filter.option),
           }}
+          title={titlePin(intl, filter)}
         >
           <span>{filter.filter}</span>
           <span
@@ -537,8 +571,6 @@ const pinsStyle: React.CSSProperties = {
   gap: 6,
   margin: '0 0 8px 0',
 };
-
-
 
 const pinStyle: React.CSSProperties = {
   display: 'inline-flex',

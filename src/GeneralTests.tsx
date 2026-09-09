@@ -16,8 +16,14 @@ import type { TestDebugger } from './generated/catala_types';
 import { readDownMessage, writeUpMessage } from './generated/catala_types';
 import { Box, Checkbox, FormControlLabel, Grid } from '@mui/material';
 import { VscodeTextfield } from '@vscode-elements/react-elements';
-import type { Filter} from './shared/util';
-import { assertUnreachable, pinBackground, splitOnTerms } from './shared/util';
+import type { Filter } from './shared/util';
+import {
+  assertUnreachable,
+  pinBackground,
+  splitOnTerms,
+  switchFilter,
+  titlePin,
+} from './shared/util';
 import { setVsCodeApi } from './shared/webviewApi';
 
 type TestGridArg = {
@@ -56,6 +62,7 @@ type FilterArg = {
   filters: Filters;
   filterScope: string[];
   setFilterScope: React.Dispatch<React.SetStateAction<string[]>>;
+  onClickFilter: (filter: string) => void;
   addFilter: (filter: string, include: boolean) => void;
   removeFilter: (filter: string) => void;
   removeAllFilter: () => void;
@@ -501,7 +508,7 @@ function HeaderLine({
           />
         </td>
         <td>
-          <RunIcon onRun={() => { }} />
+          <RunIcon onRun={() => {}} />
         </td>
         <td>
           <FormattedMessage
@@ -579,7 +586,8 @@ function matchFilter(
       testingScope(test).toLowerCase().includes(filterText) ||
       (test.index + 1).toString().includes(filterText);
     if (filter.option !== 'ignore') {
-      let currentFilter = filter.option == 'include' ? includesFilter : !includesFilter;
+      let currentFilter =
+        filter.option == 'include' ? includesFilter : !includesFilter;
       searchBarFilter = searchBarFilter && currentFilter;
     }
   }
@@ -658,9 +666,9 @@ function TestPath({
             isGui(test)
               ? { kind: 'OpenInTestEditor', value: test.filename }
               : {
-                kind: 'OpenInTextEditor',
-                value: { value: test.filename },
-              }
+                  kind: 'OpenInTextEditor',
+                  value: { value: test.filename },
+                }
           )
         );
       }}
@@ -942,37 +950,32 @@ function ScopeFilter({
 
 type FilterPinArg = {
   removeFilter: (filter: string) => void;
+  onClickFilter: (filter: string) => void;
   filter: Filter;
 };
 
 function FilterPin({
   removeFilter,
+  onClickFilter,
   filter,
 }: FilterPinArg): ReactElement {
   const intl = useIntl();
   // Both branches keep their descriptor inline so that the message ids stay
   // statically extractable
-  const tooltip = (filter.option == 'include')
-    ? intl.formatMessage(
-      {
-        id: 'generalTests.filterPin.inclusion',
-        defaultMessage: 'Je veux que "{filter}" apparaisse dans le test',
-      },
-      { filter: filter.filter }
-    )
-    : intl.formatMessage(
-      {
-        id: 'generalTests.filterPin.exclusion',
-        defaultMessage:
-          'Je ne veux pas que "{filter}" apparaisse dans le test',
-      },
-      { filter: filter.filter }
-    );
   return (
     <div
-      style={{ display: 'flex', alignItems: 'center', backgroundColor: pinBackground(filter.option) }}
-      title={tooltip}
-      className='filter-pin'
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        cursor: 'pointer',
+        ...pinBackground(filter.option),
+      }}
+      title={titlePin(intl, filter)}
+      className="filter-pin"
+      onClick={(e) => {
+        e.preventDefault();
+        onClickFilter(filter.filter);
+      }}
     >
       <span>{filter.filter}</span>
       <span
@@ -989,9 +992,11 @@ function FilterPin({
 
 function FilterPins({
   removeFilter,
+  onClickFilter,
   filters,
 }: {
   removeFilter: (filter: string) => void;
+  onClickFilter: (filter: string) => void;
   filters: Filters;
 }): ReactElement | null {
   return filters.length == 0 ? null : (
@@ -1002,6 +1007,7 @@ function FilterPins({
         {Array.from(filters).map((filter, index) => (
           <FilterPin
             key={index}
+            onClickFilter={onClickFilter}
             removeFilter={removeFilter}
             filter={filter}
           />
@@ -1016,6 +1022,7 @@ function FilterPanel({
   filters,
   filterScope,
   setFilterScope,
+  onClickFilter,
   addFilter,
   removeFilter,
   removeAllFilter,
@@ -1099,7 +1106,11 @@ function FilterPanel({
             setFilterScope={setFilterScope}
           />
           <div style={{ marginLeft: 'auto' }}>
-            <FilterPins removeFilter={removeFilter} filters={filters} />
+            <FilterPins
+              removeFilter={removeFilter}
+              onClickFilter={onClickFilter}
+              filters={filters}
+            />
             <VscodeTextfield
               className="search-bar"
               value={searchBar}
@@ -1223,7 +1234,22 @@ export default function GeneralTests({
     setFilter((oldFilter) =>
       oldFilter.some((term) => term.filter == filter)
         ? oldFilter
-        : [...oldFilter, { filter: filter, option: include ? 'include' : 'exclude' }]
+        : [
+            ...oldFilter,
+            { filter: filter, option: include ? 'include' : 'exclude' },
+          ]
+    );
+  };
+
+  const onClickFilter = (filter: string): void => {
+    setFilter((oldFilter) =>
+      oldFilter.map((f) => {
+        if (f.filter == filter) {
+          return switchFilter(f);
+        } else {
+          return f;
+        }
+      })
     );
   };
 
@@ -1396,6 +1422,7 @@ export default function GeneralTests({
           addFilter={addFilter}
           removeFilter={removeFilter}
           removeAllFilter={removeAllFilter}
+          onClickFilter={onClickFilter}
           setFilterScope={setFilterScope}
           filterScope={filterScope}
           filterGui={filterGui}
@@ -1445,13 +1472,13 @@ export default function GeneralTests({
             title={intl.formatMessage(
               reload
                 ? {
-                  id: 'generalTests.tooltip.reloading',
-                  defaultMessage: 'Rechargement en cours…',
-                }
+                    id: 'generalTests.tooltip.reloading',
+                    defaultMessage: 'Rechargement en cours…',
+                  }
                 : {
-                  id: 'generalTests.tooltip.reload',
-                  defaultMessage: 'Recharger la liste des tests',
-                }
+                    id: 'generalTests.tooltip.reload',
+                    defaultMessage: 'Recharger la liste des tests',
+                  }
             )}
           >
             <span

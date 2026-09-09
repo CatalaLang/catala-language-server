@@ -162,6 +162,7 @@
   "generalTests.tooltip.openTextEditor": "Otwórz edytor tekstu",
   "generalTests.filterPin.inclusion": "Chcę, aby „{filter}” występowało",
   "generalTests.filterPin.exclusion": "Nie chcę, aby „{filter}” występowało",
+  "generalTests.filterPin.ignore": "Ignoruj filtr „{filter}”",
   "generalTests.filterBar.inclusion": "Uwzględnij {filter} w filtrze",
   "generalTests.filterBar.exclusion": "Wyklucz {filter} z filtra",
   "generalTests.tooltip.stateSuccess": "Test zaliczony",

@@ -1,3 +1,5 @@
+import type { IntlShape } from "react-intl";
+
 // For exhaustiveness checks
 export function assertUnreachable(x: never): never {
   throw new Error(`Unexpected value: ${x}`);
@@ -39,13 +41,60 @@ export function splitOnTerms(text: string, terms: Filter[]): TextChunk[] {
 /* Kept out of [pinStyle] so the colour can follow a per-pin boolean. */
 export const pinBackground = (
   highlighted: 'include' | 'ignore' | 'exclude'
-): string => {
+): React.CSSProperties => {
   switch (highlighted) {
     case 'include':
-      return 'var(--vscode-notebookStatusSuccessIcon-foreground)';
-    case 'ignore':
-      return 'var(--vscode-errorForeground)';
+      return {
+        backgroundColor: 'var(--vscode-notebookStatusSuccessIcon-foreground)',
+      };
     case 'exclude':
-      return 'var(--vscode-errorForeground)';
+      return { backgroundColor: 'var(--vscode-errorForeground)' };
+    case 'ignore':
+      return {
+        backgroundColor: 'var(--vscode-button-background)',
+        opacity: '0.5',
+      };
   }
 };
+
+export const switchFilter = (filter: Filter): Filter => {
+  switch (filter.option) {
+    case 'include':
+      return { filter: filter.filter, option: 'exclude' };
+    case 'ignore':
+      return { filter: filter.filter, option: 'include' };
+    case 'exclude':
+      return { filter: filter.filter, option: 'ignore' };
+  }
+};
+
+export function titlePin(intl: IntlShape, filter: Filter): string {
+  switch (filter.option) {
+    case 'include':
+      return intl.formatMessage(
+        {
+          id: 'generalTests.filterPin.inclusion',
+          defaultMessage: 'Je veux que "{filter}" apparaisse',
+        },
+        { filter: filter.filter }
+      );
+    case 'exclude':
+      return intl.formatMessage(
+        {
+          id: 'generalTests.filterPin.exclusion',
+          defaultMessage:
+            'Je ne veux pas que "{filter}" apparaisse',
+        },
+        { filter: filter.filter }
+      );
+    case 'ignore':
+      return intl.formatMessage(
+        {
+          id: 'generalTests.filterPin.ignore',
+          defaultMessage:
+            'Ignorer le filtre "{filter}"',
+        },
+        { filter: filter.filter }
+      );
+  }
+}

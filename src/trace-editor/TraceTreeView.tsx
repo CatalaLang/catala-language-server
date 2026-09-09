@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import type { JsonValue } from '../shared/util_client';
-import type { Filter} from '../shared/util';
+import type { Filter } from '../shared/util';
 import { splitOnTerms } from '../shared/util';
 import { getVsCodeApi } from '../shared/webviewApi';
 import type { TraceDownMessage, TraceUpMessage } from './messages';
@@ -398,7 +398,7 @@ function filterMatches(
   el: TraceElement,
   filters: Filter[],
   intl: IntlShape
-): Filter[] {
+): [Filter[], boolean] {
   const { label, detail } = describe(el.element, intl);
   const value =
     el.value !== undefined ? formatTraceValue(el.value, intl) : undefined;
@@ -412,16 +412,19 @@ function filterMatches(
     .join(' ')
     .toLowerCase();
   let remaining_filters = [];
+  let exclusion = false;
   for (let filter of filters) {
-    if (text.includes(filter.filter) && (filter.option == 'include')) {
+    if (text.includes(filter.filter) && filter.option == 'include') {
       continue;
-    } else if (!text.includes(filter.filter) && (filter.option == 'exclude')) {
+    } else if (filter.option == 'ignore') {
       continue;
+    } else if (text.includes(filter.filter) && filter.option == 'exclude') {
+      exclusion = true;
     } else {
       remaining_filters.push(filter);
     }
   }
-  return remaining_filters;
+  return [remaining_filters, exclusion];
 }
 
 function subtreeMatches(
@@ -429,12 +432,15 @@ function subtreeMatches(
   filters: Filter[],
   intl: IntlShape
 ): boolean {
-  let remaining_filters = filterMatches(el, filters, intl);
-  let rem_length = remaining_filters.length;
-  if (rem_length == 0) {
+  let [remaining_filters, forbidden] = filterMatches(el, filters, intl);
+  if (forbidden) {
+    return false;
+  }
+  let without_exclude = remaining_filters.filter((f) => f.option != 'exclude');
+  const children = Array.isArray(el.trace) ? el.trace : [];
+  if (without_exclude.length == 0 && children.length == 0) {
     return true;
   }
-  const children = Array.isArray(el.trace) ? el.trace : [];
   return children.some((c) => subtreeMatches(c, remaining_filters, intl));
 }
 
@@ -546,7 +552,12 @@ export default function TraceTreeView({
   // Normalised once here: the matching is case insensitive, and a blank term
   // would match everything, so it is dropped rather than kept as a no-op.
   const f = (filters ?? [])
-    .map((filter) => { return { filter: filter.filter.trim().toLowerCase(), option: filter.option }; })
+    .map((filter) => {
+      return {
+        filter: filter.filter.trim().toLowerCase(),
+        option: filter.option,
+      };
+    })
     .filter((filter) => filter.filter.length > 0);
   const anyVisible =
     f.length > 0 ? roots.some((el) => subtreeMatches(el, f, intl)) : true;
@@ -622,8 +633,10 @@ function TraceNode({
   // `filters` is a fresh array on every render, so it cannot be used as an
   // effect dependency: the effect below would re-run each time and keep
   // resetting the manual expand/collapse state. This joined key compares by
-  // value instead. The separator is a character no filter can contain.
-  const filterKey = filters.join('\n');
+  // value instead. The option is part of the key so that flipping a pin
+  // between include and exclude re-runs the effect. The separator is a
+  // character no filter can contain.
+  const filterKey = filters.map((f) => `${f.option}:${f.filter}`).join('\n');
   const expected = useContext(ExpectedContext);
   const stepIndices = useContext(IndexContext);
   const intl = useIntl();
@@ -642,10 +655,10 @@ function TraceNode({
 
   const [node, displayName, isMerged]: [TraceElement, string, boolean] =
     te.element.kind === 'scope_var' &&
-      typeof te.element.name === 'string' &&
-      te.trace?.length === 1 &&
-      te.trace[0].element.kind === 'scope_call' &&
-      typeof te.trace[0].element.name === 'string'
+    typeof te.element.name === 'string' &&
+    te.trace?.length === 1 &&
+    te.trace[0].element.kind === 'scope_call' &&
+    typeof te.trace[0].element.name === 'string'
       ? [te.trace[0], `${te.element.name}.${te.trace[0].element.name}`, true]
       : [te, te.element.name as string, false];
 
@@ -653,9 +666,9 @@ function TraceNode({
   const hasChildren = children.length > 0;
   const containerValue =
     te.element.kind !== 'if_branching' &&
-      te.element.kind !== 'scope_call' &&
-      te.value !== undefined &&
-      formatTraceValue(te.value, intl) === undefined
+    te.element.kind !== 'scope_call' &&
+    te.value !== undefined &&
+    formatTraceValue(te.value, intl) === undefined
       ? formatTraceValue(te.value, intl, 'en', true)
       : undefined;
   const expandable =
@@ -677,7 +690,9 @@ function TraceNode({
         : depth < 1;
   const [expanded, setExpanded] = useState(defaultExpanded);
   useEffect(() => {
-    setExpanded(filtering ? true : defaultExpanded);
+    setExpanded(
+      filters.some((f) => f.option == 'include') ? true : defaultExpanded
+    );
   }, [filterKey, defaultExpanded, filtering]);
 
   const expandCmd = useContext(ExpandContext);
@@ -717,7 +732,7 @@ function TraceNode({
   if (filtering && !subtreeMatches(node, filters, intl)) {
     return null;
   }
-  const childFilters = filtering ? filterMatches(node, filters, intl) : [];
+  const [childFilters] = filtering ? filterMatches(node, filters, intl) : [[]];
   let matchBackground: string | undefined;
   if (
     expected &&
@@ -737,14 +752,14 @@ function TraceNode({
 
   const described: Described = isMerged
     ? {
-      symbol: '→',
-      label: intl.formatMessage(
-        { id: 'trace.computationOf' },
-        { name: `${detail(te.element.name)} (${detail(node.element.name)})` }
-      ),
-      tone: 'scope',
-      showsValue: true,
-    }
+        symbol: '→',
+        label: intl.formatMessage(
+          { id: 'trace.computationOf' },
+          { name: `${detail(te.element.name)} (${detail(node.element.name)})` }
+        ),
+        tone: 'scope',
+        showsValue: true,
+      }
     : describe(node.element, intl);
   const accentColor =
     node.element.kind === 'assertion'
