@@ -146,7 +146,6 @@ export function runTestScope(
   // artifacts do not evict the plain ones from the main build dir.
   const clerkTraceArgs = traceFile
     ? [
-        '--quiet',
         '--trace',
         traceFile,
         '--build-dir',

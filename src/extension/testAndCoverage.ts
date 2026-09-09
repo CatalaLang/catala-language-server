@@ -19,7 +19,6 @@ import type {
   VariableFailure,
 } from '../generated/catala_types';
 import path from 'path';
-import { logger } from './logger';
 
 type ClerkLocation = {
   file: string;
@@ -218,7 +217,6 @@ async function clerkRunTest(
         const results = JSON.parse(
           output.toString()
         ) as ClerkTestAndCoverageResult;
-        logger.log(`Hausse du json: ${JSON.stringify(results)}`);
         if (results?.['test-results']) {
           resolve({ results, code: code ?? 0, err_msg: stderr });
         } else {
@@ -611,7 +609,7 @@ function makeRunHandler(
       resultController.refresh(clerk_test_result);
       const { results, code, err_msg } = clerk_test_result;
       if (code != 0 && err_msg != '')
-        console.error(`Clerk exit code: ${code}, Output:\n{err_msg}`);
+        console.error(`Clerk exit code: ${code}, Output:\n${err_msg}`);
       let test_gui_threads: Array<Promise<void>> = [];
       results['test-results'].forEach(({ file, tests }) => {
         tests.scopes.forEach((scope_test_result) => {

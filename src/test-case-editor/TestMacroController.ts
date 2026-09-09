@@ -72,7 +72,7 @@ export class TestMacroController {
             success:
               res.success && res.expected !== undefined
                 ? res.expected.length == 0
-                : true,
+                : false,
             date: res.date,
           };
           this.tests.push(testEntrypoint);
