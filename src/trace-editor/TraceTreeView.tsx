@@ -577,7 +577,7 @@ export function TracePanel({
 
   useEffect(() => {
     if (filterRequest) {
-      setFilter(filterRequest.filter);
+      saveFilter(filterRequest.filter);
     }
   }, [filterRequest]);
 
