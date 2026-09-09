@@ -581,10 +581,6 @@
   margin-left: var(--spacing8);
   vertical-align: middle;
 }
-.fate-carried {
-  background: var(--success);
-  opacity: 0.55;
-}
 .fate-attention {
   background: var(--vscode-inputValidation-warningBorder, #cca700);
 }
@@ -630,17 +626,11 @@
 .vscode-dark .carry-done {
   color: var(--success);
 }
-.vscode-dark .carry-open {
-  color: var(--stormgray500);
-}
 .vscode-light .broken-pane-authored {
   opacity: 0.9;
 }
 .vscode-light .carry-done {
   color: var(--success);
-}
-.vscode-light .carry-open {
-  color: var(--stormgray800);
 }
 
 /* The authored pane as an archived record. A muted hatched band down the

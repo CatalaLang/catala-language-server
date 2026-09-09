@@ -144,9 +144,12 @@ describe('BrokenTestView', () => {
   });
 
   it('marks a field that could not be carried, with the reason', () => {
-    renderView(view());
-    // Localized names, not raw catala type syntax.
-    expect(screen.getByText(/date → EndDate/)).toBeTruthy();
+    const container = renderView(view());
+    const dot = container.querySelector('.broken-pane-rebuilt .fate-attention');
+    expect(dot).toBeTruthy();
+    // Localized names, not raw catala type syntax -- in the tooltip.
+    expect(dot!.getAttribute('title')).toMatch(/date → EndDate/);
+    expect(screen.queryByText(/date → EndDate/)).toBeNull();
   });
 
   it('renders the authored pane with the ordinary editors, inert', () => {
@@ -159,11 +162,12 @@ describe('BrokenTestView', () => {
     expect(pane.querySelectorAll('button:not(.tab)').length).toBe(0);
   });
 
-  it('annotates the authored pane with each field\u2019s fate', () => {
+  it('keeps the authored pane quiet except for what promotion deletes', () => {
     const container = renderView(view());
-    // start_date carried, end_date did not: one quiet dot, one warning dot.
-    expect(container.querySelectorAll('.fate-carried').length).toBe(1);
-    expect(container.querySelectorAll('.fate-attention').length).toBe(1);
+    const pane = container.querySelector('.broken-pane-authored')!;
+    // Carried and even not-carried fields say nothing on the left: the right
+    // pane owns those signals. Only Dropped has no other place to be said.
+    expect(pane.querySelectorAll('.fate-mark').length).toBe(0);
   });
 
   it('names the new target when the rebuild points elsewhere', () => {
@@ -258,8 +262,8 @@ describe('BrokenTestView', () => {
     expect(screen.queryByText(/now optional/)).toBeNull();
   });
 
-  it('says nothing about a field the test simply never set', () => {
-    renderView(
+  it('a field the old test never set gets the quiet dot, no sentence', () => {
+    const container = renderView(
       view({
         outcomes: [
           {
@@ -270,9 +274,10 @@ describe('BrokenTestView', () => {
         ],
       })
     );
-    expect(
-      screen.queryByText(/kept|now required|needs a new value/)
-    ).toBeNull();
+    const dot = container.querySelector('.broken-pane-rebuilt .fate-attention');
+    expect(dot).toBeTruthy();
+    expect(dot!.getAttribute('title')).toMatch(/fill it in/);
+    expect(screen.queryByText(/fill it in/)).toBeNull();
   });
 
   it('says what it could not do, in the reader\u2019s language', () => {
@@ -389,11 +394,13 @@ describe('BrokenTestView', () => {
     ];
     const container = renderView(v);
     // The explanation survives, exactly once, and on the outputs side.
-    const marks = container.querySelectorAll('.carry-mark');
+    const marks = container.querySelectorAll(
+      '.test-output-row .fate-attention'
+    );
     expect(marks.length).toBe(1);
-    expect(marks[0].textContent).toMatch(/money → decimal/);
+    expect(marks[0].getAttribute('title')).toMatch(/money → decimal/);
     expect(
-      container.querySelector('.test-output-row .carry-mark')
+      container.querySelector('.test-output-row .fate-attention')
     ).not.toBeNull();
   });
 
@@ -448,8 +455,10 @@ describe('BrokenTestView', () => {
         },
       },
     ];
-    renderView(v);
-    expect(screen.getByText(/integer → money/)).toBeTruthy();
+    const container = renderView(v);
+    const dots = container.querySelectorAll('.fate-attention');
+    const titles = [...dots].map((d) => d.getAttribute('title') ?? '');
+    expect(titles.some((t) => /integer → money/.test(t))).toBe(true);
   });
 
   it('lets the divider be moved from the keyboard', () => {

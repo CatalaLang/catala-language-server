@@ -64,12 +64,14 @@ function CarryMark({
   outcome: CarryOutcome;
 }): React.JSX.Element | null {
   const intl = useIntl();
-  if (outcome.kind === 'WasUnset') return null;
   if (outcome.kind === 'Fits') return null;
   if (outcome.kind === 'Dropped') return null;
   const carried = outcome.kind === 'Wrap' || outcome.kind === 'Unwrap';
   let id: string;
   switch (outcome.kind) {
+    case 'WasUnset':
+      id = 'broken.markWasUnset';
+      break;
     case 'Wrap':
       id = 'broken.markWrapped';
       break;
@@ -90,8 +92,8 @@ function CarryMark({
           intl
         )}`
       : '';
+  const title = intl.formatMessage({ id }, { change });
   if (carried) {
-    const title = intl.formatMessage({ id });
     return (
       <span
         className="carry-mark carry-done"
@@ -104,41 +106,32 @@ function CarryMark({
     );
   }
   return (
-    <span className="carry-mark carry-open">
-      <FormattedMessage id={id} values={{ change }} />
-    </span>
+    <span
+      className="fate-mark fate-attention"
+      role="img"
+      aria-label={title}
+      title={title}
+    />
   );
 }
 
-/** What became of this line: a dot, the sentence in its tooltip. */
+/** Only the fact the left pane alone can state: deleted on promotion. */
 function FateMark({
   outcome,
 }: {
   outcome: CarryOutcome | undefined;
 }): React.JSX.Element | null {
   const intl = useIntl();
-  if (outcome === undefined || outcome.kind === 'WasUnset') return null;
-  const fate =
-    outcome.kind === 'Dropped'
-      ? 'dropped'
-      : outcome.kind === 'TypeChanged' ||
-          outcome.kind === 'WasAbsentNowRequired'
-        ? 'attention'
-        : 'carried';
-  const title = intl.formatMessage({
-    id: {
-      dropped: 'broken.fateDropped',
-      attention: 'broken.fateAttention',
-      carried: 'broken.fateCarried',
-    }[fate],
-  });
-  // Spelled out, not assembled: PurgeCSS reads these statically.
-  const cls = {
-    dropped: 'fate-mark fate-dropped',
-    attention: 'fate-mark fate-attention',
-    carried: 'fate-mark fate-carried',
-  }[fate];
-  return <span className={cls} role="img" aria-label={title} title={title} />;
+  if (outcome?.kind !== 'Dropped') return null;
+  const title = intl.formatMessage({ id: 'broken.fateDropped' });
+  return (
+    <span
+      className="fate-mark fate-dropped"
+      role="img"
+      aria-label={title}
+      title={title}
+    />
+  );
 }
 
 const fateFrom =
