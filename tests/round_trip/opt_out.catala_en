@@ -1,0 +1,12 @@
+> Module Opt_out
+
+```catala-metadata
+declaration scope Give:
+  input want content boolean
+  output level content optional of integer
+```
+
+```catala
+scope Give:
+  definition level equals if want then Present content 4 else Absent
+```

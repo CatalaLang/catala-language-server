@@ -1115,8 +1115,11 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
             }}
             onValueChange={handlePayloadChange}
             editorHook={editorHook}
-            // Do NOT add EnumPayload here: server diff paths are transparent over enums
-            currentPath={currentPath}
+            // Server diff paths name the payload; each node's path is its own.
+            currentPath={[
+              ...currentPath,
+              { kind: 'EnumPayload', value: currentCtor },
+            ]}
             diffs={props.diffs}
             editable={editable}
             onDiffResolved={props.onDiffResolved}
