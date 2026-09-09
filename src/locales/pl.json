@@ -185,6 +185,7 @@
   "trace.noMatches": "Żaden wpis śladu nie pasuje do filtra.",
   "trace.value": "wartość",
   "trace.consequence": "Konsekwencja",
+  "trace.code": "kod",
   "trace.relatedLocations": "Powiązane lokalizacje:",
   "trace.fulfilled": "spełniony",
   "trace.notFulfilled": "niespełniony",

@@ -185,6 +185,7 @@
   "trace.noMatches": "Aucune entrée de trace ne correspond au filtre.",
   "trace.value": "valeur",
   "trace.consequence": "Conséquence",
+  "trace.code": "code",
   "trace.relatedLocations": "Emplacements associés :",
   "trace.fulfilled": "rempli",
   "trace.notFulfilled": "non rempli",

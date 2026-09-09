@@ -9,12 +9,14 @@ import {
 } from 'react';
 import type { JsonValue } from '../shared/util_client';
 import { getVsCodeApi } from '../shared/webviewApi';
-import type { TraceDownMessage, TraceUpMessage } from './messages';
+import type { TraceUpMessage } from './messages';
+import { CwdContext, LocationSnippet, resolvePath } from './LocationSnippet';
 import type { CodeLocation, TraceElement, TraceKind } from './traceUtils';
 import {
   type TraceValue,
   type TraceTest,
   formatTraceValue,
+  posText,
   traceValueEqual,
   traceValueFromRuntime,
   traceVariablesForTest,
@@ -39,19 +41,12 @@ type Described = {
   detail?: string;
   tone: Tone;
   showsValue: boolean;
+  showsCode: boolean;
 };
 
 const ExpectedContext = createContext<Expected | null>(null);
 const IndexContext = createContext<Map<TraceElement, number>>(new Map());
-const CwdContext = createContext<string>('');
 const ExpandContext = createContext<boolean | null>(null);
-
-function resolvePath(cwd: string, file: string): string {
-  if (!cwd || file.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(file)) {
-    return file;
-  }
-  return `${cwd.replace(/[\\/]+$/, '')}/${file}`;
-}
 
 function detail(x: JsonValue): string {
   return typeof x === 'string' ? x : '';
@@ -67,6 +62,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.name),
         tone: 'scope',
         showsValue: true,
+        showsCode: true,
       };
     case 'scope_var': {
       const label =
@@ -81,6 +77,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.name),
         tone: 'plain',
         showsValue: true,
+        showsCode: kind.input !== 'only_input',
       };
     }
     case 'local_var':
@@ -90,6 +87,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.name),
         tone: 'plain',
         showsValue: true,
+        showsCode: true,
       };
     case 'local_tup':
       return {
@@ -100,6 +98,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
           : undefined,
         tone: 'plain',
         showsValue: true,
+        showsCode: true,
       };
     case 'function_call':
       return {
@@ -108,6 +107,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.name),
         tone: 'scope',
         showsValue: true,
+        showsCode: true,
       };
     case 'branch_condition':
       return {
@@ -115,6 +115,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         label: t('trace.kind.condition'),
         tone: 'branch',
         showsValue: true,
+        showsCode: true,
       };
     case 'if_branching':
       return {
@@ -122,6 +123,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         label: t('trace.kind.branchTaken'),
         tone: 'branch',
         showsValue: false,
+        showsCode: true,
       };
     case 'match_branching':
       return {
@@ -130,6 +132,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: detail(kind.constructor as unknown as JsonValue),
         tone: 'branch',
         showsValue: false,
+        showsCode: true,
       };
     case 'assertion':
       return {
@@ -137,6 +140,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         label: t('trace.kind.assertion'),
         tone: 'plain',
         showsValue: false,
+        showsCode: true,
       };
     case 'exception':
       return {
@@ -145,6 +149,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         detail: kind.label !== undefined ? detail(kind.label) : undefined,
         tone: 'plain',
         showsValue: false,
+        showsCode: true,
       };
     case 'error':
       return {
@@ -155,6 +160,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
           .join(': '),
         tone: 'error',
         showsValue: false,
+        showsCode: true,
       };
     default:
       return {
@@ -162,6 +168,7 @@ function describe(kind: TraceKind, intl: IntlShape): Described {
         label: kind.kind,
         tone: 'plain',
         showsValue: false,
+        showsCode: true,
       };
   }
 }
@@ -186,12 +193,6 @@ function relatedLocations(kind: TraceKind): CodeLocation[] {
 
 function isSingleLine(pos?: CodeLocation): pos is CodeLocation {
   return !!pos && pos.start.line === pos.end.line;
-}
-
-function posText(pos?: CodeLocation): string {
-  if (!pos) return '';
-  const line = pos.start.line;
-  return `${pos.file}:${line}`;
 }
 
 function formatPos(
@@ -237,115 +238,26 @@ function PosLink({
   );
 }
 
-const extractCache = new Map<string, string | null>();
-const pendingExtracts = new Map<number, (line: string | null) => void>();
-let extractSeq = 0;
-let extractListenerAttached = false;
-
-function ensureExtractListener(): void {
-  if (extractListenerAttached) {
-    return;
-  }
-  extractListenerAttached = true;
-  window.addEventListener('message', (event: MessageEvent): void => {
-    const m = event.data as TraceDownMessage;
-    if (m?.kind === 'extract') {
-      const callback = pendingExtracts.get(m.id);
-      if (callback) {
-        pendingExtracts.delete(m.id);
-        callback(m.text);
-      }
-    }
-  });
-}
-
-async function fetchExtract(
-  file: string,
-  line: number
-): Promise<string | null> {
-  const key = `${file}:${line}`;
-  const cached = extractCache.get(key);
-  if (cached !== undefined) {
-    return Promise.resolve(cached);
-  }
-  ensureExtractListener();
-  const id = extractSeq++;
-  return new Promise<string | null>((resolve) => {
-    pendingExtracts.set(id, resolve);
-    const message: TraceUpMessage = {
-      kind: 'requestExtract',
-      id,
-      file,
-      line,
-    };
-    getVsCodeApi().postMessage(message);
-  }).then((result) => {
-    extractCache.set(key, result);
-    return result;
-  });
-}
-
-function SourceLine({
-  pos,
-  text,
+function Pill({
+  labelId,
+  active,
+  onToggle,
 }: {
-  pos: CodeLocation;
-  text: string;
+  labelId: string;
+  active: boolean;
+  onToggle: () => void;
 }): ReactElement {
-  const cwd = useContext(CwdContext);
-  const intl = useIntl();
-  const a = Math.max(0, pos.start.character - 1);
-  const b = Math.max(a, pos.end.character - 1);
-  const before = text.slice(0, a);
-  const mid = text.slice(a, b);
-  const after = text.slice(b);
-  const onClick = (): void => {
-    const message: TraceUpMessage = {
-      kind: 'openLocation',
-      file: resolvePath(cwd, pos.file),
-      start: pos.start,
-      end: pos.end,
-    };
-    getVsCodeApi().postMessage(message);
-  };
   return (
-    <pre
-      style={sourceStyle}
-      onClick={onClick}
-      title={intl.formatMessage(
-        { id: 'trace.openLocation' },
-        { target: posText(pos) }
-      )}
+    <span
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      style={active ? { ...pillStyle, ...pillActiveStyle } : pillStyle}
     >
-      {before}
-      <mark style={markStyle}>{mid || ' '}</mark>
-      {after}
-    </pre>
+      <FormattedMessage id={labelId} />
+    </span>
   );
-}
-
-function LocationExtract({ pos }: { pos: CodeLocation }): ReactElement | null {
-  const cwd = useContext(CwdContext);
-  if (pos.start.line !== pos.end.line) {
-    return null;
-  }
-  const line = pos.start.line;
-  const [source, setSource] = useState<{ text: string | null; line: number }>({
-    text: null,
-    line,
-  });
-  useEffect(() => {
-    let cancelled = false;
-    void fetchExtract(resolvePath(cwd, pos.file), line).then((text) => {
-      if (!cancelled) {
-        setSource({ line, text });
-      }
-    });
-    return (): void => {
-      cancelled = true;
-    };
-  }, [cwd, pos]);
-  return source.text ? <SourceLine pos={pos} text={source.text} /> : null;
 }
 
 function asCodeLocation(v: JsonValue | undefined): CodeLocation | undefined {
@@ -563,6 +475,8 @@ function TraceNode({
   prefix: string;
   tested_scope?: string;
 }): ReactElement | null {
+  const [showValue, setShowValue] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   if (te.element.kind === 'exception' && depth === 1) return null;
 
   const filtering = filter.length > 0;
@@ -600,11 +514,6 @@ function TraceNode({
     formatTraceValue(te.value, intl) === undefined
       ? formatTraceValue(te.value, intl, 'en', true)
       : undefined;
-  const expandable =
-    hasChildren ||
-    !!singleLinePos ||
-    !!consSingleLine ||
-    containerValue !== undefined;
   const onlyContainerValue =
     containerValue !== undefined &&
     !hasChildren &&
@@ -688,8 +597,10 @@ function TraceNode({
         ),
         tone: 'scope',
         showsValue: true,
+        showsCode: true,
       }
     : describe(node.element, intl);
+  const snippetPos = described.showsCode ? te.pos : undefined;
   const accentColor =
     node.element.kind === 'assertion'
       ? !node.trace
@@ -698,7 +609,7 @@ function TraceNode({
       : toneColor(described.tone);
   const related =
     node.element.kind === 'error' ? relatedLocations(node.element) : [];
-
+  const expandable = hasChildren || !!consPos || related.length > 0;
   return (
     <li style={liStyle}>
       <div
@@ -727,17 +638,38 @@ function TraceNode({
           <span style={detailStyle}>{described.detail}</span>
         )}
         <ValueView te={te} described={described} />
+        {(containerValue !== undefined || snippetPos) && (
+          <span style={pillsStyle}>
+            {containerValue !== undefined && (
+              <Pill
+                labelId="trace.value"
+                active={showValue}
+                onToggle={() => setShowValue((v) => !v)}
+              />
+            )}
+            {snippetPos && (
+              <Pill
+                labelId="trace.code"
+                active={showCode}
+                onToggle={() => setShowCode((v) => !v)}
+              />
+            )}
+          </span>
+        )}
       </div>
+      {showValue && containerValue !== undefined && (
+        <div style={openContentStyle}>
+          <pre style={containerValueStyle}>{containerValue}</pre>
+        </div>
+      )}
+      {showCode && snippetPos && (
+        <div style={openContentStyle}>
+          <LocationSnippet pos={snippetPos} />
+        </div>
+      )}
       {open && (
         <div style={openContentStyle}>
-          {containerValue !== undefined &&
-            (onlyContainerValue ? (
-              <pre style={containerValueStyle}>{containerValue}</pre>
-            ) : (
-              <ContainerValue value={containerValue} />
-            ))}
-          {singleLinePos && <LocationExtract pos={singleLinePos} />}
-          {consSingleLine && (
+          {consPos && (
             <>
               <div
                 style={{ ...consequenceLabelStyle, color: toneColor('branch') }}
@@ -745,7 +677,7 @@ function TraceNode({
                 {'⊸ '}
                 <FormattedMessage id="trace.consequence" />
               </div>
-              <LocationExtract pos={consSingleLine} />
+              <LocationSnippet pos={consPos} />
             </>
           )}
           {related.length > 0 && (
@@ -775,22 +707,6 @@ function TraceNode({
         </div>
       )}
     </li>
-  );
-}
-
-function ContainerValue({ value }: { value: string }): ReactElement {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <div style={containerValueLabelStyle} onClick={() => setOpen((o) => !o)}>
-        <span
-          className={`codicon codicon-chevron-${open ? 'down' : 'right'}`}
-          style={chevronStyle}
-        />
-        <FormattedMessage id="trace.value" />
-      </div>
-      {open && <pre style={containerValueStyle}>{value}</pre>}
-    </div>
   );
 }
 
@@ -872,13 +788,25 @@ const openContentStyle: CSSProperties = {
   paddingLeft: 16,
 };
 
-const containerValueLabelStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
+const pillsStyle: CSSProperties = {
+  display: 'inline-flex',
+  gap: 4,
+  marginLeft: 16,
+};
+
+const pillStyle: CSSProperties = {
   cursor: 'pointer',
+  userSelect: 'none',
+  fontSize: '0.8em',
+  padding: '0 6px',
+  borderRadius: 8,
+  border: '1px solid currentColor',
   color: 'var(--vscode-descriptionForeground)',
-  fontStyle: 'italic',
+};
+
+const pillActiveStyle: CSSProperties = {
+  background: 'var(--vscode-badge-background)',
+  color: 'var(--vscode-badge-foreground)',
 };
 
 const containerValueStyle: CSSProperties = {
@@ -916,25 +844,6 @@ const valueStyle: CSSProperties = {
   color: 'var(--vscode-debugTokenExpression-value, var(--vscode-foreground))',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
-};
-
-const sourceStyle: CSSProperties = {
-  margin: '2px 0 4px 22px',
-  padding: '2px 6px',
-  background:
-    'var(--vscode-textCodeBlock-background, var(--vscode-editor-background))',
-  border: '1px solid var(--vscode-panel-border, transparent)',
-  borderRadius: 2,
-  overflowX: 'auto',
-  whiteSpace: 'pre',
-  cursor: 'pointer',
-  fontFamily: 'var(--vscode-editor-font-family, monospace)',
-};
-
-const markStyle: CSSProperties = {
-  background: 'var(--vscode-editor-findMatchHighlightBackground, yellow)',
-  color: 'inherit',
-  borderRadius: 2,
 };
 
 const relatedStyle: CSSProperties = {

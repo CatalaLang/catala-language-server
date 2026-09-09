@@ -518,6 +518,12 @@ export function fieldValue(e: Event): string {
   return (e.target as { value?: string } | null)?.value ?? '';
 }
 
+/** A location as `file:line`, the way both the tree and a snippet name one. */
+export function posText(pos?: CodeLocation): string {
+  if (!pos) return '';
+  return `${pos.file}:${pos.start.line}`;
+}
+
 export function variableSegment(v: TraceVariable): string {
   return v.kind === 'step' && v.index !== undefined
     ? `${v.name}[${v.index}]`
