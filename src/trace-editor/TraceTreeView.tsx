@@ -716,6 +716,11 @@ function closestFilterMatch(
 
 // -- Components ---------------------------------------------------------------
 
+function asPin(filter: string | undefined): Filter[] {
+  const trimmed = filter?.trim() ?? '';
+  return trimmed === '' ? [] : [{ filter: trimmed, option: 'include' }];
+}
+
 export function TracePanel({
   trace,
   cwd,
@@ -738,8 +743,10 @@ export function TracePanel({
   const intl = useIntl();
   const [view, setView] = useState<OutputView>('tree');
   const [expand, setExpand] = useState<ExpandCommand | null>(null);
-  const [filter, setFilter] = useState(initialFilter ?? '');
-  const [savedFilters, setSavedFilters] = useState<Filter[]>([]);
+  const [filter, setFilter] = useState('');
+  const [savedFilters, setSavedFilters] = useState<Filter[]>(() =>
+    asPin(initialFilter)
+  );
   const [derived, setDerived] = useState<{ id: number; filter: string }[]>([]);
   const nextDerivedId = useRef(1);
 
