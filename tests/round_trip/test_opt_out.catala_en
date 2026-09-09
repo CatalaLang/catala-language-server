@@ -1,0 +1,16 @@
+> Using Opt_out
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "opt"]
+declaration scope Give_test:
+  output g scope Opt_out.Give
+```
+
+```catala
+scope Give_test:
+  definition g.want equals true
+  assertion (g.level = Present content 5)
+```

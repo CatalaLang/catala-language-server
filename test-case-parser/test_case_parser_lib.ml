@@ -1286,7 +1286,11 @@ let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program) :
           scope_lets)
     [] code_items
 
-type path = SField of StructField.t | ListIdx of int | TupIdx of int
+type path =
+  | SField of StructField.t
+  | ListIdx of int
+  | TupIdx of int
+  | EnumPayload of string
 
 type diff = {
   path : path list;
@@ -1300,6 +1304,7 @@ let pp_diff fmt { path; expected; actual } =
     | SField sf -> fprintf fmt "<%a>" StructField.format sf
     | ListIdx i -> fprintf fmt "[%d]" i
     | TupIdx i -> fprintf fmt "(%d)" i
+    | EnumPayload c -> fprintf fmt "{%s}" c
   in
   fprintf fmt "@[<v 2>Diff on %a:@ expected: %a@ actual: %a@]"
     (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "→") pp_path)
@@ -1365,7 +1370,10 @@ let rec compute_diff
   | ETupleAccess _, ETupleAccess _ -> assert false
   | ( EInj { e = e1; name = _name1; cons = cons1 },
       EInj { e = e2; name = _name2; cons = cons2 } ) ->
-    if EnumConstructor.equal cons1 cons2 then compute_diff curr_rev_path e1 e2
+    if EnumConstructor.equal cons1 cons2 then
+      compute_diff
+        (EnumPayload (EnumConstructor.to_string cons1) :: curr_rev_path)
+        e1 e2
     else [mk_diff expected_result actual_result]
   | EPos p1, EPos p2 ->
     if Pos.compare p1 p2 = 0 then []
@@ -1401,6 +1409,7 @@ let proj_diff get_value ({ path; expected; actual } : diff) : O.diff =
     | SField sf -> `StructField (StructField.to_string sf)
     | ListIdx i -> `ListIndex i
     | TupIdx i -> `TupleIndex i
+    | EnumPayload c -> `EnumPayload c
   in
   let expected = get_value expected in
   let actual = get_value actual in
