@@ -618,7 +618,7 @@ const thStyle: CSSProperties = {
 const tdStyle: CSSProperties = {
   textAlign: 'left',
   padding: '1px 8px 1px 0',
-  verticalAlign: 'top',
+  verticalAlign: 'middle',
 };
 
 const ROW_INSET = 8;
@@ -685,7 +685,7 @@ const crumbSeparatorStyle: CSSProperties = {
 };
 
 const nameCellStyle: CSSProperties = {
-  display: 'inline-flex',
+  display: 'flex',
   alignItems: 'center',
   gap: 4,
 };
