@@ -39,15 +39,36 @@ function makeUnset(originalRuntimeValue?: RuntimeValue): RuntimeValue {
   return createRuntimeValue({ kind: 'Unset' }, originalRuntimeValue);
 }
 
+function optionEnumDeclaration(payloadType: Typ): EnumDeclaration {
+  const constructors = new Map<string, Option<Typ>>();
+  constructors.set('Absent', null);
+  constructors.set('Present', { value: payloadType });
+  return { enum_name: 'Optional', constructors, ctor_attrs: new Map() };
+}
+
 export function getDefaultValue(
   typ: Typ,
   originalRuntimeValue?: RuntimeValue
 ): RuntimeValue {
-  // Arrays are the only type with a "sane default": empty list.
+  // Arrays and options have a "sane default": empty list, Absent.
   // All other types start as explicit Unset placeholders.
-  return typ.kind === 'TArray'
-    ? createRuntimeValue({ kind: 'Array', value: [] }, originalRuntimeValue)
-    : makeUnset(originalRuntimeValue);
+  switch (typ.kind) {
+    case 'TArray':
+      return createRuntimeValue(
+        { kind: 'Array', value: [] },
+        originalRuntimeValue
+      );
+    case 'TOption':
+      return createRuntimeValue(
+        {
+          kind: 'Enum',
+          value: [optionEnumDeclaration(typ.value), ['Absent', null]],
+        },
+        originalRuntimeValue
+      );
+    default:
+      return makeUnset(originalRuntimeValue);
+  }
 }
 
 type ValidationState = 'valid' | 'unset' | 'invalid';
@@ -222,17 +243,9 @@ export default function ValueEditor(props: Props): ReactElement {
       );
       break;
     case 'TOption': {
-      const constructors = new Map<string, Option<Typ>>();
-      constructors.set('Absent', null);
-      constructors.set('Present', { value: typ.value });
-      const option_decl: EnumDeclaration = {
-        enum_name: 'Optional',
-        constructors,
-        ctor_attrs: new Map(),
-      };
       editor = (
         <EnumEditor
-          enumDeclaration={option_decl}
+          enumDeclaration={optionEnumDeclaration(typ.value)}
           valueDef={valueDef}
           onValueChange={handleValueChange}
           editorHook={editorHook}
