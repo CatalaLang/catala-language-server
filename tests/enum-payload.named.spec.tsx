@@ -10,8 +10,8 @@ function seg(kind: PathSegment['kind'], value: any): PathSegment {
   return { kind, value } as any;
 }
 
-describe('Enum payload highlight without EnumPayload segment in diff path', () => {
-  it('highlights payload field diffs even if UI recurses into Enum', () => {
+describe('Enum payload highlight with the EnumPayload segment in the diff path', () => {
+  it('highlights payload field diffs through the named payload', () => {
     const payloadFields = new Map<string, Typ>([['ratio', tRat()]]);
     const payloadTyp = tStruct('X.Payload', payloadFields);
     const enumTyp = tEnum(
@@ -58,6 +58,7 @@ describe('Enum payload highlight without EnumPayload segment in diff path', () =
         path: [
           seg('StructField', outputName),
           seg('StructField', 'enum_field'),
+          seg('EnumPayload', 'VariantA'),
           seg('StructField', 'ratio'),
         ],
         expected: { value: { kind: 'Decimal', value: 0.26 }, attrs: [] },
