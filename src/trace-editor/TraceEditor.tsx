@@ -37,6 +37,9 @@ type Props = {
 
 type ScopeWithInfo = [string, TraceTest | undefined];
 
+const PANE_LAYOUTS = ['data', 'both', 'trace'] as const;
+type PaneLayout = (typeof PANE_LAYOUTS)[number];
+
 const BOTTOM_MARGIN = 12;
 
 export default function TraceEditor({ vscode }: Props): ReactElement {
@@ -49,6 +52,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
   const [scopePreset, setScopePreset] = useState(false);
   const [runState, setRunState] = useState<RunState>({ status: 'idle' });
   const [initialized, setInitialized] = useState(false);
+  const [layout, setLayout] = useState<PaneLayout>('both');
   const [filterRequest, setFilterRequest] = useState<FilterCommand | null>(
     null
   );
@@ -172,6 +176,9 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         <VscodeButton icon="play" disabled={running} onClick={onRunScope}>
           <FormattedMessage id={running ? 'trace.running' : 'trace.run'} />
         </VscodeButton>
+        {scope[1] !== undefined && (
+          <LayoutSlider layout={layout} onLayout={setLayout} />
+        )}
       </div>
 
       {!scopePreset && scopes.size > 1 && (
@@ -214,6 +221,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
       >
         {scope[1] !== undefined ? (
           <SplitPane
+            layout={layout}
             left={
               <DataPanel
                 setFilter={requestFilter}
@@ -242,6 +250,53 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         )}
       </div>
     </div>
+  );
+}
+
+function LayoutSlider({
+  layout,
+  onLayout,
+}: {
+  layout: PaneLayout;
+  onLayout: (layout: PaneLayout) => void;
+}): ReactElement {
+  const intl = useIntl();
+  const [dragging, setDragging] = useState<number>();
+  const index = dragging ?? PANE_LAYOUTS.indexOf(layout);
+  const commit = (): void => {
+    if (dragging !== undefined) {
+      onLayout(PANE_LAYOUTS[dragging]);
+      setDragging(undefined);
+    }
+  };
+  return (
+    <span style={layoutSliderStyle}>
+      <span className="trace-layout-label">
+        <FormattedMessage id="trace.layout.data" />
+      </span>
+      <input
+        type="range"
+        className="trace-layout-range"
+        min={0}
+        max={PANE_LAYOUTS.length - 1}
+        step={1}
+        value={index}
+        list="trace-layout-stops"
+        aria-label={intl.formatMessage({ id: 'trace.layout.label' })}
+        onChange={(e) => setDragging(Number(e.target.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+      />
+      <datalist id="trace-layout-stops">
+        {PANE_LAYOUTS.map((_, i) => (
+          <option key={i} value={i} />
+        ))}
+      </datalist>
+      <span className="trace-layout-label">
+        <FormattedMessage id="trace.layout.trace" />
+      </span>
+    </span>
   );
 }
 
@@ -293,9 +348,11 @@ function post(vscode: WebviewApi<unknown>, message: TraceUpMessage): void {
 function SplitPane({
   left,
   right,
+  layout,
 }: {
   left: ReactElement;
   right: ReactElement;
+  layout: PaneLayout;
 }): ReactElement {
   const intl = useIntl();
   const [leftWidth, setLeftWidth] = useState<number | null>(null);
@@ -330,6 +387,14 @@ function SplitPane({
       window.removeEventListener('mouseup', onUp);
     };
   }, []);
+
+  if (layout !== 'both') {
+    return (
+      <div style={{ width: '100%', minWidth: 0 }}>
+        {layout === 'data' ? left : right}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -368,6 +433,13 @@ const titleRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 16,
+};
+
+const layoutSliderStyle: React.CSSProperties = {
+  marginLeft: 'auto',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
 };
 
 const fieldStyle: React.CSSProperties = {
