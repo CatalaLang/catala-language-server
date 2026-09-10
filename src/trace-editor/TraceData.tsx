@@ -299,8 +299,12 @@ export function DataPanel({
 
   const hasTraceVars = trVariables.length > 0;
   const matched = new Set<string>();
+  const auxiliary = trVariables.filter(
+    (variable) =>
+      variable.kind === 'step' || trOutputs[variable.name] === undefined
+  );
   let internalNodes = nodesFromTrace(
-    trVariables,
+    auxiliary,
     '',
     test.variables,
     matched,
