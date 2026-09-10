@@ -566,7 +566,7 @@ function NodeRow({
           </span>
         </span>
       </td>
-      {noExpected ? (
+      {noExpected || node.expected === undefined ? (
         <td style={disabledCellStyle}>—</td>
       ) : (
         <td
@@ -576,7 +576,7 @@ function NodeRow({
             setFilter(node.expected ?? '');
           }}
         >
-          {node.expected ?? ''}
+          {node.expected}
         </td>
       )}
       <td
@@ -713,5 +713,4 @@ const disabledCellStyle: CSSProperties = {
   ...tdStyle,
   color: 'var(--vscode-descriptionForeground)',
   opacity: 0.5,
-  textAlign: 'center',
 };
