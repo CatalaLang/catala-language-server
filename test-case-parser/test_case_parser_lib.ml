@@ -224,16 +224,24 @@ let get_lang_strings =
   | `Pl -> pl_strings
   | _ -> unsupported "unsupported language"
 
-let mk_optional_enum_decl lang typ =
+(* The option enum uses the compiler's language-neutral constructor names, the
+   same ones [get_value] produces when reading a file; the per-language strings
+   are only used when printing Catala text. *)
+let mk_optional_enum_decl typ =
   {
     O.enum_name = EnumName.to_string ConstantNames.option_enum;
     constructors =
       [
-        (get_lang_strings lang).absent, None;
-        (get_lang_strings lang).present, Some typ;
+        EnumConstructor.to_string ConstantNames.none_constr, None;
+        EnumConstructor.to_string ConstantNames.some_constr, Some typ;
       ];
     ctor_attrs = [];
   }
+
+let mk_absent typ =
+  O.Enum
+    ( mk_optional_enum_decl typ,
+      (EnumConstructor.to_string ConstantNames.none_constr, None) )
 
 let get_typ_literal = function
   | TBool -> O.TBool
@@ -310,7 +318,7 @@ and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
       in
       x |> Option.get
     in
-    mk_optional_enum_decl lang typ
+    mk_optional_enum_decl typ
   else
     let module_name =
       if EnumName.path enum_name = [] then None
@@ -540,18 +548,11 @@ let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
 
 (** Default placeholder for uninitialized inputs: empty array for TArray, Absent
     for TOption, explicit Unset for everything else. *)
-let unset_default_value lang (typ : O.typ) : O.value_def =
+let unset_default_value (typ : O.typ) : O.value_def =
   let value =
     match typ with
     | TArray _ -> { O.value = O.Array [||]; attrs = [] }
-    | TOption typ ->
-      {
-        O.value =
-          O.Enum
-            ( mk_optional_enum_decl lang typ,
-              ((get_lang_strings lang).absent, None) );
-        attrs = [];
-      }
+    | TOption typ -> { O.value = mk_absent typ; attrs = [] }
     | _ -> { O.value = O.Unset; attrs = [] }
   in
   { O.value; pos = None }
@@ -593,7 +594,7 @@ let get_scope_test
       (fun (v, (si : O.scope_input)) ->
         let default =
           if si.is_context then context_var_default
-          else unset_default_value prg.program_lang si.typ
+          else unset_default_value si.typ
         in
         v, { O.typ = si.typ; value = Some default })
       tested_scope.inputs
@@ -658,9 +659,7 @@ let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
         cn, Option.map (generate_default_value lang) ty
       in
       O.Enum (decl, elt)
-    | TOption typ ->
-      Enum
-        (mk_optional_enum_decl lang typ, ((get_lang_strings lang).absent, None))
+    | TOption typ -> mk_absent typ
     | TArray _ -> O.Array [||]
     | TUnset -> O.Unset
     | TUnit -> raise (Unsupported "unit type")
@@ -673,7 +672,8 @@ let patch_paths
     ({ tested_scope; test_inputs; test_outputs; _ } as test : O.test) =
   let open O in
   let patch_name s =
-    if String.contains s '.' then s
+    if String.contains s '.' || s = EnumName.to_string ConstantNames.option_enum
+    then s
     else Format.sprintf "%s.%s" (ModuleName.to_string modl) s
   in
   let rec patch_enum_decl = function
@@ -899,7 +899,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
           | [] ->
             Some
               (if is_context then context_var_default
-               else unset_default_value prg.program_lang test_in.O.typ)
+               else unset_default_value test_in.O.typ)
           | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
             let value = get_value prg.program_lang prg.program_ctx e in
