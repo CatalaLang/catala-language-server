@@ -94,40 +94,49 @@ function sortTree(nodes: DataNode[]): DataNode[] {
   );
 }
 
+function isContainer(node: DataNode): boolean {
+  return node.kind === 'struct' || node.kind === 'array';
+}
+
 function nodesFromTrace(
   variables: TraceVariable[],
   prefix: string,
   expected: Map<string, TraceValue | null>,
   matched: Set<string>,
+  showContainers: boolean,
   intl: IntlShape
 ): DataNode[] {
   return leavesFirst(
-    variables.map((variable): DataNode => {
+    variables.flatMap((variable): DataNode[] => {
       const label = variableSegment(variable);
       const path = variablePath(prefix, variable);
       if (expected.has(path)) {
         matched.add(path);
       }
       if (variable.kind === 'step') {
-        return {
-          label,
-          path,
-          children: nodesFromTrace(
-            variable.variables,
+        return [
+          {
+            label,
             path,
-            expected,
-            matched,
-            intl
-          ),
-        };
+            children: nodesFromTrace(
+              variable.variables,
+              path,
+              expected,
+              matched,
+              showContainers,
+              intl
+            ),
+          },
+        ];
       }
-      return buildNode(
+      const node = buildNode(
         label,
         path,
         expected.get(path) ?? undefined,
         variable.value,
         intl
       );
+      return showContainers || !isContainer(node) ? [node] : [];
     })
   );
 }
@@ -279,11 +288,13 @@ export function DataPanel({
   trace,
   intl,
   setFilter,
+  showContainers = false,
 }: {
   test: TraceTest;
   setFilter: SetFilter;
   trace?: TraceElement[];
   intl: IntlShape;
+  showContainers?: boolean;
 }): ReactElement {
   const [trVariables, trOutputs] = traceVariablesForTest(
     trace ?? [],
@@ -307,16 +318,21 @@ export function DataPanel({
     '',
     test.variables,
     matched,
+    showContainers,
     intl
   );
   for (const [name, expected] of test.variables) {
     if (matched.has(name)) {
       continue;
     }
-    internalNodes = insertAt(internalNodes, pathSegments(name), '', {
+    const leaf = {
       ...buildNode(name, name, expected ?? undefined, undefined, intl),
       missing: hasTraceVars,
-    });
+    };
+    if (!showContainers && isContainer(leaf)) {
+      continue;
+    }
+    internalNodes = insertAt(internalNodes, pathSegments(name), '', leaf);
   }
   internalNodes = sortTree(internalNodes);
 
