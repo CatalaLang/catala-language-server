@@ -27,12 +27,8 @@ import {
 } from '../shared/util';
 import { getVsCodeApi } from '../shared/webviewApi';
 import type { TraceUpMessage } from './messages';
-import {
-  CwdContext,
-  LocationSnippet,
-  SnippetActionsContext,
-  resolvePath,
-} from './LocationSnippet';
+import { CwdContext, LocationSnippet, resolvePath } from './LocationSnippet';
+import { isSelectingText, useTraceMenu } from './traceMenu';
 import type { CodeLocation, TraceElement, TraceKind } from './traceUtils';
 import {
   type TraceValue,
@@ -566,9 +562,11 @@ export function TracePanel({
     );
   }, []);
 
-  const snippetActions = useMemo(
-    () => ({ spawnPanel, addFilter: saveFilter }),
-    [spawnPanel, saveFilter]
+  const menuProps = useTraceMenu(
+    useMemo(
+      () => ({ spawnPanel, addFilter: saveFilter }),
+      [spawnPanel, saveFilter]
+    )
   );
 
   const onClickFilter = (clicked: string): void => {
@@ -588,7 +586,7 @@ export function TracePanel({
   }, [filterRequest]);
 
   return (
-    <div>
+    <div {...menuProps}>
       <div style={panelHeaderStyle}>
         <span style={{ fontWeight: 600 }}>
           {label ?? <FormattedMessage id="trace.label" />}
@@ -670,16 +668,14 @@ export function TracePanel({
             removeFilter={removeFilter}
             onClickFilter={onClickFilter}
           />
-          <SnippetActionsContext.Provider value={snippetActions}>
-            <TraceTreeView
-              trace={trace}
-              filters={savedFilters}
-              cwd={cwd}
-              expand={expand}
-              test={test}
-              fromClosestMatch={fromClosestMatch}
-            />
-          </SnippetActionsContext.Provider>
+          <TraceTreeView
+            trace={trace}
+            filters={savedFilters}
+            cwd={cwd}
+            expand={expand}
+            test={test}
+            fromClosestMatch={fromClosestMatch}
+          />
         </>
       ) : (
         <>
@@ -1019,7 +1015,9 @@ function TraceNode({
           cursor: expandable ? 'pointer' : 'default',
           background: matchBackground,
         }}
-        onClick={() => expandable && setExpanded((e) => !e)}
+        onClick={() =>
+          expandable && !isSelectingText() && setExpanded((e) => !e)
+        }
       >
         {expandable ? (
           <span

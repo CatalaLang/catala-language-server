@@ -201,11 +201,11 @@
       "webview/context": [
         {
           "command": "catala.trace.viewWithFilter",
-          "when": "webviewSection == 'traceSnippetSelection'"
+          "when": "webviewSection == 'tracePanelSelection'"
         },
         {
           "command": "catala.trace.addToFilter",
-          "when": "webviewSection == 'traceSnippetSelection'"
+          "when": "webviewSection == 'tracePanelSelection'"
         }
       ]
     },

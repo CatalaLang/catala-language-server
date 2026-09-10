@@ -7,7 +7,6 @@ import {
   useContext,
   useEffect,
   useState,
-  useSyncExternalStore,
 } from 'react';
 import { useIntl } from 'react-intl';
 import { getVsCodeApi } from '../shared/webviewApi';
@@ -16,90 +15,11 @@ import type { CodeLocation } from './traceUtils';
 import { posText } from './traceUtils';
 
 export const CwdContext = createContext<string>('');
-export type SnippetActions = {
-  spawnPanel: (filter: string) => void;
-  addFilter: (filter: string) => void;
-};
-
-export const SnippetActionsContext = createContext<SnippetActions | null>(null);
-
 export function resolvePath(cwd: string, file: string): string {
   if (!cwd || file.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(file)) {
     return file;
   }
   return `${cwd.replace(/[\\/]+$/, '')}/${file}`;
-}
-
-// -- The "View with filter" menu item -----------------------------------------
-
-const snippetContextAttribute = JSON.stringify({
-  webviewSection: 'traceSnippet',
-  preventDefaultContextMenuItems: false,
-});
-const snippetSelectionContextAttribute = JSON.stringify({
-  webviewSection: 'traceSnippetSelection',
-  preventDefaultContextMenuItems: false,
-});
-
-let hasSelection = false;
-const selectionListeners = new Set<() => void>();
-
-function onSelectionChange(): void {
-  const selected = (window.getSelection()?.toString() ?? '').trim() !== '';
-  if (selected === hasSelection) {
-    return;
-  }
-  hasSelection = selected;
-  for (const listener of selectionListeners) {
-    listener();
-  }
-}
-
-function subscribeToSelection(onStoreChange: () => void): () => void {
-  if (selectionListeners.size === 0) {
-    document.addEventListener('selectionchange', onSelectionChange);
-  }
-  selectionListeners.add(onStoreChange);
-  return (): void => {
-    selectionListeners.delete(onStoreChange);
-    if (selectionListeners.size === 0) {
-      document.removeEventListener('selectionchange', onSelectionChange);
-    }
-  };
-}
-
-function useHasSelection(): boolean {
-  return useSyncExternalStore(
-    subscribeToSelection,
-    () => hasSelection,
-    () => false
-  );
-}
-
-let menuTarget: SnippetActions | null = null;
-let menuListenerAttached = false;
-
-function armSnippetMenu(actions: SnippetActions): void {
-  menuTarget = actions;
-  if (menuListenerAttached) {
-    return;
-  }
-  menuListenerAttached = true;
-  window.addEventListener('message', (event: MessageEvent): void => {
-    const m = event.data as TraceDownMessage;
-    if (m?.kind !== 'viewWithFilter' && m?.kind !== 'addToFilter') {
-      return;
-    }
-    const text = window.getSelection()?.toString().trim() ?? '';
-    if (text === '' || menuTarget === null) {
-      return;
-    }
-    if (m.kind === 'viewWithFilter') {
-      menuTarget.spawnPanel(text);
-    } else {
-      menuTarget.addFilter(text);
-    }
-  });
 }
 
 // -- Fetching the source lines ------------------------------------------------
@@ -162,8 +82,6 @@ function SnippetBlock({
   children: ReactNode;
 }): ReactElement {
   const cwd = useContext(CwdContext);
-  const actions = useContext(SnippetActionsContext);
-  const selected = useHasSelection();
   const intl = useIntl();
   const [hover, setHover] = useState(false);
   const openLocation = (e: MouseEvent): void => {
@@ -180,26 +98,8 @@ function SnippetBlock({
     { id: 'trace.openLocation' },
     { target: posText(pos) }
   );
-  // VS Code builds the menu itself, so that its own copy / cut / paste items
-  // stay: all this does is name the section our items are contributed to, and
-  // note which snippet the click landed on for when one of them is picked.
-  const onContextMenu = (): void => {
-    if (actions !== null) {
-      armSnippetMenu(actions);
-    }
-  };
   return (
-    <div
-      style={snippetStyle}
-      onContextMenu={onContextMenu}
-      data-vscode-context={
-        actions === null
-          ? undefined
-          : selected
-            ? snippetSelectionContextAttribute
-            : snippetContextAttribute
-      }
-    >
+    <div style={snippetStyle}>
       <pre style={sourceStyle}>{children}</pre>
       <button
         type="button"
