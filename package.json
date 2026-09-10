@@ -125,6 +125,10 @@
       {
         "command": "catala.trace.viewWithFilter",
         "title": "%command.catala.trace.viewWithFilter.title%"
+      },
+      {
+        "command": "catala.trace.addToFilter",
+        "title": "%command.catala.trace.addToFilter.title%"
       }
     ],
     "menus": {
@@ -139,6 +143,10 @@
         },
         {
           "command": "catala.trace.viewWithFilter",
+          "when": "false"
+        },
+        {
+          "command": "catala.trace.addToFilter",
           "when": "false"
         }
       ],
@@ -193,7 +201,11 @@
       "webview/context": [
         {
           "command": "catala.trace.viewWithFilter",
-          "when": "webviewSection == 'traceSnippet'"
+          "when": "webviewSection == 'traceSnippetSelection'"
+        },
+        {
+          "command": "catala.trace.addToFilter",
+          "when": "webviewSection == 'traceSnippetSelection'"
         }
       ]
     },

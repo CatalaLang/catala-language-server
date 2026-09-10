@@ -778,7 +778,10 @@ export async function activate(
 
   context.subscriptions.push(
     vscode.commands.registerCommand('catala.trace.viewWithFilter', () =>
-      TraceEditorProvider.viewWithFilter()
+      TraceEditorProvider.snippetMenuItem('viewWithFilter')
+    ),
+    vscode.commands.registerCommand('catala.trace.addToFilter', () =>
+      TraceEditorProvider.snippetMenuItem('addToFilter')
     )
   );
 

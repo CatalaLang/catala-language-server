@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -29,7 +30,7 @@ import type { TraceUpMessage } from './messages';
 import {
   CwdContext,
   LocationSnippet,
-  SpawnPanelContext,
+  SnippetActionsContext,
   resolvePath,
 } from './LocationSnippet';
 import type { CodeLocation, TraceElement, TraceKind } from './traceUtils';
@@ -553,7 +554,7 @@ export function TracePanel({
     setDerived((old) => [...old, { id, filter: spawnFilter }]);
   }, []);
 
-  const saveFilter = (newFilter: string): void => {
+  const saveFilter = useCallback((newFilter: string): void => {
     const trimmed = newFilter.trim();
     if (trimmed === '') {
       return;
@@ -563,7 +564,12 @@ export function TracePanel({
         ? old
         : [...old, { filter: trimmed, option: 'include' }]
     );
-  };
+  }, []);
+
+  const snippetActions = useMemo(
+    () => ({ spawnPanel, addFilter: saveFilter }),
+    [spawnPanel, saveFilter]
+  );
 
   const onClickFilter = (clicked: string): void => {
     setSavedFilters((old) =>
@@ -664,7 +670,7 @@ export function TracePanel({
             removeFilter={removeFilter}
             onClickFilter={onClickFilter}
           />
-          <SpawnPanelContext.Provider value={spawnPanel}>
+          <SnippetActionsContext.Provider value={snippetActions}>
             <TraceTreeView
               trace={trace}
               filters={savedFilters}
@@ -673,7 +679,7 @@ export function TracePanel({
               test={test}
               fromClosestMatch={fromClosestMatch}
             />
-          </SpawnPanelContext.Provider>
+          </SnippetActionsContext.Provider>
         </>
       ) : (
         <>

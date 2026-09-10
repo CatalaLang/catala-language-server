@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import { useIntl } from 'react-intl';
 import { getVsCodeApi } from '../shared/webviewApi';
@@ -15,9 +16,12 @@ import type { CodeLocation } from './traceUtils';
 import { posText } from './traceUtils';
 
 export const CwdContext = createContext<string>('');
-export const SpawnPanelContext = createContext<
-  ((filter: string) => void) | null
->(null);
+export type SnippetActions = {
+  spawnPanel: (filter: string) => void;
+  addFilter: (filter: string) => void;
+};
+
+export const SnippetActionsContext = createContext<SnippetActions | null>(null);
 
 export function resolvePath(cwd: string, file: string): string {
   if (!cwd || file.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(file)) {
@@ -32,24 +36,68 @@ const snippetContextAttribute = JSON.stringify({
   webviewSection: 'traceSnippet',
   preventDefaultContextMenuItems: false,
 });
+const snippetSelectionContextAttribute = JSON.stringify({
+  webviewSection: 'traceSnippetSelection',
+  preventDefaultContextMenuItems: false,
+});
 
-let viewWithFilterTarget: ((filter: string) => void) | null = null;
-let viewWithFilterListenerAttached = false;
+let hasSelection = false;
+const selectionListeners = new Set<() => void>();
 
-function armViewWithFilter(spawn: (filter: string) => void): void {
-  viewWithFilterTarget = spawn;
-  if (viewWithFilterListenerAttached) {
+function onSelectionChange(): void {
+  const selected = (window.getSelection()?.toString() ?? '').trim() !== '';
+  if (selected === hasSelection) {
     return;
   }
-  viewWithFilterListenerAttached = true;
+  hasSelection = selected;
+  for (const listener of selectionListeners) {
+    listener();
+  }
+}
+
+function subscribeToSelection(onStoreChange: () => void): () => void {
+  if (selectionListeners.size === 0) {
+    document.addEventListener('selectionchange', onSelectionChange);
+  }
+  selectionListeners.add(onStoreChange);
+  return (): void => {
+    selectionListeners.delete(onStoreChange);
+    if (selectionListeners.size === 0) {
+      document.removeEventListener('selectionchange', onSelectionChange);
+    }
+  };
+}
+
+function useHasSelection(): boolean {
+  return useSyncExternalStore(
+    subscribeToSelection,
+    () => hasSelection,
+    () => false
+  );
+}
+
+let menuTarget: SnippetActions | null = null;
+let menuListenerAttached = false;
+
+function armSnippetMenu(actions: SnippetActions): void {
+  menuTarget = actions;
+  if (menuListenerAttached) {
+    return;
+  }
+  menuListenerAttached = true;
   window.addEventListener('message', (event: MessageEvent): void => {
     const m = event.data as TraceDownMessage;
-    if (m?.kind !== 'viewWithFilter') {
+    if (m?.kind !== 'viewWithFilter' && m?.kind !== 'addToFilter') {
       return;
     }
     const text = window.getSelection()?.toString().trim() ?? '';
-    if (text !== '' && viewWithFilterTarget !== null) {
-      viewWithFilterTarget(text);
+    if (text === '' || menuTarget === null) {
+      return;
+    }
+    if (m.kind === 'viewWithFilter') {
+      menuTarget.spawnPanel(text);
+    } else {
+      menuTarget.addFilter(text);
     }
   });
 }
@@ -114,7 +162,8 @@ function SnippetBlock({
   children: ReactNode;
 }): ReactElement {
   const cwd = useContext(CwdContext);
-  const spawnPanel = useContext(SpawnPanelContext);
+  const actions = useContext(SnippetActionsContext);
+  const selected = useHasSelection();
   const intl = useIntl();
   const [hover, setHover] = useState(false);
   const openLocation = (e: MouseEvent): void => {
@@ -131,9 +180,12 @@ function SnippetBlock({
     { id: 'trace.openLocation' },
     { target: posText(pos) }
   );
+  // VS Code builds the menu itself, so that its own copy / cut / paste items
+  // stay: all this does is name the section our items are contributed to, and
+  // note which snippet the click landed on for when one of them is picked.
   const onContextMenu = (): void => {
-    if (spawnPanel !== null) {
-      armViewWithFilter(spawnPanel);
+    if (actions !== null) {
+      armSnippetMenu(actions);
     }
   };
   return (
@@ -141,7 +193,11 @@ function SnippetBlock({
       style={snippetStyle}
       onContextMenu={onContextMenu}
       data-vscode-context={
-        spawnPanel === null ? undefined : snippetContextAttribute
+        actions === null
+          ? undefined
+          : selected
+            ? snippetSelectionContextAttribute
+            : snippetContextAttribute
       }
     >
       <pre style={sourceStyle}>{children}</pre>

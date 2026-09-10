@@ -70,9 +70,9 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
 
   private static activePanel: vscode.WebviewPanel | undefined;
 
-  public static viewWithFilter(): void {
+  public static snippetMenuItem(kind: 'viewWithFilter' | 'addToFilter'): void {
     void TraceEditorProvider.activePanel?.webview.postMessage({
-      kind: 'viewWithFilter',
+      kind,
     } satisfies TraceDownMessage);
   }
 
