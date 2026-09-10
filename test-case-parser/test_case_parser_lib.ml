@@ -538,12 +538,20 @@ let get_scope_def (prg : I.program) (sc : I.scope) ~tested_module : O.scope_def
     module_deps = retrieve_scope_module_deps prg sc;
   }
 
-(** Default placeholder for uninitialized inputs: empty array for TArray,
-    explicit Unset for everything else. *)
-let unset_default_value (typ : O.typ) : O.value_def =
+(** Default placeholder for uninitialized inputs: empty array for TArray, Absent
+    for TOption, explicit Unset for everything else. *)
+let unset_default_value lang (typ : O.typ) : O.value_def =
   let value =
     match typ with
     | TArray _ -> { O.value = O.Array [||]; attrs = [] }
+    | TOption typ ->
+      {
+        O.value =
+          O.Enum
+            ( mk_optional_enum_decl lang typ,
+              ((get_lang_strings lang).absent, None) );
+        attrs = [];
+      }
     | _ -> { O.value = O.Unset; attrs = [] }
   in
   { O.value; pos = None }
@@ -585,7 +593,7 @@ let get_scope_test
       (fun (v, (si : O.scope_input)) ->
         let default =
           if si.is_context then context_var_default
-          else unset_default_value si.typ
+          else unset_default_value prg.program_lang si.typ
         in
         v, { O.typ = si.typ; value = Some default })
       tested_scope.inputs
@@ -891,7 +899,7 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
           | [] ->
             Some
               (if is_context then context_var_default
-               else unset_default_value test_in.O.typ)
+               else unset_default_value prg.program_lang test_in.O.typ)
           | [(_, rule)] ->
             let e = Expr.unbox_closed rule.rule_cons in
             let value = get_value prg.program_lang prg.program_ctx e in
