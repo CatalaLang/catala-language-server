@@ -1,8 +1,17 @@
 import { type ReactElement } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
-import type { TestIo, Diff, PathSegment } from '../generated/catala_types';
+import type {
+  EnumDeclaration,
+  TestIo,
+  Diff,
+  PathSegment,
+} from '../generated/catala_types';
 import ValueEditor from '../editors/ValueEditors';
 import { renderAtomicValue } from './testCaseUtils';
+import {
+  getOptionCtorLabel,
+  isOptionDeclaration,
+} from '../editors/typeNameUtils';
 import '../styles/assertions-editor.css';
 import { findMatchingDiff, isParentOfAnyDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
@@ -24,7 +33,8 @@ type Props = {
  */
 function createDiffHighlightHook(
   diffs: Diff[],
-  formatBool: (b: boolean) => string
+  formatBool: (b: boolean) => string,
+  formatCtor: (decl: EnumDeclaration, name: string) => string
 ) {
   return (editor: ReactElement, path: PathSegment[]): ReactElement => {
     // Check if current path matches any diff path (exact match)
@@ -59,7 +69,7 @@ function createDiffHighlightHook(
           {editor}
           <div className="diff-actual">
             <FormattedMessage id="diff.actual" />:{' '}
-            {renderAtomicValue(matchingDiff.actual, formatBool)}
+            {renderAtomicValue(matchingDiff.actual, formatBool, formatCtor)}
           </div>
         </div>
       );
@@ -84,13 +94,15 @@ export default function AssertionValueEditor({
   const intl = useIntl();
   const formatBool = (b: boolean): string =>
     intl.formatMessage({ id: b ? 'true' : 'false' });
+  const formatCtor = (decl: EnumDeclaration, name: string): string =>
+    isOptionDeclaration(decl) ? getOptionCtorLabel(name, intl) : name;
 
   // Array item phantom rendering is handled inside ArrayEditor based on diffs.
 
   // Create the diff highlight hook if we have diffs
   const editorHook =
     diffs.length > 0 && highlightDiffs
-      ? createDiffHighlightHook(diffs, formatBool)
+      ? createDiffHighlightHook(diffs, formatBool, formatCtor)
       : undefined;
 
   return (

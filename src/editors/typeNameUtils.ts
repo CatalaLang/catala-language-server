@@ -3,7 +3,7 @@
  */
 
 import type { IntlShape } from 'react-intl';
-import type { Typ } from '../generated/catala_types';
+import type { EnumDeclaration, Typ } from '../generated/catala_types';
 import { assertUnreachable } from '../shared/util';
 
 /**
@@ -88,5 +88,22 @@ export function getTypeDisplayName(typ: Typ, intl: IntlShape): string {
       return intl.formatMessage({ id: 'type.unset' });
     default:
       return assertUnreachable(typ);
+  }
+}
+
+export const OPTION_ENUM_NAME = 'Optional';
+
+export function isOptionDeclaration(decl: EnumDeclaration): boolean {
+  return decl.enum_name === OPTION_ENUM_NAME;
+}
+
+export function getOptionCtorLabel(name: string, intl: IntlShape): string {
+  switch (name) {
+    case 'Absent':
+      return intl.formatMessage({ id: 'option.absent' });
+    case 'Present':
+      return intl.formatMessage({ id: 'option.present' });
+    default:
+      return name;
   }
 }

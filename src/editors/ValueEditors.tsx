@@ -3,6 +3,11 @@
 import { type ReactElement, useState, useEffect } from 'react';
 import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
+import {
+  OPTION_ENUM_NAME,
+  getOptionCtorLabel,
+  isOptionDeclaration,
+} from './typeNameUtils';
 import type {
   Option,
   TestIo,
@@ -43,7 +48,7 @@ function optionEnumDeclaration(payloadType: Typ): EnumDeclaration {
   const constructors = new Map<string, Option<Typ>>();
   constructors.set('Absent', null);
   constructors.set('Present', { value: payloadType });
-  return { enum_name: 'Optional', constructors, ctor_attrs: new Map() };
+  return { enum_name: OPTION_ENUM_NAME, constructors, ctor_attrs: new Map() };
 }
 
 export function getDefaultValue(
@@ -1058,12 +1063,18 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
   // Note: do not early-return here; we render the expected editor and, when applicable,
   // an "actual preview" block alongside it further below.
+  const intl = useIntl();
+  const isOption = isOptionDeclaration(enumDeclaration);
   const ctorOptions = Array.from(enumDeclaration.constructors.keys()).map(
     (name) => {
       const labelAttr = enumDeclaration.ctor_attrs
         .get(name)
         ?.find((a) => a.kind === 'Description');
-      return { value: name, label: name, description: labelAttr?.value };
+      return {
+        value: name,
+        label: isOption ? getOptionCtorLabel(name, intl) : name,
+        description: labelAttr?.value,
+      };
     }
   );
 
