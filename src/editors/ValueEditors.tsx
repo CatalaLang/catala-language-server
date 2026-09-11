@@ -984,7 +984,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
       <div
         className={`struct-editor struct-container nest-${nestingDepth % 2}`}
       >
-        <CompositeEditor items={editorItems} />
+        <CompositeEditor items={editorItems} currentPath={currentPath} />
       </div>
     </NestingDepthIncrementer>
   );

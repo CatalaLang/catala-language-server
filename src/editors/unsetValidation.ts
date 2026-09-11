@@ -4,7 +4,12 @@
  * not treated as Unset — it is valid and does not block test runs.
  */
 
-import type { RuntimeValue, Test, Typ } from '../generated/catala_types';
+import type {
+  PathSegment,
+  RuntimeValue,
+  Test,
+  Typ,
+} from '../generated/catala_types';
 
 /** Recursively checks whether a RuntimeValue contains any Unset values. */
 function containsUnset(rv: RuntimeValue): boolean {
@@ -38,15 +43,70 @@ export function scrollToFirstInvalidOrUnset(
   delay: number = 0
 ): void {
   setTimeout(() => {
-    const el = container.querySelector(
-      '.value-editor.invalid, .value-editor.unset'
-    ) as HTMLElement | null;
+    const els = Array.from(
+      container.querySelectorAll('.value-editor.invalid, .value-editor.unset')
+    ) as HTMLElement[];
+    const el = els.find((e) => e.offsetParent !== null) ?? els[0];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       const focusable = el.querySelector('input, select') as HTMLElement | null;
       focusable?.focus?.();
     }
   }, delay);
+}
+
+function unsetPathIn(
+  rv: RuntimeValue,
+  prefix: PathSegment[]
+): PathSegment[] | undefined {
+  const raw = rv.value;
+  switch (raw.kind) {
+    case 'Unset':
+      return prefix;
+    case 'Array': {
+      for (const [i, item] of raw.value.entries()) {
+        const found = unsetPathIn(item, [
+          ...prefix,
+          { kind: 'ListIndex', value: i },
+        ]);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    case 'Struct': {
+      for (const [name, v] of raw.value[1]) {
+        const found = unsetPathIn(v, [
+          ...prefix,
+          { kind: 'StructField', value: name },
+        ]);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    case 'Enum': {
+      const [, [ctor, payload]] = raw.value;
+      return payload?.value
+        ? unsetPathIn(payload.value, [
+            ...prefix,
+            { kind: 'EnumPayload', value: ctor },
+          ])
+        : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+/** The path of the first value still to fill, inputs before outputs. */
+export function firstUnsetPath(test: Test): PathSegment[] | undefined {
+  for (const [name, io] of [...test.test_inputs, ...test.test_outputs]) {
+    if (io.value === undefined) continue;
+    const found = unsetPathIn(io.value.value, [
+      { kind: 'StructField', value: name },
+    ]);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /** An Unset weighed by its type: a blank record counts its declared

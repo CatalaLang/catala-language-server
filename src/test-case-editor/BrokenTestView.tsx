@@ -10,13 +10,17 @@ import type {
   TestRunResults,
   Test,
   TestList,
+  ScopeDef,
+  Typ,
 } from '../generated/catala_types';
 import { getTypeDisplayName } from '../editors/typeNameUtils';
 import {
   hasUnsetInTest,
   scrollToFirstInvalidOrUnset,
+  firstUnsetPath,
 } from '../editors/unsetValidation';
 import { confirm } from '../messaging/confirm';
+import { RevealContext, type Reveal } from '../editors/reveal';
 import { rebuiltOf } from './testCaseUtils';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
@@ -60,8 +64,11 @@ function marksFor(
 
 function CarryMark({
   outcome,
+  hint,
 }: {
   outcome: CarryOutcome;
+  /** Dropped inputs of the original whose names are fields of this one. */
+  hint?: string[];
 }): React.JSX.Element | null {
   const intl = useIntl();
   if (outcome.kind === 'Fits') return null;
@@ -92,7 +99,14 @@ function CarryMark({
           intl
         )}`
       : '';
-  const title = intl.formatMessage({ id }, { change });
+  const base = intl.formatMessage({ id }, { change });
+  const title =
+    hint === undefined || hint.length === 0
+      ? base
+      : `${base} — ${intl.formatMessage(
+          { id: 'broken.markHint' },
+          { names: hint.join(', ') }
+        )}`;
   if (carried) {
     return (
       <span
@@ -132,6 +146,33 @@ function FateMark({
       title={title}
     />
   );
+}
+
+function structFields(typ: Typ): Set<string> {
+  switch (typ.kind) {
+    case 'TStruct':
+      return new Set(typ.value.fields.keys());
+    case 'TOption':
+    case 'TArray':
+      return structFields(typ.value);
+    default:
+      return new Set();
+  }
+}
+
+/** For each input of [scope], the dropped names that reappear as one of
+ *  its fields: where the original's value most likely belongs now. */
+function destinationHints(
+  scope: ScopeDef,
+  dropped: string[]
+): Map<string, string[]> {
+  const hints = new Map<string, string[]>();
+  for (const [name, input] of scope.inputs) {
+    const fields = structFields(input.typ);
+    const found = dropped.filter((d) => fields.has(d));
+    if (found.length > 0) hints.set(name, found);
+  }
+  return hints;
 }
 
 const fateFrom =
@@ -367,15 +408,30 @@ function TestPanes({
   const scope = meta?.tested_scope;
   const rebuiltPaneRef = useRef<HTMLDivElement>(null);
   const markFrom =
-    (marks: Map<string, CarryOutcome>) =>
+    (marks: Map<string, CarryOutcome>, hints?: Map<string, string[]>) =>
     (name: string): React.JSX.Element | null => {
       const outcome = marks.get(name);
-      return outcome === undefined ? null : <CarryMark outcome={outcome} />;
+      return outcome === undefined ? null : (
+        <CarryMark outcome={outcome} hint={hints?.get(name)} />
+      );
     };
+  const hints =
+    rebuilt === undefined
+      ? undefined
+      : destinationHints(
+          rebuilt.tested_scope,
+          [...marksIn].filter(([, o]) => o.kind === 'Dropped').map(([n]) => n)
+        );
+  const [reveal, setReveal] = useState<Reveal | undefined>(undefined);
+  const jumpToFirstUnset = (): void => {
+    const path = rebuilt === undefined ? undefined : firstUnsetPath(rebuilt);
+    if (path) setReveal({ path, nonce: (reveal?.nonce ?? 0) + 1 });
+    scrollToFirstInvalidOrUnset(rebuiltPaneRef.current ?? document, 50);
+  };
   // An unset value fails the run with an interpreter error: ask first.
   const runWithUnsetCheck = async (): Promise<void> => {
     if (rebuilt !== undefined && hasUnsetInTest(rebuilt)) {
-      scrollToFirstInvalidOrUnset(rebuiltPaneRef.current ?? document);
+      jumpToFirstUnset();
       if (!(await confirm('RunTestWithUnsetValues'))) return;
     }
     onRun?.();
@@ -435,71 +491,66 @@ function TestPanes({
         </div>
         <SplitHandle split={split} onSplit={onSplit} />
         <div className="broken-pane broken-pane-rebuilt" ref={rebuiltPaneRef}>
-          {rebuilt === undefined ? (
-            <>
-              <p className="broken-empty">
-                <FormattedMessage id="broken.noSignature" />
-              </p>
-              {picker}
-            </>
-          ) : (
-            <>
-              {authored !== undefined &&
-                (rebuilt.tested_scope.name !== authored.tested_scope.name ||
-                  rebuilt.tested_scope.module_name !==
-                    authored.tested_scope.module_name) && (
-                  <div
-                    className="broken-retargeted"
-                    title={intl.formatMessage({ id: 'broken.retargeted' })}
-                  >
-                    <span className="codicon codicon-arrow-right"></span>{' '}
-                    <span className="broken-test-scope">
-                      {rebuilt.tested_scope.module_name}.
-                      {rebuilt.tested_scope.name}
-                    </span>
-                  </div>
+          <RevealContext.Provider value={reveal}>
+            {rebuilt === undefined ? (
+              <>
+                <p className="broken-empty">
+                  <FormattedMessage id="broken.noSignature" />
+                </p>
+                {picker}
+              </>
+            ) : (
+              <>
+                {authored !== undefined &&
+                  (rebuilt.tested_scope.name !== authored.tested_scope.name ||
+                    rebuilt.tested_scope.module_name !==
+                      authored.tested_scope.module_name) && (
+                    <div
+                      className="broken-retargeted"
+                      title={intl.formatMessage({ id: 'broken.retargeted' })}
+                    >
+                      <span className="codicon codicon-arrow-right"></span>{' '}
+                      <span className="broken-test-scope">
+                        {rebuilt.tested_scope.module_name}.
+                        {rebuilt.tested_scope.name}
+                      </span>
+                    </div>
+                  )}
+                <TestInputsEditor
+                  test_inputs={rebuilt.test_inputs}
+                  tested_scope={rebuilt.tested_scope}
+                  onTestInputsChange={(inputs): void =>
+                    onChange({ ...rebuilt, test_inputs: inputs })
+                  }
+                  labelExtra={markFrom(marksIn, hints)}
+                />
+                {rebuilt.tested_scope.outputs.size > 0 && (
+                  <>
+                    <h5 className="broken-subhead">
+                      <FormattedMessage id="broken.expected" />
+                    </h5>
+                    <TestOutputsEditor
+                      test={rebuilt}
+                      onTestChange={onChange}
+                      diffs={runDiffs}
+                      labelExtra={markFrom(marksOut)}
+                    />
+                  </>
                 )}
-              <TestInputsEditor
-                test_inputs={rebuilt.test_inputs}
-                tested_scope={rebuilt.tested_scope}
-                onTestInputsChange={(inputs): void =>
-                  onChange({ ...rebuilt, test_inputs: inputs })
-                }
-                labelExtra={markFrom(marksIn)}
-              />
-              {rebuilt.tested_scope.outputs.size > 0 && (
-                <>
-                  <h5 className="broken-subhead">
-                    <FormattedMessage id="broken.expected" />
-                  </h5>
-                  <TestOutputsEditor
-                    test={rebuilt}
-                    onTestChange={onChange}
-                    diffs={runDiffs}
-                    labelExtra={markFrom(marksOut)}
-                  />
-                </>
-              )}
-            </>
-          )}
-          {rebuilt !== undefined && onRun !== undefined && (
-            <div className="broken-run">
-              <RunControl
-                status={runState?.status}
-                results={runState?.results}
-                onRun={runWithUnsetCheck}
-                labelId="broken.runWorkingCopy"
-              />
-              <ReadinessChip
-                test={rebuilt}
-                onJump={(): void =>
-                  scrollToFirstInvalidOrUnset(
-                    rebuiltPaneRef.current ?? document
-                  )
-                }
-              />
-            </div>
-          )}
+              </>
+            )}
+            {rebuilt !== undefined && onRun !== undefined && (
+              <div className="broken-run">
+                <RunControl
+                  status={runState?.status}
+                  results={runState?.results}
+                  onRun={runWithUnsetCheck}
+                  labelId="broken.runWorkingCopy"
+                />
+                <ReadinessChip test={rebuilt} onJump={jumpToFirstUnset} />
+              </div>
+            )}
+          </RevealContext.Provider>
         </div>
       </div>
     </section>

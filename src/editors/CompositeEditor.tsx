@@ -1,6 +1,13 @@
-import { useState, type ReactElement, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { useIntl } from 'react-intl';
-import type { Typ } from '../generated/catala_types';
+import type { PathSegment, Typ } from '../generated/catala_types';
+import { pathStartsWith, useReveal } from './reveal';
 
 /**
  * Base for StructEditor and TestInputsEditor. Renders label/editor pairs with
@@ -20,6 +27,8 @@ export type EditorItem = {
 type CompositeEditorProps = {
   items: EditorItem[];
   atomicElements?: boolean;
+  /** Where these items live; lets a reveal request open the right tab. */
+  currentPath?: PathSegment[];
 };
 
 // True if the type needs full-width rendering (not suitable for compact wrap).
@@ -78,6 +87,25 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
   const [activeTab, setActiveTab] = useState(
     arrayItems.length > 0 ? arrayItems[0].key : ''
   );
+
+  const reveal = useReveal();
+  const revealed = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      reveal === undefined ||
+      reveal.nonce === revealed.current ||
+      props.currentPath === undefined ||
+      !pathStartsWith(reveal.path, props.currentPath)
+    )
+      return;
+    revealed.current = reveal.nonce;
+    const next = reveal.path[props.currentPath.length];
+    if (
+      next?.kind === 'StructField' &&
+      arrayItems.some((i) => i.key === next.value)
+    )
+      setActiveTab(next.value);
+  }, [reveal, props.currentPath, arrayItems]);
 
   return (
     <div className="composite-editor">

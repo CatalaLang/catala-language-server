@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { type ReactElement, useEffect, useRef } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
   type Test,
@@ -12,9 +12,11 @@ import TestOutputsEditor from './TestOutputsEditor';
 import { ReadinessChip } from './RunControl';
 import { type TestRunStatus } from './TestFileEditor';
 import { confirm } from '../messaging/confirm';
+import { RevealContext, type Reveal } from '../editors/reveal';
 import {
   hasUnsetInTest,
   scrollToFirstInvalidOrUnset,
+  firstUnsetPath,
 } from '../editors/unsetValidation';
 
 type Props = {
@@ -90,8 +92,11 @@ export default function TestEditor(props: Props): ReactElement {
     }
   }, [props.runState]);
 
+  const [reveal, setReveal] = useState<Reveal | undefined>(undefined);
   const scrollToFirstUnset = (): void => {
-    scrollToFirstInvalidOrUnset(unsetElementRef.current ?? document, 0);
+    const path = firstUnsetPath(props.test);
+    if (path) setReveal({ path, nonce: (reveal?.nonce ?? 0) + 1 });
+    scrollToFirstInvalidOrUnset(unsetElementRef.current ?? document, 50);
   };
 
   const runWithUnsetCheck = async (): Promise<void> => {
@@ -113,151 +118,153 @@ export default function TestEditor(props: Props): ReactElement {
   };
 
   return (
-    <div className="test-editor" ref={unsetElementRef}>
-      <div className="test-editor-breadcrumb body-b3">
-        {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
-      </div>
-      <div className="test-title-wrapper">
-        <input
-          type="text"
-          className="test-title-input heading-h2"
-          value={props.test.title}
-          onChange={(e) => onTitleChange(e.target.value)}
-          aria-label={intl.formatMessage({
-            id: 'testEditor.title',
-            defaultMessage: 'Title',
-          })}
-          placeholder={intl.formatMessage({
-            id: 'testEditor.titlePlaceholder',
-            defaultMessage: 'Test title...',
-          })}
-        />
-        <span
-          className="codicon codicon-edit test-title-edit-icon"
-          aria-hidden="true"
-        />
-      </div>
-      <div className="test-editor-content">
-        <div className="test-section">
-          <h2 className="test-section-title heading-h2">
-            <FormattedMessage
-              id="testEditor.description"
-              defaultMessage="Description"
-            />
-          </h2>
-          <div className="test-description-editor">
-            <textarea
-              value={props.test.description}
-              onChange={onDescriptionChange}
-              onBlur={onDescriptionChange}
-              placeholder={intl.formatMessage({
-                id: 'testEditor.descriptionPlaceholder',
-              })}
-              rows={10}
-              className="test-description-textarea"
-            />
-          </div>
+    <RevealContext.Provider value={reveal}>
+      <div className="test-editor" ref={unsetElementRef}>
+        <div className="test-editor-breadcrumb body-b3">
+          {props.test.testing_scope} ➛ {String(props.test.tested_scope.name)}
         </div>
-        <div className="test-section">
-          <h2 className="test-section-title heading-h2">
-            <FormattedMessage id="testEditor.inputs" />
-          </h2>
-          <TestInputsEditor
-            test_inputs={props.test.test_inputs}
-            tested_scope={props.test.tested_scope}
-            onTestInputsChange={onTestInputsChange}
+        <div className="test-title-wrapper">
+          <input
+            type="text"
+            className="test-title-input heading-h2"
+            value={props.test.title}
+            onChange={(e) => onTitleChange(e.target.value)}
+            aria-label={intl.formatMessage({
+              id: 'testEditor.title',
+              defaultMessage: 'Title',
+            })}
+            placeholder={intl.formatMessage({
+              id: 'testEditor.titlePlaceholder',
+              defaultMessage: 'Test title...',
+            })}
+          />
+          <span
+            className="codicon codicon-edit test-title-edit-icon"
+            aria-hidden="true"
           />
         </div>
-        <div
-          className="test-section"
-          id={expectedAnchorId}
-          ref={expectedSectionRef}
-          tabIndex={-1}
-        >
-          <h2 className="test-section-title heading-h2">
-            <FormattedMessage id="testEditor.expectedValues" />
-          </h2>
-          <div className="test-result-header">
-            <div className="test-result-action-bar">
-              <button
-                className="reset-expected-values button-action-dvp body-b3"
-                title={intl.formatMessage({ id: 'testEditor.resetExpected' })}
-                onClick={resetWithUnsetCheck}
-              >
-                <span className="codicon codicon-refresh"></span>{' '}
-                <FormattedMessage id="testEditor.resetExpectedButton" />
-              </button>
-              <button
-                className={`button-action-dvp body-b3 ${props.runState?.status ?? ''}`}
-                title={intl.formatMessage({ id: 'testEditor.runTest' })}
-                onClick={runWithUnsetCheck}
-                disabled={props.runState?.status === 'running'}
-              >
-                <span
-                  className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
-                ></span>{' '}
-                {intl.formatMessage({ id: 'testEditor.runTest' })}
-              </button>
-              <ReadinessChip test={props.test} onJump={scrollToFirstUnset} />
+        <div className="test-editor-content">
+          <div className="test-section">
+            <h2 className="test-section-title heading-h2">
+              <FormattedMessage
+                id="testEditor.description"
+                defaultMessage="Description"
+              />
+            </h2>
+            <div className="test-description-editor">
+              <textarea
+                value={props.test.description}
+                onChange={onDescriptionChange}
+                onBlur={onDescriptionChange}
+                placeholder={intl.formatMessage({
+                  id: 'testEditor.descriptionPlaceholder',
+                })}
+                rows={10}
+                className="test-description-textarea"
+              />
             </div>
-            <div className="test-result">
-              {props.runState?.status === 'success' &&
-                props.runState?.results?.kind === 'Ok' &&
-                !props.runState.results.value.assert_failures && (
-                  <p className="test-run-result test-run-success body-1">
-                    <span className="codicon codicon-check-all"></span>
-                    <FormattedMessage
-                      id="testEditor.passed"
-                      defaultMessage="Passed"
-                    />
-                  </p>
+          </div>
+          <div className="test-section">
+            <h2 className="test-section-title heading-h2">
+              <FormattedMessage id="testEditor.inputs" />
+            </h2>
+            <TestInputsEditor
+              test_inputs={props.test.test_inputs}
+              tested_scope={props.test.tested_scope}
+              onTestInputsChange={onTestInputsChange}
+            />
+          </div>
+          <div
+            className="test-section"
+            id={expectedAnchorId}
+            ref={expectedSectionRef}
+            tabIndex={-1}
+          >
+            <h2 className="test-section-title heading-h2">
+              <FormattedMessage id="testEditor.expectedValues" />
+            </h2>
+            <div className="test-result-header">
+              <div className="test-result-action-bar">
+                <button
+                  className="reset-expected-values button-action-dvp body-b3"
+                  title={intl.formatMessage({ id: 'testEditor.resetExpected' })}
+                  onClick={resetWithUnsetCheck}
+                >
+                  <span className="codicon codicon-refresh"></span>{' '}
+                  <FormattedMessage id="testEditor.resetExpectedButton" />
+                </button>
+                <button
+                  className={`button-action-dvp body-b3 ${props.runState?.status ?? ''}`}
+                  title={intl.formatMessage({ id: 'testEditor.runTest' })}
+                  onClick={runWithUnsetCheck}
+                  disabled={props.runState?.status === 'running'}
+                >
+                  <span
+                    className={`codicon ${props.runState?.status === 'running' ? 'codicon-loading codicon-modifier-spin' : 'codicon-play'}`}
+                  ></span>{' '}
+                  {intl.formatMessage({ id: 'testEditor.runTest' })}
+                </button>
+                <ReadinessChip test={props.test} onJump={scrollToFirstUnset} />
+              </div>
+              <div className="test-result">
+                {props.runState?.status === 'success' &&
+                  props.runState?.results?.kind === 'Ok' &&
+                  !props.runState.results.value.assert_failures && (
+                    <p className="test-run-result test-run-success body-1">
+                      <span className="codicon codicon-check-all"></span>
+                      <FormattedMessage
+                        id="testEditor.passed"
+                        defaultMessage="Passed"
+                      />
+                    </p>
+                  )}
+                {(props.runState?.status === 'error' ||
+                  (props.runState?.results?.kind === 'Ok' &&
+                    props.runState.results.value.assert_failures)) && (
+                  <div className="test-result-information">
+                    <p className="test-run-result test-run-error body-1">
+                      <span className="codicon codicon-warning"></span>
+                      <FormattedMessage
+                        id="testEditor.failed"
+                        defaultMessage="Failed"
+                      />
+                    </p>
+                  </div>
                 )}
-              {(props.runState?.status === 'error' ||
-                (props.runState?.results?.kind === 'Ok' &&
-                  props.runState.results.value.assert_failures)) && (
+              </div>
+              {props.runState?.stale && (
                 <div className="test-result-information">
-                  <p className="test-run-result test-run-error body-1">
-                    <span className="codicon codicon-warning"></span>
+                  <p className="body-3">
+                    <span className="codicon codicon-history"></span>{' '}
                     <FormattedMessage
-                      id="testEditor.failed"
-                      defaultMessage="Failed"
+                      id="testEditor.diffsStale"
+                      defaultMessage="Diffs are out of date. Re-run to refresh."
                     />
                   </p>
                 </div>
               )}
             </div>
-            {props.runState?.stale && (
-              <div className="test-result-information">
-                <p className="body-3">
-                  <span className="codicon codicon-history"></span>{' '}
-                  <FormattedMessage
-                    id="testEditor.diffsStale"
-                    defaultMessage="Diffs are out of date. Re-run to refresh."
-                  />
-                </p>
-              </div>
-            )}
-          </div>
 
-          <TestOutputsEditor
-            test={props.test}
-            onTestChange={(test) => {
-              props.onTestChange(test, true);
-            }}
-            diffs={
-              props.runState?.results?.kind === 'Ok'
-                ? props.runState.results.value.diffs
-                : []
-            }
-            onDiffResolved={(path: PathSegment[]) =>
-              props.onDiffResolved(props.test.testing_scope, path)
-            }
-            onInvalidateDiffs={(pathPrefix: PathSegment[]) =>
-              props.onInvalidateDiffs(props.test.testing_scope, pathPrefix)
-            }
-          />
+            <TestOutputsEditor
+              test={props.test}
+              onTestChange={(test) => {
+                props.onTestChange(test, true);
+              }}
+              diffs={
+                props.runState?.results?.kind === 'Ok'
+                  ? props.runState.results.value.diffs
+                  : []
+              }
+              onDiffResolved={(path: PathSegment[]) =>
+                props.onDiffResolved(props.test.testing_scope, path)
+              }
+              onInvalidateDiffs={(pathPrefix: PathSegment[]) =>
+                props.onInvalidateDiffs(props.test.testing_scope, pathPrefix)
+              }
+            />
+          </div>
         </div>
       </div>
-    </div>
+    </RevealContext.Provider>
   );
 }
