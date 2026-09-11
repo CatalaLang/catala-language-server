@@ -89,6 +89,7 @@
   "broken.markWasAbsentNowRequired": "était vide, et une valeur est désormais obligatoire",
   "broken.markTypeChanged": "nouvelle valeur attendue ({change})",
   "broken.markWasUnset": "aucune valeur à reprendre : à remplir",
+  "broken.markPartial": "repris morceau par morceau : voir à l'intérieur ce qui n'a pas suivi",
   "broken.fateDropped": "le champ d'application n'a plus ce champ",
   "broken.markHint": "{names} de l'original a probablement sa place ici",
   "broken.runWorkingCopy": "Exécuter la copie de travail",

@@ -694,3 +694,10 @@
 .vscode-light .broken-pane-authored {
   opacity: 1; /* legibility comes back; the hatch carries the message */
 }
+
+.carry-marked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}

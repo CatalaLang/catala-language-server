@@ -12,6 +12,7 @@ import type {
   TestList,
   ScopeDef,
   Typ,
+  PathSegment,
 } from '../generated/catala_types';
 import { getTypeDisplayName } from '../editors/typeNameUtils';
 import {
@@ -52,13 +53,54 @@ type Props = {
   >;
 };
 
+function pathKey(path: PathSegment[]): string {
+  return path.map((s) => `${s.kind}:${s.value}`).join('/');
+}
+
+/** One side's outcomes below the field level, by path. */
+function nestedMarksFor(
+  carried: CarryRecord[],
+  side: CarrySide['kind']
+): Map<string, CarryOutcome> {
+  return new Map(
+    carried
+      .filter((c) => c.side.kind === side && c.path.length > 1)
+      .map((c) => [pathKey(c.path), c.outcome])
+  );
+}
+
+type Hook = (
+  editor: React.JSX.Element,
+  path: PathSegment[]
+) => React.JSX.Element;
+
+/** Wraps the editor at a marked path with its mark. */
+function markHook(
+  marks: Map<string, CarryOutcome>,
+  Mark: (props: { outcome: CarryOutcome }) => React.JSX.Element | null
+): Hook | undefined {
+  if (marks.size === 0) return undefined;
+  return (editor, path) => {
+    const outcome = marks.get(pathKey(path));
+    if (outcome === undefined) return editor;
+    return (
+      <span className="carry-marked">
+        {editor}
+        <Mark outcome={outcome} />
+      </span>
+    );
+  };
+}
+
 /** One side's outcomes by field name. */
 function marksFor(
   carried: CarryRecord[],
   side: CarrySide['kind']
 ): Map<string, CarryOutcome> {
   return new Map(
-    carried.filter((c) => c.side.kind === side).map((c) => [c.field, c.outcome])
+    carried
+      .filter((c) => c.side.kind === side && c.path.length === 1)
+      .map((c) => [String(c.path[0].value), c.outcome])
   );
 }
 
@@ -90,6 +132,9 @@ function CarryMark({
       break;
     case 'TypeChanged':
       id = 'broken.markTypeChanged';
+      break;
+    case 'Partial':
+      id = 'broken.markPartial';
       break;
   }
   const change =
@@ -384,6 +429,8 @@ function TestPanes({
   onChange,
   marksIn,
   marksOut,
+  nestedIn,
+  nestedOut,
   runState,
   onRun,
   split,
@@ -395,6 +442,8 @@ function TestPanes({
   onChange: (next: Test) => void;
   marksIn: Map<string, CarryOutcome>;
   marksOut: Map<string, CarryOutcome>;
+  nestedIn: Map<string, CarryOutcome>;
+  nestedOut: Map<string, CarryOutcome>;
   runState?: { status: TestRunStatus; results?: TestRunResults };
   onRun?: () => void;
   split: number;
@@ -422,6 +471,16 @@ function TestPanes({
           rebuilt.tested_scope,
           [...marksIn].filter(([, o]) => o.kind === 'Dropped').map(([n]) => n)
         );
+  const only =
+    (keep: (o: CarryOutcome) => boolean) =>
+    (marks: Map<string, CarryOutcome>): Map<string, CarryOutcome> =>
+      new Map([...marks].filter(([, o]) => keep(o)));
+  const dropped = only((o) => o.kind === 'Dropped');
+  const carried = only((o) => o.kind !== 'Dropped');
+  const fateHookIn = markHook(dropped(nestedIn), FateMark);
+  const fateHookOut = markHook(dropped(nestedOut), FateMark);
+  const carryHookIn = markHook(carried(nestedIn), CarryMark);
+  const carryHookOut = markHook(carried(nestedOut), CarryMark);
   const [reveal, setReveal] = useState<Reveal | undefined>(undefined);
   const jumpToFirstUnset = (): void => {
     const path = rebuilt === undefined ? undefined : firstUnsetPath(rebuilt);
@@ -472,6 +531,7 @@ function TestPanes({
                 onTestInputsChange={(): void => {}}
                 readOnly
                 labelExtra={fateFrom(marksIn)}
+                editorHook={fateHookIn}
               />
               {authored.test_outputs.size > 0 && (
                 <>
@@ -483,6 +543,7 @@ function TestPanes({
                     onTestChange={(): void => {}}
                     readOnly
                     labelExtra={fateFrom(marksOut)}
+                    editorHook={fateHookOut}
                   />
                 </>
               )}
@@ -523,6 +584,7 @@ function TestPanes({
                     onChange({ ...rebuilt, test_inputs: inputs })
                   }
                   labelExtra={markFrom(marksIn, hints)}
+                  editorHook={carryHookIn}
                 />
                 {rebuilt.tested_scope.outputs.size > 0 && (
                   <>
@@ -534,6 +596,7 @@ function TestPanes({
                       onTestChange={onChange}
                       diffs={runDiffs}
                       labelExtra={markFrom(marksOut)}
+                      editorHook={carryHookOut}
                     />
                   </>
                 )}
@@ -681,6 +744,8 @@ export default function BrokenTestView({
             rebuilt={live}
             marksIn={marksFor(outcomes, 'In')}
             marksOut={marksFor(outcomes, 'Out')}
+            nestedIn={nestedMarksFor(outcomes, 'In')}
+            nestedOut={nestedMarksFor(outcomes, 'Out')}
             split={split}
             onSplit={moveSplit}
             picker={picker}

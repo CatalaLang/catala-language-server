@@ -1695,10 +1695,126 @@ let carry_rule ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
   | _ when value_fits new_typ v = Ok () -> Some v, O.Fits
   | _ -> None, O.TypeChanged (old_typ, new_typ)
 
-let carry_value ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
-    O.runtime_value option * O.carry_outcome =
-  let carried, outcome = carry_rule ~old_typ ~new_typ v in
-  Option.map (adopt_typ new_typ) carried, outcome
+(* Below a value that does not carry whole, carry what does: field by field,
+   element by element, through options, tuples and enum payloads. Nested
+   outcomes are paths from the value down; [Fits] is not recorded there. A value
+   none of whose parts carry stays [TypeChanged], so a list of moneys turned
+   dates is one mark, not one per element. *)
+let rec carry_value ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
+    :
+    O.runtime_value option
+    * O.carry_outcome
+    * (O.path_segment list * O.carry_outcome) list =
+  match carry_rule ~old_typ ~new_typ v with
+  (* A fit can still hold less than the live type declares: a field the old
+     record never had is a blank to report, not a fit to pass. *)
+  | Some c, O.Fits -> (
+    match carry_inside ~old_typ ~new_typ v with
+    | Some (completed, (_ :: _ as nested)) -> Some completed, O.Partial, nested
+    | _ -> Some (adopt_typ new_typ c), O.Fits, [])
+  | Some c, outcome -> Some (adopt_typ new_typ c), outcome, []
+  | None, (O.TypeChanged _ as leaf) -> (
+    match carry_inside ~old_typ ~new_typ v with
+    | Some (c, nested) -> Some c, O.Partial, nested
+    | None -> None, leaf, [])
+  | None, outcome -> None, outcome, []
+
+and carry_inside ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
+    (O.runtime_value * (O.path_segment list * O.carry_outcome) list) option =
+  let hole typ = (unset_default_value typ).O.value in
+  let nested = ref [] in
+  let push seg outcome = nested := ([seg], outcome) :: !nested in
+  let carry_at seg ~old_typ ~new_typ e =
+    let c, outcome, sub = carry_value ~old_typ ~new_typ e in
+    if outcome <> O.Fits then push seg outcome;
+    nested := List.rev_append (List.map (fun (p, o) -> seg :: p, o) sub) !nested;
+    c
+  in
+  (* Paths are transparent over enums, as diff paths are: a payload lives at the
+     enum's own path. *)
+  let carry_through ~old_typ ~new_typ e =
+    let c, _, sub = carry_value ~old_typ ~new_typ e in
+    nested := List.rev_append sub !nested;
+    c
+  in
+  let indexed mk_seg ots nts elems =
+    let carried =
+      List.mapi
+        (fun i (ot, nt) ->
+          i, nt, carry_at (mk_seg i) ~old_typ:ot ~new_typ:nt elems.(i))
+        (List.combine ots nts)
+    in
+    if List.for_all (fun (_, _, c) -> c = None) carried then None
+    else
+      Some
+        (Array.of_list
+           (List.map
+              (fun (_, nt, c) -> Option.value c ~default:(hole nt))
+              carried))
+  in
+  let result =
+    match old_typ, new_typ, v.O.value with
+    | O.TStruct od, O.TStruct nd, O.Struct (_, fields) ->
+      let any_carried = ref false in
+      let carried =
+        List.map
+          (fun (n, nt) ->
+            let seg = `StructField n in
+            match List.assoc_opt n fields with
+            | None ->
+              push seg O.WasUnset;
+              n, hole nt
+            | Some fv -> (
+              let ot =
+                Option.value (List.assoc_opt n od.O.fields) ~default:nt
+              in
+              match carry_at seg ~old_typ:ot ~new_typ:nt fv with
+              | Some c ->
+                any_carried := true;
+                n, c
+              | None -> n, hole nt))
+          nd.O.fields
+      in
+      List.iter
+        (fun (n, _) ->
+          if not (List.mem_assoc n nd.O.fields) then
+            push (`StructField n) O.Dropped)
+        fields;
+      if !any_carried then Some (O.Struct (nd, carried)) else None
+    | O.TArray oe, O.TArray ne, O.Array elems ->
+      let n = Array.length elems in
+      Option.map
+        (fun a -> O.Array a)
+        (indexed
+           (fun i -> `ListIndex i)
+           (List.init n (fun _ -> oe))
+           (List.init n (fun _ -> ne))
+           elems)
+    | O.TTuple ots, O.TTuple nts, O.Array elems
+      when List.length ots = List.length nts
+           && List.length nts = Array.length elems ->
+      Option.map
+        (fun a -> O.Array a)
+        (indexed (fun i -> `TupleIndex i) ots nts elems)
+    | O.TOption oi, O.TOption ni, O.Enum (_, (ctor, Some p)) ->
+      Option.map
+        (fun c -> O.Enum (mk_optional_enum_decl ni, (ctor, Some c)))
+        (carry_through ~old_typ:oi ~new_typ:ni p)
+    | O.TEnum od, O.TEnum nd, O.Enum (_, (ctor, Some p)) -> (
+      match List.assoc_opt ctor nd.O.constructors with
+      | Some (Some npt) ->
+        let opt =
+          match List.assoc_opt ctor od.O.constructors with
+          | Some (Some t) -> t
+          | _ -> npt
+        in
+        Option.map
+          (fun c -> O.Enum (nd, (ctor, Some c)))
+          (carry_through ~old_typ:opt ~new_typ:npt p)
+      | _ -> None)
+    | _ -> None
+  in
+  Option.map (fun value -> { v with O.value }, List.rev !nested) result
 
 (* The compiler's own diagnostic, as text: the one thing that gets the tester
    out. *)
@@ -1988,8 +2104,8 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
         | live ->
           let pair_of (t : O.test) : O.recovered_test =
             let carried = ref [] in
-            let record side field outcome =
-              carried := { O.field; side; outcome } :: !carried
+            let record side path outcome =
+              carried := { O.path; side; outcome } :: !carried
             in
             (* One entry per live field. [when_missing]: an absent input
                was left unset; an absent output was never asserted. *)
@@ -2000,17 +2116,18 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                 (fun (name, (live_io : O.test_io)) ->
                   match List.assoc_opt name old_record with
                   | Some { O.value = Some vd; typ = old_typ } -> (
-                    match
+                    let field = `StructField name in
+                    let v, outcome, nested =
                       carry_value ~old_typ ~new_typ:live_io.typ vd.O.value
-                    with
-                    | Some v, outcome ->
-                      record io name outcome;
+                    in
+                    record io [field] outcome;
+                    List.iter (fun (p, o) -> record io (field :: p) o) nested;
+                    match v with
+                    | Some v ->
                       ( name,
                         { live_io with O.value = Some { O.value = v; pos = None } }
                       )
-                    | None, outcome ->
-                      record io name outcome;
-                      name, live_io)
+                    | None -> name, live_io)
                   | _ ->
                     (* A context var never overridden is not damage. *)
                     let defaulting =
@@ -2020,7 +2137,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                       | _ -> false
                     in
                     if not defaulting then
-                      Option.iter (record io name) when_missing;
+                      Option.iter (record io [`StructField name]) when_missing;
                     name, live_io)
                 live_record
             in
@@ -2030,7 +2147,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                 (fun (name, (old_io : O.test_io)) ->
                   if old_io.O.value <> None
                      && not (List.mem_assoc name live_record)
-                  then record io name O.Dropped)
+                  then record io [`StructField name] O.Dropped)
                 old_record
             in
             let rebuilt =
@@ -2069,19 +2186,46 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
               with
               | None -> pair
               | Some s ->
-                let still_blank side field =
+                (* Paths are transparent over enums, as diff paths are. *)
+                let rec at (v : O.runtime_value) = function
+                  | [] -> Some v
+                  | path
+                    when (match v.O.value with
+                         | O.Enum (_, (_, Some _)) -> true
+                         | _ -> false) -> (
+                    match v.O.value with
+                    | O.Enum (_, (_, Some p)) -> at p path
+                    | _ -> None)
+                  | `StructField n :: rest -> (
+                    match v.O.value with
+                    | O.Struct (_, fs) ->
+                      Option.bind (List.assoc_opt n fs) (fun v -> at v rest)
+                    | _ -> None)
+                  | (`ListIndex i | `TupleIndex i) :: rest -> (
+                    match v.O.value with
+                    | O.Array a when i < Array.length a -> at a.(i) rest
+                    | _ -> None)
+                  | _ -> None
+                in
+                let still_blank side path =
                   let record =
                     match side with
                     | O.In -> s.O.test_inputs
                     | O.Out -> s.O.test_outputs
                   in
-                  match
-                    List.assoc_opt field record
-                    |> Option.fold ~none:None ~some:(fun (io : O.test_io) ->
-                           io.value)
-                  with
-                  | None -> true
-                  | Some vd -> vd.O.value.O.value = O.Unset
+                  match path with
+                  | `StructField field :: rest -> (
+                    match
+                      List.assoc_opt field record
+                      |> Option.fold ~none:None ~some:(fun (io : O.test_io) ->
+                             io.value)
+                    with
+                    | None -> true
+                    | Some vd -> (
+                      match at vd.O.value rest with
+                      | None -> true
+                      | Some v -> v.O.value = O.Unset))
+                  | _ -> true
                 in
                 {
                   pair with
@@ -2092,7 +2236,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
                         match r.O.outcome with
                         | O.WasUnset | O.TypeChanged _ | O.WasAbsentNowRequired
                           ->
-                          still_blank r.O.side r.O.field
+                          still_blank r.O.side r.O.path
                         | _ -> true)
                       pair.O.outcomes;
                 })

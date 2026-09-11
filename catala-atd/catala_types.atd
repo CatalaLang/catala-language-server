@@ -173,8 +173,10 @@ type recovered_test = {
 }
 
 type carry_record = {
-  field: string;
-  (* [field] alone is ambiguous: a `context output` variable is both an
+  (* From the field name down: nested records say what did not fit inside a
+     value carried piece by piece. *)
+  path: path_segment list;
+  (* [path] alone is ambiguous: a `context output` variable is both an
      input and an output. *)
   side: carry_side;
   outcome: carry_outcome;
@@ -190,6 +192,7 @@ type carry_outcome = [
   | WasAbsentNowRequired (* the old value was Absent: no payload to take *)
   | TypeChanged of (typ * typ) (* old, new *)
   | Dropped (* no longer declared: promotion deletes it; authored side *)
+  | Partial (* carried piece by piece: the records below say what did not fit *)
 ] <ocaml repr="classic">
 
 type broken_note = [

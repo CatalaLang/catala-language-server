@@ -19,6 +19,7 @@ type Props = {
   readOnly?: boolean;
   /** Rendered next to an output's name (the recovery view's carry marks). */
   labelExtra?: (outputName: string) => ReactNode;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
 };
 
 /* An editor for test outputs. Outputs are named and typed, and
@@ -46,6 +47,7 @@ export default function TestOutputsEditor({
   onInvalidateDiffs,
   readOnly,
   labelExtra,
+  editorHook,
 }: Props): ReactElement {
   const intl = useIntl();
   const { test_outputs, tested_scope } = test;
@@ -117,6 +119,7 @@ export default function TestOutputsEditor({
                   currentPath={[{ kind: 'StructField', value: outputName }]}
                   onDiffResolved={onDiffResolved}
                   onInvalidateDiffs={onInvalidateDiffs}
+                  editorHook={editorHook}
                 />
               ) : readOnly ? null : (
                 <div className="assertion-editor">

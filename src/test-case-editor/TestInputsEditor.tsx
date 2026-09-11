@@ -1,6 +1,11 @@
 import { type ReactElement, type ReactNode, useState } from 'react';
 import { useIntl } from 'react-intl';
-import type { TestInputs, TestIo, ScopeDef } from '../generated/catala_types';
+import type {
+  PathSegment,
+  TestInputs,
+  TestIo,
+  ScopeDef,
+} from '../generated/catala_types';
 import ValueEditor, {
   getDefaultValue,
   createRuntimeValue,
@@ -15,6 +20,7 @@ type InputFieldProps = {
   isContext: boolean;
   readOnly?: boolean;
   onTestInputChange(newValue: TestIo): void;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
 };
 
 function InputField({
@@ -23,6 +29,7 @@ function InputField({
   isContext,
   readOnly,
   onTestInputChange,
+  editorHook,
 }: InputFieldProps): ReactElement {
   const intl = useIntl();
   // false iff the context var is NotOverridden (using scope-computed default)
@@ -75,6 +82,7 @@ function InputField({
         testIO={testIo}
         onValueChange={onTestInputChange}
         editable={!readOnly}
+        editorHook={editorHook}
         currentPath={[{ kind: 'StructField', value: inputName }]}
         diffs={[]}
       />
@@ -98,6 +106,8 @@ type Props = {
   readOnly?: boolean;
   /** Rendered next to an input's name (the recovery view's carry marks). */
   labelExtra?: (inputName: string) => ReactNode;
+  /** Decorates any nested editor by path, as the diff highlighter does. */
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
 };
 
 export default function TestInputsEditor(props: Props): ReactElement {
@@ -153,6 +163,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
             isContext={isContext}
             readOnly={props.readOnly}
             onTestInputChange={onTestInputChange}
+            editorHook={props.editorHook}
           />
         ),
       };

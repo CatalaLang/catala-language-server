@@ -18,6 +18,8 @@ type Props = {
   editable?: boolean;
   onDiffResolved?: (path: PathSegment[]) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
+  /** Applied outside the diff highlight, for marks that are not diffs. */
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
 };
 
 /**
@@ -73,16 +75,17 @@ function createDiffHighlightHook(
   };
 }
 
-export default function AssertionValueEditor({
-  testIO,
-  onValueChange,
-  diffs = [],
-  currentPath,
-  highlightDiffs = true,
-  editable,
-  onDiffResolved,
-  onInvalidateDiffs,
-}: Props): ReactElement {
+export default function AssertionValueEditor(props: Props): ReactElement {
+  const {
+    testIO,
+    onValueChange,
+    diffs = [],
+    currentPath,
+    highlightDiffs = true,
+    editable,
+    onDiffResolved,
+    onInvalidateDiffs,
+  } = props;
   const intl = useIntl();
   const formatBool = (b: boolean): string =>
     intl.formatMessage({ id: b ? 'true' : 'false' });
@@ -90,10 +93,16 @@ export default function AssertionValueEditor({
   // Array item phantom rendering is handled inside ArrayEditor based on diffs.
 
   // Create the diff highlight hook if we have diffs
-  const editorHook =
+  const diffHook =
     diffs.length > 0 && highlightDiffs
       ? createDiffHighlightHook(diffs, formatBool)
       : undefined;
+  const outerHook = props.editorHook;
+  const editorHook =
+    outerHook === undefined
+      ? diffHook
+      : (editor: ReactElement, path: PathSegment[]): ReactElement =>
+          outerHook(diffHook ? diffHook(editor, path) : editor, path);
 
   return (
     <div className="assertion-value-editor">

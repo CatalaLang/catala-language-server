@@ -89,6 +89,7 @@
   "broken.markWasAbsentNowRequired": "was left empty, and a value is now required",
   "broken.markTypeChanged": "needs a new value ({change})",
   "broken.markWasUnset": "no value to carry over: fill it in",
+  "broken.markPartial": "carried piece by piece: look inside for what did not fit",
   "broken.fateDropped": "the scope no longer has this field",
   "broken.markHint": "the original's {names} may belong in here",
   "broken.runWorkingCopy": "Run the working copy",

@@ -165,7 +165,7 @@ export type RecoveredTest = {
 }
 
 export type CarryRecord = {
-  field: string;
+  path: PathSegment[];
   side: CarrySide;
   outcome: CarryOutcome;
 }
@@ -182,6 +182,7 @@ export type CarryOutcome =
 | { kind: 'WasAbsentNowRequired' }
 | { kind: 'TypeChanged'; value: [Typ, Typ] }
 | { kind: 'Dropped' }
+| { kind: 'Partial' }
 
 export type BrokenNote =
 | { kind: 'ModuleNotFound'; value: ModuleNotFound }
@@ -874,7 +875,7 @@ export function readRecoveredTest(x: any, context: any = x): RecoveredTest {
 
 export function writeCarryRecord(x: CarryRecord, context: any = x): any {
   return {
-    'field': _atd_write_required_field('CarryRecord', 'field', _atd_write_string, x.field, x),
+    'path': _atd_write_required_field('CarryRecord', 'path', _atd_write_array(writePathSegment), x.path, x),
     'side': _atd_write_required_field('CarryRecord', 'side', writeCarrySide, x.side, x),
     'outcome': _atd_write_required_field('CarryRecord', 'outcome', writeCarryOutcome, x.outcome, x),
   };
@@ -882,7 +883,7 @@ export function writeCarryRecord(x: CarryRecord, context: any = x): any {
 
 export function readCarryRecord(x: any, context: any = x): CarryRecord {
   return {
-    field: _atd_read_required_field('CarryRecord', 'field', _atd_read_string, x['field'], x),
+    path: _atd_read_required_field('CarryRecord', 'path', _atd_read_array(readPathSegment), x['path'], x),
     side: _atd_read_required_field('CarryRecord', 'side', readCarrySide, x['side'], x),
     outcome: _atd_read_required_field('CarryRecord', 'outcome', readCarryOutcome, x['outcome'], x),
   };
@@ -925,6 +926,8 @@ export function writeCarryOutcome(x: CarryOutcome, context: any = x): any {
       return ['TypeChanged', ((x, context) => [writeTyp(x[0], x), writeTyp(x[1], x)])(x.value, x)]
     case 'Dropped':
       return 'Dropped'
+    case 'Partial':
+      return 'Partial'
   }
 }
 
@@ -943,6 +946,8 @@ export function readCarryOutcome(x: any, context: any = x): CarryOutcome {
         return { kind: 'WasAbsentNowRequired' }
       case 'Dropped':
         return { kind: 'Dropped' }
+      case 'Partial':
+        return { kind: 'Partial' }
       default:
         _atd_bad_json('CarryOutcome', x, context)
         throw new Error('impossible')

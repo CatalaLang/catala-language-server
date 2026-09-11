@@ -139,7 +139,7 @@ let rows =
       new_typ = TStruct (detail ["rank", TInt; "fee", TMoney; "stamp", TDate]);
       value = struct_of (detail ["fee", TMoney; "rank", TInt])
                 ["fee", money 1200; "rank", int 3];
-      outcome = Fits; carried = true;
+      outcome = Partial; carried = true;
     };
     {
       what = "a struct field that changed type underneath";
@@ -160,10 +160,8 @@ let rows =
       new_typ = TStruct (detail ["fee", TMoney]);
       value = struct_of (detail ["fee", TMoney; "stamp", TInt])
                 ["fee", money 1200; "stamp", int 3];
-      outcome =
-        TypeChanged
-          ( TStruct (detail ["fee", TMoney; "stamp", TInt]),
-            TStruct (detail ["fee", TMoney]) ); carried = false;
+      (* The surviving field carries; the lost one is reported at its path. *)
+      outcome = Partial; carried = true;
     };
     {
       what = "an enum constructor that now requires a payload, value bare";
@@ -196,9 +194,10 @@ let show_outcome : O.carry_outcome -> string = function
   | TypeChanged (a, b) ->
     Printf.sprintf "TypeChanged (%s -> %s)" (Lib.typ_name a) (Lib.typ_name b)
   | Dropped -> "Dropped"
+  | Partial -> "Partial"
 
 let check_row r =
-  let carried, outcome =
+  let carried, outcome, _ =
     Lib.carry_value ~old_typ:r.old_typ ~new_typ:r.new_typ r.value
   in
   if outcome <> r.outcome then
@@ -218,7 +217,7 @@ let check_adopts_live_declarations () =
     Lib.carry_value ~old_typ:(TEnum (colour ["Red", None]))
       ~new_typ:(TEnum live) (red (colour ["Red", None]))
   with
-  | Some { value = Enum (decl, _); _ }, Fits ->
+  | Some { value = Enum (decl, _); _ }, Fits, _ ->
     if List.length decl.O.constructors <> 3 then
       failwith "a carried enum kept the partial declaration it was recovered with"
   | _ -> failwith "an unchanged enum did not carry"
@@ -227,13 +226,86 @@ let check_adopts_live_declarations () =
 let check_keeps_attributes () =
   let v = O.{ value = Money 1000; attrs = [Uid "abc"] } in
   match Lib.carry_value ~old_typ:TMoney ~new_typ:(TOption TMoney) v with
-  | Some { value = Enum (_, (_, Some payload)); _ }, Wrap ->
+  | Some { value = Enum (_, (_, Some payload)); _ }, Wrap, _ ->
     if payload.O.attrs <> [O.Uid "abc"] then
       failwith "wrapping a value dropped its attributes"
   | _ -> failwith "a field that became optional did not wrap"
 
+(* A record with one renamed field keeps the others; the rename shows up as a
+   dropped old name and a blank new one, at their paths. *)
+let check_carries_inside_records () =
+  let old_typ = O.TStruct (detail ["x", O.TMoney; "second", O.TInt]) in
+  let new_decl = detail ["x", O.TMoney; "amount", O.TInt] in
+  let v =
+    struct_of
+      (detail ["x", O.TMoney; "second", O.TInt])
+      ["x", money 1000; "second", int 3]
+  in
+  match Lib.carry_value ~old_typ ~new_typ:(O.TStruct new_decl) v with
+  | Some { value = Struct (decl, fields); _ }, Partial, nested ->
+    if decl <> new_decl then
+      failwith "a carried record kept the old declaration";
+    if List.assoc_opt "x" fields <> Some (money 1000) then
+      failwith "an unchanged field of a changed record was not kept";
+    if List.assoc_opt "amount" fields <> Some unset then
+      failwith "a new field of a changed record is not a blank";
+    if List.mem_assoc "second" fields then
+      failwith "a dropped field survived in the carried record";
+    let expect p o =
+      if not (List.mem (p, o) nested) then
+        failwith (Printf.sprintf "missing nested outcome %s" (show_outcome o))
+    in
+    expect [`StructField "second"] Dropped;
+    expect [`StructField "amount"] WasUnset;
+    if List.length nested <> 2 then failwith "unexpected nested outcomes"
+  | _, outcome, _ ->
+    failwith
+      (Printf.sprintf
+         "a record with one renamed field: expected Partial, got %s"
+         (show_outcome outcome))
+
+(* Elements carry one by one, and a list none of whose elements carry is one
+   TypeChanged, not one per element. *)
+let check_carries_inside_lists () =
+  let old_elt = O.TStruct (detail ["x", O.TMoney; "second", O.TInt]) in
+  let new_elt = O.TStruct (detail ["x", O.TMoney; "amount", O.TInt]) in
+  let elt =
+    struct_of
+      (detail ["x", O.TMoney; "second", O.TInt])
+      ["x", money 1; "second", int 1]
+  in
+  (match
+     Lib.carry_value ~old_typ:(O.TArray old_elt) ~new_typ:(O.TArray new_elt)
+       (arr [elt; elt])
+   with
+  | Some { value = Array a; _ }, Partial, nested ->
+    if Array.length a <> 2 then failwith "a carried list lost elements";
+    if not (List.mem ([`ListIndex 1; `StructField "amount"], O.WasUnset) nested)
+    then failwith "nested outcomes of a list element are not indexed"
+  | _, outcome, _ ->
+    failwith
+      (Printf.sprintf "a list of changed records: expected Partial, got %s"
+         (show_outcome outcome)));
+  match
+    Lib.carry_value ~old_typ:(O.TArray O.TMoney) ~new_typ:(O.TArray O.TDate)
+      (arr [money 1; money 2])
+  with
+  | None, TypeChanged _, [] -> ()
+  | _, outcome, nested ->
+    failwith
+      (Printf.sprintf
+         "a list of moneys turned dates: expected one TypeChanged, got %s with \
+          %d nested"
+         (show_outcome outcome) (List.length nested))
+
 let () =
   let open Tezt.Test in
+  register ~__FILE__ ~title:"carry_value: carries inside records"
+    ~tags:["unit"; "carry"] (fun () ->
+      Lwt.return @@ check_carries_inside_records ());
+  register ~__FILE__ ~title:"carry_value: carries inside lists"
+    ~tags:["unit"; "carry"] (fun () ->
+      Lwt.return @@ check_carries_inside_lists ());
   register ~__FILE__ ~title:"carry_value: the table"
     ~tags:["unit"; "carry"] (fun () ->
       Lwt.return @@ List.iter check_row rows);

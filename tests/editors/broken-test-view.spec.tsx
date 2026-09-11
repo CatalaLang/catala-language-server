@@ -87,12 +87,12 @@ function view(
             ? []
             : [
                 {
-                  field: 'start_date',
+                  path: [{ kind: 'StructField', value: 'start_date' }],
                   side: { kind: 'In' },
                   outcome: { kind: 'Fits' },
                 },
                 {
-                  field: 'end_date',
+                  path: [{ kind: 'StructField', value: 'end_date' }],
                   side: { kind: 'In' },
                   outcome: {
                     kind: 'TypeChanged',
@@ -231,7 +231,7 @@ describe('BrokenTestView', () => {
       view({
         outcomes: [
           {
-            field: 'end_date',
+            path: [{ kind: 'StructField', value: 'end_date' }],
             side: { kind: 'In' },
             outcome: { kind: 'Dropped' },
           },
@@ -248,7 +248,7 @@ describe('BrokenTestView', () => {
       view({
         outcomes: [
           {
-            field: 'start_date',
+            path: [{ kind: 'StructField', value: 'start_date' }],
             side: { kind: 'In' },
             outcome: { kind: 'Wrap' },
           },
@@ -267,7 +267,7 @@ describe('BrokenTestView', () => {
       view({
         outcomes: [
           {
-            field: 'start_date',
+            path: [{ kind: 'StructField', value: 'start_date' }],
             side: { kind: 'In' },
             outcome: { kind: 'WasUnset' },
           },
@@ -379,12 +379,12 @@ describe('BrokenTestView', () => {
     pair.rebuilt!.test_outputs = new Map([['z', io({ kind: 'TRat' })]]);
     pair.outcomes = [
       {
-        field: 'z',
+        path: [{ kind: 'StructField', value: 'z' }],
         side: { kind: 'In' },
         outcome: { kind: 'WasUnset' },
       },
       {
-        field: 'z',
+        path: [{ kind: 'StructField', value: 'z' }],
         side: { kind: 'Out' },
         outcome: {
           kind: 'TypeChanged',
@@ -447,7 +447,7 @@ describe('BrokenTestView', () => {
     v.tests[0].outcomes = [
       ...v.tests[0].outcomes,
       {
-        field: 'total',
+        path: [{ kind: 'StructField', value: 'total' }],
         side: { kind: 'Out' },
         outcome: {
           kind: 'TypeChanged',
@@ -685,5 +685,74 @@ describe('BrokenTestView', () => {
     expect(screen.queryByText(/No current signature/)).toBeNull();
     // start_date carried across, so it is now on both sides
     expect(screen.getAllByDisplayValue('2025-01-01').length).toBe(2);
+  });
+});
+
+describe('marks below the field level', () => {
+  const pairTyp: Typ = {
+    kind: 'TStruct',
+    value: {
+      struct_name: 'B.Pair',
+      fields: new Map<string, Typ>([
+        ['first', { kind: 'TInt' }],
+        ['amount', { kind: 'TMoney' }],
+      ]),
+    },
+  };
+  const pairVal = rv({
+    kind: 'Struct',
+    value: [
+      pairTyp.value as never,
+      new Map([
+        ['first', rv({ kind: 'Integer', value: 1 })],
+        ['amount', rv({ kind: 'Unset' })],
+      ]),
+    ],
+  });
+  it('shows a carried record with its blank field marked inside', () => {
+    const base = authored();
+    const reb: Test = {
+      ...base,
+      test_inputs: new Map<string, TestIo>([
+        ['pair', io(pairTyp, { value: pairVal })],
+      ]),
+    };
+    const v: Recovery = {
+      tests: [
+        {
+          authored: {
+            ...base,
+            test_inputs: new Map([['pair', io(pairTyp, { value: pairVal })]]),
+          },
+          rebuilt: reb,
+          outcomes: [
+            {
+              path: [{ kind: 'StructField', value: 'pair' }],
+              side: { kind: 'In' },
+              outcome: { kind: 'Partial' },
+            },
+            {
+              path: [
+                { kind: 'StructField', value: 'pair' },
+                { kind: 'StructField', value: 'amount' },
+              ],
+              side: { kind: 'In' },
+              outcome: { kind: 'WasUnset' },
+            },
+          ],
+        },
+      ],
+      notes: [],
+      working_copy: 'x.repair',
+    };
+    const container = renderView(v);
+    const rebuiltPane = container.querySelector('.broken-pane-rebuilt')!;
+    const nested = rebuiltPane.querySelectorAll('.carry-marked .fate-mark');
+    expect(nested.length).toBe(1);
+    expect(nested[0].getAttribute('title')).toBe(
+      enMessages['broken.markWasUnset']
+    );
+    const authoredPane = container.querySelector('.broken-pane-authored')!;
+    expect(authoredPane.querySelectorAll('.carry-marked').length).toBe(0);
   });
 });

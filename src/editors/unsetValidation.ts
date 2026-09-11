@@ -84,13 +84,9 @@ function unsetPathIn(
       return undefined;
     }
     case 'Enum': {
-      const [, [ctor, payload]] = raw.value;
-      return payload?.value
-        ? unsetPathIn(payload.value, [
-            ...prefix,
-            { kind: 'EnumPayload', value: ctor },
-          ])
-        : undefined;
+      // Transparent over enums, as diff paths are.
+      const payload = raw.value[1][1];
+      return payload?.value ? unsetPathIn(payload.value, prefix) : undefined;
     }
     default:
       return undefined;
