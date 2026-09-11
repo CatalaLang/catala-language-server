@@ -53,7 +53,11 @@ function categorize(item: EditorItem): 'scalar' | 'structural' | 'array' {
 
 function getTabDisplayName(item: EditorItem): ReactNode {
   if (item.count !== undefined) {
-    return `${item.key} (${item.count})`;
+    return (
+      <>
+        {item.label} ({item.count})
+      </>
+    );
   }
   return item.label;
 }

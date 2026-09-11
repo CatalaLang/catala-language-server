@@ -156,3 +156,24 @@ describe('Unfilled badges', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('Tab labels keep their decorations', () => {
+  it('renders the item label, not just its key, next to the count', () => {
+    const decorated: EditorItem = {
+      ...arrayItem('children', 2),
+      label: (
+        <>
+          children
+          <span data-testid="mark" />
+        </>
+      ),
+    };
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <CompositeEditor items={[decorated, arrayItem('pets', 1)]} />
+      </IntlProvider>
+    );
+    expect(screen.getByTestId('mark').closest('.tab')).not.toBeNull();
+    expect(screen.getByText('children (2)')).toBeInTheDocument();
+  });
+});
