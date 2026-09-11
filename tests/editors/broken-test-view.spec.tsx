@@ -756,3 +756,28 @@ describe('marks below the field level', () => {
     expect(authoredPane.querySelectorAll('.carry-marked').length).toBe(0);
   });
 });
+
+describe('destination hints', () => {
+  it('appends the hint rebuild computed to the mark tooltip', () => {
+    const container = renderView(
+      view({
+        outcomes: [
+          {
+            path: [{ kind: 'StructField', value: 'end_date' }],
+            side: { kind: 'In' },
+            outcome: { kind: 'WasUnset' },
+            hint: ['start_date'],
+          },
+          {
+            path: [{ kind: 'StructField', value: 'start_date' }],
+            side: { kind: 'In' },
+            outcome: { kind: 'Dropped' },
+            hint: [],
+          },
+        ],
+      })
+    );
+    const mark = container.querySelector('.broken-pane-rebuilt .fate-mark');
+    expect(mark?.getAttribute('title')).toContain('start_date');
+  });
+});

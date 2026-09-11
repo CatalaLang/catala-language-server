@@ -15,6 +15,10 @@ function sameSegment(a: PathSegment, b: PathSegment): boolean {
   return a.kind === b.kind && a.value === b.value;
 }
 
+export function samePath(a: PathSegment[], b: PathSegment[]): boolean {
+  return a.length === b.length && pathStartsWith(a, b);
+}
+
 export function pathStartsWith(
   path: PathSegment[],
   prefix: PathSegment[]

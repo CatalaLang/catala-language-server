@@ -155,7 +155,9 @@ export default function TestInputsEditor(props: Props): ReactElement {
         mark: props.labelExtra?.(inputName),
         type: testIo.typ,
         count,
-        unfilled: countUnsetIn(testIo.value?.value, testIo.typ),
+        unfilled: props.readOnly
+          ? 0
+          : countUnsetIn(testIo.value?.value, testIo.typ),
         editor: (
           <InputField
             inputName={inputName}

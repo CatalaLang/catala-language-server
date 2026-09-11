@@ -10,8 +10,6 @@ import type {
   TestRunResults,
   Test,
   TestList,
-  ScopeDef,
-  Typ,
   PathSegment,
 } from '../generated/catala_types';
 import { getTypeDisplayName } from '../editors/typeNameUtils';
@@ -80,14 +78,9 @@ function markHook(
   Mark: (props: { outcome: CarryOutcome }) => React.JSX.Element | null
 ): Hook | undefined {
   if (marks.size === 0) return undefined;
-  // An option's payload editor shares its path (paths are transparent over
-  // enums): the first editor rendered at a path, the outer one, gets the mark.
-  const shown = new Set<string>();
   return (editor, path) => {
-    const key = pathKey(path);
-    const outcome = marks.get(key);
-    if (outcome === undefined || shown.has(key)) return editor;
-    shown.add(key);
+    const outcome = marks.get(pathKey(path));
+    if (outcome === undefined) return editor;
     return (
       <span className="carry-marked">
         {editor}
@@ -198,31 +191,21 @@ function FateMark({
   );
 }
 
-function structFields(typ: Typ): Set<string> {
-  switch (typ.kind) {
-    case 'TStruct':
-      return new Set(typ.value.fields.keys());
-    case 'TOption':
-    case 'TArray':
-      return structFields(typ.value);
-    default:
-      return new Set();
-  }
-}
-
-/** For each input of [scope], the dropped names that reappear as one of
- *  its fields: where the original's value most likely belongs now. */
-function destinationHints(
-  scope: ScopeDef,
-  dropped: string[]
+/** One side's destination hints by field name, as rebuild computed them. */
+function hintsFor(
+  carried: CarryRecord[],
+  side: CarrySide['kind']
 ): Map<string, string[]> {
-  const hints = new Map<string, string[]>();
-  for (const [name, input] of scope.inputs) {
-    const fields = structFields(input.typ);
-    const found = dropped.filter((d) => fields.has(d));
-    if (found.length > 0) hints.set(name, found);
-  }
-  return hints;
+  return new Map(
+    carried
+      .filter(
+        (c) =>
+          c.side.kind === side &&
+          c.path.length === 1 &&
+          (c.hint ?? []).length > 0
+      )
+      .map((c) => [String(c.path[0].value), c.hint])
+  );
 }
 
 const fateFrom =
@@ -434,6 +417,7 @@ function TestPanes({
   onChange,
   marksIn,
   marksOut,
+  hintsIn,
   nestedIn,
   nestedOut,
   runState,
@@ -447,6 +431,7 @@ function TestPanes({
   onChange: (next: Test) => void;
   marksIn: Map<string, CarryOutcome>;
   marksOut: Map<string, CarryOutcome>;
+  hintsIn: Map<string, string[]>;
   nestedIn: Map<string, CarryOutcome>;
   nestedOut: Map<string, CarryOutcome>;
   runState?: { status: TestRunStatus; results?: TestRunResults };
@@ -469,13 +454,6 @@ function TestPanes({
         <CarryMark outcome={outcome} hint={hints?.get(name)} />
       );
     };
-  const hints =
-    rebuilt === undefined
-      ? undefined
-      : destinationHints(
-          rebuilt.tested_scope,
-          [...marksIn].filter(([, o]) => o.kind === 'Dropped').map(([n]) => n)
-        );
   const only =
     (keep: (o: CarryOutcome) => boolean) =>
     (marks: Map<string, CarryOutcome>): Map<string, CarryOutcome> =>
@@ -588,7 +566,7 @@ function TestPanes({
                   onTestInputsChange={(inputs): void =>
                     onChange({ ...rebuilt, test_inputs: inputs })
                   }
-                  labelExtra={markFrom(marksIn, hints)}
+                  labelExtra={markFrom(marksIn, hintsIn)}
                   editorHook={carryHookIn}
                 />
                 {rebuilt.tested_scope.outputs.size > 0 && (
@@ -749,6 +727,7 @@ export default function BrokenTestView({
             rebuilt={live}
             marksIn={marksFor(outcomes, 'In')}
             marksOut={marksFor(outcomes, 'Out')}
+            hintsIn={hintsFor(outcomes, 'In')}
             nestedIn={nestedMarksFor(outcomes, 'In')}
             nestedOut={nestedMarksFor(outcomes, 'Out')}
             split={split}
