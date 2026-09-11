@@ -189,10 +189,13 @@ grep -q -- '-- rank: 3' rebuilt_details.catala_en \
     || { echo "FAIL: an integer field was not written as an integer"; exit 1; }
 grep -q -- '-- fee: \$12.00' rebuilt_details.catala_en \
     || { echo "FAIL: a money field was not written as money"; exit 1; }
-# ...and in DECLARATION order (the test wrote stamp, rank, fee), so a rebuilt
-# test writes the same bytes an ordinary read of it would.
-[ "$(grep -o -- '-- [a-z]*:' rebuilt_details.catala_en | tr '\n' ' ')" = "-- rank: -- fee: -- stamp: " ] \
+# ...in DECLARATION order (the test wrote stamp, rank, fee), so a rebuilt test
+# writes the same bytes an ordinary read of it would, and with the field the
+# module gained since (note) as a blank to fill, not silently absent.
+[ "$(grep -o -- '-- [a-z]*:' rebuilt_details.catala_en | tr '\n' ' ')" = "-- rank: -- fee: -- stamp: -- note: " ] \
     || { echo "FAIL: a rebuilt struct keeps the test's field order, not the declaration's"; exit 1; }
+grep -q -- '-- note: impossible' rebuilt_details.catala_en \
+    || { echo "FAIL: the field the module gained is not written as a blank"; exit 1; }
 
 
 # ── why a rebuild could not proceed ─────────────────────────────────────────
@@ -324,22 +327,23 @@ node -e '
   const reb = d.tests.filter((t) => t.rebuilt !== undefined);
   if (reb.length !== 3) { console.error("FAIL: rebuilt " + reb.length + " of 3 tests"); process.exit(1); }
   const outcomes = d.tests.flatMap((t) => t.outcomes);
+  const name = (c) => c.path.map((p) => p[1]).join(".");
   const by = {};
   for (const c of outcomes) { const k = Array.isArray(c.outcome) ? c.outcome[0] : c.outcome; by[k] = (by[k] || 0) + 1; }
   // per test: amount (new) unset; bonus and total carried wherever the test set them
-  const amount = outcomes.filter((c) => c.field === "amount").map((c) => c.outcome);
+  const amount = outcomes.filter((c) => name(c) === "amount").map((c) => c.outcome);
   if (amount.length !== 3 || amount.some((o) => o !== "WasUnset"))
     { console.error("FAIL: the renamed field should be unset in all 3 tests: " + JSON.stringify(amount)); process.exit(1); }
-  const bonus = outcomes.filter((c) => c.field === "bonus").map((c) => c.outcome);
+  const bonus = outcomes.filter((c) => name(c) === "bonus").map((c) => c.outcome);
   if (bonus.length !== 3 || bonus.some((o) => o !== "Fits"))
     { console.error("FAIL: an unchanged field did not carry: " + JSON.stringify(bonus)); process.exit(1); }
   // total is asserted by two tests; the third never asserts it, and an output
   // a test does not assert is not damage to report
-  const total = outcomes.filter((c) => c.field === "total").map((c) => c.outcome);
+  const total = outcomes.filter((c) => name(c) === "total").map((c) => c.outcome);
   if (total.length !== 2 || total.some((o) => o !== "Fits"))
     { console.error("FAIL: expected two carried assertions on total and silence for the unasserted one: " + JSON.stringify(total)); process.exit(1); }
   // the lost name is reported as deleted-on-promotion, in each test that set it
-  const base = outcomes.filter((c) => c.field === "base").map((c) => c.outcome);
+  const base = outcomes.filter((c) => name(c) === "base").map((c) => c.outcome);
   if (base.length !== 3 || base.some((o) => o !== "Dropped"))
     { console.error("FAIL: the lost field should be Dropped in all 3 tests: " + JSON.stringify(base)); process.exit(1); }
   if (Object.keys(by).some((k) => k !== "Fits" && k !== "WasUnset" && k !== "Dropped"))
@@ -522,7 +526,7 @@ sed 's/\bx\b/amount/g' context_vars.catala_en > "$notes_scratch/ctx/context_vars
 node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   const marks = d.tests.flatMap((t) => t.outcomes).map((c) =>
-    c.field + ":" + c.side + ":" + (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome)).sort();
+    c.path.map((p) => p[1]).join(".") + ":" + c.side + ":" + (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome)).sort();
   const want = ["amount:In:WasUnset", "x:In:Dropped", "y:In:Fits", "z:Out:Fits"];
   if (JSON.stringify(marks) !== JSON.stringify(want))
     { console.error("FAIL: expected marks " + want + ", got " + marks); process.exit(1); }
@@ -532,9 +536,11 @@ for case in lostfield:detail:test_details payload:shade:test_bare; do
     dir=${case%%:*}; rest=${case#*:}; field=${rest%%:*}; test=${rest##*:}
     node -e '
       const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-      const c = d.tests.flatMap((t) => t.outcomes).find((c) => c.field === process.argv[2]);
+      const c = d.tests.flatMap((t) => t.outcomes).find((c) => c.path.map((p) => p[1]).join(".") === process.argv[2]);
       const k = c && (Array.isArray(c.outcome) ? c.outcome[0] : c.outcome);
-      if (k !== "TypeChanged")
+      // A whole value the declaration no longer allows is TypeChanged; a
+      // record that lost one field carries the others and is Partial. Never Fits.
+      if (k === undefined || k === "Fits")
         { console.error("FAIL: a value the declaration no longer allows must not fit: " + JSON.stringify(c)); process.exit(1); }
       process.stdout.write(JSON.stringify(d.tests.map((t) => t.rebuilt)));
     ' "$notes_scratch/$dir.json" "$field" \
