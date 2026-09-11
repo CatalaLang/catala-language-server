@@ -244,7 +244,7 @@ export async function showExceptions(args: ExceptionsArgs): Promise<void> {
   } = args;
   const cwd = getCwd(uri) ?? path.dirname(uri);
 
-  let jsonOutput = '';
+  let stdoutOutput = '';
   let stderrOutput = '';
   try {
     await new Promise<void>((resolve, reject) => {
@@ -262,7 +262,7 @@ export async function showExceptions(args: ExceptionsArgs): Promise<void> {
         { cwd, shell: process.platform === 'win32' }
       );
       proc.stdout.on('data', (data: Buffer) => {
-        jsonOutput += data.toString();
+        stdoutOutput += data.toString();
       });
       proc.stderr.on('data', (data: Buffer) => {
         stderrOutput += data.toString();
@@ -283,6 +283,10 @@ export async function showExceptions(args: ExceptionsArgs): Promise<void> {
 
   let result: ExceptionsResult;
   try {
+    // Temporary fix: we only consider the last output line as warnings
+    // are emitted on stdout as well
+    const outLines = stdoutOutput.trim().split(/(\r?\n)/g);
+    const jsonOutput = outLines[outLines.length - 1];
     const parsed = JSON.parse(jsonOutput) as Omit<ExceptionsResult, 'declPos'>;
     result = {
       ...parsed,
