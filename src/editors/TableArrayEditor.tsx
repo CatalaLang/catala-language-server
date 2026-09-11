@@ -1,6 +1,6 @@
 import { type ReactElement, useMemo, useState, useRef } from 'react';
 import { countUnsetIn } from './unsetValidation';
-import { UnfilledBadge } from './CompositeEditor';
+import { CountBadge } from './badges';
 import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type {
@@ -799,22 +799,24 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                         onContextMenu={(e) => e.preventDefault()}
                       >
                         <div className="sub-array-cell-content">
-                          {count > 0 ? (
-                            <button
-                              className="count-badge count-badge-clickable"
-                              onClick={() => {
-                                navigateAndFlashSubTable(subTableId, rowIndex);
-                              }}
-                              title={`Go to ${arr.label} for row #${rowIndex + 1}`}
-                            >
-                              {count}
-                            </button>
-                          ) : (
-                            <span className="count-badge count-badge-zero">
-                              0
-                            </span>
-                          )}
-                          <UnfilledBadge count={unfilled} />
+                          <CountBadge
+                            items={count}
+                            unfilled={unfilled}
+                            onClick={
+                              count > 0
+                                ? (): void =>
+                                    navigateAndFlashSubTable(
+                                      subTableId,
+                                      rowIndex
+                                    )
+                                : undefined
+                            }
+                            title={
+                              count > 0
+                                ? `Go to ${arr.label} for row #${rowIndex + 1}`
+                                : undefined
+                            }
+                          />
                           {editable && !isPhantomRow && !isExpectedOnlyRow && (
                             <button
                               className="add-subarray-pill"
@@ -1017,9 +1019,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
           <div key={idx} id={subTableId} className="sub-table-section">
             <div className="sub-table-header">
               {subArray.label}
-              <span className="count-badge">{subArray.items.length}</span>
-              <UnfilledBadge
-                count={subArray.items.reduce(
+              <CountBadge
+                items={subArray.items.length}
+                unfilled={subArray.items.reduce(
                   (n, item) => n + countUnsetIn(item.value, subElementType),
                   0
                 )}

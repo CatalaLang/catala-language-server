@@ -80,9 +80,14 @@ function markHook(
   Mark: (props: { outcome: CarryOutcome }) => React.JSX.Element | null
 ): Hook | undefined {
   if (marks.size === 0) return undefined;
+  // An option's payload editor shares its path (paths are transparent over
+  // enums): the first editor rendered at a path, the outer one, gets the mark.
+  const shown = new Set<string>();
   return (editor, path) => {
-    const outcome = marks.get(pathKey(path));
-    if (outcome === undefined) return editor;
+    const key = pathKey(path);
+    const outcome = marks.get(key);
+    if (outcome === undefined || shown.has(key)) return editor;
+    shown.add(key);
     return (
       <span className="carry-marked">
         {editor}
@@ -484,7 +489,7 @@ function TestPanes({
   const [reveal, setReveal] = useState<Reveal | undefined>(undefined);
   const jumpToFirstUnset = (): void => {
     const path = rebuilt === undefined ? undefined : firstUnsetPath(rebuilt);
-    if (path) setReveal({ path, nonce: (reveal?.nonce ?? 0) + 1 });
+    if (path) setReveal((r) => ({ path, nonce: (r?.nonce ?? 0) + 1 }));
     scrollToFirstInvalidOrUnset(rebuiltPaneRef.current ?? document, 50);
   };
   // An unset value fails the run with an interpreter error: ask first.

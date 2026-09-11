@@ -11,6 +11,7 @@
   "testEditor.ready": "Tous les champs sont remplis",
   "testEditor.unfilled": "{count, plural, one {1 valeur à remplir} other {# valeurs à remplir}}",
   "testEditor.jumpToUnfilled": "Aller au premier champ non rempli",
+  "tab.items": "{count, plural, one {1 élément} other {# éléments}}",
   "scopeEditor.run": "Exécuter",
   "scopeEditor.shell_run": "Exécuter dans un terminal",
   "scopeEditor.debug_run": "Débugger",

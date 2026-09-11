@@ -95,7 +95,7 @@ export default function TestEditor(props: Props): ReactElement {
   const [reveal, setReveal] = useState<Reveal | undefined>(undefined);
   const scrollToFirstUnset = (): void => {
     const path = firstUnsetPath(props.test);
-    if (path) setReveal({ path, nonce: (reveal?.nonce ?? 0) + 1 });
+    if (path) setReveal((r) => ({ path, nonce: (r?.nonce ?? 0) + 1 }));
     scrollToFirstInvalidOrUnset(unsetElementRef.current ?? document, 50);
   };
 

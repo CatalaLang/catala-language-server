@@ -140,7 +140,6 @@ export default function TestInputsEditor(props: Props): ReactElement {
           ) : (
             inputName
           )}
-          {props.labelExtra?.(inputName)}
         </>
       );
 
@@ -153,6 +152,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
       return {
         key: inputName,
         label,
+        mark: props.labelExtra?.(inputName),
         type: testIo.typ,
         count,
         unfilled: countUnsetIn(testIo.value?.value, testIo.typ),

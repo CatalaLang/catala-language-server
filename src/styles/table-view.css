@@ -199,14 +199,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
+  box-sizing: border-box;
+  min-width: 32px;
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
   background-color: var(--vscode-badge-background);
   color: var(--vscode-badge-foreground);
-  border: none;
+  border: 1px solid transparent;
 }
 
 .count-badge-clickable {
@@ -218,12 +219,24 @@
   background-color: var(--vscode-button-hoverBackground);
 }
 
+.count-badge-unfilled {
+  gap: 3px;
+  background: var(--vscode-inputValidation-warningBackground, #352a05);
+  color: var(--vscode-foreground);
+  border-color: var(--vscode-inputValidation-warningBorder, #cca700);
+}
+
+.count-badge .codicon {
+  font-size: 11px;
+}
+
+.count-badge-sep {
+  opacity: 0.6;
+}
+
 .count-badge-zero {
   opacity: 0.5;
   cursor: default;
-  min-width: 24px;
-  max-width: 24px;
-  box-sizing: border-box;
 }
 
 /* Add sub-array pill */

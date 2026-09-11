@@ -15,6 +15,7 @@
   "testEditor.ready": "All fields set",
   "testEditor.unfilled": "{count, plural, one {1 value to fill} other {# values to fill}}",
   "testEditor.jumpToUnfilled": "Jump to the first unfilled field",
+  "tab.items": "{count, plural, one {1 item} other {# items}}",
   "scopeEditor.run": "Uruchom",
   "scopeEditor.shell_run": "Uruchom w terminalu",
   "scopeEditor.debug_run": "Debuguj",

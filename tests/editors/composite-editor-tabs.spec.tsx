@@ -53,8 +53,10 @@ describe('CompositeEditor tab labels', () => {
         />
       </IntlProvider>
     );
-    expect(screen.getByText('children (3)')).toBeInTheDocument();
-    expect(screen.getByText('pets (1)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 3' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'pets 1' })).toBeInTheDocument();
   });
 
   it('shows plain label when count is undefined', () => {
@@ -65,8 +67,10 @@ describe('CompositeEditor tab labels', () => {
         />
       </IntlProvider>
     );
-    expect(screen.getByText('children')).toBeInTheDocument();
-    expect(screen.getByText('pets (5)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'pets 5' })).toBeInTheDocument();
   });
 
   it('shows zero count', () => {
@@ -77,20 +81,26 @@ describe('CompositeEditor tab labels', () => {
         />
       </IntlProvider>
     );
-    expect(screen.getByText('children (0)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 0' })
+    ).toBeInTheDocument();
   });
 });
 
 describe('StructEditor tab count from value', () => {
   it('shows correct counts for each array field', () => {
     renderEditor(personTyp, vi.fn(), { value: mkPersonValue(3, 1) });
-    expect(screen.getByText('children (3)')).toBeInTheDocument();
-    expect(screen.getByText('pets (1)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 3' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'pets 1' })).toBeInTheDocument();
   });
 
   it('shows zero count for empty arrays', () => {
     renderEditor(personTyp, vi.fn(), { value: mkPersonValue(0, 1) });
-    expect(screen.getByText('children (0)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 0' })
+    ).toBeInTheDocument();
   });
 
   it('count updates when re-rendered with a new value', () => {
@@ -106,7 +116,9 @@ describe('StructEditor tab count from value', () => {
       </IntlProvider>
     );
 
-    expect(screen.getByText('children (2)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 2' })
+    ).toBeInTheDocument();
 
     rerender(
       <IntlProvider locale="en" messages={enMessages}>
@@ -119,7 +131,9 @@ describe('StructEditor tab count from value', () => {
       </IntlProvider>
     );
 
-    expect(screen.getByText('children (4)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 4' })
+    ).toBeInTheDocument();
   });
 });
 
@@ -135,11 +149,10 @@ describe('Unfilled badges', () => {
         />
       </IntlProvider>
     );
-    const badge = screen.getByText('2', { selector: '.unfilled-badge' });
-    expect(badge).toHaveAttribute('title', '2 values to fill');
-    expect(screen.queryAllByText('0', { selector: '.unfilled-badge' })).toEqual(
-      []
-    );
+    const badges = document.querySelectorAll('.count-badge-unfilled');
+    expect(badges.length).toBe(1);
+    expect(badges[0]).toHaveAttribute('title', '2 items, 2 values to fill');
+    expect(badges[0].textContent).toBe('2·2');
   });
 
   it('counts unset elements inside an inactive tab from the value', () => {
@@ -151,9 +164,8 @@ describe('Unfilled badges', () => {
       ])
     );
     renderEditor(personTyp, vi.fn(), { value });
-    expect(
-      screen.getByText('1', { selector: '.unfilled-badge' })
-    ).toBeInTheDocument();
+    const badge = document.querySelector('.count-badge-unfilled');
+    expect(badge?.textContent).toBe('2·1');
   });
 });
 
@@ -174,6 +186,8 @@ describe('Tab labels keep their decorations', () => {
       </IntlProvider>
     );
     expect(screen.getByTestId('mark').closest('.tab')).not.toBeNull();
-    expect(screen.getByText('children (2)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 2' })
+    ).toBeInTheDocument();
   });
 });
