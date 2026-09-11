@@ -6,6 +6,7 @@ import ValueEditor, {
   createRuntimeValue,
 } from '../editors/ValueEditors';
 import { CompositeEditor, type EditorItem } from '../editors/CompositeEditor';
+import { countUnsetIn } from '../editors/unsetValidation';
 import { confirm } from '../messaging/confirm';
 
 type InputFieldProps = {
@@ -144,6 +145,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
         label,
         type: testIo.typ,
         count,
+        unfilled: countUnsetIn(testIo.value?.value, testIo.typ),
         editor: (
           <InputField
             inputName={inputName}

@@ -91,6 +91,11 @@ function countUnset(rv: RuntimeValue, typ: Typ | undefined): number {
   }
 }
 
+/** How many values inside [rv] are still to fill, weighed by [typ]. */
+export function countUnsetIn(rv: RuntimeValue | undefined, typ: Typ): number {
+  return rv === undefined ? 0 : countUnset(rv, typ);
+}
+
 /** How many values (inputs and outputs together) are still to fill. */
 export function countUnsetValues(test: Test): number {
   const holes = (io: { typ: Typ; value?: { value: RuntimeValue } }): number =>

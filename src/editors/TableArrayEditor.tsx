@@ -1,4 +1,6 @@
 import { type ReactElement, useMemo, useState, useRef } from 'react';
+import { countUnsetIn } from './unsetValidation';
+import { UnfilledBadge } from './CompositeEditor';
 import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type {
@@ -780,6 +782,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       arrayValue?.value.kind === 'Array'
                         ? arrayValue.value.value.length
                         : 0;
+                    const unfilled = countUnsetIn(arrayValue, arr.arrayType);
 
                     const subTableId = `sub-table-${arr.label}`;
                     const arrElemType =
@@ -811,6 +814,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                               0
                             </span>
                           )}
+                          <UnfilledBadge count={unfilled} />
                           {editable && !isPhantomRow && !isExpectedOnlyRow && (
                             <button
                               className="add-subarray-pill"
@@ -1014,6 +1018,12 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
             <div className="sub-table-header">
               {subArray.label}
               <span className="count-badge">{subArray.items.length}</span>
+              <UnfilledBadge
+                count={subArray.items.reduce(
+                  (n, item) => n + countUnsetIn(item.value, subElementType),
+                  0
+                )}
+              />
             </div>
             <div className="sub-table-content">
               <TableArrayEditor

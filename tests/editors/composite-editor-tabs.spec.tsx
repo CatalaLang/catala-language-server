@@ -8,7 +8,7 @@ import {
   type EditorItem,
 } from '../../src/editors/CompositeEditor';
 import ValueEditor from '../../src/editors/ValueEditors';
-import { renderEditor, arrayVal, intVal, structVal } from './test-helpers';
+import { renderEditor, arrayVal, intVal, rv, structVal } from './test-helpers';
 import enMessages from '../../src/locales/en.json';
 
 function arrayItem(key: string, count?: number): EditorItem {
@@ -120,5 +120,39 @@ describe('StructEditor tab count from value', () => {
     );
 
     expect(screen.getByText('children (4)')).toBeInTheDocument();
+  });
+});
+
+describe('Unfilled badges', () => {
+  it('shows how many values are left to fill in a tab', () => {
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <CompositeEditor
+          items={[
+            { ...arrayItem('children', 2), unfilled: 2 },
+            { ...arrayItem('pets', 1), unfilled: 0 },
+          ]}
+        />
+      </IntlProvider>
+    );
+    const badge = screen.getByText('2', { selector: '.unfilled-badge' });
+    expect(badge).toHaveAttribute('title', '2 values to fill');
+    expect(screen.queryAllByText('0', { selector: '.unfilled-badge' })).toEqual(
+      []
+    );
+  });
+
+  it('counts unset elements inside an inactive tab from the value', () => {
+    const value = structVal(
+      personDecl,
+      new Map([
+        ['children', arrayVal([intVal(1), intVal(2)])],
+        ['pets', arrayVal([rv({ kind: 'Unset' }), intVal(3)])],
+      ])
+    );
+    renderEditor(personTyp, vi.fn(), { value });
+    expect(
+      screen.getByText('1', { selector: '.unfilled-badge' })
+    ).toBeInTheDocument();
   });
 });

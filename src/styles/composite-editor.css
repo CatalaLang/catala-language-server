@@ -88,3 +88,20 @@
 .tab-panel.active {
   display: block;
 }
+
+.unfilled-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-transform: none;
+  background: var(--vscode-inputValidation-warningBackground, #352a05);
+  color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-inputValidation-warningBorder, #cca700);
+}

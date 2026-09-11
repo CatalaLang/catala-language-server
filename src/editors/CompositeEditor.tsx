@@ -1,4 +1,5 @@
 import { useState, type ReactElement, type ReactNode } from 'react';
+import { useIntl } from 'react-intl';
 import type { Typ } from '../generated/catala_types';
 
 /**
@@ -13,6 +14,7 @@ export type EditorItem = {
   type: Typ;
   editor: ReactElement;
   count?: number;
+  unfilled?: number;
 };
 
 type CompositeEditorProps = {
@@ -45,6 +47,23 @@ function getTabDisplayName(item: EditorItem): ReactNode {
     return `${item.key} (${item.count})`;
   }
   return item.label;
+}
+
+export function UnfilledBadge({
+  count,
+}: {
+  count: number;
+}): ReactElement | null {
+  const intl = useIntl();
+  if (count === 0) return null;
+  return (
+    <span
+      className="unfilled-badge"
+      title={intl.formatMessage({ id: 'testEditor.unfilled' }, { count })}
+    >
+      {count}
+    </span>
+  );
 }
 
 export function CompositeEditor(props: CompositeEditorProps): ReactElement {
@@ -107,6 +126,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
                 onClick={() => setActiveTab(item.key)}
               >
                 {getTabDisplayName(item)}
+                <UnfilledBadge count={item.unfilled ?? 0} />
               </button>
             ))}
           </div>
