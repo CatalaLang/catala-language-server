@@ -52,7 +52,37 @@ let cmd_read =
       const Lib.read_test
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
-      $ buffer_path)
+      $ buffer_path
+      $ Cli.Flags.ex_scope_opt)
+
+(* The trace cannot be produced by this command: [Interpreter.evaluate_expr]
+   wraps every evaluation in a dummy [ScopeCall], so its root value is only
+   "<function>". The caller runs the scope through clerk with [--trace] and
+   hands the resulting file over here. *)
+let check_trace =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["check-trace"] ~docv:"FILE"
+        ~doc:
+          "Check the values declared by the $(b,#[testcase.variable]) \
+           attributes against the JSON trace in $(i,FILE), looking each \
+           variable up by name. Without this option the expected variables are \
+           not checked.")
+
+(* Mirrors clerk's own [--build-dir]: the caller may have compiled the
+   dependencies elsewhere than the default, and the interpretation here loads
+   the standard library and the tested modules from that directory. *)
+let build_dir =
+  Arg.(
+    value
+    & opt (some string) None
+    & info ["build-dir"] ~docv:"DIR"
+        ~doc:
+          "Look for the compiled artifacts (standard library and module \
+           dependencies) in $(i,DIR) rather than in $(b,_build). $(i,DIR) is \
+           understood relative to the project root, and is expected to be the \
+           directory clerk built them into.")
 
 let cmd_run =
   Cmd.v
@@ -68,7 +98,9 @@ let cmd_run =
       $ Cli.Flags.include_dirs
       $ Cli.Flags.Global.options
       $ Cli.Flags.ex_scope
-      $ Cli.Flags.scope_input)
+      $ Cli.Flags.scope_input
+      $ check_trace
+      $ build_dir)
 
 let cmd_write =
   Cmd.v
@@ -114,44 +146,6 @@ let register () =
       cmd_list_scopes;
       cmd_serialize_inputs;
     ];
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
-     ~contexts:(function
-     | Desugared.Name_resolution.Expression _ -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.Uid s)
-  | _ -> failwith "unexpected UID value");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
-     ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with _ -> Some Test_case_parser_lib.TestUi);
-  (Driver.Plugin.register_attribute ~plugin:"testcase"
-     ~path:["test_description"] ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestDescription s)
-  | _ -> failwith "unexpected test description");
-
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
-     ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.TestTitle s)
-  | _ -> failwith "unexpected test title");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-     ~contexts:(function
-     | Desugared.Name_resolution.Expression _ -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Test_case_parser_lib.ArrayItemLabel s)
-  | _ -> failwith "unexpected array item label")
+  Lib.register_attributes ()
 
 let () = register ()

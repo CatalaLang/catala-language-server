@@ -16,6 +16,7 @@ import {
   generate,
   serializeInputs,
 } from '../test-case-editor/testCaseCompilerInterop';
+import { runTrace } from '../trace-editor/traceRunner';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
@@ -86,11 +87,15 @@ export class ScopeInputController {
           if (typed_msg.value.in_shell) {
             const result = serializeInputs(this.test.test_inputs);
             if (result.kind == 'Ok')
-              vscode.commands.executeCommand('catala.runScope', {
-                uri: file,
-                scope: this.scope,
-                inputs: result.json,
-              });
+              if (this.test.variables.size > 0) {
+                runTrace(file, this.scope, result.json);
+              } else {
+                vscode.commands.executeCommand('catala.runScope', {
+                  uri: file,
+                  scope: this.scope,
+                  inputs: result.json,
+                });
+              }
             else
               throw new Error(
                 `Error on test scope run with inputs: ${result.message}`
@@ -104,6 +109,10 @@ export class ScopeInputController {
               inputs: result.json,
             });
           } else {
+            // No trace requested: running with overridden inputs goes through
+            // the compiler's `run_with_inputs`, which does not check the
+            // expected values written in the source, so instrumenting the run
+            // would only cost time.
             const results: TestRunResults = runTestScope(
               file,
               scope,
@@ -131,6 +140,16 @@ export class ScopeInputController {
           throw new Error(`Trying to select scope while in input scope mode`);
         case 'TestGenerateRequest':
           throw new Error(`Trying to generate scope while in input scope mode`);
+        case 'SpecificTestRequest':
+          throw new Error(
+            `Trying to start a specific test while in input scope mode`
+          );
+        case 'OpenInTestEditor':
+          throw new Error(
+            `Trying to open test editor while in input scope mode`
+          );
+        case 'Reload':
+          throw new Error('Unexpected Reload');
         default:
           assertUnreachable(typed_msg);
       }

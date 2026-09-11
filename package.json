@@ -36,14 +36,39 @@
           "title": "%view.catala.exceptionsView.name%",
           "icon": "logo.png"
         }
+      ],
+      "activitybar": [
+        {
+          "id": "catala",
+          "title": "Catala",
+          "icon": "./logo_alt.svg"
+        }
       ]
     },
     "views": {
+      "catala": [
+        {
+          "id": "catala.openAllTests",
+          "name": "%view.catala.openAllTests.title%",
+          "icon": "$(menu)"
+        },
+        {
+          "id": "catala.switches",
+          "name": "%view.catala.switches.title%",
+          "icon": "$(info)"
+        },
+        {
+          "id": "catala.help",
+          "name": "%view.catala.help.title%",
+          "icon": "$(info)"
+        }
+      ],
       "catala-exceptions-panel": [
         {
           "type": "webview",
           "id": "catala.exceptionsView",
-          "name": "%view.catala.exceptionsView.name%"
+          "name": "%view.catala.exceptionsView.name%",
+          "icon": "$(graph-line)"
         }
       ]
     },
@@ -63,10 +88,20 @@
         "title": "Debug a scope"
       },
       {
+        "command": "catala.openWithTraceEditor",
+        "icon": "$(graph)",
+        "title": "%command.catala.openWithTraceEditor.title%"
+      },
+      {
         "command": "catala.openWithTestEditor",
         "title": "%command.catala.openWithTestEditor.title%",
         "category": "%category.catala%",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "catala.debugAllTests",
+        "title": "%command.catala.debugAllTests.title%",
+        "category": "%category.catala%"
       },
       {
         "command": "catala.openInputEditor",
@@ -80,6 +115,20 @@
         "command": "catala.showExceptionsAtCursor",
         "title": "%command.catala.showExceptionsAtCursor.title%",
         "category": "%category.catala%"
+      },
+      {
+        "command": "catala.refreshSwitches",
+        "category": "catala",
+        "title": "Refresh Switches",
+        "icon": "$(sync-compact)"
+      },
+      {
+        "command": "catala.trace.viewWithFilter",
+        "title": "%command.catala.trace.viewWithFilter.title%"
+      },
+      {
+        "command": "catala.trace.addToFilter",
+        "title": "%command.catala.trace.addToFilter.title%"
       }
     ],
     "menus": {
@@ -87,6 +136,25 @@
         {
           "command": "catala.showExceptions",
           "when": "false"
+        },
+        {
+          "command": "catala.refreshSwitches",
+          "when": "false"
+        },
+        {
+          "command": "catala.trace.viewWithFilter",
+          "when": "false"
+        },
+        {
+          "command": "catala.trace.addToFilter",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "catala.refreshSwitches",
+          "when": "view == catala.switches",
+          "group": "navigation"
         }
       ],
       "explorer/context": [
@@ -94,6 +162,11 @@
           "command": "catala.openWithTestEditor",
           "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(en|fr|pl)$/",
           "group": "navigation@2"
+        },
+        {
+          "command": "catala.openWithTraceEditor",
+          "when": "resourceFilename =~ /\\.catala_(en|fr)$/",
+          "group": "navigation@3"
         }
       ],
       "editor/context": [
@@ -118,6 +191,21 @@
           "command": "catala.openWithTestEditor",
           "when": "config.catala.enableCustomTestCaseEditor && (editorLangId == catala_en || editorLangId == catala_fr || editorLangId == catala_pl) && resourceFilename =~ /.*test.*\\.catala_(en|fr|pl)$/",
           "group": "navigation@2"
+        },
+        {
+          "command": "catala.openWithTraceEditor",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en",
+          "group": "navigation@13"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "catala.trace.viewWithFilter",
+          "when": "webviewSection == 'tracePanelSelection'"
+        },
+        {
+          "command": "catala.trace.addToFilter",
+          "when": "webviewSection == 'tracePanelSelection'"
         }
       ]
     },
@@ -252,6 +340,16 @@
         "selector": [
           {
             "filenamePattern": "*test*.catala_*"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "catala.traceEditor",
+        "displayName": "Catala Trace Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.catala_*"
           }
         ],
         "priority": "option"
@@ -390,7 +488,7 @@
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "opam exec -- dune build @lsp; webpack --mode development",
-    "test": "tsc && vscode-test",
+    "test": "tsc -p tsconfig.test.json && vscode-test",
     "webview:test": "node node_modules/vitest/vitest.mjs run",
     "webview:test:watch": "node node_modules/vitest/vitest.mjs",
     "format": "prettier --write .",
@@ -406,17 +504,25 @@
     "knip:exports": "knip --include exports --no-progress"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@floating-ui/react": "^0.27.19",
+    "@mui/material": "^9.1.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/vscode-webview": "^1.57.5",
-    "@vscode/codicons": "^0.0.36",
+    "@vscode-elements/elements": "^2.5.1",
+    "@vscode-elements/react-elements": "^2.4.0",
     "command-exists": "^1.2.9",
     "p-queue": "^6.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-intl": "^7.1.9",
+    "react-loading-indicators": "^1.0.1",
     "vscode-languageclient": "^8.0.2"
+  },
+  "overrides": {
+    "react-is": "^18.3.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -433,7 +539,7 @@
     "css-loader": "^7.1.2",
     "eslint": "^9.14.0",
     "glob": "^11.0.3",
-    "husky": "^9.0.11",
+    "husky": "^9.1.7",
     "jsdom": "^25.0.1",
     "knip": "^5.71.0",
     "lint-staged": "^15.2.7",

@@ -11,7 +11,16 @@ const commonConfig = {
       },
       {
         test: /\.css$/i,
+        resourceQuery: { not: [/url/] },
         use: ['style-loader', 'css-loader'],
+      },
+      {
+        // `import x from '....css?url'` emits the file and returns its path,
+        // instead of injecting it via style-loader (which needs a DOM).
+        test: /\.css$/i,
+        resourceQuery: /url/,
+        type: 'asset/resource',
+        generator: { filename: '[name][ext]', publicPath: '' },
       },
       {
         test: /\.(woff|woff2|eot|ttf|otf)$/i,

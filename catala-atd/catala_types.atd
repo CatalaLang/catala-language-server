@@ -93,12 +93,15 @@ type attr_def = [
   | Uid of string
   | ArrayItemLabel of string
   | Description of string
+  | TestDate of string
   ] <ocaml repr="classic">
 
 type runtime_value = {
   value: runtime_value_raw;
   attrs: attr_def list;
 }
+
+type scope_real_var = { name: string; ?real_value: runtime_value option }
 
 (* Test data *)
 
@@ -120,15 +123,82 @@ type test = {
   tested_scope: scope_def;
   test_inputs: test_inputs;
   test_outputs: test_outputs;
+  variables: (string * runtime_value option) list <json repr="object"> <ts repr="map">;
   description: string;
   title: string;
+}
+
+(* A test as displayed in the 'debug all tests' panel: the test itself
+   (GUI or plain), along with the run metadata that is not intrinsic to
+   the test (which file it lives in and its last run result). *)
+type test_debugger = {
+  index: int;  
+  filename: string;
+  (* [filename] made relative to the workspace folder it belongs to, for
+     display: the panel shows where a test sits in the project, and only the
+     extension side can compute this. Absent when the file belongs to no
+     workspace folder, in which case there is nothing to be relative to. *)
+  ?relative_filename: string option;
+  test: test_entrypoint;
+  ?success: bool option;
+  ?date: string option;
 }
 
 type test_run = {
   test: test;
   assert_failures: bool;
   diffs: diff list;
+  (* Defaulted rather than required: absent from the JSON emitted by a Catala
+     that does not check expected variables yet. *)
+  ~variable_failures: variable_failure list;
 }
+
+type file_test = {
+  file: string;
+  tests: string;
+}
+
+type scope_test_result = {
+  scope_name: string;
+  success: bool;
+  errors: string list;
+  time: float;
+}
+
+type inline_test = {
+  cmd: string;
+  success: bool;
+}
+
+type file_tests = {
+  scopes: scope_test_result list;
+  inline_tests <json name="inline-tests"> : inline_test list;
+}
+
+type file_test_result = {
+  file: string;
+  tests: file_tests;
+}
+
+type coverage = {
+  scopes: string list;
+  locations: string list;
+}
+
+type test_result = {
+  test_results <json name="test-results"> : file_test_result list;
+  coverage: coverage;
+}
+
+
+type gui_entrypoint = {
+   scope_tested : string;
+   scope: string;
+   ?title: string option;
+   ?description : string option;
+}
+
+type test_debugger_list = test_debugger list
 
 type test_list = test list
 
@@ -148,6 +218,21 @@ type diff = {
   actual: runtime_value;
 }
 
+(* One auxiliary variable whose value in the trace does not match the one
+   declared by its [#[testcase.variable]] attribute. The variable is looked up
+   in the trace by name.
+
+   Mirrors [Clerk_report.expected]. The values are the rendered strings the
+   checker compares, not [runtime_value]s: the comparison deliberately happens
+   on the trace's own rendering, so that hand-written expected values need not
+   have the runtime's formatting rules replicated. [current_value] is absent
+   when the trace carries no value for the variable. *)
+type variable_failure = {
+  name: string;
+  expected: string;
+  ?current_value: string option;
+}
+
 (* Message exchange within extension (shell <-> webview) *)
 
 type parse_results = [
@@ -160,6 +245,7 @@ type test_run_output = { (* do we need that type at all when the difference with
   test_outputs: test_outputs;
   assert_failures: bool;
   diffs: diff list;
+  ~variable_failures: variable_failure list;
 }
 
 type test_run_results = [
@@ -178,6 +264,11 @@ type test_run_request = {
   reset_outputs: bool;
   in_shell: bool;
   debug: bool;
+  (* Whether the test declares expected variables. Only then is the run worth
+     instrumenting with "--trace": tracing changes the compiled AST and costs
+     interpretation time, so it is not enabled for tests that have nothing to
+     check against the trace. *)
+  has_expected: bool;
 }
 
 type test_generate_request = {
@@ -209,38 +300,49 @@ type confirm_result = {
   confirmed: bool;
 }
 
-type up_message = [
-  | Ready
-  | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
-  | OpenInTextEditor
-  | TestRunRequest of test_run_request
-  | TestGenerateRequest of test_generate_request
-  | OpenTestScopePicker
-  | ConfirmRequest of confirm_request
-]
-
-type down_message = [
-  | Update of parse_results
-  | TestRunResults of test_run_results_msg
-  | ConfirmResult of confirm_result
-]
-
-(* List entrypoints *)
-
-type gui_entrypoint = {
-   scope : string;
-   ?title: string option;
-   ?description : string option;
-}
-
-type fonc_test_entrypoint = {
-   scope : string;
+type scope_success = {
+  success: bool;
+  date: string;
 }
 
 type test_entrypoint = [
   | GUI of gui_entrypoint
   | Test of fonc_test_entrypoint
 ]
+
+type up_message = [
+  | Ready
+  | Reload
+  | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
+  | OpenInTextEditor of string option (* filename *)
+  | TestRunRequest of test_run_request
+  | SpecificTestRequest of int list
+  | TestGenerateRequest of test_generate_request
+  | OpenTestScopePicker
+  | ConfirmRequest of confirm_request
+  | OpenInTestEditor of string (* filename *)
+]
+
+type test_scope_result = {
+  entry: test_entrypoint;
+  scope_success: scope_success;
+  index: int;
+  order: bool
+}
+
+type down_message = [
+  | Update of parse_results
+  | TestRunResults of test_run_results_msg
+  | TestScopeResult of test_scope_result
+  | ConfirmResult of confirm_result
+  | AllTests of test_debugger_list
+]
+
+(* List entrypoints *)
+
+type fonc_test_entrypoint = {
+   scope : string;
+}
 
 type no_input_scope_entrypoint = {
   scope: string;

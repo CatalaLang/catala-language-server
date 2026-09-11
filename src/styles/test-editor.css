@@ -44,9 +44,11 @@
   color: var(--stormgray00);
   width: fit-content;
 }
+
 .test-run-success {
   background-color: var(--success);
 }
+
 .test-run-error {
   background-color: var(--error);
 }
@@ -93,6 +95,7 @@
   justify-content: center;
   width: fit-content;
 }
+
 .button-action-dvp .codicon {
   font-size: 14px;
 }
@@ -320,4 +323,69 @@
 
 .context-var-reset-btn:hover {
   opacity: 1;
+}
+
+/* Expected variables section: value + remove button row */
+.expected-variable-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expected-variable-value {
+  width: 10em;
+}
+
+/* Rows grouping the states of one auxiliary variable. They carry no background
+   of their own, so hovering is the only way to tell which one the pointer is
+   on; the highlight is applied to the cells rather than the row because the
+   second cell is a flex container. */
+.state-row {
+  cursor: pointer;
+}
+
+.state-row:hover td {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+/* Variable catalog table.
+
+   Fixed layout on purpose: rows are revealed and hidden as the user expands
+   steps and state groups, and each value row carries an editor whose content
+   changes while it is typed in. With the default `auto` layout every one of
+   those changes re-measures all the cells, so the columns kept resizing and
+   the table shifted under the pointer. Widths now come from the `colgroup`
+   only, so the geometry stays put. */
+.variable-catalog-table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.variable-catalog-col-chevron {
+  width: 1.5em;
+}
+
+/* Wide enough for the roomiest editor (the three duration fields). */
+.variable-catalog-col-value {
+  width: 16em;
+}
+
+/* Two icon buttons. */
+.variable-catalog-col-actions {
+  width: 4.5em;
+}
+
+/* Fixed layout does not clip, so a long name would spill over the value
+   column instead of widening its own. The full name stays available as the
+   cell's tooltip. */
+.variable-catalog-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.variable-catalog-actions {
+  display: flex;
+  gap: 2px;
 }

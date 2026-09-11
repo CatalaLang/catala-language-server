@@ -50,6 +50,20 @@ export async function listEntrypoints(
   return entrypoints;
 }
 
+export type CheckExpected = (clerk_toml_dir: string) => Promise<boolean>;
+
+export function checkExpected(client: LanguageClient): CheckExpected {
+  return async (clerk_toml_dir: string): Promise<boolean> => {
+    let x: JSON = await client.sendRequest('catala.getExpected', {
+      clerk_toml_dir,
+    });
+    if (typeof x === 'boolean') return x;
+    else {
+      throw new Error('Bad json for checkExpected');
+    }
+  };
+}
+
 export type ExceptionsArgs = {
   uri: string;
   scope: string;

@@ -17,6 +17,89 @@ open Shared_ast
 module I = Desugared.Ast
 module O = Catala_types_t
 module J = Catala_types_j
+module S = Surface.Ast
+
+module Expected : sig
+  type expected = {
+    name : string;
+    expected : string;
+    current_value : string option;
+  }
+
+  val check_expected :
+    expected:Clerk_utils.Scan.expected_variable Clerk_utils.Scan.M.t ->
+    tested_scope:string ->
+    Yojson.Safe.t ->
+    expected list
+end = struct
+  type expected = {
+    name : string;
+    expected : string;
+    current_value : string option;
+  }
+
+  let check_expected ~expected ~tested_scope json =
+    let open Clerk_utils in
+    let expected_list = Expected.check_expected ~expected ~tested_scope json in
+    List.map
+      (fun expected ->
+        {
+          name = expected.Expected.name;
+          expected = expected.Expected.expected;
+          current_value = expected.Expected.current_value;
+        })
+      expected_list
+end
+
+module Scan = Clerk_utils.Scan
+
+type Pos.attr += TestUi
+type Pos.attr += Uid of string
+type Pos.attr += TestDescription of string
+type Pos.attr += TestTitle of string
+type Pos.attr += ArrayItemLabel of string
+type Pos.attr += ExpectedVariable of string
+
+let register_attributes () =
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
+    ~contexts:(function
+      | Desugared.Name_resolution.Expression _ -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (Uid s)
+      | _ -> failwith "unexpected UID value");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ _value -> Some TestUi);
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_description"]
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (TestDescription s)
+      | _ -> failwith "unexpected test description");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (TestTitle s)
+      | _ -> failwith "unexpected test title");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
+    ~contexts:(function
+      | Desugared.Name_resolution.Expression _ -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (ArrayItemLabel s)
+      | _ -> failwith "unexpected array item label");
+  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["variable"]
+    ~contexts:(function
+      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
+    (fun ~pos:_ value ->
+      match value with
+      | Shared_ast.String (s, _pos) -> Some (ExpectedVariable s)
+      | _ -> failwith "unexpected variable label")
 
 let to_relative (p : File.t) = File.make_relative_to ~dir:(Sys.getcwd ()) p
 
@@ -38,7 +121,16 @@ let lookup_clerk_toml from_dir =
     end
   with _ -> None
 
-let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
+(* Where clerk leaves its artifacts, relative to the project root. Overridable
+   from the command line: a caller that built with [clerk --build-dir] has them
+   somewhere else, and this is the only way for us to find them back. *)
+let default_build_dir = "_build"
+
+let lookup_include_dirs
+    ?(build_dir = default_build_dir)
+    ?(prefix_build = false)
+    ?buffer_path
+    options =
   (* Otherwise, lookup for the toml *)
   let dir =
     match options.Global.input_src with
@@ -63,7 +155,9 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
     in
     let include_dirs =
       if prefix_build then
-        List.map (fun p -> File.(path_to_build / "_build" / p)) all_include_dirs
+        List.map
+          (fun p -> File.(path_to_build / build_dir / p))
+          all_include_dirs
       else List.map (File.( / ) path_to_build) all_include_dirs
     in
     let all_include_dirs =
@@ -330,12 +424,6 @@ and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
     in
     { O.enum_name; constructors; ctor_attrs }
 
-type Pos.attr += TestUi
-type Pos.attr += Uid of string
-type Pos.attr += TestDescription of string
-type Pos.attr += TestTitle of string
-type Pos.attr += ArrayItemLabel of string
-
 let rec get_value : type a.
     Global.backend_lang -> decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun lang decl_ctx e ->
@@ -591,6 +679,7 @@ let get_scope_test
     tested_scope;
     test_outputs;
     test_inputs;
+    variables = [];
     description;
     title;
   }
@@ -605,9 +694,10 @@ let write_stdout f arg =
 let print_test test = write_stdout J.write_test test
 let print_tests test = write_stdout J.write_test_list test
 
-let read_program includes path_to_build options =
+let read_program ?(build_dir = default_build_dir) includes path_to_build options
+    =
   let stdlib =
-    Some (Global.raw_file File.(path_to_build / "_build" / "libcatala"))
+    Some (Global.raw_file File.(path_to_build / build_dir / "libcatala"))
   in
   let prg, ctx = Driver.Passes.desugared options ~stdlib ~includes in
   let prg = Desugared.Disambiguate.program prg in
@@ -815,6 +905,130 @@ let get_test_scopes prg =
       && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
   |> ScopeName.Map.keys
 
+let string_of_runtime_value ~lang (v : O.runtime_value) : string =
+  match v.O.value with
+  | O.Bool b -> if b then "true" else "false"
+  | O.Integer i -> string_of_int i
+  | O.Decimal f ->
+    let s = Printf.sprintf "%.12f" f in
+    let len = ref (String.length s) in
+    while !len > 1 && s.[!len - 1] = '0' do
+      decr len
+    done;
+    let s = String.sub s 0 !len in
+    if s.[String.length s - 1] = '.' then s ^ "0" else s
+  | O.Money m -> (
+    let major = abs m / 100 and minor = abs m mod 100 in
+    let sign = if m < 0 then "-" else "" in
+    match lang with
+    | `En -> Printf.sprintf "%s$%d.%02d" sign major minor
+    | _ -> Printf.sprintf "%s%d,%02d €" sign major minor)
+  | O.Date { year; month; day } ->
+    Printf.sprintf "%04d-%02d-%02d" year month day
+  | O.Duration { years; months; days } ->
+    Printf.sprintf "%dy %dm %dd" years months days
+  | O.Enum (_, (ctor, _)) -> ctor
+  | _ -> ""
+
+let runtime_value_of_string (s : string) : O.runtime_value =
+  let enum ctor =
+    O.Enum
+      ( { O.enum_name = "Optional"; constructors = []; ctor_attrs = [] },
+        (ctor, None) )
+  in
+  let money_of s =
+    let mk n =
+      match
+        float_of_string_opt
+          (String.trim (String.map (function ',' -> '.' | c -> c) n))
+      with
+      | Some f -> Some (O.Money (int_of_float (Float.round (f *. 100.))))
+      | None -> None
+    in
+    if String.contains s '$' then
+      mk (String.concat "" (String.split_on_char '$' s))
+    else
+      let euro = "€" in
+      let ls = String.length s and le = String.length euro in
+      if ls >= le && String.sub s (ls - le) le = euro then
+        mk (String.sub s 0 (ls - le))
+      else None
+  in
+  let scan fmt f = try Some (Scanf.sscanf s fmt f) with _ -> None in
+  let raw =
+    match s with
+    | "true" -> O.Bool true
+    | "false" -> O.Bool false
+    | "Absent" | "--" -> enum "Absent"
+    | s -> (
+      match money_of s with
+      | Some m -> m
+      | None -> (
+        match int_of_string_opt s with
+        | Some i -> O.Integer i
+        | None -> (
+          match scan "%d-%d-%d%!" (fun y m d -> y, m, d) with
+          | Some (year, month, day) -> O.Date { year; month; day }
+          | None -> (
+            match scan "%dy %dm %dd%!" (fun y m d -> y, m, d) with
+            | Some (years, months, days) -> O.Duration { years; months; days }
+            | None -> (
+              match float_of_string_opt s with
+              | Some f -> O.Decimal f
+              | None -> enum s)))))
+  in
+  { O.value = raw; attrs = [] }
+
+let parse_expected_variable (s : string) :
+    (string * O.runtime_value option) option =
+  match String.index_opt s ':' with
+  | None -> Some (String.trim s, None)
+  | Some i ->
+    let name = String.trim (String.sub s 0 i) in
+    let value = String.trim (String.sub s (i + 1) (String.length s - i - 1)) in
+    if value = "" then Some (name, None)
+    else Some (name, Some (runtime_value_of_string value))
+
+(* Splits a "name: payload" attribute payload, keeping [payload] exactly as
+   written in the source: [Expected.check_expected] needs the surface form to
+   re-render it through the trace's own encoder. *)
+let split_expected_attr (s : string) : (string * string) option =
+  match String.index_opt s ':' with
+  | None -> None
+  | Some i ->
+    let name = String.trim (String.sub s 0 i) in
+    let payload =
+      String.trim (String.sub s (i + 1) (String.length s - i - 1))
+    in
+    if name = "" || payload = "" then None else Some (name, payload)
+
+(* The expected variables of one testing scope, in the form
+   [Expected.check_expected] consumes.
+
+   Read from the scope's own attributes rather than through [Scan.catala_file],
+   which gathers a single map for a whole file: a file may hold several test
+   scopes, and `testcase run` runs exactly one. *)
+let expected_variables info : Scan.expected_variable Scan.M.t =
+  List.fold_left
+    (fun acc (name, value) -> Scan.add_expected_value name value acc)
+    Scan.M.empty
+    (Pos.get_attrs info (function
+      | ExpectedVariable s -> split_expected_attr s
+      | _ -> None))
+
+(* Splits a "name: payload" attribute payload, keeping [payload] exactly as
+   written in the source: [Expected.check_expected] needs the surface form to
+   re-render it through the trace's own encoder. *)
+let split_expected_attr (s : string) : (string * string) option =
+  match String.index_opt s ':' with
+  | None -> None
+  | Some i ->
+    let name = String.trim (String.sub s 0 i) in
+    let payload =
+      String.trim (String.sub s (i + 1) (String.length s - i - 1))
+    in
+    if name = "" || payload = "" then None else Some (name, payload)
+
 let get_catala_test (prg, naming_ctx) testing_scope_name =
   let testing_scope =
     ScopeName.Map.find testing_scope_name prg.I.program_root.module_scopes
@@ -966,18 +1180,29 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
         var_str, { test_out with O.value })
       base_test.test_outputs
   in
-  { base_test with O.test_inputs; test_outputs; description; title }
+  let variables =
+    Pos.get_attrs info (function
+      | ExpectedVariable s -> parse_expected_variable s
+      | _ -> None)
+  in
+  { base_test with O.test_inputs; test_outputs; variables; description; title }
 
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
-let read_test include_dirs (options : Global.options) buffer_path =
+let read_test include_dirs (options : Global.options) buffer_path scope_filter =
   let path_to_build, include_dirs =
     if include_dirs = [] then lookup_include_dirs ?buffer_path options
     else ".", include_dirs
   in
   let prg = read_program include_dirs path_to_build options in
   let tests = import_catala_tests prg in
+  let tests =
+    match scope_filter with
+    | None -> tests
+    | Some scope ->
+      List.filter (fun (t : O.test) -> t.O.testing_scope = scope) tests
+  in
   write_stdout J.write_test_list tests
 
 type duration_units = { day : string; month : string; year : string }
@@ -1163,6 +1388,16 @@ let write_catala_test ppf t lang =
   fprintf ppf "#[testcase.test_description = %s]@\n"
     (String.quote t.description);
   fprintf ppf "#[testcase.test_title = %s]@\n" (String.quote t.title);
+  List.iter
+    (fun (var, value) ->
+      let payload =
+        match value with
+        | None -> var
+        | Some v ->
+          Printf.sprintf "%s: %s" var (string_of_runtime_value ~lang v)
+      in
+      fprintf ppf "#[testcase.variable = %s]@\n" (String.quote payload))
+    t.variables;
   fprintf ppf "@[<v 2>%s %s:@," strings.declaration_scope t.testing_scope;
   fprintf ppf "%s %s %s %s.%s@," strings.output_scope sscope_var strings.scope
     t.tested_scope.module_name t.tested_scope.name;
@@ -1190,7 +1425,7 @@ let write_catala_test ppf t lang =
       | Some { value; _ } ->
         fprintf ppf "@,%s (@[<hv>%s.%s =@ %a)@]" strings.assertion sscope_var
           tvar
-          (print_catala_value ~typ:(Some t_out.typ) ~lang)
+          (print_catala_value ~typ:None ~lang)
           value)
     t.test_outputs;
   fprintf ppf "@]@,```@,"
@@ -1254,10 +1489,26 @@ let write_catala options outfile =
 
 let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program) :
     (StructField.t * (dcalc, typed) gexpr) list =
+  (* When the trace is on, the compiler wraps sub-expressions in [Tag] operator
+     applications: [Expr.etag] is a no-op unless [Global.options.trace] is set,
+     and `testcase run` now sets it before compiling. Those markers carry no
+     value and have to be seen through to reach the shape below. *)
+  let rec strip_tags (e : (dcalc, typed) gexpr) : (dcalc, typed) gexpr =
+    match Mark.remove e with
+    | EAppOp { op = Op.Tag _, _; args = [e]; _ } -> strip_tags e
+    | _ -> e
+  in
   let get_expected_value (assert_e : (dcalc, typed) gexpr) =
-    match Mark.remove assert_e with
-    | EAssert (EAppOp { args = [(EStructAccess { field; _ }, _); v]; _ }, _) ->
-      field, v
+    match Mark.remove (strip_tags assert_e) with
+    | EAssert equality -> (
+      match Mark.remove (strip_tags equality) with
+      | EAppOp { args = [lhs; v]; _ } -> (
+        match Mark.remove (strip_tags lhs) with
+        (* [v] is stripped too: it is handed to [get_value] downstream, which
+           knows nothing about tags. *)
+        | EStructAccess { field; _ } -> field, strip_tags v
+        | _ -> assert false)
+      | _ -> assert false)
     | _ -> assert false
   in
   let code_items = dcalc_prg.code_items |> BoundList.to_seq |> List.of_seq in
@@ -1397,18 +1648,18 @@ let proj_diff get_value ({ path; expected; actual } : diff) : O.diff =
   let actual = get_value actual in
   { O.path = List.map proj_path path; expected; actual }
 
-let retrieve_program include_dirs options scope_name =
+let retrieve_program ?build_dir include_dirs options scope_name =
   let path_to_build, include_dirs =
     if include_dirs = [] then
       let _path_to_build, include_dirs = lookup_include_dirs options in
       let path_to_build, build_include_dirs =
-        lookup_include_dirs ~prefix_build:true options
+        lookup_include_dirs ?build_dir ~prefix_build:true options
       in
       path_to_build, build_include_dirs @ include_dirs
     else ".", []
   in
   let desugared_prg, naming_ctx =
-    read_program include_dirs path_to_build options
+    read_program ?build_dir include_dirs path_to_build options
   in
   let testing_scope_name =
     match
@@ -1523,12 +1774,13 @@ let rec convert_to_json_input ({ value; _ } : O.runtime_value) : Yojson.Safe.t =
   convert_runtime_raw value
 
 let run_with_inputs
+    ?build_dir
     include_dirs
     options
     tested_scope_name
     (scope_input : Yojson.Safe.t) =
   let desugared_prg, _naming_ctx, scope_name, dcalc_prg =
-    retrieve_program include_dirs options tested_scope_name
+    retrieve_program ?build_dir include_dirs options tested_scope_name
   in
   let test =
     get_scope_test desugared_prg "<abstract>" scope_name
@@ -1614,11 +1866,18 @@ let run_with_inputs
   in
   let assert_failures = not (failed_asserts = []) in
   let test = O.{ test with test_outputs } in
-  write_stdout J.write_test_run O.{ test; assert_failures; diffs = [] }
+  (* TODO(expected variables): [run_with_inputs] runs against ad-hoc inputs, so
+     the expected values written in the source do not apply here. *)
+  write_stdout J.write_test_run
+    O.{ test; assert_failures; diffs = []; variable_failures = [] }
 
-let run_test include_dirs options testing_scope =
+(* [check_trace] is the JSON trace of that same scope, produced by running it
+   through clerk with [--trace]. The interpretation done here cannot produce a
+   usable one: [Interpreter.evaluate_expr] wraps every evaluation in a dummy
+   [ScopeCall], so the trace it emits carries "<function>" as its root value. *)
+let run_test ?build_dir include_dirs options testing_scope check_trace =
   let desugared_prg, naming_ctx, testing_scope_name, dcalc_prg =
-    retrieve_program include_dirs options testing_scope
+    retrieve_program ?build_dir include_dirs options testing_scope
   in
   let test = get_catala_test (desugared_prg, naming_ctx) testing_scope_name in
   let build_term program_fun =
@@ -1628,6 +1887,9 @@ let run_test include_dirs options testing_scope =
       | _ -> assert false
     in
     program_expr
+  in
+  let expected =
+    expected_variables (Mark.get (ScopeName.get_info testing_scope_name))
   in
   let result_struct, failed_asserts =
     interpret_program dcalc_prg testing_scope_name build_term
@@ -1669,13 +1931,53 @@ let run_test include_dirs options testing_scope =
     |> List.map (proj_diff (get_value dcalc_prg.lang dcalc_prg.decl_ctx))
   in
   let assert_failures = not (failed_asserts = []) in
-  let test_run = { O.test; O.assert_failures; O.diffs } in
+  (* Same check as `interpret --check-expected`, reported as data instead of
+     raising: this command exists to hand failures back to the editor, and its
+     error absorber only catches assertion failures. An unreadable trace
+     therefore leaves the variables unchecked with a warning, where `interpret`
+     rightly fails hard. *)
+  let variable_failures =
+    if check_trace = None || Scan.M.is_empty expected then []
+    else
+      let file = Option.get check_trace in
+      (* Read here rather than through [Expected.read_trace], which reports with
+         [Message.error] and so raises: this command hands failures back to the
+         editor, and its absorber only catches assertion failures. An unreadable
+         trace leaves the variables unchecked, where `interpret` fails hard. *)
+      match Yojson.Safe.from_file file with
+      | trace ->
+        Expected.check_expected ~expected ~tested_scope:testing_scope trace
+        (* Annotated: several ATD records carry a [name] field, so the type is
+           pinned rather than left to field-based inference. *)
+        |> List.map (fun (e : Expected.expected) : O.variable_failure ->
+            {
+              name = e.Expected.name;
+              expected = e.Expected.expected;
+              current_value = e.Expected.current_value;
+            })
+      | exception e ->
+        Message.warning
+          "Could not read the trace @{<bold>%s@} of @{<bold>%s@}, its expected \
+           variables are left unchecked:@ %s"
+          file testing_scope (Printexc.to_string e);
+        []
+  in
+  let test_run = { O.test; O.assert_failures; O.diffs; O.variable_failures } in
   write_stdout J.write_test_run test_run
 
-let run_test_cmd include_dirs options test_scope_name scope_input_opt =
+(* [build_dir] comes straight from the command line, hence the option type: it
+   is left to the callees to fall back on [default_build_dir]. *)
+let run_test_cmd
+    include_dirs
+    options
+    test_scope_name
+    scope_input_opt
+    check_trace
+    build_dir =
   match scope_input_opt with
-  | None -> run_test include_dirs options test_scope_name
-  | Some json -> run_with_inputs include_dirs options test_scope_name json
+  | None -> run_test ?build_dir include_dirs options test_scope_name check_trace
+  | Some json ->
+    run_with_inputs ?build_dir include_dirs options test_scope_name json
 
 let print_scopes scopes = write_stdout J.write_scope_def_list scopes
 

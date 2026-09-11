@@ -1,6 +1,7 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
   ScopeDefList,
+  ScopeTestResult,
   TestGenerateResults,
   TestInputs,
 } from '../generated/catala_types';
@@ -15,13 +16,9 @@ import {
   type TestRunResults,
 } from '../generated/catala_types';
 import { logger } from '../extension/logger';
-import { Uri, window, workspace } from 'vscode';
+import { window } from 'vscode';
 import path from 'path';
-import { clerkPath, catalaPath, shellArg } from '../shared/util_client';
-
-function getCwd(bufferPath: string): string | undefined {
-  return workspace.getWorkspaceFolder(Uri.file(bufferPath))?.uri?.fsPath;
-}
+import { clerkPath, catalaPath, getCwd, shellArg } from '../shared/util_client';
 
 type ExecOptions = { input?: string; cwd?: string };
 type ExecResult = { ok: true; output: string } | { ok: false; stderr: string };
@@ -34,14 +31,12 @@ function execBinary(
   logger.log(`Running ${bin} ${args.join(' ')}`);
   try {
     const useShell = process.platform === 'win32';
-    return {
-      ok: true,
-      output: execFileSync(bin, useShell ? args.map(shellArg) : args, {
-        encoding: 'utf8',
-        shell: useShell,
-        ...opts,
-      }),
-    };
+    const output = execFileSync(bin, useShell ? args.map(shellArg) : args, {
+      encoding: 'utf8',
+      shell: useShell,
+      ...opts,
+    });
+    return { ok: true, output };
   } catch (error) {
     const stderr = (error as SpawnSyncReturns<Buffer | string>).stderr;
     return {
@@ -57,13 +52,22 @@ function execBinary(
 
 export function parseTestFile(
   content: string,
-  lang: string,
-  bufferPath: string
+  bufferPath: string,
+  lang?: string,
+  scope?: string
 ): ParseResults {
   const cwd = getCwd(bufferPath);
   const execResult = execBinary(
     catalaPath,
-    ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
+    [
+      'testcase',
+      'read',
+      ...(lang ? ['-l', lang] : []),
+      '--buffer-path',
+      bufferPath,
+      ...(scope ? ['--scope', scope] : []),
+      '-',
+    ],
     { input: content, ...(cwd && { cwd }) }
   );
   if (!execResult.ok) return { kind: 'ParseError', value: execResult.stderr };
@@ -101,10 +105,22 @@ export function atdToCatala(tests: TestList, lang: string): string {
   return result.output;
 }
 
+// Outcome of running a scope test: either a successful `ScopeTestResult`,
+// or a failure carrying an error message.
+export type ScopeRunResult =
+  | { kind: 'Success'; value: ScopeTestResult }
+  | { kind: 'Failed'; value: string };
+
 export function runTestScope(
   filename: string,
   testScope: string,
-  inputs?: TestInputs
+  inputs?: TestInputs,
+  /**
+   * Absolute path of the JSON file the trace should be written to. When
+   * undefined the run is not instrumented at all: tracing changes the compiled
+   * AST and costs interpretation time.
+   */
+  traceFile?: string
 ): TestRunResults {
   /*
    * Notes:
@@ -121,6 +137,28 @@ export function runTestScope(
     ? JSON.stringify(writeTestInputs(inputs))
     : undefined;
   const inputArgs = inputs ? ['--input=-'] : [];
+  // Only instrument the run when the test has expected variables to check:
+  // tracing changes the compiled AST and costs interpretation time.
+  // NB: bare `--trace` defaults to writing the trace on stdout, where the JSON
+  // result is read from; the plugin redirects it away, which is what makes this
+  // safe.
+  // Dependencies are built in a separate directory so that the instrumented
+  // artifacts do not evict the plain ones from the main build dir.
+  const clerkTraceArgs = traceFile
+    ? [
+        '--trace',
+        traceFile,
+        '--build-dir',
+        '_build/_trace',
+        '--ninja-output-file',
+        '_build/_trace/clerk.ninja',
+      ]
+    : [];
+  // The trace is produced by the clerk run below, not here: `testcase run` wraps
+  // every evaluation in a dummy scope call, so the trace it could emit carries
+  // only "<function>" as its root value. It is handed the file instead, so that
+  // the expected variables are checked against the very trace the editor shows.
+  const catalaTraceArgs = traceFile ? [`--check-trace=${traceFile}`] : [];
   const args = [
     'testcase',
     'run',
@@ -128,15 +166,28 @@ export function runTestScope(
     testScope,
     filename,
     ...inputArgs,
+    ...catalaTraceArgs,
   ];
   const cwd = getCwd(filename);
   if (cwd) {
     const relFilename = path.relative(cwd, filename);
-    //compile dependencies (hack), do not fail on asserts
+    // Two jobs at once: compile the dependencies the run below needs, and — when
+    // a trace was asked for — produce it. `-c--no-fail-on-assert` matters in
+    // both cases: a test whose expectations do not match must still get its
+    // dependencies built and its trace written.
     const clerkResult = execBinary(
       clerkPath,
-      ['run', '-c--no-fail-on-assert', relFilename],
-      { cwd }
+      [
+        'run',
+        ...clerkTraceArgs,
+        '-c--no-fail-on-assert',
+        relFilename,
+        '--scope',
+        testScope,
+      ],
+      {
+        cwd,
+      }
     );
     if (!clerkResult.ok) {
       window.showErrorMessage(clerkResult.stderr);
@@ -167,6 +218,7 @@ export function runTestScope(
       test: { test_outputs },
       assert_failures,
       diffs,
+      variable_failures,
     } = readTestRun(parsed);
     return {
       kind: 'Ok',
@@ -175,6 +227,7 @@ export function runTestScope(
         test_outputs,
         assert_failures,
         diffs,
+        variable_failures,
       },
     };
   } catch (error) {

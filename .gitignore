@@ -6,5 +6,6 @@ node_modules
 .envrc
 
 _build
+_opam
 src/.DS_Store
 test-case-parser/examples/.DS_Store

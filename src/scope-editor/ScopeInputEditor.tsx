@@ -85,6 +85,9 @@ export default function ScopeInputEditor({
           reset_outputs: false,
           in_shell: args.action == 'Terminal',
           debug: args.action == 'Debug',
+          // The scope editor runs a scope against ad-hoc inputs, not a test:
+          // there are no expected variables to check against a trace.
+          has_expected: false,
         },
       })
     );
@@ -110,15 +113,29 @@ export default function ScopeInputEditor({
           setState(parseResultsToUiState(message.value));
           break;
         case 'TestRunResults': {
-          setTestRunState((_prev) => {
-            const next: TestRunState = _resultsToState(message.value.results);
-            return next;
-          });
+          const results = message.value.results;
+          setTestRunState((_prev) => _resultsToState(results));
+          if (results.kind !== 'Cancelled') {
+            // Record the run outcome on the test (and reflect it back to the
+            // controller through a GuiEdit, like any other test edit).
+            setState((prev) => {
+              if (prev.state !== 'success') {
+                return prev;
+              }
+              return { state: 'success', test: prev.test };
+            });
+          }
           break;
         }
         case 'ConfirmResult': {
           resolveConfirmResult(message.value.id, message.value.confirmed);
           break;
+        }
+        case 'AllTests': {
+          throw Error('Wrong AllTests message posted');
+        }
+        case 'TestScopeResult': {
+          throw Error(`This view can't trigger a TestScopeResult`);
         }
         default:
           assertUnreachable(message);
@@ -178,7 +195,9 @@ function ParsingErrorWarning({
       <button
         className="test-editor-open-text"
         onClick={() =>
-          vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+          vscode.postMessage(
+            writeUpMessage({ kind: 'OpenInTextEditor', value: null })
+          )
         }
       >
         <span className="codicon codicon-edit"></span>

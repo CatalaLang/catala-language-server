@@ -102,7 +102,11 @@ type Catala_utils.Pos.attr += TestTitle of string
 
 val list_entrypoints :
   get_prog:
-    (Doc_id.doc_id -> Shared_ast.typed Scopelang.Ast.program option Lwt.t) ->
+    (Doc_id.doc_id ->
+    (Shared_ast.typed Scopelang.Ast.program
+    * Desugared.Ast.scope Shared_ast.ScopeName.Map.t)
+    option
+    Lwt.t) ->
   project ->
   Catala_types_t.entrypoints_params ->
   Catala_types_t.entrypoint list Lwt.t
