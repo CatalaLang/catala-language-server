@@ -1,4 +1,9 @@
-import type { Test, TestList, RuntimeValue } from '../generated/catala_types';
+import type {
+  EnumDeclaration,
+  Test,
+  TestList,
+  RuntimeValue,
+} from '../generated/catala_types';
 import { isAtomicRaw } from '../diff/diff';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
@@ -43,7 +48,9 @@ function rename(testNames: Set<string>, newTestName: string): string {
  */
 export function renderAtomicValue(
   value: RuntimeValue,
-  formatBool: (b: boolean) => string = (b) => (b ? 'true' : 'false')
+  formatBool: (b: boolean) => string = (b) => (b ? 'true' : 'false'),
+  formatCtor: (decl: EnumDeclaration, name: string) => string = (_, name) =>
+    name
 ): string {
   const raw = value.value;
   switch (raw.kind) {
@@ -70,9 +77,9 @@ export function renderAtomicValue(
         raw.value[1][1] == undefined ||
         !isAtomicRaw(raw.value[1][1].value.value)
       ) {
-        return `${raw.value[1][0]}`;
+        return formatCtor(raw.value[0], raw.value[1][0]);
       } else {
-        return `${raw.value[1][0]} ➡ ${renderAtomicValue(raw.value[1][1].value, formatBool)}  `;
+        return `${formatCtor(raw.value[0], raw.value[1][0])} ➡ ${renderAtomicValue(raw.value[1][1].value, formatBool, formatCtor)}  `;
       }
     // Complex types just get a placeholder or name
     case 'Struct':
