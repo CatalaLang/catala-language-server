@@ -168,6 +168,7 @@ export type CarryRecord = {
   path: PathSegment[];
   side: CarrySide;
   outcome: CarryOutcome;
+  hint: string[];
 }
 
 export type CarrySide =
@@ -878,6 +879,7 @@ export function writeCarryRecord(x: CarryRecord, context: any = x): any {
     'path': _atd_write_required_field('CarryRecord', 'path', _atd_write_array(writePathSegment), x.path, x),
     'side': _atd_write_required_field('CarryRecord', 'side', writeCarrySide, x.side, x),
     'outcome': _atd_write_required_field('CarryRecord', 'outcome', writeCarryOutcome, x.outcome, x),
+    'hint': _atd_write_field_with_default(_atd_write_array(_atd_write_string), [], x.hint, x),
   };
 }
 
@@ -886,6 +888,7 @@ export function readCarryRecord(x: any, context: any = x): CarryRecord {
     path: _atd_read_required_field('CarryRecord', 'path', _atd_read_array(readPathSegment), x['path'], x),
     side: _atd_read_required_field('CarryRecord', 'side', readCarrySide, x['side'], x),
     outcome: _atd_read_required_field('CarryRecord', 'outcome', readCarryOutcome, x['outcome'], x),
+    hint: _atd_read_field_with_default(_atd_read_array(_atd_read_string), [], x['hint'], x),
   };
 }
 

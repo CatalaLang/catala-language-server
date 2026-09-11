@@ -1053,8 +1053,14 @@ let rec value_fits (t : O.typ) (v : O.runtime_value) : (unit, string) Result.t =
   (* An option is an enum in the runtime, so it is checked as one below. *)
   | O.TOption ot, O.Enum (_, (ctor, payload)) -> (
     match payload with
-    | None -> Ok ()
-    | Some p -> under (Printf.sprintf ".%s" ctor) (value_fits ot p))
+    | None when ctor = option_absent -> Ok ()
+    | Some p when ctor = option_present ->
+      under (Printf.sprintf ".%s" ctor) (value_fits ot p)
+    | _ ->
+      mismatch
+        (Printf.sprintf "%s or %s" option_absent option_present)
+        (Printf.sprintf "%s%s" ctor
+           (match payload with None -> "" | Some _ -> " with a payload")))
   | O.TEnum d, O.Enum (_, (ctor, payload)) -> (
     match List.assoc_opt ctor d.O.constructors, payload with
     | None, _ ->
@@ -1674,7 +1680,12 @@ let carry_rule ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
   (* [TUnset] is absence of evidence, not a differing type. First, because
      [value_fits] accepts [Unset] against anything. *)
   | _, O.TUnset -> None, O.WasUnset
-  | O.TOption inner, _ when inner = old_typ ->
+  (* By fit, not type equality: the recovered type of an enum is narrower
+     than the live one. An option never wraps another option. *)
+  | O.TOption inner, _
+    when (match old_typ with O.TOption _ -> false | _ -> true)
+         && v.O.value <> O.Unset
+         && value_fits inner v = Ok () ->
     let decl = mk_optional_enum_decl inner in
     ( Some
         {
@@ -1697,7 +1708,8 @@ let carry_rule ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
 
 (* Below a value that does not carry whole, carry what does: field by field,
    element by element, through options, tuples and enum payloads. Nested
-   outcomes are paths from the value down; [Fits] is not recorded there. A value
+   outcomes are paths from the value down; [Fits] and [Partial] are not
+   recorded there, the leaves say it all. A value
    none of whose parts carry stays [TypeChanged], so a list of moneys turned
    dates is one mark, not one per element. *)
 let rec carry_value ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
@@ -1721,12 +1733,12 @@ let rec carry_value ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
 
 and carry_inside ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
     (O.runtime_value * (O.path_segment list * O.carry_outcome) list) option =
-  let hole typ = (unset_default_value typ).O.value in
+  let hole typ = (unset_default_value typ).O.value.O.value in
   let nested = ref [] in
   let push seg outcome = nested := ([seg], outcome) :: !nested in
   let carry_at seg ~old_typ ~new_typ e =
     let c, outcome, sub = carry_value ~old_typ ~new_typ e in
-    if outcome <> O.Fits then push seg outcome;
+    if outcome <> O.Fits && outcome <> O.Partial then push seg outcome;
     nested := List.rev_append (List.map (fun (p, o) -> seg :: p, o) sub) !nested;
     c
   in
@@ -1749,7 +1761,8 @@ and carry_inside ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
       Some
         (Array.of_list
            (List.map
-              (fun (_, nt, c) -> Option.value c ~default:(hole nt))
+              (fun (i, nt, c) ->
+                Option.value c ~default:{ elems.(i) with O.value = hole nt })
               carried))
   in
   let result =
@@ -1763,7 +1776,7 @@ and carry_inside ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
             match List.assoc_opt n fields with
             | None ->
               push seg O.WasUnset;
-              n, hole nt
+              n, { O.value = hole nt; attrs = [] }
             | Some fv -> (
               let ot =
                 Option.value (List.assoc_opt n od.O.fields) ~default:nt
@@ -1772,7 +1785,7 @@ and carry_inside ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
               | Some c ->
                 any_carried := true;
                 n, c
-              | None -> n, hole nt))
+              | None -> n, { fv with O.value = hole nt }))
           nd.O.fields
       in
       List.iter
@@ -2105,7 +2118,7 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
           let pair_of (t : O.test) : O.recovered_test =
             let carried = ref [] in
             let record side path outcome =
-              carried := { O.path; side; outcome } :: !carried
+              carried := { O.path; side; outcome; hint = [] } :: !carried
             in
             (* One entry per live field. [when_missing]: an absent input
                was left unset; an absent output was never asserted. *)
@@ -2166,10 +2179,47 @@ let rebuild_broken_test (options : Global.options) (target : string option) =
             in
             mark_dropped ~io:O.In t.O.test_inputs live.O.test_inputs;
             mark_dropped ~io:O.Out t.O.test_outputs live.O.test_outputs;
+            (* Where a dropped input's value would fit a field of a live
+               record that needs filling, say so on that record. *)
+            let dropped =
+              List.filter_map
+                (fun (r : O.carry_record) ->
+                  match r.O.side, r.O.path, r.O.outcome with
+                  | O.In, [`StructField n], O.Dropped -> (
+                    match List.assoc_opt n t.O.test_inputs with
+                    | Some { O.value = Some vd; _ } -> Some (n, vd.O.value)
+                    | _ -> None)
+                  | _ -> None)
+                !carried
+            in
+            let rec fields_of : O.typ -> (string * O.typ) list = function
+              | O.TStruct d -> d.O.fields
+              | O.TOption t | O.TArray t -> fields_of t
+              | _ -> []
+            in
+            let with_hint (r : O.carry_record) =
+              match r.O.side, r.O.path, r.O.outcome with
+              | O.In, [`StructField n], (O.WasUnset | O.TypeChanged _ | O.Partial)
+                -> (
+                match List.assoc_opt n live.O.test_inputs with
+                | None -> r
+                | Some (live_io : O.test_io) ->
+                  let fields = fields_of live_io.O.typ in
+                  let hint =
+                    List.filter_map
+                      (fun (d, v) ->
+                        match List.assoc_opt d fields with
+                        | Some ft when value_fits ft v = Ok () -> Some d
+                        | _ -> None)
+                      dropped
+                  in
+                  { r with O.hint })
+              | _ -> r
+            in
             {
               O.authored = t;
               rebuilt = Some rebuilt;
-              outcomes = List.rev !carried;
+              outcomes = List.rev_map with_hint !carried;
             }
           in
           (* A mark is answered once its field holds a value; [Dropped]

@@ -180,6 +180,9 @@ type carry_record = {
      input and an output. *)
   side: carry_side;
   outcome: carry_outcome;
+  (* Dropped inputs of the original whose value would fit a field of this
+     one: where it most likely belongs now. *)
+  ~hint: string list;
 }
 
 type carry_side = [ In | Out ] <ocaml repr="classic">
