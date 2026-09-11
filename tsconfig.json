@@ -13,5 +13,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "exclude": ["node_modules", ".vscode-test", "tests", "vitest.config.*"]
+  "exclude": [
+    "node_modules",
+    ".vscode-test",
+    "_build",
+    "tests",
+    "vitest.config.*"
+  ]
 }

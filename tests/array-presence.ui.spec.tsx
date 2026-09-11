@@ -9,7 +9,7 @@ import type {
   RuntimeValueRaw,
   Typ,
   ValueDef,
-} from '../src/generated/test_case';
+} from '../src/generated/catala_types';
 import { ArrayEditor } from '../src/editors/ArrayEditor';
 
 // Mock confirm to auto-approve destructive actions

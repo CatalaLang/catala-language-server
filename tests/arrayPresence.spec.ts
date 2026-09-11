@@ -3,7 +3,7 @@ import type {
   Diff,
   PathSegment,
   RuntimeValue,
-} from '../src/generated/test_case';
+} from '../src/generated/catala_types';
 import {
   computeActualOnlyIndices,
   indicesToRender,

@@ -1,0 +1,17 @@
+> Module Bare
+
+```catala-metadata
+declaration enumeration Colour:
+  -- Red
+  -- Green
+  -- Blue
+
+declaration scope Paint:
+  input shade content optional of Colour
+  output done content boolean
+```
+
+```catala
+scope Paint:
+  definition done equals true
+```

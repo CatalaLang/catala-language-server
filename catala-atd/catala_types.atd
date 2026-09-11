@@ -154,7 +154,82 @@ type parse_results = [
   | ParseError of string (* compiler signals a parsing error *)
   | EmptyTestListMismatch (* buffer is non-empty, but empty test list returned *)
   | Results of test_list (* may be empty, that's fine as long as the buffer is empty too *)
+  (* The test no longer fits its scope; its values were recovered from the
+     file's own literals. *)
+  | BrokenTest of recovery
 ]
+
+type recovery = {
+  tests: recovered_test list;
+  notes: broken_note list;
+  working_copy: string;
+}
+
+type recovered_test = {
+  authored: test;
+  (* [None] when there is no live signature to rebuild against. *)
+  ?rebuilt: test option;
+  outcomes: carry_record list;
+}
+
+type carry_record = {
+  (* From the field name down: nested records say what did not fit inside a
+     value carried piece by piece. *)
+  path: path_segment list;
+  (* [path] alone is ambiguous: a `context output` variable is both an
+     input and an output. *)
+  side: carry_side;
+  outcome: carry_outcome;
+  (* Dropped inputs of the original whose value would fit a field of this
+     one: where it most likely belongs now. *)
+  ~hint: string list;
+}
+
+type carry_side = [ In | Out ] <ocaml repr="classic">
+
+type carry_outcome = [
+  | Fits
+  | Wrap
+  | Unwrap
+  | WasUnset (* the old test never set this field *)
+  | WasAbsentNowRequired (* the old value was Absent: no payload to take *)
+  | TypeChanged of (typ * typ) (* old, new *)
+  | Dropped (* no longer declared: promotion deletes it; authored side *)
+  | Partial (* carried piece by piece: the records below say what did not fit *)
+] <ocaml repr="classic">
+
+type broken_note = [
+  | ModuleNotFound of module_not_found
+  | ModuleWontCompile of module_error
+  | ScopeNotFound of scope_not_found
+  | Other of module_error (* builds, has the scope; generate_test raised anyway *)
+] <ocaml repr="classic">
+
+(* Candidates come from anywhere in the project. *)
+type module_not_found = {
+  module_name: string;
+  candidates: scope_candidate list;
+}
+
+type module_error = {
+  name: string; (* module, or module.scope *)
+  error: string; (* the compiler's own message *)
+}
+
+type scope_not_found = {
+  module_name: string;
+  scope_name: string;
+  (* Every scope the module declares, best guess first. Ordered, never chosen. *)
+  candidates: scope_candidate list;
+}
+
+type scope_candidate = {
+  module_name: string;
+  name: string;
+  (* Of the recovered test's field names, how many this scope declares. *)
+  shared: int;
+  out_of: int;
+}
 
 type test_run_output = { (* do we need that type at all when the difference with `test_run` is minimal? *)
   test_outputs: test_outputs;
@@ -197,6 +272,9 @@ type confirm_action = [
   | DeleteAssertion
   | RunTestWithUnsetValues
   | ResetContextVar
+  (* replacing the original would drop the unset fields *)
+  | ReplaceOriginalWithUnsetValues
+  | DiscardWorkingCopy
 ]
 
 type confirm_request = {
@@ -217,6 +295,9 @@ type up_message = [
   | TestGenerateRequest of test_generate_request
   | OpenTestScopePicker
   | ConfirmRequest of confirm_request
+  | RetargetRequest of string (* rebuild against this scope: "Scope" or "Module.Scope" *)
+  | ReplaceOriginalRequest (* write the working copy over the original *)
+  | DiscardWorkingCopyRequest (* delete the working copy, start over *)
 ]
 
 type down_message = [

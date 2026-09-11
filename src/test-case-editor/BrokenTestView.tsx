@@ -1,0 +1,746 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FormattedMessage, useIntl } from 'react-intl';
+import type {
+  BrokenNote,
+  Recovery,
+  CarrySide,
+  CarryOutcome,
+  ScopeCandidate,
+  CarryRecord,
+  TestRunResults,
+  Test,
+  TestList,
+  PathSegment,
+} from '../generated/catala_types';
+import { getTypeDisplayName } from '../editors/typeNameUtils';
+import {
+  hasUnsetInTest,
+  scrollToFirstInvalidOrUnset,
+  firstUnsetPath,
+} from '../editors/unsetValidation';
+import { confirm } from '../messaging/confirm';
+import { RevealContext, type Reveal } from '../editors/reveal';
+import { rebuiltOf } from './testCaseUtils';
+import TestInputsEditor from './TestInputsEditor';
+import TestOutputsEditor from './TestOutputsEditor';
+import RunControl, { ReadinessChip } from './RunControl';
+import type { TestRunStatus } from './TestFileEditor';
+
+/**
+ * Shown when a test no longer fits the scope it targets: the old values on the
+ * left, visible and untouchable; a rebuild beside them on the right. The
+ * rebuilt pane is the ordinary editor's own input/output components, so
+ * context variables and unasserted outputs behave exactly as they do there.
+ */
+
+type Props = {
+  view: Recovery;
+  /** Report the rebuild upward, so saving writes it to the workspace file. */
+  onRebuildChange?: (tests: TestList) => void;
+  onRun?: (testingScope: string) => void;
+  /** The tester chose which scope to rebuild against. */
+  onRetarget?: (scope: string) => void;
+  /** Write the rebuild over the original. Given the rebuild, so the caller
+   *  can check for unset fields. */
+  onReplace?: (rebuilt: TestList) => void;
+  /** Throw the rebuild away and start over from the original. */
+  onDiscard?: () => void;
+  runStates?: Record<
+    string,
+    { status: TestRunStatus; results?: TestRunResults }
+  >;
+};
+
+function pathKey(path: PathSegment[]): string {
+  return path.map((s) => `${s.kind}:${s.value}`).join('/');
+}
+
+/** One side's outcomes below the field level, by path. */
+function nestedMarksFor(
+  carried: CarryRecord[],
+  side: CarrySide['kind']
+): Map<string, CarryOutcome> {
+  return new Map(
+    carried
+      .filter((c) => c.side.kind === side && c.path.length > 1)
+      .map((c) => [pathKey(c.path), c.outcome])
+  );
+}
+
+type Hook = (
+  editor: React.JSX.Element,
+  path: PathSegment[]
+) => React.JSX.Element;
+
+/** Wraps the editor at a marked path with its mark. */
+function markHook(
+  marks: Map<string, CarryOutcome>,
+  Mark: (props: { outcome: CarryOutcome }) => React.JSX.Element | null
+): Hook | undefined {
+  if (marks.size === 0) return undefined;
+  return (editor, path) => {
+    const outcome = marks.get(pathKey(path));
+    if (outcome === undefined) return editor;
+    return (
+      <span className="carry-marked">
+        {editor}
+        <Mark outcome={outcome} />
+      </span>
+    );
+  };
+}
+
+/** One side's outcomes by field name. */
+function marksFor(
+  carried: CarryRecord[],
+  side: CarrySide['kind']
+): Map<string, CarryOutcome> {
+  return new Map(
+    carried
+      .filter((c) => c.side.kind === side && c.path.length === 1)
+      .map((c) => [String(c.path[0].value), c.outcome])
+  );
+}
+
+function CarryMark({
+  outcome,
+  hint,
+}: {
+  outcome: CarryOutcome;
+  /** Dropped inputs of the original whose names are fields of this one. */
+  hint?: string[];
+}): React.JSX.Element | null {
+  const intl = useIntl();
+  if (outcome.kind === 'Fits') return null;
+  if (outcome.kind === 'Dropped') return null;
+  const carried = outcome.kind === 'Wrap' || outcome.kind === 'Unwrap';
+  let id: string;
+  switch (outcome.kind) {
+    case 'WasUnset':
+      id = 'broken.markWasUnset';
+      break;
+    case 'Wrap':
+      id = 'broken.markWrapped';
+      break;
+    case 'Unwrap':
+      id = 'broken.markUnwrapped';
+      break;
+    case 'WasAbsentNowRequired':
+      id = 'broken.markWasAbsentNowRequired';
+      break;
+    case 'TypeChanged':
+      id = 'broken.markTypeChanged';
+      break;
+    case 'Partial':
+      id = 'broken.markPartial';
+      break;
+  }
+  const change =
+    outcome.kind === 'TypeChanged'
+      ? `${getTypeDisplayName(outcome.value[0], intl)} → ${getTypeDisplayName(
+          outcome.value[1],
+          intl
+        )}`
+      : '';
+  const base = intl.formatMessage({ id }, { change });
+  const title =
+    hint === undefined || hint.length === 0
+      ? base
+      : `${base} — ${intl.formatMessage(
+          { id: 'broken.markHint' },
+          { names: hint.join(', ') }
+        )}`;
+  if (carried) {
+    return (
+      <span
+        className="carry-mark carry-done"
+        role="img"
+        aria-label={title}
+        title={title}
+      >
+        <span className="codicon codicon-check"></span>
+      </span>
+    );
+  }
+  return (
+    <span
+      className="fate-mark fate-attention"
+      role="img"
+      aria-label={title}
+      title={title}
+    />
+  );
+}
+
+/** Only the fact the left pane alone can state: deleted on promotion. */
+function FateMark({
+  outcome,
+}: {
+  outcome: CarryOutcome | undefined;
+}): React.JSX.Element | null {
+  const intl = useIntl();
+  if (outcome?.kind !== 'Dropped') return null;
+  const title = intl.formatMessage({ id: 'broken.fateDropped' });
+  return (
+    <span
+      className="fate-mark fate-dropped"
+      role="img"
+      aria-label={title}
+      title={title}
+    />
+  );
+}
+
+/** One side's destination hints by field name, as rebuild computed them. */
+function hintsFor(
+  carried: CarryRecord[],
+  side: CarrySide['kind']
+): Map<string, string[]> {
+  return new Map(
+    carried
+      .filter(
+        (c) =>
+          c.side.kind === side &&
+          c.path.length === 1 &&
+          (c.hint ?? []).length > 0
+      )
+      .map((c) => [String(c.path[0].value), c.hint])
+  );
+}
+
+const fateFrom =
+  (marks: Map<string, CarryOutcome>) =>
+  (name: string): React.JSX.Element => <FateMark outcome={marks.get(name)} />;
+
+function Note({ note }: { note: BrokenNote }): React.JSX.Element {
+  switch (note.kind) {
+    case 'ModuleNotFound':
+      return (
+        <FormattedMessage
+          id="broken.noteModuleNotFound"
+          values={{ name: <code>{note.value.module_name}</code> }}
+        />
+      );
+    case 'ScopeNotFound':
+      return (
+        <>
+          <FormattedMessage
+            id="broken.noteScopeNotFound"
+            values={{
+              scope: (
+                <code>{`${note.value.module_name}.${note.value.scope_name}`}</code>
+              ),
+            }}
+          />
+        </>
+      );
+    case 'ModuleWontCompile':
+    case 'Other':
+      return (
+        <>
+          <FormattedMessage
+            id={
+              note.kind === 'ModuleWontCompile'
+                ? 'broken.noteModuleWontCompile'
+                : 'broken.noteOther'
+            }
+            values={{ name: <code>{note.value.name}</code> }}
+          />
+          {note.value.error !== '' && (
+            <pre className="broken-note-error">{note.value.error}</pre>
+          )}
+        </>
+      );
+  }
+}
+
+const SPLIT_KEY = 'catala.brokenView.split';
+const SPLIT_MIN = 20;
+const SPLIT_MAX = 80;
+
+function clampSplit(pct: number): number {
+  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, pct));
+}
+
+/* The divider position survives webview reloads. */
+function storedSplit(): number {
+  try {
+    const raw = localStorage.getItem(SPLIT_KEY);
+    if (raw === null) return 50;
+    const pct = Number(raw);
+    return Number.isFinite(pct) ? clampSplit(pct) : 50;
+  } catch {
+    return 50;
+  }
+}
+
+function storeSplit(pct: number): void {
+  try {
+    localStorage.setItem(SPLIT_KEY, String(pct));
+  } catch {
+    /* the divider still moves, it just will not be remembered */
+  }
+}
+
+/**
+ * The divider between the panes. Pointer capture so the drag survives leaving
+ * the element; a real separator so it moves from the keyboard.
+ */
+function SplitHandle({
+  onSplit,
+  split,
+}: {
+  onSplit: (pct: number) => void;
+  split: number;
+}): React.JSX.Element {
+  const intl = useIntl();
+  const fromEvent = (e: React.PointerEvent<HTMLDivElement>): void => {
+    const panes = e.currentTarget.parentElement;
+    if (panes === null) return;
+    const box = panes.getBoundingClientRect();
+    if (box.width === 0) return;
+    onSplit(clampSplit(((e.clientX - box.left) / box.width) * 100));
+  };
+  return (
+    <div
+      className="broken-split"
+      role="separator"
+      aria-orientation="vertical"
+      aria-valuenow={Math.round(split)}
+      aria-valuemin={SPLIT_MIN}
+      aria-valuemax={SPLIT_MAX}
+      aria-label={intl.formatMessage({ id: 'broken.resize' })}
+      tabIndex={0}
+      onPointerDown={(e): void => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      }}
+      onPointerMove={(e): void => {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) fromEvent(e);
+      }}
+      onPointerUp={(e): void => {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }}
+      onKeyDown={(e): void => {
+        const step = e.shiftKey ? 10 : 2;
+        if (e.key === 'ArrowLeft') onSplit(clampSplit(split - step));
+        else if (e.key === 'ArrowRight') onSplit(clampSplit(split + step));
+        else return;
+        e.preventDefault();
+      }}
+    >
+      <span className="codicon codicon-arrow-right" aria-hidden="true"></span>
+    </div>
+  );
+}
+
+/**
+ * The scopes a test could be rebuilt against, when the one it names is gone.
+ * Best guess first, but the tester picks.
+ */
+function ScopePicker({
+  candidates,
+  qualified,
+  onRetarget,
+}: {
+  candidates: ScopeCandidate[];
+  /** Candidates come from other modules: say which. */
+  qualified: boolean;
+  onRetarget?: (scope: string) => void;
+}): React.JSX.Element {
+  const intl = useIntl();
+  const key = (c: ScopeCandidate): string => `${c.module_name}.${c.name}`;
+  const label = (c: ScopeCandidate): string => (qualified ? key(c) : c.name);
+  // Never preselected: a rename is a guess, and the tester says which.
+  const [chosen, setChosen] = useState<string>('');
+  const choice = candidates.find((c) => key(c) === chosen);
+  return (
+    <div className="broken-candidates">
+      <FormattedMessage
+        id={
+          qualified
+            ? 'broken.noteModuleNotFoundPick'
+            : 'broken.noteScopeNotFoundPick'
+        }
+      />
+      {candidates.length > 1 && (
+        <span className="broken-candidates-hint">
+          {' '}
+          <FormattedMessage id="broken.candidatesRanked" />
+        </span>
+      )}
+      <div className="broken-candidate-row">
+        <select
+          className="broken-candidate-select"
+          value={chosen}
+          onChange={(e): void => setChosen(e.target.value)}
+          aria-label={intl.formatMessage({ id: 'broken.candidatePlaceholder' })}
+        >
+          <option value="" disabled>
+            {intl.formatMessage({ id: 'broken.candidatePlaceholder' })}
+          </option>
+          {candidates.map((c) => (
+            <option key={key(c)} value={key(c)}>
+              {`${label(c)} (${c.shared}/${c.out_of})`}
+            </option>
+          ))}
+        </select>
+        <button
+          className="broken-candidate"
+          onClick={(): void => onRetarget?.(chosen)}
+          disabled={onRetarget === undefined || choice === undefined}
+        >
+          <span className="codicon codicon-arrow-right"></span>{' '}
+          <FormattedMessage
+            id="broken.candidateRebuild"
+            values={{
+              scope: <code>{choice === undefined ? '…' : label(choice)}</code>,
+            }}
+          />
+        </button>
+      </div>
+      {choice !== undefined && (
+        <div className="broken-candidate-shared">
+          <FormattedMessage
+            id="broken.candidateShared"
+            values={{ shared: choice.shared, of: choice.out_of }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TestPanes({
+  authored,
+  rebuilt,
+  onChange,
+  marksIn,
+  marksOut,
+  hintsIn,
+  nestedIn,
+  nestedOut,
+  runState,
+  onRun,
+  split,
+  onSplit,
+  picker,
+}: {
+  authored: Test | undefined;
+  rebuilt: Test | undefined;
+  onChange: (next: Test) => void;
+  marksIn: Map<string, CarryOutcome>;
+  marksOut: Map<string, CarryOutcome>;
+  hintsIn: Map<string, string[]>;
+  nestedIn: Map<string, CarryOutcome>;
+  nestedOut: Map<string, CarryOutcome>;
+  runState?: { status: TestRunStatus; results?: TestRunResults };
+  onRun?: () => void;
+  split: number;
+  onSplit: (pct: number) => void;
+  picker?: React.JSX.Element;
+}): React.JSX.Element {
+  const intl = useIntl();
+  const meta = authored ?? rebuilt;
+  const runDiffs =
+    runState?.results?.kind === 'Ok' ? runState.results.value.diffs : [];
+  const scope = meta?.tested_scope;
+  const rebuiltPaneRef = useRef<HTMLDivElement>(null);
+  const markFrom =
+    (marks: Map<string, CarryOutcome>, hints?: Map<string, string[]>) =>
+    (name: string): React.JSX.Element | null => {
+      const outcome = marks.get(name);
+      return outcome === undefined ? null : (
+        <CarryMark outcome={outcome} hint={hints?.get(name)} />
+      );
+    };
+  const only =
+    (keep: (o: CarryOutcome) => boolean) =>
+    (marks: Map<string, CarryOutcome>): Map<string, CarryOutcome> =>
+      new Map([...marks].filter(([, o]) => keep(o)));
+  const dropped = only((o) => o.kind === 'Dropped');
+  const carried = only((o) => o.kind !== 'Dropped');
+  const fateHookIn = markHook(dropped(nestedIn), FateMark);
+  const fateHookOut = markHook(dropped(nestedOut), FateMark);
+  const carryHookIn = markHook(carried(nestedIn), CarryMark);
+  const carryHookOut = markHook(carried(nestedOut), CarryMark);
+  const [reveal, setReveal] = useState<Reveal | undefined>(undefined);
+  const jumpToFirstUnset = (): void => {
+    const path = rebuilt === undefined ? undefined : firstUnsetPath(rebuilt);
+    if (path) setReveal((r) => ({ path, nonce: (r?.nonce ?? 0) + 1 }));
+    scrollToFirstInvalidOrUnset(rebuiltPaneRef.current ?? document, 50);
+  };
+  // An unset value fails the run with an interpreter error: ask first.
+  const runWithUnsetCheck = async (): Promise<void> => {
+    if (rebuilt !== undefined && hasUnsetInTest(rebuilt)) {
+      jumpToFirstUnset();
+      if (!(await confirm('RunTestWithUnsetValues'))) return;
+    }
+    onRun?.();
+  };
+  return (
+    <section className="broken-test">
+      <h3 className="broken-test-title">
+        {meta !== undefined && meta.title !== ''
+          ? meta.title
+          : (meta?.testing_scope ?? '')}
+      </h3>
+      <div className="broken-test-meta">
+        {scope !== undefined && (
+          <span className="broken-test-scope">
+            {scope.module_name}.{scope.name}
+          </span>
+        )}
+        {meta !== undefined && meta.description !== '' && (
+          <span className="broken-test-description">{meta.description}</span>
+        )}
+      </div>
+      <div
+        className="broken-panes"
+        style={{ ['--broken-split']: `${split}%` } as React.CSSProperties}
+      >
+        <div className="broken-pane broken-pane-authored">
+          {authored === undefined ? (
+            <p className="broken-empty">
+              <FormattedMessage id="broken.nothingRecovered" />
+            </p>
+          ) : (
+            <>
+              {/* The ordinary editors, read-only: same layout as the right
+                  pane, so the two sides stay comparable. */}
+              <TestInputsEditor
+                test_inputs={authored.test_inputs}
+                tested_scope={authored.tested_scope}
+                onTestInputsChange={(): void => {}}
+                readOnly
+                labelExtra={fateFrom(marksIn)}
+                editorHook={fateHookIn}
+              />
+              {authored.test_outputs.size > 0 && (
+                <>
+                  <h5 className="broken-subhead">
+                    <FormattedMessage id="broken.expected" />
+                  </h5>
+                  <TestOutputsEditor
+                    test={authored}
+                    onTestChange={(): void => {}}
+                    readOnly
+                    labelExtra={fateFrom(marksOut)}
+                    editorHook={fateHookOut}
+                  />
+                </>
+              )}
+            </>
+          )}
+        </div>
+        <SplitHandle split={split} onSplit={onSplit} />
+        <div className="broken-pane broken-pane-rebuilt" ref={rebuiltPaneRef}>
+          <RevealContext.Provider value={reveal}>
+            {rebuilt === undefined ? (
+              <>
+                <p className="broken-empty">
+                  <FormattedMessage id="broken.noSignature" />
+                </p>
+                {picker}
+              </>
+            ) : (
+              <>
+                {authored !== undefined &&
+                  (rebuilt.tested_scope.name !== authored.tested_scope.name ||
+                    rebuilt.tested_scope.module_name !==
+                      authored.tested_scope.module_name) && (
+                    <div
+                      className="broken-retargeted"
+                      title={intl.formatMessage({ id: 'broken.retargeted' })}
+                    >
+                      <span className="codicon codicon-arrow-right"></span>{' '}
+                      <span className="broken-test-scope">
+                        {rebuilt.tested_scope.module_name}.
+                        {rebuilt.tested_scope.name}
+                      </span>
+                    </div>
+                  )}
+                <TestInputsEditor
+                  test_inputs={rebuilt.test_inputs}
+                  tested_scope={rebuilt.tested_scope}
+                  onTestInputsChange={(inputs): void =>
+                    onChange({ ...rebuilt, test_inputs: inputs })
+                  }
+                  labelExtra={markFrom(marksIn, hintsIn)}
+                  editorHook={carryHookIn}
+                />
+                {rebuilt.tested_scope.outputs.size > 0 && (
+                  <>
+                    <h5 className="broken-subhead">
+                      <FormattedMessage id="broken.expected" />
+                    </h5>
+                    <TestOutputsEditor
+                      test={rebuilt}
+                      onTestChange={onChange}
+                      diffs={runDiffs}
+                      labelExtra={markFrom(marksOut)}
+                      editorHook={carryHookOut}
+                    />
+                  </>
+                )}
+              </>
+            )}
+            {rebuilt !== undefined && onRun !== undefined && (
+              <div className="broken-run">
+                <RunControl
+                  status={runState?.status}
+                  results={runState?.results}
+                  onRun={runWithUnsetCheck}
+                  labelId="broken.runWorkingCopy"
+                />
+                <ReadinessChip test={rebuilt} onJump={jumpToFirstUnset} />
+              </div>
+            )}
+          </RevealContext.Provider>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function BrokenTestView({
+  view,
+  onRebuildChange,
+  onRun,
+  onRetarget,
+  onReplace,
+  onDiscard,
+  runStates,
+}: Props): React.JSX.Element {
+  const viewRebuilt = useMemo(() => rebuiltOf(view.tests), [view.tests]);
+  const [rebuilt, setRebuilt] = useState<TestList>(viewRebuilt);
+  // A new view (retarget, undo, revert) is authoritative.
+  useEffect(() => {
+    setRebuilt(viewRebuilt);
+  }, [viewRebuilt]);
+  const pickable = view.notes.find(
+    (n) => n.kind === 'ScopeNotFound' || n.kind === 'ModuleNotFound'
+  );
+  const picker =
+    (pickable?.kind === 'ScopeNotFound' ||
+      pickable?.kind === 'ModuleNotFound') &&
+    pickable.value.candidates.length > 0 ? (
+      <ScopePicker
+        candidates={pickable.value.candidates}
+        qualified={pickable.kind === 'ModuleNotFound'}
+        onRetarget={onRetarget}
+      />
+    ) : undefined;
+  const [split, setSplit] = useState<number>(storedSplit);
+  const update = (next: TestList): void => {
+    setRebuilt(next);
+    onRebuildChange?.(next);
+  };
+  const moveSplit = (pct: number): void => {
+    setSplit(pct);
+    storeSplit(pct);
+  };
+
+  const blocked = view.tests.every((t) => t.rebuilt === undefined);
+  const notes = view.notes.map((n, i) => (
+    <li key={n.kind + String(i)}>
+      <Note note={n} />
+    </li>
+  ));
+
+  return (
+    <div className="broken-view">
+      <div className="broken-banner">
+        <span className="codicon codicon-warning"></span>
+        <div>
+          <strong>
+            <FormattedMessage
+              id={blocked ? 'broken.blockedTitle' : 'broken.title'}
+            />
+          </strong>
+          <p>
+            <FormattedMessage
+              id={blocked ? 'broken.blockedExplanation' : 'broken.explanation'}
+            />
+          </p>
+          {blocked ? (
+            notes.length > 0 && <ul className="broken-notes">{notes}</ul>
+          ) : (
+            <>
+              <p className="broken-arrangement">
+                <FormattedMessage
+                  id="broken.arrangement"
+                  values={{ file: <code>{view.working_copy}</code> }}
+                />
+              </p>
+              <div className="broken-exit">
+                <button
+                  className="broken-candidate"
+                  onClick={(): void => onReplace?.(rebuilt)}
+                  disabled={onReplace === undefined}
+                >
+                  <span className="codicon codicon-check"></span>{' '}
+                  <FormattedMessage id="broken.replace" />
+                </button>
+                <button
+                  className="broken-candidate"
+                  onClick={(): void => onDiscard?.()}
+                  disabled={onDiscard === undefined}
+                >
+                  <span className="codicon codicon-discard"></span>{' '}
+                  <FormattedMessage id="broken.discard" />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {!blocked && notes.length > 0 && (
+        <ul className="broken-notes">{notes}</ul>
+      )}
+
+      {view.tests.length > 0 && (
+        <div
+          className="broken-panes broken-panes-header"
+          style={{ ['--broken-split']: `${split}%` } as React.CSSProperties}
+        >
+          <h4 className="broken-col-label">
+            <span className="codicon codicon-lock"></span>{' '}
+            <FormattedMessage id="broken.asAuthored" />
+          </h4>
+          <SplitHandle split={split} onSplit={moveSplit} />
+          <h4 className="broken-col-label">
+            <span className="codicon codicon-edit"></span>{' '}
+            <FormattedMessage id="broken.rebuild" />
+          </h4>
+        </div>
+      )}
+
+      {view.tests.map(({ authored, outcomes }, i) => {
+        const scope = authored.testing_scope;
+        const live = rebuilt.find((t) => t.testing_scope === scope);
+        return (
+          <TestPanes
+            key={scope + String(i)}
+            authored={authored}
+            rebuilt={live}
+            marksIn={marksFor(outcomes, 'In')}
+            marksOut={marksFor(outcomes, 'Out')}
+            hintsIn={hintsFor(outcomes, 'In')}
+            nestedIn={nestedMarksFor(outcomes, 'In')}
+            nestedOut={nestedMarksFor(outcomes, 'Out')}
+            split={split}
+            onSplit={moveSplit}
+            picker={picker}
+            runState={runStates?.[scope]}
+            onRun={onRun === undefined ? undefined : (): void => onRun(scope)}
+            onChange={(next): void =>
+              update(rebuilt.map((t) => (t.testing_scope === scope ? next : t)))
+            }
+          />
+        );
+      })}
+    </div>
+  );
+}

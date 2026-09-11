@@ -2,6 +2,7 @@
 
 ```catala-metadata
 #[test]
+#[testcase.testui]
 #[testcase.test_description = "Ensure we can round-trip from/to catala source.\n\nSee issue #168"]
 #[testcase.test_title = "Implicit import test"]
 declaration scope Example_test:

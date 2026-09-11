@@ -1,0 +1,18 @@
+> Module Details
+
+```catala-metadata
+declaration structure Detail:
+  data rank content integer
+  data fee content money
+  data stamp content date
+  data note content integer
+
+declaration scope Record:
+  input detail content Detail
+  output total content money
+```
+
+```catala
+scope Record:
+  definition total equals detail.fee
+```

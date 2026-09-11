@@ -1,0 +1,17 @@
+> Using Optionals
+
+# A test written under a heading
+
+```catala
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Declared under a heading"]
+declaration scope Grant_heading:
+  output calc scope Optionals.Grant
+
+scope Grant_heading:
+  definition calc.base equals $1000.00
+  definition calc.bonus equals Absent
+  assertion (calc.total = $1000.00)
+```

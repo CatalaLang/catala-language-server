@@ -16,7 +16,7 @@ import {
   autoUpdate,
 } from '@floating-ui/react';
 
-export type ComboboxOption = {
+type ComboboxOption = {
   value: string;
   label: string;
   description?: string;

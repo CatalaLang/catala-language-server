@@ -1,0 +1,451 @@
+(* What [carry_value] does with one field of a drifted test, one row per
+   situation: [old_typ] inferred from the test's literal, [new_typ] from the
+   live module, the value the tester wrote. Recovery is triggered per file, so
+   most rows are fields that did not change -- described from one literal,
+   narrower than the live type either way. *)
+
+module O = Catala_types_t
+module Lib = Test_case_parser_lib
+
+let money n = O.{ value = Money n; attrs = [] }
+let int n = O.{ value = Integer n; attrs = [] }
+let unset = O.{ value = Unset; attrs = [] }
+let arr l = O.{ value = Array (Array.of_list l); attrs = [] }
+
+(* Options as the readers build them. *)
+let absent inner =
+  O.{ value = Enum (Lib.mk_optional_enum_decl inner, (Lib.option_absent, None)); attrs = [] }
+
+let present inner v =
+  O.
+    {
+      value = Enum (Lib.mk_optional_enum_decl inner, (Lib.option_present, Some v));
+      attrs = [];
+    }
+
+let colour ctors =
+  O.{ enum_name = "M.Colour"; constructors = ctors; ctor_attrs = [] }
+
+let red decl = O.{ value = Enum (decl, ("Red", None)); attrs = [] }
+let red_of decl v = O.{ value = Enum (decl, ("Red", Some v)); attrs = [] }
+
+let detail fields =
+  O.{ struct_name = "M.Detail"; fields }
+
+let struct_of decl fields = O.{ value = Struct (decl, fields); attrs = [] }
+
+type row = {
+  what : string;
+  old_typ : O.typ;
+  new_typ : O.typ;
+  value : O.runtime_value;
+  outcome : O.carry_outcome;
+  carried : bool;
+}
+
+let rows =
+  [
+    (* ---- nothing changed ------------------------------------------------ *)
+    {
+      what = "a scalar whose type did not change";
+      old_typ = TMoney; new_typ = TMoney; value = money 1000;
+      outcome = Fits; carried = true;
+    };
+    {
+      what = "a scalar whose type changed outright";
+      old_typ = TMoney; new_typ = TDate; value = money 1000;
+      outcome = TypeChanged (TMoney, TDate); carried = false;
+    };
+    {
+      what = "an integer where money is now wanted: NOT a conversion";
+      old_typ = TInt; new_typ = TMoney; value = int 5;
+      outcome = TypeChanged (TInt, TMoney); carried = false;
+    };
+
+    (* ---- the recovered type is unknown ---------------------------------- *)
+    {
+      (* The common case: the UI writes `impossible` for an unfilled input.
+         [value_fits] accepts [Unset] against any type. *)
+      what = "a field the old test never filled";
+      old_typ = TUnset; new_typ = TMoney; value = unset;
+      outcome = WasUnset; carried = false;
+    };
+    {
+      (* Valid for any list. *)
+      what = "an empty list, element type unknowable from it";
+      old_typ = TArray TUnset; new_typ = TArray TMoney; value = arr [];
+      outcome = Fits; carried = true;
+    };
+    {
+      (* A bare `Absent` recovers as [TOption TUnset]; valid at any option. *)
+      what = "an unchanged Absent, payload type unknowable from it";
+      old_typ = TOption TUnset; new_typ = TOption TMoney; value = absent TUnit;
+      outcome = Fits; carried = true;
+    };
+
+    (* ---- options ------------------------------------------------------- *)
+    {
+      what = "a field that became optional";
+      old_typ = TMoney; new_typ = TOption TMoney; value = money 1000;
+      outcome = Wrap; carried = true;
+    };
+    {
+      what = "a field that stopped being optional, and had a value";
+      old_typ = TOption TMoney; new_typ = TMoney; value = present TMoney (money 1000);
+      outcome = Unwrap; carried = true;
+    };
+    {
+      what = "a field that stopped being optional, and was Absent";
+      old_typ = TOption TMoney; new_typ = TMoney; value = absent TMoney;
+      outcome = WasAbsentNowRequired; carried = false;
+    };
+    {
+      what = "a field that stopped being optional, and changed type too";
+      old_typ = TOption TMoney; new_typ = TDate; value = present TMoney (money 1000);
+      outcome = TypeChanged (TOption TMoney, TDate); carried = false;
+    };
+    {
+      (* Neither wrap nor unwrap; the payload descriptions differ anyway. *)
+      what = "an unchanged optional enum, described from one literal";
+      old_typ = TOption (TEnum (colour ["Red", None]));
+      new_typ = TOption (TEnum (colour ["Red", None; "Green", None; "Blue", None]));
+      value = present (TEnum (colour ["Red", None])) (red (colour ["Red", None]));
+      outcome = Fits; carried = true;
+    };
+
+    (* ---- partial declarations, which is the ordinary case ---------------- *)
+    {
+      (* One constructor of three; structural equality never holds. *)
+      what = "an unchanged enum, described from one literal";
+      old_typ = TEnum (colour ["Red", None]);
+      new_typ = TEnum (colour ["Red", None; "Green", None; "Blue", None]);
+      value = red (colour ["Red", None]);
+      outcome = Fits; carried = true;
+    };
+    {
+      what = "an enum that lost the constructor this value used";
+      old_typ = TEnum (colour ["Red", None]);
+      new_typ = TEnum (colour ["Green", None; "Blue", None]);
+      value = red (colour ["Red", None]);
+      outcome =
+        TypeChanged
+          ( TEnum (colour ["Red", None]),
+            TEnum (colour ["Green", None; "Blue", None]) ); carried = false;
+    };
+    {
+      (* Fewer fields, in the test's own order: the ordinary case. *)
+      what = "a struct the test filled only partly";
+      old_typ = TStruct (detail ["fee", TMoney; "rank", TInt]);
+      new_typ = TStruct (detail ["rank", TInt; "fee", TMoney; "stamp", TDate]);
+      value = struct_of (detail ["fee", TMoney; "rank", TInt])
+                ["fee", money 1200; "rank", int 3];
+      outcome = Partial; carried = true;
+    };
+    {
+      what = "a struct field that changed type underneath";
+      old_typ = TStruct (detail ["fee", TMoney]);
+      new_typ = TStruct (detail ["fee", TDate]);
+      value = struct_of (detail ["fee", TMoney]) ["fee", money 1200];
+      outcome =
+        TypeChanged
+          (TStruct (detail ["fee", TMoney]), TStruct (detail ["fee", TDate])); carried = false;
+    };
+
+    (* ---- the value claims more than the live declaration allows ---------- *)
+    (* Each of these once answered [Fits], and the written working copy did
+       not read back. A carried value must always survive an ordinary read. *)
+    {
+      what = "a struct that lost a field the test filled";
+      old_typ = TStruct (detail ["fee", TMoney; "stamp", TInt]);
+      new_typ = TStruct (detail ["fee", TMoney]);
+      value = struct_of (detail ["fee", TMoney; "stamp", TInt])
+                ["fee", money 1200; "stamp", int 3];
+      (* The surviving field carries; the lost one is reported at its path. *)
+      outcome = Partial; carried = true;
+    };
+    {
+      (* The recovered declaration is narrower than the live one: the
+         wrap must go by fit, not by type equality. *)
+      what = "an enum field that became optional";
+      old_typ = TEnum (colour ["Red", None]);
+      new_typ = TOption (TEnum (colour ["Red", None; "Green", None]));
+      value = red (colour ["Red", None]);
+      outcome = Wrap; carried = true;
+    };
+    {
+      (* An enum value is not an option value: never read as Absent. *)
+      what = "an enum where an option of that enum is wanted, old type an option";
+      old_typ = TOption (TEnum (colour ["Red", None]));
+      new_typ = TOption (TEnum (colour ["Red", None; "Green", None]));
+      value = red (colour ["Red", None]);
+      outcome =
+        TypeChanged
+          ( TOption (TEnum (colour ["Red", None])),
+            TOption (TEnum (colour ["Red", None; "Green", None])) );
+      carried = false;
+    };
+    {
+      what = "an enum constructor that now requires a payload, value bare";
+      old_typ = TEnum (colour ["Red", None]);
+      new_typ = TEnum (colour ["Red", Some TMoney; "Green", None]);
+      value = red (colour ["Red", None]);
+      outcome =
+        TypeChanged
+          ( TEnum (colour ["Red", None]),
+            TEnum (colour ["Red", Some TMoney; "Green", None]) ); carried = false;
+    };
+    {
+      what = "an enum constructor that lost its payload, value has one";
+      old_typ = TEnum (colour ["Red", Some TMoney]);
+      new_typ = TEnum (colour ["Red", None; "Green", None]);
+      value = red_of (colour ["Red", Some TMoney]) (money 500);
+      outcome =
+        TypeChanged
+          ( TEnum (colour ["Red", Some TMoney]),
+            TEnum (colour ["Red", None; "Green", None]) ); carried = false;
+    };
+  ]
+
+let show_outcome : O.carry_outcome -> string = function
+  | Fits -> "Fits"
+  | Wrap -> "Wrap"
+  | Unwrap -> "Unwrap"
+  | WasUnset -> "WasUnset"
+  | WasAbsentNowRequired -> "WasAbsentNowRequired"
+  | TypeChanged (a, b) ->
+    Printf.sprintf "TypeChanged (%s -> %s)" (Lib.typ_name a) (Lib.typ_name b)
+  | Dropped -> "Dropped"
+  | Partial -> "Partial"
+
+let check_row r =
+  let carried, outcome, _ =
+    Lib.carry_value ~old_typ:r.old_typ ~new_typ:r.new_typ r.value
+  in
+  if outcome <> r.outcome then
+    failwith
+      (Printf.sprintf "%s: expected %s, got %s" r.what (show_outcome r.outcome)
+         (show_outcome outcome));
+  if Option.is_some carried <> r.carried then
+    failwith
+      (Printf.sprintf "%s: expected %s, got %s" r.what
+         (if r.carried then "a carried value" else "no value")
+         (if Option.is_some carried then "a carried value" else "no value"))
+
+(* A carried value is re-described with the live type. *)
+let check_adopts_live_declarations () =
+  let live = colour ["Red", None; "Green", None; "Blue", None] in
+  match
+    Lib.carry_value ~old_typ:(TEnum (colour ["Red", None]))
+      ~new_typ:(TEnum live) (red (colour ["Red", None]))
+  with
+  | Some { value = Enum (decl, _); _ }, Fits, _ ->
+    if List.length decl.O.constructors <> 3 then
+      failwith "a carried enum kept the partial declaration it was recovered with"
+  | _ -> failwith "an unchanged enum did not carry"
+
+(* Attributes belong to the value, not to the type it is carried into. *)
+let check_keeps_attributes () =
+  let v = O.{ value = Money 1000; attrs = [Uid "abc"] } in
+  match Lib.carry_value ~old_typ:TMoney ~new_typ:(TOption TMoney) v with
+  | Some { value = Enum (_, (_, Some payload)); _ }, Wrap, _ ->
+    if payload.O.attrs <> [O.Uid "abc"] then
+      failwith "wrapping a value dropped its attributes"
+  | _ -> failwith "a field that became optional did not wrap"
+
+(* A record with one renamed field keeps the others; the rename shows up as a
+   dropped old name and a blank new one, at their paths. *)
+let check_carries_inside_records () =
+  let old_typ = O.TStruct (detail ["x", O.TMoney; "second", O.TInt]) in
+  let new_decl = detail ["x", O.TMoney; "amount", O.TInt] in
+  let v =
+    struct_of
+      (detail ["x", O.TMoney; "second", O.TInt])
+      ["x", money 1000; "second", int 3]
+  in
+  match Lib.carry_value ~old_typ ~new_typ:(O.TStruct new_decl) v with
+  | Some { value = Struct (decl, fields); _ }, Partial, nested ->
+    if decl <> new_decl then
+      failwith "a carried record kept the old declaration";
+    if List.assoc_opt "x" fields <> Some (money 1000) then
+      failwith "an unchanged field of a changed record was not kept";
+    if List.assoc_opt "amount" fields <> Some unset then
+      failwith "a new field of a changed record is not a blank";
+    if List.mem_assoc "second" fields then
+      failwith "a dropped field survived in the carried record";
+    let expect p o =
+      if not (List.mem (p, o) nested) then
+        failwith (Printf.sprintf "missing nested outcome %s" (show_outcome o))
+    in
+    expect [`StructField "second"] Dropped;
+    expect [`StructField "amount"] WasUnset;
+    if List.length nested <> 2 then failwith "unexpected nested outcomes"
+  | _, outcome, _ ->
+    failwith
+      (Printf.sprintf
+         "a record with one renamed field: expected Partial, got %s"
+         (show_outcome outcome))
+
+(* Elements carry one by one, and a list none of whose elements carry is one
+   TypeChanged, not one per element. *)
+let check_carries_inside_lists () =
+  let old_elt = O.TStruct (detail ["x", O.TMoney; "second", O.TInt]) in
+  let new_elt = O.TStruct (detail ["x", O.TMoney; "amount", O.TInt]) in
+  let elt =
+    struct_of
+      (detail ["x", O.TMoney; "second", O.TInt])
+      ["x", money 1; "second", int 1]
+  in
+  (match
+     Lib.carry_value ~old_typ:(O.TArray old_elt) ~new_typ:(O.TArray new_elt)
+       (arr [elt; elt])
+   with
+  | Some { value = Array a; _ }, Partial, nested ->
+    if Array.length a <> 2 then failwith "a carried list lost elements";
+    if not (List.mem ([`ListIndex 1; `StructField "amount"], O.WasUnset) nested)
+    then failwith "nested outcomes of a list element are not indexed"
+  | _, outcome, _ ->
+    failwith
+      (Printf.sprintf "a list of changed records: expected Partial, got %s"
+         (show_outcome outcome)));
+  match
+    Lib.carry_value ~old_typ:(O.TArray O.TMoney) ~new_typ:(O.TArray O.TDate)
+      (arr [money 1; money 2])
+  with
+  | None, TypeChanged _, [] -> ()
+  | _, outcome, nested ->
+    failwith
+      (Printf.sprintf
+         "a list of moneys turned dates: expected one TypeChanged, got %s with \
+          %d nested"
+         (show_outcome outcome) (List.length nested))
+
+let show_nested nested =
+  String.concat "; "
+    (List.map
+       (fun (p, o) ->
+         String.concat ""
+           (List.map
+              (function
+                | `StructField n -> "." ^ n
+                | `ListIndex i -> Printf.sprintf "[%d]" i
+                | `TupleIndex i -> Printf.sprintf "(%d)" i
+                | `EnumPayload c -> "<" ^ c ^ ">")
+              p)
+         ^ "=" ^ show_outcome o)
+       nested)
+
+let expect_nested what nested p o =
+  if not (List.mem (p, o) nested) then
+    failwith
+      (Printf.sprintf "%s: missing %s; nested = %s" what
+         (show_nested [p, o]) (show_nested nested))
+
+(* Shapes below the top level, each at its path: transparent over options,
+   indexed in lists and tuples, [Partial] only at the top. *)
+let check_nested_shapes () =
+  (* A list of options of a record that gained a field. *)
+  let old_s = detail ["a", O.TInt] and new_s = detail ["a", O.TInt; "c", O.TInt] in
+  (match
+     Lib.carry_value
+       ~old_typ:(TArray (TOption (TStruct old_s)))
+       ~new_typ:(TArray (TOption (TStruct new_s)))
+       (arr [present (O.TStruct old_s) (struct_of old_s ["a", int 1])])
+   with
+  | Some { value = Array [| _ |]; _ }, Partial, nested ->
+    expect_nested "list of options" nested [`ListIndex 0; `StructField "c"] O.WasUnset;
+    if List.length nested <> 1 then
+      failwith ("list of options: nested = " ^ show_nested nested)
+  | _, outcome, _ -> failwith ("list of options: " ^ show_outcome outcome));
+  (* A tuple with one element changed keeps the other. *)
+  (match
+     Lib.carry_value ~old_typ:(TTuple [TInt; TMoney]) ~new_typ:(TTuple [TInt; TDate])
+       (arr [int 1; money 5])
+   with
+  | Some { value = Array [| { value = Integer 1; _ }; { value = Unset; _ } |]; _ }, Partial,
+    [([`TupleIndex 1], TypeChanged _)] -> ()
+  | _, outcome, nested ->
+    failwith (Printf.sprintf "tuple: %s, nested = %s" (show_outcome outcome) (show_nested nested)));
+  (* A record field that became optional wraps in place. *)
+  let old_s = detail ["a", O.TInt] and new_s = detail ["a", O.TOption O.TInt] in
+  (match
+     Lib.carry_value ~old_typ:(TStruct old_s) ~new_typ:(TStruct new_s)
+       (struct_of old_s ["a", int 1])
+   with
+  | Some { value = Struct (_, ["a", { value = Enum (_, (ctor, Some { value = Integer 1; _ })); _ }]); _ },
+    Partial, nested when ctor = Lib.option_present ->
+    if nested <> [[`StructField "a"], O.Wrap] then
+      failwith ("field became optional: nested = " ^ show_nested nested)
+  | _, outcome, nested ->
+    failwith (Printf.sprintf "field became optional: %s, nested = %s" (show_outcome outcome) (show_nested nested)));
+  (* A Present record that lost a field: reported at the field's path. *)
+  let old_s = detail ["a", O.TInt; "b", O.TInt] and new_s = detail ["a", O.TInt] in
+  (match
+     Lib.carry_value ~old_typ:(TOption (TStruct old_s)) ~new_typ:(TOption (TStruct new_s))
+       (present (O.TStruct old_s) (struct_of old_s ["a", int 1; "b", int 2]))
+   with
+  | Some { value = Enum (_, (_, Some { value = Struct (_, fields); _ })); _ }, Partial, nested ->
+    if List.mem_assoc "b" fields then failwith "present lost field: b survived";
+    if nested <> [[`StructField "b"], O.Dropped] then
+      failwith ("present lost field: nested = " ^ show_nested nested)
+  | _, outcome, _ -> failwith ("present lost field: " ^ show_outcome outcome));
+  (* Both ways at once, with a record inside: everything at its path, and
+     no [Partial] below the top. *)
+  let inner_old = detail ["x", O.TInt; "gone", O.TInt] in
+  let inner_new = detail ["x", O.TInt; "added", O.TInt] in
+  let old_s = detail ["inner", O.TStruct inner_old; "old_only", O.TInt] in
+  let new_s = detail ["inner", O.TStruct inner_new; "new_only", O.TInt] in
+  match
+    Lib.carry_value ~old_typ:(TStruct old_s) ~new_typ:(TStruct new_s)
+      (struct_of old_s
+         ["inner", struct_of inner_old ["x", int 1; "gone", int 2]; "old_only", int 3])
+  with
+  | Some _, Partial, nested ->
+    let expect = expect_nested "both ways" nested in
+    expect [`StructField "inner"; `StructField "added"] O.WasUnset;
+    expect [`StructField "inner"; `StructField "gone"] O.Dropped;
+    expect [`StructField "new_only"] O.WasUnset;
+    expect [`StructField "old_only"] O.Dropped;
+    if List.exists (fun (_, o) -> o = O.Partial) nested then
+      failwith ("both ways: a nested Partial: " ^ show_nested nested)
+  | _, outcome, nested ->
+    failwith (Printf.sprintf "both ways: %s, nested = %s" (show_outcome outcome) (show_nested nested))
+
+(* A blank replacing an element keeps the element's attributes: row identity
+   in the editor relies on the uid. *)
+let check_hole_keeps_attributes () =
+  let narrow = colour ["Red", None; "Blue", None] in
+  let live = colour ["Red", None; "Green", None] in
+  let row c = O.{ value = Enum (narrow, (c, None)); attrs = [Uid ("row-" ^ c)] } in
+  match
+    Lib.carry_value ~old_typ:(TArray (TEnum narrow)) ~new_typ:(TArray (TEnum live))
+      (arr [row "Red"; row "Blue"])
+  with
+  | Some { value = Array [| kept; hole |]; _ }, Partial, _ ->
+    if not (List.mem (O.Uid "row-Red") kept.O.attrs) then
+      failwith "a carried element lost its uid";
+    if hole.O.value <> O.Unset || not (List.mem (O.Uid "row-Blue") hole.O.attrs) then
+      failwith "the blank replacing an element lost its uid"
+  | _, outcome, _ -> failwith ("hole keeps attributes: " ^ show_outcome outcome)
+
+let () =
+  let open Tezt.Test in
+  register ~__FILE__ ~title:"carry_value: shapes below the top level"
+    ~tags:["unit"; "carry"] (fun () -> Lwt.return @@ check_nested_shapes ());
+  register ~__FILE__ ~title:"carry_value: a blank keeps the element's attributes"
+    ~tags:["unit"; "carry"] (fun () -> Lwt.return @@ check_hole_keeps_attributes ());
+  register ~__FILE__ ~title:"carry_value: carries inside records"
+    ~tags:["unit"; "carry"] (fun () ->
+      Lwt.return @@ check_carries_inside_records ());
+  register ~__FILE__ ~title:"carry_value: carries inside lists"
+    ~tags:["unit"; "carry"] (fun () ->
+      Lwt.return @@ check_carries_inside_lists ());
+  register ~__FILE__ ~title:"carry_value: the table"
+    ~tags:["unit"; "carry"] (fun () ->
+      Lwt.return @@ List.iter check_row rows);
+  register ~__FILE__ ~title:"carry_value: adopts the live declarations"
+    ~tags:["unit"; "carry"] (fun () ->
+      Lwt.return @@ check_adopts_live_declarations ());
+  register ~__FILE__ ~title:"carry_value: keeps the value's attributes"
+    ~tags:["unit"; "carry"] (fun () -> Lwt.return @@ check_keeps_attributes ())
+
+let () = Tezt.Test.run ()

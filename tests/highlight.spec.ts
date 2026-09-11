@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { pathEquals, isPathPrefix } from '../src/diff/highlight';
-import type { PathSegment } from '../src/generated/test_case';
+import type { PathSegment } from '../src/generated/catala_types';
 
 function seg(kind: PathSegment['kind'], value: any): PathSegment {
   return { kind, value } as any;

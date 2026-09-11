@@ -19,6 +19,8 @@ import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../shared/util';
 import { Combobox } from './Combobox';
 import { CompositeEditor } from './CompositeEditor';
+import { countUnsetIn } from './unsetValidation';
+import { samePath } from './reveal';
 import { useNestingDepth, NestingDepthIncrementer } from './NestingDepth';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
@@ -952,6 +954,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
         label: fieldName,
         type: fieldType,
         count,
+        unfilled: countUnsetIn(fieldValue, fieldType),
         editor: (
           <ValueEditor
             testIO={{
@@ -982,7 +985,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
       <div
         className={`struct-editor struct-container nest-${nestingDepth % 2}`}
       >
-        <CompositeEditor items={editorItems} />
+        <CompositeEditor items={editorItems} currentPath={currentPath} />
       </div>
     </NestingDepthIncrementer>
   );
@@ -1114,8 +1117,14 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
                 : undefined,
             }}
             onValueChange={handlePayloadChange}
-            editorHook={editorHook}
-            // Do NOT add EnumPayload here: server diff paths are transparent over enums
+            // Paths are transparent over enums, so the payload shares this
+            // editor's path: decorations at that path belong to the outer
+            // editor only.
+            editorHook={
+              editorHook &&
+              ((e: ReactElement, p: PathSegment[]): ReactElement =>
+                samePath(p, currentPath) ? e : editorHook(e, p))
+            }
             currentPath={currentPath}
             diffs={props.diffs}
             editable={editable}

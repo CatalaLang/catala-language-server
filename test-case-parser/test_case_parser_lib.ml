@@ -157,6 +157,9 @@ type lang_strings = {
   declaration_scope : string;
   output_scope : string;
   using_module : string;
+  (* The first line of every file the editor writes: it owns the file, and says
+     so where a reader of the source will look first. *)
+  header : string;
   definition : string;
   assertion : string;
   equals : string;
@@ -172,6 +175,8 @@ let get_lang_strings =
       declaration_scope = "déclaration champ d'application";
       output_scope = "résultat";
       using_module = "Usage de";
+      header =
+        "Fichier écrit par l’éditeur de tests métier Catala. Ne pas modifier à la main.";
       definition = "définition";
       assertion = "assertion";
       equals = "égal à";
@@ -186,6 +191,7 @@ let get_lang_strings =
       declaration_scope = "declaration scope";
       output_scope = "output";
       using_module = "Using";
+      header = "Written by the Catala testcase editor. Do not edit by hand.";
       definition = "definition";
       assertion = "assertion";
       equals = "equals";
@@ -207,6 +213,9 @@ let get_lang_strings =
       scope = "zakres";
       present = "Obecny";
       absent = "Nieobecny";
+      header =
+        "Plik zapisany przez edytor przypadków testowych Catala. Nie edytować \
+         ręcznie.";
     }
   in
   function
@@ -215,14 +224,15 @@ let get_lang_strings =
   | `Pl -> pl_strings
   | _ -> unsupported "unsupported language"
 
-let mk_optional_enum_decl lang typ =
+(* Runtime names, as an ordinary read produces them and the editor's option
+   form expects them. The surface keyword is the writer's business. *)
+let option_absent = EnumConstructor.to_string ConstantNames.none_constr
+let option_present = EnumConstructor.to_string ConstantNames.some_constr
+
+let mk_optional_enum_decl typ =
   {
     O.enum_name = EnumName.to_string ConstantNames.option_enum;
-    constructors =
-      [
-        (get_lang_strings lang).absent, None;
-        (get_lang_strings lang).present, Some typ;
-      ];
+    constructors = [option_absent, None; option_present, Some typ];
     ctor_attrs = [];
   }
 
@@ -301,7 +311,7 @@ and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
       in
       x |> Option.get
     in
-    mk_optional_enum_decl lang typ
+    mk_optional_enum_decl typ
   else
     let module_name =
       if EnumName.path enum_name = [] then None
@@ -641,9 +651,7 @@ let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
         cn, Option.map (generate_default_value lang) ty
       in
       O.Enum (decl, elt)
-    | TOption typ ->
-      Enum
-        (mk_optional_enum_decl lang typ, ((get_lang_strings lang).absent, None))
+    | TOption typ -> Enum (mk_optional_enum_decl typ, (option_absent, None))
     | TArray _ -> O.Array [||]
     | TUnset -> O.Unset
     | TUnit -> raise (Unsupported "unit type")
@@ -736,12 +744,20 @@ let generate_test
     ?(enforce_module = true)
     ?(testing_scope = tested_scope ^ "_test")
     ?(with_default_values = false)
+    ?program
     include_dirs
     options =
-  let path_to_build, include_dirs =
-    if include_dirs = [] then lookup_include_dirs options else ".", include_dirs
+  (* [program]: a caller that already read the module hands it over. *)
+  let prg, _ =
+    match program with
+    | Some p -> p
+    | None ->
+      let path_to_build, include_dirs =
+        if include_dirs = [] then lookup_include_dirs options
+        else ".", include_dirs
+      in
+      read_program include_dirs path_to_build options
   in
-  let prg, _ = read_program include_dirs path_to_build options in
   let tested_scope =
     Ident.Map.find tested_scope prg.I.program_ctx.ctx_scope_index
   in
@@ -814,6 +830,28 @@ let get_test_scopes prg =
       Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
       && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
   |> ScopeName.Map.keys
+
+(* `#[test]` without `#[testcase.testui]`: hand-written, may hold anything.
+   The editor can only express literals and equalities, so writing such a file
+   back would delete it. Must agree with [surface_scopes_by_ownership]. *)
+let unowned_test_scopes prg =
+  prg.I.program_root.module_scopes
+  |> ScopeName.Map.filter (fun scope_name _scope ->
+      Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
+      && not (Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi))
+  |> ScopeName.Map.keys
+
+(* Raw newlines in a pre-joined string escape the message box. *)
+let error_mixed_ownership (unowned : string list) =
+  Message.error
+    "this file mixes tests the editor owns with tests written by \
+     hand:@\n@[<v 2>  %a@]@\n\
+     The editor can express only literal values and equalities, so reading it \
+     would drop whatever else those tests contain, and writing it back would \
+     delete them. Mark them `#[testcase.testui]` to hand them over, or keep \
+     them in a file of their own."
+    (Format.pp_print_list ~pp_sep:Format.pp_print_cut Format.pp_print_string)
+    unowned
 
 let get_catala_test (prg, naming_ctx) testing_scope_name =
   let testing_scope =
@@ -939,6 +977,12 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
               _ )
             when svar = subscope_var ->
             let scope_var = StructField.Map.find field scope_field_map in
+            (* A rich-assertion editor (foo > 30 and foo < 50) would
+               revisit this. *)
+            if ScopeVar.Map.mem scope_var acc then
+              Message.error ~pos
+                "%a is asserted twice; keep one assertion per output."
+                ScopeVar.format scope_var;
             ScopeVar.Map.add scope_var
               {
                 O.value = get_value prg.program_lang prg.program_ctx value;
@@ -971,14 +1015,1281 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
+(* Does [v] still inhabit [t]? (recovery of drifted tests). *)
+let rec value_fits (t : O.typ) (v : O.runtime_value) : (unit, string) Result.t =
+  let path segs msg =
+    Error (if segs = "" then msg else Printf.sprintf "%s%s" segs msg)
+  in
+  let mismatch expected got = path "" (Printf.sprintf ": expected %s, got %s" expected got) in
+  let under seg = function
+    | Ok () -> Ok ()
+    | Error e -> Error (seg ^ e)
+  in
+  match t, v.O.value with
+  (* Value-less, so nothing to check. *)
+  | _, (O.Unset | O.NotOverridden) -> Ok ()
+  (* The empty default exists only in run results and diffs; no reader
+     produces it, and the printer refuses it the same way. *)
+  | _, O.Empty -> assert false
+  | O.TBool, O.Bool _
+  | O.TInt, O.Integer _
+  | O.TRat, O.Decimal _
+  | O.TMoney, O.Money _
+  | O.TDate, O.Date _
+  | O.TDuration, O.Duration _
+  | O.TUnit, _
+  | O.TUnset, _
+  | O.TArrow _, _ ->
+    Ok ()
+  (* An option is an enum in the runtime, so it is checked as one below. *)
+  | O.TOption ot, O.Enum (_, (ctor, payload)) -> (
+    match payload with
+    | None when ctor = option_absent -> Ok ()
+    | Some p when ctor = option_present ->
+      under (Printf.sprintf ".%s" ctor) (value_fits ot p)
+    | _ ->
+      mismatch
+        (Printf.sprintf "%s or %s" option_absent option_present)
+        (Printf.sprintf "%s%s" ctor
+           (match payload with None -> "" | Some _ -> " with a payload")))
+  | O.TEnum d, O.Enum (_, (ctor, payload)) -> (
+    match List.assoc_opt ctor d.O.constructors, payload with
+    | None, _ ->
+      mismatch
+        (Printf.sprintf "one of %s"
+           (String.concat " | " (List.map fst d.O.constructors)))
+        (Printf.sprintf "%s.%s" d.O.enum_name ctor)
+    | Some None, None -> Ok ()
+    | Some None, Some _ ->
+      mismatch
+        (Printf.sprintf "bare %s" ctor)
+        (Printf.sprintf "%s with a payload" ctor)
+    | Some (Some _), None ->
+      mismatch
+        (Printf.sprintf "%s with a payload" ctor)
+        (Printf.sprintf "bare %s" ctor)
+    | Some (Some pt), Some p ->
+      under (Printf.sprintf ".%s" ctor) (value_fits pt p))
+  | O.TStruct d, O.Struct (_, fields) -> (
+    let declared =
+      List.fold_left
+        (fun acc (fname, ft) ->
+          match acc with
+          | Error _ -> acc
+          | Ok () -> (
+            match List.assoc_opt fname fields with
+            | None -> Ok () (* absent field: nothing to contradict the type *)
+            | Some fv -> under ("." ^ fname) (value_fits ft fv)))
+        (Ok ()) d.O.fields
+    in
+    match declared with
+    | Error _ -> declared
+    | Ok () -> (
+      match
+        List.find_opt (fun (n, _) -> not (List.mem_assoc n d.O.fields)) fields
+      with
+      | None -> Ok ()
+      | Some (n, _) ->
+        path ("." ^ n) (Printf.sprintf ": not a field of %s" d.O.struct_name)))
+  | O.TArray et, O.Array elems ->
+    let rec go i =
+      if i >= Array.length elems then Ok ()
+      else
+        match under (Printf.sprintf "[%d]" i) (value_fits et elems.(i)) with
+        | Ok () -> go (i + 1)
+        | e -> e
+    in
+    go 0
+  | O.TTuple ts, O.Array elems when List.length ts = Array.length elems ->
+    let rec go i = function
+      | [] -> Ok ()
+      | et :: rest -> (
+        match under (Printf.sprintf "[%d]" i) (value_fits et elems.(i)) with
+        | Ok () -> go (i + 1) rest
+        | e -> e)
+    in
+    go 0 ts
+  | _ -> mismatch (typ_name t) (value_name v.O.value)
+
+and typ_name : O.typ -> string = function
+  | O.TBool -> "boolean"
+  | O.TInt -> "integer"
+  | O.TRat -> "decimal"
+  | O.TMoney -> "money"
+  | O.TDate -> "date"
+  | O.TDuration -> "duration"
+  | O.TUnit -> "unit"
+  | O.TUnset -> "unset"
+  | O.TTuple ts -> Printf.sprintf "a %d-tuple" (List.length ts)
+  | O.TStruct d -> d.O.struct_name
+  | O.TEnum d -> d.O.enum_name
+  | O.TOption t -> "optional of " ^ typ_name t
+  | O.TArray t -> "list of " ^ typ_name t
+  | O.TArrow _ -> "function"
+
+and value_name : O.runtime_value_raw -> string = function
+  | O.Bool _ -> "a boolean"
+  | O.Money _ -> "money"
+  | O.Integer _ -> "an integer"
+  | O.Decimal _ -> "a decimal"
+  | O.Date _ -> "a date"
+  | O.Duration _ -> "a duration"
+  | O.Enum (d, _) -> d.O.enum_name
+  | O.Struct (d, _) -> d.O.struct_name
+  | O.Array _ -> "a list"
+  | O.Unset -> "no value"
+  | O.NotOverridden -> "a default"
+  | O.Empty -> "empty"
+
+(* Every input and output of every test, checked against its declared type. *)
+let check_tests_fit (tests : O.test list) : (unit, string list) Result.t =
+  let problems =
+    List.concat_map
+      (fun (t : O.test) ->
+        List.concat_map
+          (fun (where, record) ->
+            List.filter_map
+              (fun (name, (io : O.test_io)) ->
+                match io.value with
+                | None -> None
+                | Some vd -> (
+                  match value_fits io.typ vd.O.value with
+                  | Ok () -> None
+                  | Error msg ->
+                    Some
+                      (Printf.sprintf "%s: %s.%s%s" t.O.testing_scope where name msg)))
+              record)
+          [ "in", t.O.test_inputs; "out", t.O.test_outputs ])
+      tests
+  in
+  if problems = [] then Ok () else Error problems
+
 let read_test include_dirs (options : Global.options) buffer_path =
   let path_to_build, include_dirs =
     if include_dirs = [] then lookup_include_dirs ?buffer_path options
     else ".", include_dirs
   in
   let prg = read_program include_dirs path_to_build options in
+  (match unowned_test_scopes (fst prg), get_test_scopes (fst prg) with
+  | (_ :: _ as unowned), _ :: _ ->
+    error_mixed_ownership (List.map ScopeName.to_string unowned)
+  | _ -> ());
   let tests = import_catala_tests prg in
-  write_stdout J.write_test_list tests
+  match check_tests_fit tests with
+  | Ok () -> write_stdout J.write_test_list tests
+  | Error problems ->
+    Message.error
+      "this test no longer fits the scope it targets:@\n@[<v 2>  %a@]@\n\
+       Its values were written against a different signature. Use@ \
+       `catala testcase partial-read` to read them as authored."
+      (Format.pp_print_list ~pp_sep:Format.pp_print_cut
+         (fun ppf s -> Format.pp_print_string ppf s))
+      problems
+
+let translate_literal l pos =
+  let open Surface.Ast in
+  let module Runtime = Catala_runtime in
+  let int1 = Runtime.integer_of_int 1 in
+  let intminus1 = Runtime.integer_of_int (-1) in
+  let int100 = Runtime.integer_of_int 100 in
+  let rat100 = Runtime.decimal_of_integer int100 in
+  match l with
+  | LNumber ((Int i, _), None) -> LInt (Runtime.integer_of_string i)
+  | LNumber ((Int i, _), Some (Percent, _)) ->
+    LRat
+      Runtime.(
+        Oper.o_div_rat_rat (Expr.pos_to_runtime pos) (decimal_of_string i)
+          rat100)
+  | LNumber ((Dec (i, f), _), None) ->
+    LRat Runtime.(decimal_of_string (i ^ "." ^ f))
+  | LNumber ((Dec (i, f), _), Some (Percent, _)) ->
+    LRat
+      Runtime.(
+        Oper.o_div_rat_rat (Expr.pos_to_runtime pos)
+          (decimal_of_string (i ^ "." ^ f))
+          rat100)
+  | LBool b -> LBool b
+  | LMoneyAmount i ->
+    LMoney
+      Runtime.(
+        money_of_cents_integer
+          (Oper.o_mult_int_int
+             (if i.money_amount_sign then int1 else intminus1)
+             (Oper.o_add_int_int
+                (Oper.o_mult_int_int
+                   (integer_of_string i.money_amount_units)
+                   int100)
+                (integer_of_string i.money_amount_cents))))
+  | LNumber ((Int i, _), Some (Year, _)) ->
+    LDuration (Runtime.duration_of_numbers (int_of_string i) 0 0)
+  | LNumber ((Int i, _), Some (Month, _)) ->
+    LDuration (Runtime.duration_of_numbers 0 (int_of_string i) 0)
+  | LNumber ((Int i, _), Some (Day, _)) ->
+    LDuration (Runtime.duration_of_numbers 0 0 (int_of_string i))
+  | LNumber ((Dec (_, _), _), Some ((Year | Month | Day), _)) ->
+    Message.error ~pos
+      "Impossible to specify decimal amounts of days, months or years."
+  | LDate date ->
+    if date.literal_date_month > 12 then
+      Message.error ~pos
+        "There is an error in this date: the month number is bigger than 12.";
+    if date.literal_date_day > 31 then
+      Message.error ~pos
+        "There is an error in this date: the day number is bigger than 31.";
+    LDate
+      (try
+         Runtime.date_of_numbers date.literal_date_year date.literal_date_month
+           date.literal_date_day
+       with Failure _ ->
+         Message.error ~pos
+           "There is an error in this date, it does not correspond to a \
+            correct calendar day.")
+
+(* Every scope declaration in the file, across all code blocks, with the mark
+   its attributes hang off. Declarations and uses are paired by name. *)
+(* Block kind ignored: Catala accepts either, so an ordinary read does, and the
+   two readers must agree on what counts as a test. What the editor emits is
+   pinned by a test instead. *)
+(* Every code item in the file, under whatever headings. *)
+let surface_code_items (prg : Surface.Ast.program) =
+  let open Surface.Ast in
+  let rec items = function
+    | CodeBlock (cb, _, _) -> cb
+    | LawHeading (_, sub) -> List.concat_map items sub
+    | _ -> []
+  in
+  List.concat_map items prg.program_items
+
+let surface_scope_decls (prg : Surface.Ast.program) =
+  List.filter_map
+    (function Surface.Ast.ScopeDecl s, m -> Some (s, m) | _ -> None)
+    (surface_code_items prg)
+
+let surface_scope_uses (prg : Surface.Ast.program) =
+  List.filter_map
+    (function Surface.Ast.ScopeUse s, _ -> Some s | _ -> None)
+    (surface_code_items prg)
+
+(* Before name resolution the plugin's attributes are still raw [Src], on the
+   mark of the declaration's name. *)
+let surface_attr_string path (m : Pos.t) : string option =
+  List.find_map
+    (function
+      | Shared_ast.Src ((p, _), Shared_ast.String (v, _), _)
+        when p = "testcase" :: path -> Some v
+      | _ -> None)
+    (Pos.attrs m)
+
+(* The value attributes an ordinary read keeps ([get_value] sees them resolved;
+   here they are still raw). The array editor tracks rows by them. *)
+let surface_value_attrs (m : Pos.t) : O.attr_def list =
+  List.filter_map
+    (function
+      | Shared_ast.Src ((p, _), Shared_ast.String (v, _), _) -> (
+        match p with
+        | ["testcase"; "uid"] -> Some (O.Uid v)
+        | ["testcase"; "array_item_label"] -> Some (O.ArrayItemLabel v)
+        | _ -> None)
+      | _ -> None)
+    (Pos.attrs m)
+
+let surface_has_attr path (m : Pos.t) : bool =
+  List.exists
+    (function Shared_ast.Src ((p, _), _, _) -> p = path | _ -> false)
+    (Pos.attrs m)
+
+(* [unowned_test_scopes] without typechecking. The two must agree. *)
+let surface_scopes_by_ownership (prg : Surface.Ast.program) =
+  List.partition_map
+    (fun ((decl : Surface.Ast.scope_decl), _) ->
+      let m = Mark.get decl.scope_decl_name in
+      let name = Mark.remove decl.scope_decl_name in
+      if surface_has_attr [ "testcase"; "testui" ] m then Either.Left name
+      else Either.Right name)
+    (List.filter
+       (fun ((decl : Surface.Ast.scope_decl), _) ->
+         surface_has_attr [ "test" ] (Mark.get decl.scope_decl_name))
+       (surface_scope_decls prg))
+
+(* A bare constructor names no enum. Never a name; never printed as one. *)
+let unknown_enum_name = "unknown"
+
+let enum_name_of_path (p : Surface.Ast.path) =
+  match p with
+  | [] -> unknown_enum_name
+  | p -> String.concat "." (List.map Mark.remove p)
+
+let read_partial_test_one (scope_decl : Surface.Ast.scope_decl)
+    (scope_use : Surface.Ast.scope_use) : (O.test, string) Result.t =
+  let ( let*? ) = Result.bind in
+  let open Surface.Ast in
+  let vlit v = Some O.{ value = v; pos = None } in
+  let exception Err of string in
+  let rec convert_literal (e : expression) :
+      (O.typ * O.runtime_value, string) Result.t =
+    let ok ty raw =
+      Ok (ty, O.{ value = raw; attrs = surface_value_attrs (Mark.get e) })
+    in
+    match Mark.remove e with
+    | Literal l -> begin
+      match translate_literal l Pos.void with
+      | LBool b -> ok O.TBool (O.Bool b)
+      | LInt z -> ok O.TInt (O.Integer (Z.to_int z))
+      | LRat q -> ok O.TRat (O.Decimal (Q.to_float q))
+      | LMoney m -> ok O.TMoney (O.Money (Z.to_int m))
+      | LUnit -> assert false
+      | LDate d ->
+        let year, month, day = Dates_calc.date_to_ymd d in
+        ok O.TDate (O.Date { year; month; day })
+      | LDuration dur ->
+        let years, months, days = Dates_calc.period_to_ymds dur in
+        ok O.TDuration (O.Duration { years; months; days })
+    end
+    | EnumInject ((CBuiltin Absent, _), None) ->
+      (* TOption, as in a signature, even though the value is carried as the
+         Optional enum. A bare `Absent` has an unknown payload type. *)
+      let edecl = mk_optional_enum_decl TUnit in
+      ok (O.TOption O.TUnset) (O.Enum (edecl, (option_absent, None)))
+    | EnumInject ((CBuiltin Present, _), Some sube) ->
+      let*? subt, subv = convert_literal sube in
+      let edecl = mk_optional_enum_decl subt in
+      ok (O.TOption subt) (O.Enum (edecl, (option_present, Some subv)))
+    (* `Mod.Enum.Ctor` carries the enum's full name, spelled as an ordinary
+       read spells it. Bare, it names no enum. *)
+    | EnumInject ((CConstr (p, (u, _)), _), None) ->
+      let edecl =
+        {
+          O.enum_name = enum_name_of_path p;
+          constructors = [u, None];
+          ctor_attrs = [];
+        }
+      in
+      ok (O.TEnum edecl) (O.Enum (edecl, (u, None)))
+    | EnumInject ((CConstr (p, (u, _)), _), Some sube) ->
+      let*? subt, subv = convert_literal sube in
+      let edecl =
+        {
+          O.enum_name = enum_name_of_path p;
+          constructors = [u, Some subt];
+          ctor_attrs = [];
+        }
+      in
+      ok (O.TEnum edecl) (O.Enum (edecl, (u, Some subv)))
+    (* Element type unknowable from an empty list. *)
+    | ArrayLit [] -> ok O.(TArray TUnset) O.(Array [||])
+    | ArrayLit (_ :: _ as l) ->
+      let*? ty, l =
+        try
+          let l =
+            List.map
+              (fun lit ->
+                match convert_literal lit with
+                | Error s -> raise (Err s)
+                | Ok v -> v)
+              l
+          in
+          let ty, _ = List.hd l in
+          Ok (ty, List.map snd l)
+        with Err s -> Error s
+      in
+      ok O.(TArray ty) O.(Array (Array.of_list l))
+    | StructLit (((path, (s_name, _)), _), fields) ->
+      (* Qualified as the test wrote it, which is how an ordinary read names
+         it. *)
+      let s_name =
+        match path with
+        | [] -> s_name
+        | p -> String.concat "." (List.map Mark.remove p) ^ "." ^ s_name
+      in
+      let*? fields =
+        try
+          Ok
+            (List.map
+               (fun ((n, _), lit) ->
+                 match convert_literal lit with
+                 | Error s -> raise (Err s)
+                 | Ok (ty, v) -> n, ty, v)
+               fields)
+        with Err s -> Error s
+      in
+      let struct_decl =
+        {
+          O.struct_name = s_name;
+          fields = List.map (fun (n, ty, _) -> n, ty) fields;
+        }
+      in
+      ok
+        (O.TStruct struct_decl)
+        (O.Struct (struct_decl, List.map (fun (n, _, v) -> n, v) fields))
+    | Builtin Impossible -> ok O.TUnset O.Unset
+    | Tuple elems ->
+      let*? parts =
+        try
+          Ok
+            (List.map
+               (fun elem ->
+                 match convert_literal elem with
+                 | Error s -> raise (Err s)
+                 | Ok v -> v)
+               elems)
+        with Err s -> Error s
+      in
+      ok
+        (O.TTuple (List.map fst parts))
+        (O.Array (Array.of_list (List.map snd parts)))
+    (* `1 year + 2 month`: how [write] spells a multi-unit duration. Still a
+       literal. `+` on anything else is a computation, not a value. *)
+    | Binop ((Add _, _), lhs, rhs) -> (
+      let*? lt, lv = convert_literal lhs in
+      let*? rt, rv = convert_literal rhs in
+      match lt, lv.O.value, rt, rv.O.value with
+      | O.TDuration, O.Duration a, O.TDuration, O.Duration b ->
+        ok O.TDuration
+          (O.Duration
+             {
+               years = a.O.years + b.O.years;
+               months = a.O.months + b.O.months;
+               days = a.O.days + b.O.days;
+             })
+      | _ -> Error "unsupported expression")
+    | _ | (exception _) -> Error "unsupported expression"
+  in
+  let convert_definition : definition -> (string * O.test_io, string) Result.t =
+    function
+    | {
+        definition_name = [_subscope_id; (input_var_name, _)], _;
+        definition_expr = expr;
+        _;
+      } ->
+      let*? typ, rv = convert_literal expr in
+      let expr = O.{ typ; value = vlit rv } in
+      Ok (input_var_name, expr)
+    | _ -> Error "invalid definition shape"
+  in
+  (* `assertion (calc.total = $0.00)` is an expected output. Only field =
+     literal is readable; anything richer refuses the whole test, as the
+     ordinary read does -- skipped silently, promoting the working copy
+     would delete it. *)
+  let rec convert_assertion (e : expression) :
+      (string * O.test_io, string) Result.t =
+    match Mark.remove e with
+    (* `assertion (x = y)` carries its parentheses into the tree. *)
+    | Paren inner -> convert_assertion inner
+    | Binop ((Eq, _), lhs, rhs) -> (
+      match Mark.remove lhs with
+      | Dotted (_, ((_path, (field, _)), _)) ->
+        let*? typ, rv = convert_literal rhs in
+        Ok (field, O.{ typ; value = vlit rv })
+      | _ -> Error "unsupported assertion")
+    | _ -> Error "unsupported assertion"
+  in
+  let convert_var_def = function
+    | Definition d, _ -> begin
+      match convert_definition d with
+      | Error s -> raise (Err s)
+      | Ok v -> Some v
+    end
+    | _ -> None
+  in
+  let*? test_inputs =
+    try Ok (List.filter_map convert_var_def scope_use.scope_use_items)
+    with Err s -> Error s
+  in
+  let*? recovered_outputs =
+    try
+      Ok
+        (List.filter_map
+           (function
+             | Assertion e, _ -> (
+               match convert_assertion e with
+               | Error s -> raise (Err s)
+               | Ok v -> Some v)
+             | _ -> None)
+           scope_use.scope_use_items)
+    with Err s -> Error s
+  in
+  let*? () =
+    match
+      List.find_opt
+        (fun (f, _) ->
+          List.length (List.filter (fun (g, _) -> String.equal f g)
+                         recovered_outputs) > 1)
+        recovered_outputs
+    with
+    | Some (f, _) -> Error (Printf.sprintf "%S is asserted twice" f)
+    | None -> Ok ()
+  in
+  let testing_scope = fst scope_decl.scope_decl_name in
+  let*? tested_scope =
+    List.find_map
+      (function
+        | ( ContextScope
+              { scope_decl_context_scope_sub_scope = (p, (sname, _)), _; _ },
+            _ ) ->
+          Some
+            (match List.rev p with
+            | [] ->
+              Error
+                (Printf.sprintf "%S does not say which module it tests" sname)
+            | (m, _) :: _ ->
+              Ok
+                {
+                  O.name = sname;
+                  module_name = m;
+                  inputs =
+                    List.map
+                      (fun (v, (i_io : O.test_io)) ->
+                        v, { O.typ = i_io.typ; is_context = false })
+                      test_inputs;
+                  outputs =
+                    List.map
+                      (fun (n, (io : O.test_io)) -> n, io.typ)
+                      recovered_outputs;
+                  module_deps = [];
+                })
+        | _ -> None)
+      scope_decl.scope_decl_context
+    |> function None -> Error "tested scope not found" | Some r -> r
+  in
+  Ok
+    {
+      O.testing_scope;
+      tested_scope;
+      test_inputs;
+      test_outputs = recovered_outputs;
+      description =
+        Option.value ~default:""
+          (surface_attr_string [ "test_description" ]
+             (Mark.get scope_decl.scope_decl_name));
+      title =
+        Option.value ~default:""
+          (surface_attr_string [ "test_title" ]
+             (Mark.get scope_decl.scope_decl_name));
+    }
+
+(* Each test independently: one failure must not lose the others. *)
+let read_partial_tests options : (O.test list * string list, string) Result.t =
+  let prg = Driver.Passes.surface options in
+  let uses = surface_scope_uses prg in
+  match surface_scope_decls prg with
+  | [] ->
+    (* Usually a syntax error, which leaves no surface AST at all. *)
+    Error
+      "no test declaration found — if the file has a syntax error, that is the \
+       cause: a partial read still needs the file to parse"
+  | decls ->
+    let results =
+      List.filter_map
+        (fun ((decl : Surface.Ast.scope_decl), _) ->
+          let name = Mark.remove decl.scope_decl_name in
+          match
+            List.filter
+              (fun (u : Surface.Ast.scope_use) ->
+                String.equal (Mark.remove u.scope_use_name) name)
+              uses
+          with
+          | [] -> None (* declared but never defined: not a test *)
+          | first :: _ as all ->
+            (* Catala merges a scope's uses across blocks; so must we. *)
+            let use =
+              {
+                first with
+                Surface.Ast.scope_use_items =
+                  List.concat_map
+                    (fun (u : Surface.Ast.scope_use) -> u.scope_use_items)
+                    all;
+              }
+            in
+            Some (name, read_partial_test_one decl use))
+        decls
+    in
+    let tests =
+      List.filter_map (function _, Ok t -> Some t | _ -> None) results
+    in
+    let errors =
+      List.filter_map
+        (function n, Error e -> Some (Printf.sprintf "%s: %s" n e) | _ -> None)
+        results
+    in
+    if tests = [] && errors <> [] then Error (String.concat "; " errors)
+    else Ok (tests, errors)
+
+(* Rebuilding a broken test: one command producing everything the recovery
+   view needs; none of this reasoning lives on the TypeScript side. *)
+
+(* How a recovered value may be carried into a live slot. Ordered by how much
+   each rule claims: [Wrap]/[Unwrap] only that an option and its payload
+   correspond, [Fits] only what an ordinary read checks. Anything that infers
+   intent belongs behind explicit consent -- a wrong carry is worse than an
+   empty field, because nobody re-checks a field that looks answered. Pinned by
+   the table in test/carry_test.ml. *)
+(* Re-describe a value with the live type's declarations: a recovered one is
+   inferred from a single literal (one constructor of a hundred, only the
+   fields the test wrote, [unknown_enum_name]). Attributes are the value's own
+   and stay. Only call on a value that [value_fits] the type: the asserts
+   below hold because fitting rejects a value the declaration has no place
+   for, and adoption must never be the one to drop it. *)
+let rec adopt_typ (t : O.typ) (v : O.runtime_value) : O.runtime_value =
+  let value =
+    match t, v.O.value with
+    | O.TOption inner, O.Enum (_, (ctor, payload)) ->
+      O.Enum
+        ( mk_optional_enum_decl inner,
+          (ctor, Option.map (adopt_typ inner) payload) )
+    | O.TEnum d, O.Enum (_, (ctor, payload)) ->
+      let payload =
+        match List.assoc_opt ctor d.O.constructors with
+        | Some (Some pt) -> Option.map (adopt_typ pt) payload
+        | Some None ->
+          assert (payload = None);
+          None
+        | None -> assert false
+      in
+      O.Enum (d, (ctor, payload))
+    | O.TStruct d, O.Struct (_, fields) ->
+      assert (List.for_all (fun (n, _) -> List.mem_assoc n d.O.fields) fields);
+      (* In declaration order, as an ordinary read has them: the same test
+         must write the same bytes whichever reader it came through. *)
+      let declared =
+        List.filter_map
+          (fun (n, ft) ->
+            Option.map (fun fv -> n, adopt_typ ft fv) (List.assoc_opt n fields))
+          d.O.fields
+      in
+      O.Struct (d, declared)
+    | O.TArray et, O.Array elems ->
+      O.Array (Array.map (adopt_typ et) elems)
+    | O.TTuple ts, O.Array elems when List.length ts = Array.length elems ->
+      O.Array (Array.mapi (fun i e -> adopt_typ (List.nth ts i) e) elems)
+    | _ -> v.O.value
+  in
+  { v with O.value }
+
+let carry_rule ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
+    : O.runtime_value option * O.carry_outcome =
+  match new_typ, old_typ with
+  (* [TUnset] is absence of evidence, not a differing type. First, because
+     [value_fits] accepts [Unset] against anything. *)
+  | _, O.TUnset -> None, O.WasUnset
+  (* By fit, not type equality: the recovered type of an enum is narrower
+     than the live one. An option never wraps another option. *)
+  | O.TOption inner, _
+    when (match old_typ with O.TOption _ -> false | _ -> true)
+         && v.O.value <> O.Unset
+         && value_fits inner v = Ok () ->
+    let decl = mk_optional_enum_decl inner in
+    ( Some
+        {
+          O.value = O.Enum (decl, (option_present, Some v));
+          attrs = [];
+        },
+      O.Wrap )
+  (* Option to option is neither: the fits check decides. *)
+  | _, O.TOption inner when not (match new_typ with O.TOption _ -> true | _ -> false)
+    -> (
+    match v.O.value with
+    | O.Enum (_, (_, Some payload)) when inner = new_typ -> Some payload, O.Unwrap
+    | O.Enum (_, (_, None)) -> None, O.WasAbsentNowRequired
+    | _ -> None, O.TypeChanged (old_typ, new_typ))
+  (* Not type equality: a recovered type is inferred from one literal and never
+     equals the live one, even when nothing changed. [Fits] promises exactly
+     what an ordinary read checks. *)
+  | _ when value_fits new_typ v = Ok () -> Some v, O.Fits
+  | _ -> None, O.TypeChanged (old_typ, new_typ)
+
+(* Below a value that does not carry whole, carry what does: field by field,
+   element by element, through options, tuples and enum payloads. Nested
+   outcomes are paths from the value down; [Fits] and [Partial] are not
+   recorded there, the leaves say it all. A value
+   none of whose parts carry stays [TypeChanged], so a list of moneys turned
+   dates is one mark, not one per element. *)
+let rec carry_value ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value)
+    :
+    O.runtime_value option
+    * O.carry_outcome
+    * (O.path_segment list * O.carry_outcome) list =
+  match carry_rule ~old_typ ~new_typ v with
+  (* A fit can still hold less than the live type declares: a field the old
+     record never had is a blank to report, not a fit to pass. *)
+  | Some c, O.Fits -> (
+    match carry_inside ~old_typ ~new_typ v with
+    | Some (completed, (_ :: _ as nested)) -> Some completed, O.Partial, nested
+    | _ -> Some (adopt_typ new_typ c), O.Fits, [])
+  | Some c, outcome -> Some (adopt_typ new_typ c), outcome, []
+  | None, (O.TypeChanged _ as leaf) -> (
+    match carry_inside ~old_typ ~new_typ v with
+    | Some (c, nested) -> Some c, O.Partial, nested
+    | None -> None, leaf, [])
+  | None, outcome -> None, outcome, []
+
+and carry_inside ~(old_typ : O.typ) ~(new_typ : O.typ) (v : O.runtime_value) :
+    (O.runtime_value * (O.path_segment list * O.carry_outcome) list) option =
+  let hole typ = (unset_default_value typ).O.value.O.value in
+  let nested = ref [] in
+  let push seg outcome = nested := ([seg], outcome) :: !nested in
+  let carry_at seg ~old_typ ~new_typ e =
+    let c, outcome, sub = carry_value ~old_typ ~new_typ e in
+    if outcome <> O.Fits && outcome <> O.Partial then push seg outcome;
+    nested := List.rev_append (List.map (fun (p, o) -> seg :: p, o) sub) !nested;
+    c
+  in
+  (* Paths are transparent over enums, as diff paths are: a payload lives at the
+     enum's own path. *)
+  let carry_through ~old_typ ~new_typ e =
+    let c, _, sub = carry_value ~old_typ ~new_typ e in
+    nested := List.rev_append sub !nested;
+    c
+  in
+  let indexed mk_seg ots nts elems =
+    let carried =
+      List.mapi
+        (fun i (ot, nt) ->
+          i, nt, carry_at (mk_seg i) ~old_typ:ot ~new_typ:nt elems.(i))
+        (List.combine ots nts)
+    in
+    if List.for_all (fun (_, _, c) -> c = None) carried then None
+    else
+      Some
+        (Array.of_list
+           (List.map
+              (fun (i, nt, c) ->
+                Option.value c ~default:{ elems.(i) with O.value = hole nt })
+              carried))
+  in
+  let result =
+    match old_typ, new_typ, v.O.value with
+    | O.TStruct od, O.TStruct nd, O.Struct (_, fields) ->
+      let any_carried = ref false in
+      let carried =
+        List.map
+          (fun (n, nt) ->
+            let seg = `StructField n in
+            match List.assoc_opt n fields with
+            | None ->
+              push seg O.WasUnset;
+              n, { O.value = hole nt; attrs = [] }
+            | Some fv -> (
+              let ot =
+                Option.value (List.assoc_opt n od.O.fields) ~default:nt
+              in
+              match carry_at seg ~old_typ:ot ~new_typ:nt fv with
+              | Some c ->
+                any_carried := true;
+                n, c
+              | None -> n, { fv with O.value = hole nt }))
+          nd.O.fields
+      in
+      List.iter
+        (fun (n, _) ->
+          if not (List.mem_assoc n nd.O.fields) then
+            push (`StructField n) O.Dropped)
+        fields;
+      if !any_carried then Some (O.Struct (nd, carried)) else None
+    | O.TArray oe, O.TArray ne, O.Array elems ->
+      let n = Array.length elems in
+      Option.map
+        (fun a -> O.Array a)
+        (indexed
+           (fun i -> `ListIndex i)
+           (List.init n (fun _ -> oe))
+           (List.init n (fun _ -> ne))
+           elems)
+    | O.TTuple ots, O.TTuple nts, O.Array elems
+      when List.length ots = List.length nts
+           && List.length nts = Array.length elems ->
+      Option.map
+        (fun a -> O.Array a)
+        (indexed (fun i -> `TupleIndex i) ots nts elems)
+    | O.TOption oi, O.TOption ni, O.Enum (_, (ctor, Some p)) ->
+      Option.map
+        (fun c -> O.Enum (mk_optional_enum_decl ni, (ctor, Some c)))
+        (carry_through ~old_typ:oi ~new_typ:ni p)
+    | O.TEnum od, O.TEnum nd, O.Enum (_, (ctor, Some p)) -> (
+      match List.assoc_opt ctor nd.O.constructors with
+      | Some (Some npt) ->
+        let opt =
+          match List.assoc_opt ctor od.O.constructors with
+          | Some (Some t) -> t
+          | _ -> npt
+        in
+        Option.map
+          (fun c -> O.Enum (nd, (ctor, Some c)))
+          (carry_through ~old_typ:opt ~new_typ:npt p)
+      | _ -> None)
+    | _ -> None
+  in
+  Option.map (fun value -> { v with O.value }, List.rev !nested) result
+
+(* The compiler's own diagnostic, as text: the one thing that gets the tester
+   out. *)
+let error_text (e : exn) : string =
+  let of_content c =
+    Message.pp_to_string ~ansi:false (fun ppf ->
+        Message.Content.emit ~ppf c Message.Error)
+  in
+  match e with
+  | Message.CompilerError c -> of_content c
+  | Message.CompilerErrors ((c, _) :: _) -> of_content c
+  | Unsupported msg -> "unsupported: " ^ msg
+  | e -> Printexc.to_string e
+
+let project_root (from_dir : string) : string =
+  match
+    File.find_in_parents ~cwd:(File.make_absolute from_dir) (fun dir ->
+        File.(exists (dir / "clerk.toml")))
+  with
+  | Some (dir, _) -> dir
+  | None -> from_dir
+
+module Scan = Clerk_utils.Scan
+
+(* Per-file failures dropped: broken files are recovery's normal case. *)
+let scan_catala_files (dir : string) : Scan.item list =
+  File.scan_tree
+    (fun f ->
+      match Scan.get_lang f with
+      | None -> None
+      | Some lang -> ( try Some (Scan.catala_file f lang) with _ -> None))
+    dir
+  |> Seq.concat_map (fun (_, _, items) -> List.to_seq items)
+  |> List.of_seq
+
+(* Lexical scan: resolves in a project that does not compile. *)
+let find_module_file (name : string) (from_dir : string) : string option =
+  let declares (it : Scan.item) =
+    match it.Scan.module_def with
+    | Some m -> String.equal (Mark.remove m) name
+    | None -> false
+  in
+  let find dir =
+    Option.map
+      (fun (it : Scan.item) -> it.Scan.file_name)
+      (List.find_opt declares (scan_catala_files dir))
+  in
+  match find from_dir with
+  | Some f -> Some f
+  | None -> find (project_root from_dir)
+
+(* Scopes anywhere in the project that declare some of the test's field names,
+   for a test whose module is gone. Surface-parsed only: no module need
+   compile, and none but the one chosen ever will. *)
+let rank_project_scope_candidates ~(from_dir : string) ~(wanted_module : string)
+    ~(field_names : string list) : O.scope_candidate list =
+  let total = List.length field_names in
+  let mentions_a_field content =
+    List.exists (fun f -> Re.execp (Re.compile (Re.str f)) content) field_names
+  in
+  let candidates_of (it : Scan.item) =
+    match it.Scan.module_def with
+    | None -> []
+    | Some module_def -> (
+      let module_name = Mark.remove module_def in
+      let file = it.Scan.file_name in
+      match File.contents file with
+      | exception _ -> []
+      | content when not (mentions_a_field content) -> []
+      | _ -> (
+        match
+          Driver.Passes.surface
+            (Global.enforce_options ~input_src:(Global.FileName file)
+               ~language:(Some (Cli.file_lang file)) ())
+        with
+        | exception e ->
+          Message.debug "candidates: skipping %s: %s" file (Printexc.to_string e);
+          []
+        | prg ->
+          List.filter_map
+            (fun ((decl : Surface.Ast.scope_decl), _) ->
+              let declared =
+                List.filter_map
+                  (fun (item, _) ->
+                    match item with
+                    | Surface.Ast.ContextData d ->
+                      Some (Mark.remove d.scope_decl_context_item_name)
+                    | Surface.Ast.ContextScope _ -> None)
+                  decl.scope_decl_context
+              in
+              let shared =
+                List.length
+                  (List.filter (fun n -> List.mem n declared) field_names)
+              in
+              if shared = 0 then None
+              else
+                Some
+                  {
+                    O.module_name;
+                    name = Mark.remove decl.scope_decl_name;
+                    shared;
+                    out_of = total;
+                  })
+            (surface_scope_decls prg)))
+  in
+  scan_catala_files (project_root from_dir)
+  |> List.concat_map candidates_of
+  |> List.sort (fun (a : O.scope_candidate) (b : O.scope_candidate) ->
+         match compare b.shared a.shared with
+         | 0 -> (
+           match
+             compare
+               (Suggestions.levenshtein_distance wanted_module a.module_name)
+               (Suggestions.levenshtein_distance wanted_module b.module_name)
+           with
+           | 0 -> compare (a.module_name, a.name) (b.module_name, b.name)
+           | c -> c)
+         | c -> c)
+  |> List.filteri (fun i _ -> i < 8)
+
+(* "Scope" or "Module.Scope". *)
+let parse_target (t : string) : string option * string =
+  match String.rindex_opt t '.' with
+  | Some i -> Some (String.sub t 0 i), String.sub t (i + 1) (String.length t - i - 1)
+  | None -> None, t
+
+(* [working_copy_ext] hides the language, hence [~lang]. *)
+let read_tests_of_file ~(lang : Global.backend_lang) (file : string) :
+    O.test list option =
+  if not (Sys.file_exists file) then None
+  else
+    match
+      let options =
+        Global.enforce_options ~input_src:(Global.FileName file) ~language:(Some lang) ()
+      in
+      let path_to_build, include_dirs = lookup_include_dirs options in
+      import_catala_tests (read_program include_dirs path_to_build options)
+    with
+    | tests -> Some tests
+    | exception _ -> None
+
+(* The module's scopes, ranked by shared field names then name distance.
+   Ranked, not chosen: the tester picks. Same scopes as [list_scopes]. *)
+let rank_scope_candidates (prg : I.program) ~(wanted : string)
+    ~(field_names : string list) : O.scope_candidate list =
+  let tested_module =
+    match prg.I.program_module_name with
+    | Some (m, _) -> m
+    | None -> ModuleName.fresh ("no_module", Pos.void)
+  in
+  let total = List.length field_names in
+  ScopeName.Map.fold
+    (fun _ (sc : I.scope) acc ->
+      match sc.I.scope_visibility with
+      | Private -> acc
+      | _ -> (
+        match get_scope_def prg sc ~tested_module with
+        | exception _ -> acc
+        | def ->
+          let declared =
+            List.map fst def.O.inputs @ List.map fst def.O.outputs
+          in
+          let shared =
+            List.length (List.filter (fun n -> List.mem n declared) field_names)
+          in
+          {
+            O.module_name = ModuleName.to_string tested_module;
+            name = def.O.name;
+            shared;
+            out_of = total;
+          }
+          :: acc))
+    prg.I.program_root.module_scopes []
+  |> List.sort (fun (a : O.scope_candidate) (b : O.scope_candidate) ->
+         match compare b.shared a.shared with
+         | 0 -> (
+           match
+             compare
+               (Suggestions.levenshtein_distance wanted a.name)
+               (Suggestions.levenshtein_distance wanted b.name)
+           with
+           | 0 -> compare a.name b.name
+           | c -> c)
+         | c -> c)
+
+(* Not a Catala extension, so no scan sees it; matches TS workingCopyExt. *)
+let working_copy_ext = ".repair"
+
+let rebuild_broken_test (options : Global.options) (target : string option) =
+  let test_file = Global.input_src_file options.Global.input_src in
+  let lang = Cli.file_lang test_file in
+  let notes = ref [] in
+  let note n = notes := n :: !notes in
+  let workspace_file = Filename.basename test_file ^ working_copy_ext in
+  let emit tests =
+    write_stdout J.write_recovery
+      { O.tests; notes = List.rev !notes; working_copy = workspace_file }
+  in
+  let emit_bare recovered =
+    emit
+      (List.map
+         (fun (t : O.test) ->
+           { O.authored = t; rebuilt = None; outcomes = [] })
+         recovered)
+  in
+  (match surface_scopes_by_ownership (Driver.Passes.surface options) with
+  | _ :: _, (_ :: _ as unowned) -> error_mixed_ownership unowned
+  | _ -> ());
+  match read_partial_tests options with
+  | Error e -> Format.ksprintf failwith "Error: %s" e
+  | Ok (recovered, errors) -> (
+    List.iter (fun e -> Message.warning "partial read: %s" e) errors;
+    match recovered with
+    | [] -> emit []
+    | first :: _ -> (
+      let scope = first.O.tested_scope in
+      let workspace =
+        Filename.concat (Filename.dirname test_file) workspace_file
+      in
+      let saved = read_tests_of_file ~lang workspace in
+      (* Explicit choice, else the scope a saved working copy targets, else
+         the declared one. *)
+      let target_module, target_name =
+        match target, saved with
+        | Some t, _ -> parse_target t
+        | None, Some (t :: _) ->
+          Some t.O.tested_scope.O.module_name, t.O.tested_scope.O.name
+        | None, _ -> None, scope.O.name
+      in
+      let module_name =
+        Option.value target_module ~default:scope.O.module_name
+      in
+      let field_names =
+        List.map fst first.O.test_inputs @ List.map fst first.O.test_outputs
+      in
+      let from_dir = Filename.dirname test_file in
+      match find_module_file module_name from_dir with
+      | None ->
+        note
+          (O.ModuleNotFound
+             {
+               O.module_name;
+               candidates =
+                 rank_project_scope_candidates ~from_dir
+                   ~wanted_module:module_name ~field_names;
+             });
+        emit_bare recovered
+      | Some module_file -> (
+        (* Point the compiler at the module, not at the test that no longer
+           typechecks. *)
+        let module_options =
+          Global.enforce_options ~input_src:(Global.FileName module_file) ()
+        in
+        (* Two distinct notes: a renamed scope is not a module that will not
+           build. *)
+        match
+          let path_to_build, include_dirs =
+            lookup_include_dirs module_options
+          in
+          read_program include_dirs path_to_build module_options
+        with
+        | exception e ->
+          note (O.ModuleWontCompile { O.name = module_name; error = error_text e });
+          emit_bare recovered
+        | prg, _
+          when not (Ident.Map.mem target_name prg.I.program_ctx.ctx_scope_index)
+          ->
+          note
+            (O.ScopeNotFound
+               {
+                 O.module_name;
+                 scope_name = target_name;
+                 candidates =
+                   rank_scope_candidates prg ~wanted:target_name ~field_names;
+               });
+          emit_bare recovered
+        | program -> (
+        match generate_test target_name ~program [] module_options with
+        | exception e ->
+          note
+            (O.Other
+               {
+                 O.name = module_name ^ "." ^ target_name;
+                 error = error_text e;
+               });
+          emit_bare recovered
+        | live ->
+          let pair_of (t : O.test) : O.recovered_test =
+            let carried = ref [] in
+            let record side path outcome =
+              carried := { O.path; side; outcome; hint = [] } :: !carried
+            in
+            (* One entry per live field. [when_missing]: an absent input
+               was left unset; an absent output was never asserted. *)
+            let carry_record ~io ~when_missing
+                (old_record : (string * O.test_io) list)
+                (live_record : (string * O.test_io) list) =
+              List.map
+                (fun (name, (live_io : O.test_io)) ->
+                  match List.assoc_opt name old_record with
+                  | Some { O.value = Some vd; typ = old_typ } -> (
+                    let field = `StructField name in
+                    let v, outcome, nested =
+                      carry_value ~old_typ ~new_typ:live_io.typ vd.O.value
+                    in
+                    record io [field] outcome;
+                    List.iter (fun (p, o) -> record io (field :: p) o) nested;
+                    match v with
+                    | Some v ->
+                      ( name,
+                        { live_io with O.value = Some { O.value = v; pos = None } }
+                      )
+                    | None -> name, live_io)
+                  | _ ->
+                    (* A context var never overridden is not damage. *)
+                    let defaulting =
+                      match live_io.O.value with
+                      | Some { O.value = { O.value = O.NotOverridden; _ }; _ } ->
+                        true
+                      | _ -> false
+                    in
+                    if not defaulting then
+                      Option.iter (record io [`StructField name]) when_missing;
+                    name, live_io)
+                live_record
+            in
+            let mark_dropped ~io (old_record : (string * O.test_io) list)
+                (live_record : (string * O.test_io) list) =
+              List.iter
+                (fun (name, (old_io : O.test_io)) ->
+                  if old_io.O.value <> None
+                     && not (List.mem_assoc name live_record)
+                  then record io [`StructField name] O.Dropped)
+                old_record
+            in
+            let rebuilt =
+              {
+                live with
+                O.testing_scope = t.O.testing_scope;
+                title = t.O.title;
+                description = t.O.description;
+                test_inputs =
+                  carry_record ~io:O.In ~when_missing:(Some O.WasUnset)
+                    t.O.test_inputs live.O.test_inputs;
+                test_outputs =
+                  carry_record ~io:O.Out ~when_missing:None t.O.test_outputs
+                    live.O.test_outputs;
+              }
+            in
+            mark_dropped ~io:O.In t.O.test_inputs live.O.test_inputs;
+            mark_dropped ~io:O.Out t.O.test_outputs live.O.test_outputs;
+            (* Where a dropped input's value would fit a field of a live
+               record that needs filling, say so on that record. *)
+            let dropped =
+              List.filter_map
+                (fun (r : O.carry_record) ->
+                  match r.O.side, r.O.path, r.O.outcome with
+                  | O.In, [`StructField n], O.Dropped -> (
+                    match List.assoc_opt n t.O.test_inputs with
+                    | Some { O.value = Some vd; _ } -> Some (n, vd.O.value)
+                    | _ -> None)
+                  | _ -> None)
+                !carried
+            in
+            let rec fields_of : O.typ -> (string * O.typ) list = function
+              | O.TStruct d -> d.O.fields
+              | O.TOption t | O.TArray t -> fields_of t
+              | _ -> []
+            in
+            let with_hint (r : O.carry_record) =
+              match r.O.side, r.O.path, r.O.outcome with
+              | O.In, [`StructField n], (O.WasUnset | O.TypeChanged _ | O.Partial)
+                -> (
+                match List.assoc_opt n live.O.test_inputs with
+                | None -> r
+                | Some (live_io : O.test_io) ->
+                  let fields = fields_of live_io.O.typ in
+                  let hint =
+                    List.filter_map
+                      (fun (d, v) ->
+                        match List.assoc_opt d fields with
+                        | Some ft when value_fits ft v = Ok () -> Some d
+                        | _ -> None)
+                      dropped
+                  in
+                  { r with O.hint })
+              | _ -> r
+            in
+            {
+              O.authored = t;
+              rebuilt = Some rebuilt;
+              outcomes = List.rev_map with_hint !carried;
+            }
+          in
+          (* A mark is answered once its field holds a value; [Dropped]
+             never. *)
+          let with_saved (pair : O.recovered_test) : O.recovered_test =
+            match saved with
+            | None | Some [] -> pair
+            | Some saved -> (
+              match
+                List.find_opt
+                  (fun (s : O.test) ->
+                    s.O.testing_scope = pair.O.authored.O.testing_scope)
+                  saved
+              with
+              | None -> pair
+              | Some s ->
+                (* Paths are transparent over enums, as diff paths are. *)
+                let rec at (v : O.runtime_value) = function
+                  | [] -> Some v
+                  | path
+                    when (match v.O.value with
+                         | O.Enum (_, (_, Some _)) -> true
+                         | _ -> false) -> (
+                    match v.O.value with
+                    | O.Enum (_, (_, Some p)) -> at p path
+                    | _ -> None)
+                  | `StructField n :: rest -> (
+                    match v.O.value with
+                    | O.Struct (_, fs) ->
+                      Option.bind (List.assoc_opt n fs) (fun v -> at v rest)
+                    | _ -> None)
+                  | (`ListIndex i | `TupleIndex i) :: rest -> (
+                    match v.O.value with
+                    | O.Array a when i < Array.length a -> at a.(i) rest
+                    | _ -> None)
+                  | _ -> None
+                in
+                let still_blank side path =
+                  let record =
+                    match side with
+                    | O.In -> s.O.test_inputs
+                    | O.Out -> s.O.test_outputs
+                  in
+                  match path with
+                  | `StructField field :: rest -> (
+                    match
+                      List.assoc_opt field record
+                      |> Option.fold ~none:None ~some:(fun (io : O.test_io) ->
+                             io.value)
+                    with
+                    | None -> true
+                    | Some vd -> (
+                      match at vd.O.value rest with
+                      | None -> true
+                      | Some v -> v.O.value = O.Unset))
+                  | _ -> true
+                in
+                {
+                  pair with
+                  O.rebuilt = Some s;
+                  outcomes =
+                    List.filter
+                      (fun (r : O.carry_record) ->
+                        match r.O.outcome with
+                        | O.WasUnset | O.TypeChanged _ | O.WasAbsentNowRequired
+                          ->
+                          still_blank r.O.side r.O.path
+                        | _ -> true)
+                      pair.O.outcomes;
+                })
+          in
+          emit (List.map (fun t -> with_saved (pair_of t)) recovered)))))
+
+let read_partial_test (options : Global.options) =
+  match read_partial_tests options with
+  | Ok (tests, errors) ->
+    List.iter (fun e -> Message.warning "partial read: %s" e) errors;
+    write_stdout J.write_test_list tests
+  | Error s -> Format.ksprintf failwith "Error: %s" s
 
 type duration_units = { day : string; month : string; year : string }
 
@@ -1094,28 +2405,37 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
   | _, O.Enum ({ enum_name = "Optional"; constructors; _ }, (constr, v)) ->
     if v = None then pp_print_string ppf strings.absent
     else
+      let payload_typ =
+        match typ with
+        | Some (O.TOption inner) -> Some inner
+        | _ -> List.assoc constr constructors
+      in
       fprintf ppf "%s %s %a" strings.present strings.content_str
-        (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
+        (print_catala_value ~typ:payload_typ ~lang)
         (Option.get v)
   | Some (TEnum { enum_name; constructors; _ }), O.Enum (_en, (constr, Some v))
-    ->
+    when enum_name <> unknown_enum_name ->
     fprintf ppf "@[<hv 2>%s.%s %s %a@]" enum_name constr strings.content_str
       (print_catala_value ~typ:(List.assoc constr constructors) ~lang)
       v
-  | _, O.Enum (en, (constr, Some v)) ->
-    fprintf ppf "@[<hv 2>%s.%s %s %a@]" en.enum_name constr strings.content_str
+  (* Name unknown: written bare, for Catala to infer as it did the first time. *)
+  | _, O.Enum (_, (constr, Some v)) ->
+    fprintf ppf "@[<hv 2>%s %s %a@]" constr strings.content_str
       (print_catala_value ~typ:None ~lang)
       v
-  | Some (TEnum { enum_name; _ }), O.Enum (_en, (constr, None)) ->
+  | Some (TEnum { enum_name; _ }), O.Enum (_en, (constr, None))
+    when enum_name <> unknown_enum_name ->
     fprintf ppf "%s.%s" enum_name constr
-  | _, O.Enum (en, (constr, None)) -> fprintf ppf "%s.%s" en.enum_name constr
-  | Some (O.TStruct _sdecl), O.Struct (st, fields) ->
+  | _, O.Enum (_, (constr, None)) -> pp_print_string ppf constr
+  (* By name: a recovered value has only the fields its test wrote, in the
+     test's order. *)
+  | Some (O.TStruct sdecl), O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
-      (pp_print_list ~pp_sep:pp_print_space (fun ppf (typ, (fld, v)) ->
+      (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
            fprintf ppf "-- %s: %a" fld
-             (print_catala_value ~typ:(Some typ) ~lang)
+             (print_catala_value ~typ:(List.assoc_opt fld sdecl.O.fields) ~lang)
              v))
-      (List.combine (List.map snd _sdecl.fields) fields)
+      fields
   | _, O.Struct (st, fields) ->
     fprintf ppf "@[<hv 2>%s {@ %a@;<1 -2>}@]" st.struct_name
       (pp_print_list ~pp_sep:pp_print_space (fun ppf (fld, v) ->
@@ -1149,12 +2469,8 @@ let write_catala_test ppf t lang =
   let open O in
   let strings = get_lang_strings lang in
   let sscope_var =
-    let sname =
-      match Filename.extension t.tested_scope.name with
-      | "" -> t.tested_scope.name
-      | s -> String.sub s 1 (String.length s - 1)
-    in
-    String.to_snake_case sname
+    (* The scope part of a possibly qualified name, like [parse_target]. *)
+    String.to_snake_case (snd (parse_target t.tested_scope.name))
   in
   pp_open_vbox ppf 0;
   fprintf ppf "@,```catala-metadata@,";
@@ -1212,6 +2528,7 @@ let write_catala options outfile =
   in
   with_out
   @@ fun ppf ->
+  Format.fprintf ppf "%s@\n@\n" (get_lang_strings lang).header;
   let _opened =
     List.fold_left
       (fun opened test ->
@@ -1252,8 +2569,10 @@ let write_catala options outfile =
   in
   ()
 
-let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program) :
-    (StructField.t * (dcalc, typed) gexpr) list =
+(* The tested scope's assertions only: another test's expectations on the same
+   field names are not this test's. *)
+let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program)
+    (scope : ScopeName.t) : (StructField.t * (dcalc, typed) gexpr) list =
   let get_expected_value (assert_e : (dcalc, typed) gexpr) =
     match Mark.remove assert_e with
     | EAssert (EAppOp { args = [(EStructAccess { field; _ }, _); v]; _ }, _) ->
@@ -1264,6 +2583,7 @@ let retrieve_assertions_values (dcalc_prg : typed Dcalc.Ast.program) :
   List.fold_left
     (fun acc -> function
       | _, Topdef _ -> acc
+      | _, ScopeDef (name, _) when not (ScopeName.equal name scope) -> acc
       | _, ScopeDef (_, body) ->
         let _, body_list = Bindlib.unbind body.scope_body_expr in
         let scope_lets : (dcalc, typed) gexpr scope_let list =
@@ -1500,7 +2820,7 @@ let rec convert_to_json_input ({ value; _ } : O.runtime_value) : Yojson.Safe.t =
       `String (Format.sprintf "%04d-%02d-%02d" year month day)
     | Duration { years; months; days } ->
       `Assoc ["years", `Int years; "months", `Int months; "days", `Int days]
-    | Enum (_decl, ("Absent", None)) -> `Null
+    | Enum (_decl, (c, None)) when c = option_absent -> `Null
     | Enum (_decl, ("Present", Some x)) -> convert_to_json_input x
     | Enum (_decl, (constr, None)) -> `String constr
     | Enum (_decl, (constr, Some v)) -> `Assoc [constr, convert_to_json_input v]
@@ -1509,7 +2829,7 @@ let rec convert_to_json_input ({ value; _ } : O.runtime_value) : Yojson.Safe.t =
         (List.filter_map
            (function
              | ( _,
-                 ({ value = Enum (_decl, ("Absent", None)); _ } :
+                 ({ value = Enum (_decl, (_, None)); _ } :
                    O.runtime_value) ) ->
                None
              | fname, v -> Some (fname, convert_to_json_input v))
@@ -1663,7 +2983,9 @@ let run_test include_dirs options testing_scope =
       actual_results
   in
   let test = O.{ test with test_outputs } in
-  let expected_results = retrieve_assertions_values dcalc_prg in
+  let expected_results =
+    retrieve_assertions_values dcalc_prg testing_scope_name
+  in
   let diffs =
     compute_diff expected_results actual_results
     |> List.map (proj_diff (get_value dcalc_prg.lang dcalc_prg.decl_ctx))
@@ -1672,7 +2994,65 @@ let run_test include_dirs options testing_scope =
   let test_run = { O.test; O.assert_failures; O.diffs } in
   write_stdout J.write_test_run test_run
 
-let run_test_cmd include_dirs options test_scope_name scope_input_opt =
+(* Clerk resolves clerk.toml from its cwd; ours is the workspace folder. *)
+let file_project_root (f : string) : string option =
+  let root = project_root (Filename.dirname (File.make_absolute f)) in
+  if Sys.file_exists (Filename.concat root "clerk.toml") then Some root
+  else None
+
+let prepare_runtime_plugins (file : string) =
+  match file_project_root file with
+  | None -> ()
+  | Some root ->
+    ignore
+      (Sys.command
+         (Printf.sprintf "cd %s && clerk run --prepare-only %s >/dev/null 2>&1"
+            (Filename.quote root)
+            (Filename.quote (File.make_absolute file))))
+
+let build_runtime_plugins ?buffer_path (options : Global.options) =
+  let file =
+    let f = Global.input_src_file options.Global.input_src in
+    if Sys.file_exists f then Some f
+    else
+      match buffer_path with
+      | Some b when Sys.file_exists b -> Some b
+      | _ -> None
+  in
+  match file with
+  | Some f -> prepare_runtime_plugins f
+  | None ->
+    (* Nothing to point at: the declared targets are the best guess left. *)
+    if Sys.file_exists "clerk.toml" then
+      ignore (Sys.command "clerk build >/dev/null 2>&1")
+
+(* [Contents] at [buffer_path] anchors module resolution to the file. *)
+let run_test_cmd include_dirs options test_scope_name scope_input_opt buffer_path
+    =
+  let options =
+    match options.Global.input_src, buffer_path with
+    | Global.Stdin _, Some b ->
+      let text = In_channel.input_all stdin in
+      let options =
+        Global.enforce_options ~input_src:(Global.Contents (text, b)) ()
+      in
+      (match Driver.Passes.surface options with
+      | prg ->
+        List.iter
+          (fun (u : Surface.Ast.module_use) ->
+            match
+              find_module_file (Mark.remove u.mod_use_name)
+                (Filename.dirname b)
+            with
+            | Some f -> prepare_runtime_plugins f
+            | None -> ())
+          prg.Surface.Ast.program_used_modules
+      | exception _ -> ());
+      options
+    | _ ->
+      build_runtime_plugins ?buffer_path options;
+      options
+  in
   match scope_input_opt with
   | None -> run_test include_dirs options test_scope_name
   | Some json -> run_with_inputs include_dirs options test_scope_name json

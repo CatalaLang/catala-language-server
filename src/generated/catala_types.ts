@@ -150,6 +150,69 @@ export type ParseResults =
 | { kind: 'ParseError'; value: string }
 | { kind: 'EmptyTestListMismatch' }
 | { kind: 'Results'; value: TestList }
+| { kind: 'BrokenTest'; value: Recovery }
+
+export type Recovery = {
+  tests: RecoveredTest[];
+  notes: BrokenNote[];
+  working_copy: string;
+}
+
+export type RecoveredTest = {
+  authored: Test;
+  rebuilt?: Test;
+  outcomes: CarryRecord[];
+}
+
+export type CarryRecord = {
+  path: PathSegment[];
+  side: CarrySide;
+  outcome: CarryOutcome;
+  hint: string[];
+}
+
+export type CarrySide =
+| { kind: 'In' }
+| { kind: 'Out' }
+
+export type CarryOutcome =
+| { kind: 'Fits' }
+| { kind: 'Wrap' }
+| { kind: 'Unwrap' }
+| { kind: 'WasUnset' }
+| { kind: 'WasAbsentNowRequired' }
+| { kind: 'TypeChanged'; value: [Typ, Typ] }
+| { kind: 'Dropped' }
+| { kind: 'Partial' }
+
+export type BrokenNote =
+| { kind: 'ModuleNotFound'; value: ModuleNotFound }
+| { kind: 'ModuleWontCompile'; value: ModuleError }
+| { kind: 'ScopeNotFound'; value: ScopeNotFound }
+| { kind: 'Other'; value: ModuleError }
+
+export type ModuleNotFound = {
+  module_name: string;
+  candidates: ScopeCandidate[];
+}
+
+export type ModuleError = {
+  name: string;
+  error: string;
+}
+
+export type ScopeNotFound = {
+  module_name: string;
+  scope_name: string;
+  candidates: ScopeCandidate[];
+}
+
+export type ScopeCandidate = {
+  module_name: string;
+  name: string;
+  shared: number /*int*/;
+  out_of: number /*int*/;
+}
 
 export type TestRunOutput = {
   test_outputs: TestOutputs;
@@ -189,6 +252,8 @@ export type ConfirmAction =
 | { kind: 'DeleteAssertion' }
 | { kind: 'RunTestWithUnsetValues' }
 | { kind: 'ResetContextVar' }
+| { kind: 'ReplaceOriginalWithUnsetValues' }
+| { kind: 'DiscardWorkingCopy' }
 
 export type ConfirmRequest = {
   id: number /*int*/;
@@ -208,6 +273,9 @@ export type UpMessage =
 | { kind: 'TestGenerateRequest'; value: TestGenerateRequest }
 | { kind: 'OpenTestScopePicker' }
 | { kind: 'ConfirmRequest'; value: ConfirmRequest }
+| { kind: 'RetargetRequest'; value: string }
+| { kind: 'ReplaceOriginalRequest' }
+| { kind: 'DiscardWorkingCopyRequest' }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
@@ -743,6 +811,8 @@ export function writeParseResults(x: ParseResults, context: any = x): any {
       return 'EmptyTestListMismatch'
     case 'Results':
       return ['Results', writeTestList(x.value, x)]
+    case 'BrokenTest':
+      return ['BrokenTest', writeRecovery(x.value, x)]
   }
 }
 
@@ -763,11 +833,231 @@ export function readParseResults(x: any, context: any = x): ParseResults {
         return { kind: 'ParseError', value: _atd_read_string(x[1], x) }
       case 'Results':
         return { kind: 'Results', value: readTestList(x[1], x) }
+      case 'BrokenTest':
+        return { kind: 'BrokenTest', value: readRecovery(x[1], x) }
       default:
         _atd_bad_json('ParseResults', x, context)
         throw new Error('impossible')
     }
   }
+}
+
+export function writeRecovery(x: Recovery, context: any = x): any {
+  return {
+    'tests': _atd_write_required_field('Recovery', 'tests', _atd_write_array(writeRecoveredTest), x.tests, x),
+    'notes': _atd_write_required_field('Recovery', 'notes', _atd_write_array(writeBrokenNote), x.notes, x),
+    'working_copy': _atd_write_required_field('Recovery', 'working_copy', _atd_write_string, x.working_copy, x),
+  };
+}
+
+export function readRecovery(x: any, context: any = x): Recovery {
+  return {
+    tests: _atd_read_required_field('Recovery', 'tests', _atd_read_array(readRecoveredTest), x['tests'], x),
+    notes: _atd_read_required_field('Recovery', 'notes', _atd_read_array(readBrokenNote), x['notes'], x),
+    working_copy: _atd_read_required_field('Recovery', 'working_copy', _atd_read_string, x['working_copy'], x),
+  };
+}
+
+export function writeRecoveredTest(x: RecoveredTest, context: any = x): any {
+  return {
+    'authored': _atd_write_required_field('RecoveredTest', 'authored', writeTest, x.authored, x),
+    'rebuilt': _atd_write_optional_field(writeTest, x.rebuilt, x),
+    'outcomes': _atd_write_required_field('RecoveredTest', 'outcomes', _atd_write_array(writeCarryRecord), x.outcomes, x),
+  };
+}
+
+export function readRecoveredTest(x: any, context: any = x): RecoveredTest {
+  return {
+    authored: _atd_read_required_field('RecoveredTest', 'authored', readTest, x['authored'], x),
+    rebuilt: _atd_read_optional_field(readTest, x['rebuilt'], x),
+    outcomes: _atd_read_required_field('RecoveredTest', 'outcomes', _atd_read_array(readCarryRecord), x['outcomes'], x),
+  };
+}
+
+export function writeCarryRecord(x: CarryRecord, context: any = x): any {
+  return {
+    'path': _atd_write_required_field('CarryRecord', 'path', _atd_write_array(writePathSegment), x.path, x),
+    'side': _atd_write_required_field('CarryRecord', 'side', writeCarrySide, x.side, x),
+    'outcome': _atd_write_required_field('CarryRecord', 'outcome', writeCarryOutcome, x.outcome, x),
+    'hint': _atd_write_field_with_default(_atd_write_array(_atd_write_string), [], x.hint, x),
+  };
+}
+
+export function readCarryRecord(x: any, context: any = x): CarryRecord {
+  return {
+    path: _atd_read_required_field('CarryRecord', 'path', _atd_read_array(readPathSegment), x['path'], x),
+    side: _atd_read_required_field('CarryRecord', 'side', readCarrySide, x['side'], x),
+    outcome: _atd_read_required_field('CarryRecord', 'outcome', readCarryOutcome, x['outcome'], x),
+    hint: _atd_read_field_with_default(_atd_read_array(_atd_read_string), [], x['hint'], x),
+  };
+}
+
+export function writeCarrySide(x: CarrySide, context: any = x): any {
+  switch (x.kind) {
+    case 'In':
+      return 'In'
+    case 'Out':
+      return 'Out'
+  }
+}
+
+export function readCarrySide(x: any, context: any = x): CarrySide {
+  switch (x) {
+    case 'In':
+      return { kind: 'In' }
+    case 'Out':
+      return { kind: 'Out' }
+    default:
+      _atd_bad_json('CarrySide', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeCarryOutcome(x: CarryOutcome, context: any = x): any {
+  switch (x.kind) {
+    case 'Fits':
+      return 'Fits'
+    case 'Wrap':
+      return 'Wrap'
+    case 'Unwrap':
+      return 'Unwrap'
+    case 'WasUnset':
+      return 'WasUnset'
+    case 'WasAbsentNowRequired':
+      return 'WasAbsentNowRequired'
+    case 'TypeChanged':
+      return ['TypeChanged', ((x, context) => [writeTyp(x[0], x), writeTyp(x[1], x)])(x.value, x)]
+    case 'Dropped':
+      return 'Dropped'
+    case 'Partial':
+      return 'Partial'
+  }
+}
+
+export function readCarryOutcome(x: any, context: any = x): CarryOutcome {
+  if (typeof x === 'string') {
+    switch (x) {
+      case 'Fits':
+        return { kind: 'Fits' }
+      case 'Wrap':
+        return { kind: 'Wrap' }
+      case 'Unwrap':
+        return { kind: 'Unwrap' }
+      case 'WasUnset':
+        return { kind: 'WasUnset' }
+      case 'WasAbsentNowRequired':
+        return { kind: 'WasAbsentNowRequired' }
+      case 'Dropped':
+        return { kind: 'Dropped' }
+      case 'Partial':
+        return { kind: 'Partial' }
+      default:
+        _atd_bad_json('CarryOutcome', x, context)
+        throw new Error('impossible')
+    }
+  }
+  else {
+    _atd_check_json_tuple(2, x, context)
+    switch (x[0]) {
+      case 'TypeChanged':
+        return { kind: 'TypeChanged', value: ((x, context): [Typ, Typ] => { _atd_check_json_tuple(2, x, context); return [readTyp(x[0], x), readTyp(x[1], x)] })(x[1], x) }
+      default:
+        _atd_bad_json('CarryOutcome', x, context)
+        throw new Error('impossible')
+    }
+  }
+}
+
+export function writeBrokenNote(x: BrokenNote, context: any = x): any {
+  switch (x.kind) {
+    case 'ModuleNotFound':
+      return ['ModuleNotFound', writeModuleNotFound(x.value, x)]
+    case 'ModuleWontCompile':
+      return ['ModuleWontCompile', writeModuleError(x.value, x)]
+    case 'ScopeNotFound':
+      return ['ScopeNotFound', writeScopeNotFound(x.value, x)]
+    case 'Other':
+      return ['Other', writeModuleError(x.value, x)]
+  }
+}
+
+export function readBrokenNote(x: any, context: any = x): BrokenNote {
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'ModuleNotFound':
+      return { kind: 'ModuleNotFound', value: readModuleNotFound(x[1], x) }
+    case 'ModuleWontCompile':
+      return { kind: 'ModuleWontCompile', value: readModuleError(x[1], x) }
+    case 'ScopeNotFound':
+      return { kind: 'ScopeNotFound', value: readScopeNotFound(x[1], x) }
+    case 'Other':
+      return { kind: 'Other', value: readModuleError(x[1], x) }
+    default:
+      _atd_bad_json('BrokenNote', x, context)
+      throw new Error('impossible')
+  }
+}
+
+export function writeModuleNotFound(x: ModuleNotFound, context: any = x): any {
+  return {
+    'module_name': _atd_write_required_field('ModuleNotFound', 'module_name', _atd_write_string, x.module_name, x),
+    'candidates': _atd_write_required_field('ModuleNotFound', 'candidates', _atd_write_array(writeScopeCandidate), x.candidates, x),
+  };
+}
+
+export function readModuleNotFound(x: any, context: any = x): ModuleNotFound {
+  return {
+    module_name: _atd_read_required_field('ModuleNotFound', 'module_name', _atd_read_string, x['module_name'], x),
+    candidates: _atd_read_required_field('ModuleNotFound', 'candidates', _atd_read_array(readScopeCandidate), x['candidates'], x),
+  };
+}
+
+export function writeModuleError(x: ModuleError, context: any = x): any {
+  return {
+    'name': _atd_write_required_field('ModuleError', 'name', _atd_write_string, x.name, x),
+    'error': _atd_write_required_field('ModuleError', 'error', _atd_write_string, x.error, x),
+  };
+}
+
+export function readModuleError(x: any, context: any = x): ModuleError {
+  return {
+    name: _atd_read_required_field('ModuleError', 'name', _atd_read_string, x['name'], x),
+    error: _atd_read_required_field('ModuleError', 'error', _atd_read_string, x['error'], x),
+  };
+}
+
+export function writeScopeNotFound(x: ScopeNotFound, context: any = x): any {
+  return {
+    'module_name': _atd_write_required_field('ScopeNotFound', 'module_name', _atd_write_string, x.module_name, x),
+    'scope_name': _atd_write_required_field('ScopeNotFound', 'scope_name', _atd_write_string, x.scope_name, x),
+    'candidates': _atd_write_required_field('ScopeNotFound', 'candidates', _atd_write_array(writeScopeCandidate), x.candidates, x),
+  };
+}
+
+export function readScopeNotFound(x: any, context: any = x): ScopeNotFound {
+  return {
+    module_name: _atd_read_required_field('ScopeNotFound', 'module_name', _atd_read_string, x['module_name'], x),
+    scope_name: _atd_read_required_field('ScopeNotFound', 'scope_name', _atd_read_string, x['scope_name'], x),
+    candidates: _atd_read_required_field('ScopeNotFound', 'candidates', _atd_read_array(readScopeCandidate), x['candidates'], x),
+  };
+}
+
+export function writeScopeCandidate(x: ScopeCandidate, context: any = x): any {
+  return {
+    'module_name': _atd_write_required_field('ScopeCandidate', 'module_name', _atd_write_string, x.module_name, x),
+    'name': _atd_write_required_field('ScopeCandidate', 'name', _atd_write_string, x.name, x),
+    'shared': _atd_write_required_field('ScopeCandidate', 'shared', _atd_write_int, x.shared, x),
+    'out_of': _atd_write_required_field('ScopeCandidate', 'out_of', _atd_write_int, x.out_of, x),
+  };
+}
+
+export function readScopeCandidate(x: any, context: any = x): ScopeCandidate {
+  return {
+    module_name: _atd_read_required_field('ScopeCandidate', 'module_name', _atd_read_string, x['module_name'], x),
+    name: _atd_read_required_field('ScopeCandidate', 'name', _atd_read_string, x['name'], x),
+    shared: _atd_read_required_field('ScopeCandidate', 'shared', _atd_read_int, x['shared'], x),
+    out_of: _atd_read_required_field('ScopeCandidate', 'out_of', _atd_read_int, x['out_of'], x),
+  };
 }
 
 export function writeTestRunOutput(x: TestRunOutput, context: any = x): any {
@@ -901,6 +1191,10 @@ export function writeConfirmAction(x: ConfirmAction, context: any = x): any {
       return 'RunTestWithUnsetValues'
     case 'ResetContextVar':
       return 'ResetContextVar'
+    case 'ReplaceOriginalWithUnsetValues':
+      return 'ReplaceOriginalWithUnsetValues'
+    case 'DiscardWorkingCopy':
+      return 'DiscardWorkingCopy'
   }
 }
 
@@ -914,6 +1208,10 @@ export function readConfirmAction(x: any, context: any = x): ConfirmAction {
       return { kind: 'RunTestWithUnsetValues' }
     case 'ResetContextVar':
       return { kind: 'ResetContextVar' }
+    case 'ReplaceOriginalWithUnsetValues':
+      return { kind: 'ReplaceOriginalWithUnsetValues' }
+    case 'DiscardWorkingCopy':
+      return { kind: 'DiscardWorkingCopy' }
     default:
       _atd_bad_json('ConfirmAction', x, context)
       throw new Error('impossible')
@@ -964,6 +1262,12 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return 'OpenTestScopePicker'
     case 'ConfirmRequest':
       return ['ConfirmRequest', writeConfirmRequest(x.value, x)]
+    case 'RetargetRequest':
+      return ['RetargetRequest', _atd_write_string(x.value, x)]
+    case 'ReplaceOriginalRequest':
+      return 'ReplaceOriginalRequest'
+    case 'DiscardWorkingCopyRequest':
+      return 'DiscardWorkingCopyRequest'
   }
 }
 
@@ -976,6 +1280,10 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'OpenInTextEditor' }
       case 'OpenTestScopePicker':
         return { kind: 'OpenTestScopePicker' }
+      case 'ReplaceOriginalRequest':
+        return { kind: 'ReplaceOriginalRequest' }
+      case 'DiscardWorkingCopyRequest':
+        return { kind: 'DiscardWorkingCopyRequest' }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')
@@ -992,6 +1300,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'TestGenerateRequest', value: readTestGenerateRequest(x[1], x) }
       case 'ConfirmRequest':
         return { kind: 'ConfirmRequest', value: readConfirmRequest(x[1], x) }
+      case 'RetargetRequest':
+        return { kind: 'RetargetRequest', value: _atd_read_string(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')

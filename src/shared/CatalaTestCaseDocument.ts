@@ -6,14 +6,19 @@ import type {
   TestList,
   TestOutputs,
 } from '../generated/catala_types';
+import { writeTestList } from '../generated/catala_types';
 import { ensureArrayUids } from '../editors/tableArrayUtils';
 import { atdToCatala } from '../test-case-editor/testCaseCompilerInterop';
 import {
   parseContents,
   getLanguageFromUri,
 } from '../extension/testCaseEditorProvider';
+import { rebuiltFrom } from '../test-case-editor/testCaseUtils';
 import { logger } from '../extension/logger';
 import type { integer } from 'vscode-languageclient';
+
+/** Must match the OCaml side's [working_copy_ext]. */
+const workingCopyExt = '.repair';
 
 function stampIoUids(io: TestIo): TestIo {
   if (!io.value) return io;
@@ -23,20 +28,40 @@ function stampIoUids(io: TestIo): TestIo {
   };
 }
 
-function stampParseResultsUids(results: ParseResults): ParseResults {
-  if (results.kind !== 'Results') return results;
+function stampTestUids(test: Test): Test {
   return {
-    kind: 'Results',
-    value: results.value.map((test) => ({
-      ...test,
-      test_inputs: new Map(
-        Array.from(test.test_inputs, ([k, v]) => [k, stampIoUids(v)])
-      ),
-      test_outputs: new Map(
-        Array.from(test.test_outputs, ([k, v]) => [k, stampIoUids(v)])
-      ),
-    })),
+    ...test,
+    test_inputs: new Map(
+      Array.from(test.test_inputs, ([k, v]) => [k, stampIoUids(v)])
+    ),
+    test_outputs: new Map(
+      Array.from(test.test_outputs, ([k, v]) => [k, stampIoUids(v)])
+    ),
   };
+}
+
+function stampParseResultsUids(results: ParseResults): ParseResults {
+  switch (results.kind) {
+    case 'Results':
+      return { kind: 'Results', value: results.value.map(stampTestUids) };
+    case 'BrokenTest':
+      return {
+        kind: 'BrokenTest',
+        value: {
+          ...results.value,
+          tests: results.value.tests.map((pair) => ({
+            ...pair,
+            authored: stampTestUids(pair.authored),
+            rebuilt:
+              pair.rebuilt === undefined
+                ? undefined
+                : stampTestUids(pair.rebuilt),
+          })),
+        },
+      };
+    default:
+      return results;
+  }
 }
 
 /**
@@ -52,7 +77,10 @@ export class CatalaTestCaseDocument
   private readonly _language: string;
   //At some point we could think of a better type for the doc contents?
   private _parseResults: ParseResults;
+  /* Kept out of _parseResults, or a save would write it over the original. */
+  private _rebuilt: TestList | undefined;
   private _editManager: EditManager;
+  private _rebuildManager: EditManager;
 
   private readonly _onDidDispose = new vscode.EventEmitter<void>();
   public readonly onDidDispose = this._onDidDispose.event;
@@ -104,11 +132,36 @@ export class CatalaTestCaseDocument
   }
 
   public get parseResults(): ParseResults {
+    /* Always what a save would write: the live rebuild patched in. */
+    if (
+      this._parseResults.kind === 'BrokenTest' &&
+      this._rebuilt !== undefined
+    ) {
+      const byScope = new Map(this._rebuilt.map((t) => [t.testing_scope, t]));
+      return {
+        kind: 'BrokenTest',
+        value: {
+          ...this._parseResults.value,
+          // Absent from the live list: a save would not write it.
+          tests: this._parseResults.value.tests.map((pair) => ({
+            ...pair,
+            rebuilt: byScope.get(pair.authored.testing_scope),
+          })),
+        },
+      };
+    }
     return this._parseResults;
+  }
+
+  /** Apply anything still in the batching window. */
+  public flushPendingEdits(): void {
+    this._editManager.sync();
+    this._rebuildManager.sync();
   }
 
   async save(cancellation: vscode.CancellationToken): Promise<void> {
     this._editManager.sync();
+    this._rebuildManager.sync();
     await this.saveAs(this.uri, cancellation);
   }
 
@@ -116,6 +169,26 @@ export class CatalaTestCaseDocument
     targetResource: vscode.Uri,
     cancellation: vscode.CancellationToken
   ): Promise<void> {
+    /* Never over the original, which stays authoritative until replaced. */
+    if (this._parseResults.kind === 'BrokenTest') {
+      if (targetResource.toString() !== this.uri.toString()) {
+        throw new Error(
+          'Save As is unavailable while a test is being repaired: the working copy lives next to the original. Use "Replace original" to finish.'
+        );
+      }
+      if (this._rebuilt === undefined || this._rebuilt.length === 0) {
+        // Nothing to write, but a plain save must still succeed or a dirty
+        // flag (a restored session, say) can never be cleared.
+        return;
+      }
+      const source = atdToCatala(this._rebuilt, this.language);
+      if (cancellation.isCancellationRequested) return;
+      await vscode.workspace.fs.writeFile(
+        this.workingCopyUri,
+        Buffer.from(source, 'utf-8')
+      );
+      return;
+    }
     if (this._parseResults.kind !== 'Results') {
       throw new Error('Invalid testcase file, cannot save');
     }
@@ -132,6 +205,7 @@ export class CatalaTestCaseDocument
     this._parseResults = stampParseResultsUids(
       parseContents(diskContent, this._uri, this._language)
     );
+    this._rebuilt = rebuiltFrom(this._parseResults);
 
     this._onDidChangeDocument.fire({
       document: this,
@@ -142,6 +216,13 @@ export class CatalaTestCaseDocument
     destination: vscode.Uri,
     cancellation: vscode.CancellationToken
   ): Promise<vscode.CustomDocumentBackup> {
+    /* The working copy is the backup; restoring reopens the original, whose
+       rebuild finds the copy. (Writing under the backup path put it at
+       `<backup>.repair` while VS Code restored from `<backup>`: ENOENT.) */
+    if (this._parseResults.kind === 'BrokenTest') {
+      await this.saveAs(this.uri, cancellation);
+      return { id: this.uri.toString(), delete: async (): Promise<void> => {} };
+    }
     await this.saveAs(destination, cancellation);
 
     return {
@@ -169,6 +250,115 @@ export class CatalaTestCaseDocument
     this._editManager.scheduleChange(tests, mayBeBatched);
   }
 
+  /** An edit to the rebuild of a broken test, coalesced like an ordinary one. */
+  public setRebuilt(tests: TestList, mayBeBatched: boolean): void {
+    this._rebuildManager.scheduleChange(tests, mayBeBatched);
+  }
+
+  /** Dirties the document; leaves the parse results alone. */
+  _commitRebuilt(tests: TestList): void {
+    const previous = this._rebuilt;
+    // An identical re-emit is not an undo stop.
+    if (
+      previous !== undefined &&
+      JSON.stringify(writeTestList(previous)) ===
+        JSON.stringify(writeTestList(tests))
+    ) {
+      return;
+    }
+    this._rebuilt = tests;
+    this._onDidChange.fire({
+      document: this,
+      label: 'rebuild',
+      undo: (): void => {
+        this._rebuilt = previous;
+        this._onDidChangeDocument.fire({ document: this });
+      },
+      redo: (): void => {
+        this._rebuilt = tests;
+        this._onDidChangeDocument.fire({ document: this });
+      },
+    });
+  }
+
+  public get rebuilt(): TestList | undefined {
+    return this._rebuilt;
+  }
+
+  /** The tester chose which scope to rebuild against: one undoable step. */
+  public retarget(results: ParseResults): void {
+    const previous = { results: this._parseResults, rebuilt: this._rebuilt };
+    const next = { results, rebuilt: rebuiltFrom(results) };
+    const apply = (s: typeof next): void => {
+      this._parseResults = s.results;
+      this._rebuilt = s.rebuilt;
+      this._onDidChangeDocument.fire({ document: this });
+    };
+    apply(next);
+    this._onDidChange.fire({
+      document: this,
+      label: 'retarget',
+      undo: (): void => apply(previous),
+      redo: (): void => apply(next),
+    });
+  }
+
+  private get workingCopyUri(): vscode.Uri {
+    return vscode.Uri.file(this.uri.fsPath + workingCopyExt);
+  }
+
+  private async deleteWorkingCopy(): Promise<void> {
+    try {
+      await vscode.workspace.fs.delete(this.workingCopyUri);
+    } catch (err) {
+      // FileNotFound is normal; a stale .repair outliving a Replace is not.
+      if (
+        !(err instanceof vscode.FileSystemError) ||
+        err.code !== 'FileNotFound'
+      ) {
+        logger.log(
+          `could not delete the working copy ${this.workingCopyUri.fsPath}: ${String(err)}`
+        );
+      }
+    }
+  }
+
+  /** The rebuild becomes the test. The working copy goes, or reopening would
+   *  prefer it. Not undoable: version control is the way back. */
+  async replaceOriginal(): Promise<void> {
+    if (this._parseResults.kind !== 'BrokenTest') {
+      throw new Error('Only a broken test has a working copy to promote.');
+    }
+    this._rebuildManager.sync();
+    const rebuilt = this._rebuilt;
+    if (rebuilt === undefined || rebuilt.length === 0) {
+      throw new Error(
+        'Nothing to replace the original with: this test could not be rebuilt against its scope.'
+      );
+    }
+    const source = atdToCatala(rebuilt, this.language);
+    await vscode.workspace.fs.writeFile(this.uri, Buffer.from(source, 'utf-8'));
+    await this.deleteWorkingCopy();
+    this._parseResults = stampParseResultsUids({
+      kind: 'Results',
+      value: rebuilt,
+    });
+    this._rebuilt = undefined;
+    this._onDidChangeDocument.fire({ document: this });
+  }
+
+  /** Delete the working copy, retarget included, and reparse. */
+  async discardWorkingCopy(): Promise<void> {
+    if (this._parseResults.kind !== 'BrokenTest') {
+      throw new Error('Only a broken test has a working copy to discard.');
+    }
+    // A pending batched edit would fire after the revert.
+    this._editManager.cancel();
+    this._rebuildManager.cancel();
+    await this.deleteWorkingCopy();
+    await this.revert(new vscode.CancellationTokenSource().token);
+  }
+
   public resetTestOutputs(testingScope: string, outputs: TestOutputs): void {
     this._editManager.resetTestOutputs(testingScope, outputs);
 
@@ -178,16 +368,21 @@ export class CatalaTestCaseDocument
   // 'makeEdit' in sample
   _setContents(tests: TestList): void {
     const lastRev = this._parseResults;
+    if (
+      lastRev.kind === 'Results' &&
+      JSON.stringify(writeTestList(lastRev.value)) ===
+        JSON.stringify(writeTestList(tests))
+    ) {
+      return;
+    }
     const thisRev = (this._parseResults = { kind: 'Results', value: tests });
 
     this._onDidChange.fire({
       document: this,
       label: 'edit',
       undo: (): void => {
-        if (lastRev !== undefined) {
-          this._parseResults = lastRev;
-          this._onDidChangeDocument.fire({ document: this });
-        }
+        this._parseResults = lastRev;
+        this._onDidChangeDocument.fire({ document: this });
       },
       redo: (): void => {
         this._parseResults = thisRev;
@@ -197,35 +392,45 @@ export class CatalaTestCaseDocument
   }
 
   private constructor(uri: vscode.Uri, initialContent: Uint8Array) {
-    super(() => {}); //XXX -- the sample just seems to be able to call super()
+    // Disposable wants a dispose callback; ours has nothing extra to release.
+    super(() => {});
     this._uri = uri;
     this._language = getLanguageFromUri(this._uri);
 
     this._parseResults = stampParseResultsUids(
       parseContents(initialContent, this._uri, this._language)
     );
+    this._rebuilt = rebuiltFrom(this._parseResults);
 
-    this._editManager = new EditManager(this);
+    this._editManager = new EditManager(this, (t) => this._setContents(t));
+    this._rebuildManager = new EditManager(this, (t) => this._commitRebuilt(t));
   }
 }
 
 class EditManager {
   private _doc: CatalaTestCaseDocument;
+  private _apply: (tests: TestList) => void;
   private _currentChange: TestList | undefined;
   private _timeout: NodeJS.Timeout | undefined;
 
-  constructor(doc: CatalaTestCaseDocument) {
+  constructor(doc: CatalaTestCaseDocument, apply: (tests: TestList) => void) {
     this._doc = doc;
+    this._apply = apply;
     this._currentChange = undefined;
     this._timeout = undefined;
   }
 
   private applyCurrentChange(): void {
     if (this._currentChange !== undefined) {
-      this._doc._setContents(this._currentChange);
+      this._apply(this._currentChange);
 
       this._currentChange = undefined;
     }
+  }
+
+  public cancel(): void {
+    clearTimeout(this._timeout);
+    this._currentChange = undefined;
   }
 
   public scheduleChange(testList: TestList, mayBeBatched: boolean): void {
@@ -277,7 +482,7 @@ class EditManager {
 
     const newValue = testList.toSpliced(idx, 1, updatedTest);
 
-    this._doc._setContents(newValue);
+    this._apply(newValue);
   }
 
   // force immediate applying of the latest version, e.g. when saving

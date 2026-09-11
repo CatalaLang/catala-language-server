@@ -11,7 +11,7 @@ import type {
   StructDeclaration,
   TestIo,
   Typ,
-} from '../src/generated/test_case';
+} from '../src/generated/catala_types';
 
 function rv(value: RuntimeValue['value']): RuntimeValue {
   return { value, attrs: [] };

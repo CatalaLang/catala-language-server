@@ -4,7 +4,12 @@
  * not treated as Unset — it is valid and does not block test runs.
  */
 
-import type { RuntimeValue, Test } from '../generated/catala_types';
+import type {
+  PathSegment,
+  RuntimeValue,
+  Test,
+  Typ,
+} from '../generated/catala_types';
 
 /** Recursively checks whether a RuntimeValue contains any Unset values. */
 function containsUnset(rv: RuntimeValue): boolean {
@@ -38,15 +43,123 @@ export function scrollToFirstInvalidOrUnset(
   delay: number = 0
 ): void {
   setTimeout(() => {
-    const el = container.querySelector(
-      '.value-editor.invalid, .value-editor.unset'
-    ) as HTMLElement | null;
+    const els = Array.from(
+      container.querySelectorAll('.value-editor.invalid, .value-editor.unset')
+    ) as HTMLElement[];
+    const el = els.find((e) => e.offsetParent !== null) ?? els[0];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       const focusable = el.querySelector('input, select') as HTMLElement | null;
       focusable?.focus?.();
     }
   }, delay);
+}
+
+function unsetPathIn(
+  rv: RuntimeValue,
+  prefix: PathSegment[]
+): PathSegment[] | undefined {
+  const raw = rv.value;
+  switch (raw.kind) {
+    case 'Unset':
+      return prefix;
+    case 'Array': {
+      for (const [i, item] of raw.value.entries()) {
+        const found = unsetPathIn(item, [
+          ...prefix,
+          { kind: 'ListIndex', value: i },
+        ]);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    case 'Struct': {
+      for (const [name, v] of raw.value[1]) {
+        const found = unsetPathIn(v, [
+          ...prefix,
+          { kind: 'StructField', value: name },
+        ]);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    case 'Enum': {
+      // Transparent over enums, as diff paths are.
+      const payload = raw.value[1][1];
+      return payload?.value ? unsetPathIn(payload.value, prefix) : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+/** The path of the first value still to fill, inputs before outputs. */
+export function firstUnsetPath(test: Test): PathSegment[] | undefined {
+  for (const [name, io] of [...test.test_inputs, ...test.test_outputs]) {
+    if (io.value === undefined) continue;
+    const found = unsetPathIn(io.value.value, [
+      { kind: 'StructField', value: name },
+    ]);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** An Unset weighed by its type: a blank record counts its declared
+ *  fields, recursively; anything else counts once. */
+function holesOfType(typ: Typ): number {
+  if (typ.kind === 'TStruct') {
+    return [...typ.value.fields.values()].reduce(
+      (n, t) => n + holesOfType(t),
+      0
+    );
+  }
+  return 1;
+}
+
+function countUnset(rv: RuntimeValue, typ: Typ | undefined): number {
+  switch (rv.value.kind) {
+    case 'Unset':
+      return typ === undefined ? 1 : holesOfType(typ);
+    case 'Array': {
+      const elt = typ?.kind === 'TArray' ? typ.value : undefined;
+      return rv.value.value.reduce((n, v) => n + countUnset(v, elt), 0);
+    }
+    case 'Struct': {
+      const fields = typ?.kind === 'TStruct' ? typ.value.fields : undefined;
+      const map = rv.value.value[1];
+      return [...map.entries()].reduce(
+        (n, [name, v]) => n + countUnset(v, fields?.get(name)),
+        0
+      );
+    }
+    case 'Enum': {
+      const [, [ctor, payload]] = rv.value.value;
+      if (!payload?.value) return 0;
+      const pTyp =
+        typ?.kind === 'TEnum'
+          ? (typ.value.constructors.get(ctor)?.value ?? undefined)
+          : undefined;
+      return countUnset(payload.value, pTyp);
+    }
+    default:
+      return 0;
+  }
+}
+
+/** How many values inside [rv] are still to fill, weighed by [typ]. */
+export function countUnsetIn(rv: RuntimeValue | undefined, typ: Typ): number {
+  return rv === undefined ? 0 : countUnset(rv, typ);
+}
+
+/** How many values (inputs and outputs together) are still to fill. */
+export function countUnsetValues(test: Test): number {
+  const holes = (io: { typ: Typ; value?: { value: RuntimeValue } }): number =>
+    io.value === undefined ? 0 : countUnset(io.value.value, io.typ);
+  return (
+    [...test.test_inputs.values()].reduce((n, io) => n + holes(io), 0) +
+    [...test.test_outputs.values()].reduce((n, io) => n + holes(io), 0)
+  );
 }
 
 export function hasUnsetInTest(

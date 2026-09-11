@@ -1,4 +1,4 @@
-import { type ReactElement } from 'react';
+import { type ReactElement, type ReactNode } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { confirm } from '../messaging/confirm';
 import type {
@@ -16,6 +16,10 @@ type Props = {
   diffs?: Diff[];
   onDiffResolved?: (path: PathSegment[]) => void;
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
+  readOnly?: boolean;
+  /** Rendered next to an output's name (the recovery view's carry marks). */
+  labelExtra?: (outputName: string) => ReactNode;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
 };
 
 /* An editor for test outputs. Outputs are named and typed, and
@@ -41,6 +45,9 @@ export default function TestOutputsEditor({
   diffs = [],
   onDiffResolved,
   onInvalidateDiffs,
+  readOnly,
+  labelExtra,
+  editorHook,
 }: Props): ReactElement {
   const intl = useIntl();
   const { test_outputs, tested_scope } = test;
@@ -87,7 +94,8 @@ export default function TestOutputsEditor({
             <div key={outputName} className="test-output-row">
               <div className="test-output-label">
                 <label>{outputName}</label>
-                {outputData?.value && (
+                {labelExtra?.(outputName)}
+                {outputData?.value && !readOnly && (
                   <button
                     className="assertion-delete-btn"
                     title={intl.formatMessage({ id: 'assertion.delete' })}
@@ -103,6 +111,7 @@ export default function TestOutputsEditor({
               {outputData?.value ? (
                 <AssertionValueEditor
                   testIO={outputData}
+                  editable={!readOnly}
                   onValueChange={(newValue) =>
                     onAssertValueChange(outputName, newValue)
                   }
@@ -110,8 +119,9 @@ export default function TestOutputsEditor({
                   currentPath={[{ kind: 'StructField', value: outputName }]}
                   onDiffResolved={onDiffResolved}
                   onInvalidateDiffs={onInvalidateDiffs}
+                  editorHook={editorHook}
                 />
-              ) : (
+              ) : readOnly ? null : (
                 <div className="assertion-editor">
                   <button
                     className="button-action-dvp"
