@@ -108,7 +108,7 @@
 
 /* Assertion rows: spacing between pairs */
 .test-output-row {
-  margin-bottom: var(--spacing16);
+  margin-bottom: var(--section-gap);
 }
 
 .test-output-row:last-child {
@@ -125,7 +125,7 @@
 /* Indent value editor / add button under the label */
 .test-output-row > .assertion-editor,
 .test-output-row > .assertion-value-editor {
-  margin-left: var(--spacing16);
+  margin-left: var(--spacing12);
 }
 
 .assertion-delete-btn {

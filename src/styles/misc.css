@@ -12,11 +12,11 @@
 /* Additional styles for data cards */
 .data-card {
   border-radius: 4px;
-  padding: var(--spacing32);
+  padding: var(--card-pad);
 }
 
 /* Styles for atomic elements */
 .atomic-element {
   border-radius: 4px;
-  padding: var(--spacing16);
+  padding: var(--spacing8) var(--spacing12);
 }

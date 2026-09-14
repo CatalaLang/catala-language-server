@@ -1,6 +1,6 @@
 .struct-editor {
   width: 100%;
-  padding: var(--spacing12);
+  padding: var(--spacing8);
   border-radius: 4px;
   box-sizing: border-box;
 }

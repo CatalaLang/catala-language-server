@@ -1,5 +1,6 @@
 import { type ReactElement } from 'react';
 import ValueEditor from '../editors/ValueEditors';
+import { CompositeEditor, type EditorItem } from '../editors/CompositeEditor';
 import type { TestRunState } from './ScopeInputEditor';
 
 type Props = {
@@ -10,29 +11,37 @@ export default function ScopeOutputs({ test_run_output }: Props): ReactElement {
   switch (test_run_output.status) {
     case 'success': {
       const outputs = test_run_output.results.test_outputs;
-      let items = Array.from(outputs, ([outputName, v]) => {
-        return (
-          <>
-            <span>{outputName}</span>
+      const items: EditorItem[] = Array.from(outputs, ([outputName, v]) => {
+        const raw = v.value?.value.value;
+        const count =
+          v.typ.kind === 'TArray' && raw?.kind === 'Array'
+            ? raw.value.length
+            : undefined;
+        return {
+          key: outputName,
+          label: outputName,
+          type: v.typ,
+          count,
+          editor: (
             <ValueEditor
               testIO={v}
               onValueChange={() => {}}
-              currentPath={[]}
+              currentPath={[{ kind: 'StructField', value: outputName }]}
               diffs={[]}
               editable={false}
             />
-          </>
-        );
+          ),
+        };
       });
-      return <>{items}</>;
+      return <CompositeEditor items={items} atomicElements={true} />;
     }
     case 'error':
       return (
-        <div>
+        <div className="scope-outputs-error">
           Error on test run: <pre>{test_run_output.message}</pre>
         </div>
       );
     default:
-      return <div>No results to display</div>;
+      return <div className="scope-outputs-empty">No results to display</div>;
   }
 }

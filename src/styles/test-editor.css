@@ -4,7 +4,7 @@
 }
 
 .test-editor-container {
-  margin: var(--spacing32);
+  margin: var(--spacing12);
 }
 
 .test-editor-breadcrumb {
@@ -52,33 +52,38 @@
 }
 
 .test-section {
-  margin-bottom: var(--spacing12);
-  margin-top: var(--spacing12);
+  margin-bottom: var(--section-gap);
+  margin-top: var(--section-gap);
 }
 
+/* Toolbar: run/reset buttons and the status pill share one wrapping row */
 .test-result-header {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing16);
-  padding: var(--spacing32);
-  margin-bottom: var(--spacing16);
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing8) var(--spacing16);
+  padding: var(--spacing12) var(--card-pad);
+  margin-bottom: var(--section-gap);
   border-radius: var(--spacing4);
 }
 
 .test-result-action-bar {
   display: flex;
   flex-direction: row;
-  gap: var(--spacing16);
+  gap: var(--spacing8);
 }
 
 .test-result-information {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing16);
+  gap: var(--spacing8);
 }
 
 .test-section-title {
   margin: var(--section-header-margin);
+  font-size: var(--section-header-font-size);
+  font-weight: var(--section-header-font-weight);
 }
 
 .button-action-dvp {
@@ -194,28 +199,32 @@
 .test-description-editor {
   width: 100%;
   box-sizing: border-box;
-  padding: var(--spacing32);
+  padding: var(--card-pad);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing16);
+  gap: var(--spacing8);
   border-radius: var(--spacing4);
 }
 
 .test-description-textarea {
   box-sizing: border-box;
-  padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border-radius: var(--spacing4);
   border: 1px solid;
   background: var(--vscode-editor-background);
   color: var(--vscode-input-foreground);
   width: 100%;
+  /* Grow with the text instead of reserving `rows` lines */
+  field-sizing: content;
+  min-height: 3lh;
+  resize: vertical;
 }
 
 .test-title-wrapper {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing8);
-  margin-bottom: var(--spacing16);
+  margin-bottom: var(--spacing8);
   max-width: 100%;
 }
 
@@ -291,8 +300,19 @@
 .context-var-placeholder {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  gap: var(--spacing8);
+}
+
+/* "Run with..." editor: outputs pane states */
+.scope-outputs-empty {
+  font-style: italic;
+  color: var(--field-label-color);
+}
+
+.scope-outputs-error pre {
+  margin: var(--spacing4) 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .context-var-default-text {

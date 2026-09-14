@@ -1,13 +1,13 @@
 .composite-editor {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--field-gap);
 }
 
 .simple-items-container {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--field-gap);
 }
 
 .simple-item {
@@ -19,33 +19,32 @@
 .simple-items-vertical {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing8);
+  gap: var(--label-gap);
 }
 
 .simple-item-vertical {
   display: flex;
   flex-direction: column;
-  padding: 4px 0;
 }
 
 .item-label {
   text-transform: capitalize;
   display: block;
   font-weight: var(--field-label-font-weight);
-  margin-bottom: var(--spacing8);
+  margin-bottom: var(--label-gap);
   font-size: var(--field-label-font-size);
 }
 
 .structural-item {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing4);
+  gap: var(--label-gap);
 }
 
 .structural-item > .item-label {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
-  padding-bottom: var(--spacing4);
+  padding-bottom: var(--spacing2);
   border-bottom: 1px solid var(--card-border-light);
 }
 
@@ -57,18 +56,18 @@
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--card-border-light);
-  overflow-x: scroll;
+  overflow-x: auto;
   scrollbar-width: thin;
   box-sizing: content-box;
 }
 
 .tab {
-  padding: var(--spacing8) var(--spacing12) var(--spacing8) var(--spacing12);
+  padding: 6px 10px;
   border: none;
   background: none;
   cursor: pointer;
   font-weight: 500;
-  font-size: 14px;
+  font-size: 13px;
   position: relative;
   text-transform: uppercase;
 }
@@ -78,7 +77,7 @@
 }
 
 .tab-panel {
-  padding: 16px;
+  padding: var(--spacing12);
 }
 
 .tab-panel.hidden {
