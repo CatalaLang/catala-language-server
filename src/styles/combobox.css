@@ -15,7 +15,7 @@
   align-items: center;
   gap: 6px;
   overflow: hidden;
-  padding: var(--spacing8) 28px var(--spacing8) var(--spacing16);
+  padding: var(--control-pad-y) 28px var(--control-pad-y) var(--control-pad-x);
   box-sizing: border-box;
   cursor: pointer;
   border: 1px solid var(--control-border, transparent);

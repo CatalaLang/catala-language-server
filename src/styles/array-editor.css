@@ -1,13 +1,12 @@
 .array-editor {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: var(--array-gap);
 }
 
 .array-items {
   display: flex;
-  gap: 16px;
+  gap: var(--array-gap);
 }
 
 .array-items-nested {
@@ -44,7 +43,7 @@
 
 .array-item-content {
   flex: 1;
-  padding: var(--spacing16);
+  padding: var(--spacing12);
   border-radius: var(--spacing4);
   box-sizing: border-box;
   max-width: 100%;
@@ -54,7 +53,14 @@
   display: flex;
   align-items: center;
   gap: var(--spacing8);
-  margin-bottom: var(--spacing8);
+  margin-bottom: var(--label-gap);
+}
+
+/* The element type name is a card heading, not a page heading */
+.array-item-header .heading-h2 {
+  margin: 0;
+  font-size: var(--section-header-font-size);
+  font-weight: var(--section-header-font-weight);
 }
 
 .array-item-header .row-label-input {
@@ -63,13 +69,13 @@
 
 .array-item-label {
   display: block;
-  margin-bottom: var(--spacing8);
+  margin-bottom: var(--label-gap);
 }
 
 .array-item-controls {
   display: flex;
   gap: 2px;
-  padding: 8px 4px;
+  padding: var(--spacing4);
   background-color: var(--controls-background);
   justify-content: center;
   position: relative;

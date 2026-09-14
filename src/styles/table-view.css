@@ -3,8 +3,7 @@
 .table-array-editor {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing16);
-  margin-bottom: var(--spacing8);
+  gap: var(--array-gap);
   min-width: 0; /* Allow flex shrinking so table-wrapper can scroll */
 }
 
@@ -34,7 +33,7 @@
 
 /* Empty state */
 .empty-table-message {
-  padding: var(--spacing32);
+  padding: var(--card-pad);
   text-align: center;
   color: var(--field-label-color);
   font-size: 14px;
@@ -59,7 +58,7 @@
 }
 
 .table-view th {
-  padding: var(--spacing8);
+  padding: var(--cell-pad);
   text-align: left;
   font-weight: var(--field-label-font-weight);
   font-size: var(--field-label-font-size);
@@ -108,7 +107,7 @@
   background-color: var(--card-background-alt);
   border-right: 2px solid var(--card-border);
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
-  padding: var(--spacing8);
+  padding: var(--cell-pad);
 }
 
 /* Widen header in sub-tables to match wider controls cell */
@@ -146,7 +145,7 @@
 }
 
 .table-view td {
-  padding: var(--spacing8);
+  padding: var(--cell-pad);
   vertical-align: middle;
   border-bottom: 1px solid var(--card-border-light);
 }
@@ -281,7 +280,7 @@
 
 /* Row controls cell - always present, includes row number */
 .table-cell-controls {
-  padding: var(--spacing8);
+  padding: var(--cell-pad);
   width: 240px; /* Combined width: 60px number + 180px label/controls */
   min-width: 240px;
   max-width: 240px;
@@ -447,7 +446,7 @@
 
 /* Sub-table sections */
 .sub-table-section {
-  margin-top: var(--spacing16);
+  margin-top: var(--field-gap);
   border-radius: 4px;
   border: 1px solid var(--card-border-light);
 }
@@ -456,11 +455,11 @@
   display: flex;
   align-items: center;
   gap: var(--spacing8);
-  padding: var(--spacing8);
+  padding: var(--cell-pad);
   background-color: var(--card-background-alt);
   border-left: 4px solid var(--vscode-badge-background);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--field-label-color);
   text-transform: capitalize;
 }
@@ -478,7 +477,7 @@
 
 .sub-table th,
 .sub-table td {
-  padding: 6px 8px;
+  padding: 3px 6px;
   font-size: 12px;
 }
 
@@ -532,7 +531,6 @@
 @media screen and (max-width: 768px) {
   .table-view th,
   .table-view td {
-    padding: var(--spacing8) var(--spacing8);
     font-size: 13px;
   }
 

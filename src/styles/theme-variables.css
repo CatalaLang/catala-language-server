@@ -20,16 +20,33 @@
   --success: var(--caribbean-green-600);
 
   --spacing0: 0;
-  --spacing1: 1;
-  --spacing2: 2;
+  --spacing1: 1px;
+  --spacing2: 2px;
   --spacing4: 4px;
   --spacing8: 8px;
   --spacing12: 12px;
   --spacing16: 16px;
-  --spacing20: 20;
-  --spacing24: 24;
-  --spacing28: 28;
+  --spacing20: 20px;
+  --spacing24: 24px;
+  --spacing28: 28px;
   --spacing32: 32px;
+
+  /* Density: shared spacings that must move together across components. */
+  /* top-level cards: inputs, outputs, description, toolbar */
+  --card-pad: var(--spacing16);
+  /* between sibling fields */
+  --field-gap: var(--spacing12);
+  /* between array cards */
+  --array-gap: var(--spacing8);
+  /* label to control */
+  --label-gap: var(--spacing4);
+  /* between test sections */
+  --section-gap: var(--spacing8);
+  /* inputs, selects, combobox display, textarea */
+  --control-pad-y: 5px;
+  --control-pad-x: var(--spacing8);
+  /* table cells */
+  --cell-pad: var(--spacing4) var(--spacing8);
 
   /* Custom Catala Colors */
   --background-color-lvl-1: var(--stormgray50);
@@ -71,8 +88,8 @@
   /* Section headers */
   --section-header-color: var(--vscode-foreground);
   --section-header-font-weight: 600;
-  --section-header-font-size: 14px;
-  --section-header-margin: 0 0 16px 0;
+  --section-header-font-size: 16px;
+  --section-header-margin: 0 0 var(--spacing8) 0;
 
   /* Field labels */
   --field-label-color: var(--vscode-descriptionForeground, rgba(0, 0, 0, 0.7));
@@ -117,7 +134,7 @@ p {
   margin-block-end: 0;
 }
 input {
-  padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
+  padding: var(--control-pad-y) var(--control-pad-x);
 }
 
 .button-action-dvp {

@@ -2,7 +2,7 @@
 .value-editor input,
 .value-editor select {
   width: 100%;
-  padding: var(--spacing8) var(--spacing16) var(--spacing8) var(--spacing16);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid;
   box-sizing: border-box;
   border-radius: 2px;
@@ -50,8 +50,9 @@
 /* Make action buttons used in assertion editor shrink to content */
 .assertion-editor .button-action-dvp {
   width: fit-content;
-  /* keep original vertical padding and right padding; align left padding with inputs */
-  padding: var(--spacing8) var(--spacing12) var(--spacing8) var(--spacing16);
+  /* align left padding with inputs */
+  padding: var(--control-pad-y) var(--spacing12) var(--control-pad-y)
+    var(--control-pad-x);
   box-sizing: border-box;
   text-align: left;
 }
@@ -64,23 +65,23 @@
 .enum-editor {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--label-gap);
 }
 
 .enum-payload-editor {
   width: 100%;
-  margin-top: 8px;
+  margin-top: var(--label-gap);
 }
 
 .duration-fields {
   display: flex;
-  gap: 10px;
+  gap: var(--spacing8);
 }
 
 .duration-fields label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--label-gap);
 }
 
 /* Money editor with currency symbol */
@@ -99,7 +100,7 @@
 .money-editor.currency-eur::after {
   content: '€';
   position: absolute;
-  right: 10px;
+  right: var(--control-pad-x);
   top: 50%;
   transform: translateY(-50%);
   color: var(--control-text);
@@ -109,7 +110,7 @@
 .money-editor.currency-usd::before {
   content: '$';
   position: absolute;
-  left: 10px;
+  left: var(--control-pad-x);
   top: 50%;
   transform: translateY(-50%);
   color: var(--control-text);
