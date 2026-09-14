@@ -9,6 +9,7 @@ import type {
 } from '../generated/catala_types';
 import AssertionValueEditor from './AssertionValueEditor';
 import { getDefaultValue } from '../editors/ValueEditors';
+import { Identifier } from '../editors/Identifier';
 
 type Props = {
   test: Test;
@@ -86,7 +87,9 @@ export default function TestOutputsEditor({
           return (
             <div key={outputName} className="test-output-row">
               <div className="test-output-label">
-                <label>{outputName}</label>
+                <label>
+                  <Identifier name={outputName} />
+                </label>
                 {outputData?.value && (
                   <button
                     className="assertion-delete-btn"

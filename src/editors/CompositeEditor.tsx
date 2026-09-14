@@ -1,5 +1,6 @@
 import { useState, type ReactElement, type ReactNode } from 'react';
 import type { Typ } from '../generated/catala_types';
+import { Identifier, wrapIdentifier } from './Identifier';
 
 /**
  * Base for StructEditor and TestInputsEditor. Renders label/editor pairs with
@@ -42,9 +43,13 @@ function categorize(item: EditorItem): 'scalar' | 'structural' | 'array' {
 
 function getTabDisplayName(item: EditorItem): ReactNode {
   if (item.count !== undefined) {
-    return `${item.key} (${item.count})`;
+    return (
+      <>
+        <Identifier name={item.key} /> ({item.count})
+      </>
+    );
   }
-  return item.label;
+  return wrapIdentifier(item.label);
 }
 
 export function CompositeEditor(props: CompositeEditorProps): ReactElement {
@@ -69,7 +74,9 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
               key={item.key}
               className={`simple-item-vertical ${props.atomicElements ? 'atomic-element' : ''}`}
             >
-              <label className="item-label body-1">{item.label}</label>
+              <label className="item-label body-1">
+                {wrapIdentifier(item.label)}
+              </label>
               {item.editor}
             </div>
           ))}
@@ -83,7 +90,9 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
               key={item.key}
               className={`simple-item ${props.atomicElements ? 'atomic-element' : ''}`}
             >
-              <label className="item-label body-1">{item.label}</label>
+              <label className="item-label body-1">
+                {wrapIdentifier(item.label)}
+              </label>
               {item.editor}
             </div>
           ))}
@@ -92,7 +101,9 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
 
       {structuralItems.map((item) => (
         <div key={item.key} className="structural-item">
-          <label className="item-label body-1">{item.label}</label>
+          <label className="item-label body-1">
+            {wrapIdentifier(item.label)}
+          </label>
           {item.editor}
         </div>
       ))}
@@ -125,7 +136,9 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
 
       {arrayItems.length === 1 && (
         <div className="structural-item">
-          <label className="item-label body-1">{arrayItems[0].label}</label>
+          <label className="item-label body-1">
+            {wrapIdentifier(arrayItems[0].label)}
+          </label>
           {arrayItems[0].editor}
         </div>
       )}

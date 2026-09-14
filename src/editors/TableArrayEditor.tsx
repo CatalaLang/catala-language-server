@@ -31,6 +31,7 @@ import {
   type TableSchema,
 } from './tableArrayUtils';
 import { extractSimpleName, getTypeName } from './typeNameUtils';
+import { Identifier } from './Identifier';
 import { useTableArrayHandlers } from './useTableArrayHandlers';
 
 // Animation timing constants
@@ -336,7 +337,11 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                   title={col.label || undefined}
                 >
                   {col.label ? (
-                    col.label.split('.').pop()
+                    <span className="table-header-text">
+                      <Identifier
+                        name={col.label.split('.').pop() ?? col.label}
+                      />
+                    </span>
                   ) : (
                     <FormattedMessage
                       id="tableView.value"
@@ -351,7 +356,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                   className="table-header-sub-array"
                   title={arr.label}
                 >
-                  {arr.label.split('.').pop()}
+                  <Identifier name={arr.label.split('.').pop() ?? arr.label} />
                 </th>
               ))}
             </tr>
@@ -1012,7 +1017,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
         return (
           <div key={idx} id={subTableId} className="sub-table-section">
             <div className="sub-table-header">
-              {subArray.label}
+              <Identifier name={subArray.label} />
               <span className="count-badge">{subArray.items.length}</span>
             </div>
             <div className="sub-table-content">
