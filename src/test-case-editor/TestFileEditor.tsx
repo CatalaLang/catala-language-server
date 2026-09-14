@@ -16,6 +16,25 @@ import { pathEquals, isPathPrefix } from '../diff/highlight';
 import type { WebviewApi } from 'vscode-webview';
 import { setVsCodeApi } from '../shared/webviewApi';
 import { resolveConfirmResult } from '../messaging/confirm';
+import type { TraceElement } from '../trace-editor/traceUtils';
+
+/**
+ * Hand-written message (outside the ATD DownMessage protocol) carrying the
+ * trace computed by running a test's scope with tracing.
+ */
+type TraceMessage = {
+  kind: 'trace';
+  scope: string;
+  trace: TraceElement[];
+};
+
+function isTraceMessage(data: unknown): data is TraceMessage {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    (data as { kind?: unknown }).kind === 'trace'
+  );
+}
 
 // Note:
 //
@@ -60,6 +79,8 @@ export default function TestFileEditor({
 }: Props): ReactElement {
   const [state, setState] = useState(contents);
   const [testRunState, setTestRunState] = useState<TestRunState>({});
+  // Trace computed per test scope (from running the scope with tracing).
+  const [traces, setTraces] = useState<Record<string, TraceElement[]>>({});
   useEffect(() => {
     setVsCodeApi(vscode);
   }, [vscode]);
@@ -93,8 +114,6 @@ export default function TestFileEditor({
         const newTestState = state.tests.filter(
           (test) => test.testing_scope !== testScope
         );
-        console.log('Deleting test:', testScope);
-        console.log('New test state:', newTestState);
 
         // optimistic update
         setState({ state: 'success', tests: newTestState });
@@ -110,8 +129,12 @@ export default function TestFileEditor({
     [state, vscode]
   );
 
+  // `has_expected` is a parameter rather than something looked up here: the
+  // callbacks below are memoized on `[vscode]`, so anything read from `state`
+  // in this closure would stay frozen at the first render. The caller holds
+  // the test anyway.
   const _onTestRun = (resetOutputs: boolean) => {
-    return (testScope: string): void => {
+    return (testScope: string, has_expected: boolean): void => {
       setTestRunState((prev) => ({
         ...prev,
         [testScope]: { status: 'running' },
@@ -124,6 +147,7 @@ export default function TestFileEditor({
             reset_outputs: resetOutputs,
             in_shell: false,
             debug: false,
+            has_expected,
           },
         })
       );
@@ -208,6 +232,13 @@ export default function TestFileEditor({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
+      // Intercept the hand-written trace message before the strict ATD
+      // `readDownMessage`, which would reject its unknown kind.
+      if (isTraceMessage(event.data)) {
+        const { scope, trace } = event.data;
+        setTraces((prev) => ({ ...prev, [scope]: trace }));
+        return;
+      }
       const message = readDownMessage(event.data);
       switch (message.kind) {
         case 'Update':
@@ -234,6 +265,12 @@ export default function TestFileEditor({
         case 'ConfirmResult': {
           resolveConfirmResult(message.value.id, message.value.confirmed);
           break;
+        }
+        case 'AllTests': {
+          throw Error('Wrong AllTests message posted');
+        }
+        case 'TestScopeResult': {
+          throw Error(`This view can't trigger a TestScopeResult`);
         }
         default:
           assertUnreachable(message);
@@ -288,6 +325,7 @@ export default function TestFileEditor({
               onTestRun={onTestRun}
               onTestOutputsReset={onTestOutputsReset}
               runState={testRunState[test.testing_scope]}
+              trace={traces[test.testing_scope]}
               onDiffResolved={onDiffResolved}
               onInvalidateDiffs={onInvalidateDiffs}
             />
@@ -316,7 +354,9 @@ function ParsingErrorWarning({
       <button
         className="test-editor-open-text"
         onClick={() =>
-          vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+          vscode.postMessage(
+            writeUpMessage({ kind: 'OpenInTextEditor', value: null })
+          )
         }
       >
         <span className="codicon codicon-edit"></span>
@@ -346,7 +386,9 @@ function EmptyTestListMismatchWarning({
         <button
           className="test-editor-open-text"
           onClick={() =>
-            vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+            vscode.postMessage(
+              writeUpMessage({ kind: 'OpenInTextEditor', value: null })
+            )
           }
         >
           <span className="codicon codicon-edit"></span>

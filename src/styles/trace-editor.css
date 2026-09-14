@@ -1,0 +1,46 @@
+.trace-layout-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 5.5em;
+  height: 1em;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  top: -2px;
+}
+
+.trace-layout-range:focus,
+.trace-layout-range:focus-visible {
+  outline: none;
+}
+
+.trace-layout-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(
+    --vscode-scrollbarSlider-background,
+    rgba(128, 128, 128, 0.4)
+  );
+}
+
+.trace-layout-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -4.5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--vscode-button-background);
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+}
+
+.trace-layout-range:hover::-webkit-slider-thumb {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.trace-layout-label {
+  font-size: 0.9em;
+  color: var(--vscode-descriptionForeground);
+  user-select: none;
+}

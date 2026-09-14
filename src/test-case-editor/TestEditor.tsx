@@ -2,15 +2,25 @@ import type { ChangeEvent } from 'react';
 import { type ReactElement, useEffect, useRef } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
+  type Option,
+  type RuntimeValue,
   type Test,
   type TestInputs,
   type TestRunResults,
   type PathSegment,
+  type VariableFailure,
 } from '../generated/catala_types';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
+import ExpectedVariablesEditor from './ExpectedVariablesEditor';
 import { type TestRunStatus } from './TestFileEditor';
+import {
+  type TraceElement,
+  type TraceValue,
+  traceValueToRuntime,
+} from '../trace-editor/traceUtils';
 import { confirm } from '../messaging/confirm';
+import { getVsCodeApi } from '../shared/webviewApi';
 import {
   hasUnsetInTest,
   scrollToFirstInvalidOrUnset,
@@ -20,13 +30,16 @@ type Props = {
   test: Test;
   onTestChange(newValue: Test, mayBeBatched: boolean): void;
   onTestDelete(testScope: string): void;
-  onTestRun(testScope: string): void;
-  onTestOutputsReset(testScope: string): void;
+  onTestRun(testScope: string, hasExpected: boolean): void;
+  onTestOutputsReset(testScope: string, hasExpected: boolean): void;
   runState?: {
     status: TestRunStatus;
     results?: TestRunResults;
     stale?: boolean;
   };
+  trace?: TraceElement[];
+  /** When false, the trace is not run and the expected-variable catalog is hidden. */
+  runTrace?: boolean;
   onDiffResolved(scope: string, path: PathSegment[]): void;
   onInvalidateDiffs(scope: string, pathPrefix: PathSegment[]): void;
 };
@@ -65,10 +78,42 @@ export default function TestEditor(props: Props): ReactElement {
     );
   }
 
+  function onVariablesChange(next: Map<string, TraceValue | null>): void {
+    const variables: Map<string, Option<RuntimeValue>> = new Map();
+    next.forEach((value, name) => {
+      if (value === null) {
+        variables.set(name, null);
+      } else {
+        const rv = traceValueToRuntime(value);
+        if (rv !== undefined) {
+          variables.set(name, { value: { value: rv, attrs: [] } });
+        }
+      }
+    });
+    props.onTestChange({ ...props.test, variables }, false);
+  }
+
+  // Mismatches on the auxiliary variables, as reported by the compiler for the
+  // last run. Keyed by variable name, which is also the key of
+  // `test.variables`. Empty until a run happened.
+  const variableFailures: VariableFailure[] =
+    props.runState?.results?.kind === 'Ok'
+      ? props.runState.results.value.variable_failures
+      : [];
+
   const expectedSectionRef = useRef<HTMLDivElement>(null);
   // Scope for searching the first '.value-editor.invalid' or '.value-editor.unset' before running; used to scroll into view
   const unsetElementRef = useRef<HTMLDivElement>(null);
   const expectedAnchorId = `expected-${encodeURIComponent(props.test.testing_scope)}`;
+
+  // A failing run sends the user to what went wrong, and the scope results come
+  // first: when an output is also incorrect the expected-values section takes
+  // the focus, and the expected variables only get it when they are the sole
+  // culprit.
+  const focusVariableFailure =
+    props.runState?.results?.kind === 'Ok' &&
+    !props.runState.results.value.assert_failures &&
+    variableFailures.length > 0;
 
   useEffect(() => {
     const runState = props.runState;
@@ -88,6 +133,11 @@ export default function TestEditor(props: Props): ReactElement {
     }
   }, [props.runState]);
 
+  // Whether the run needs to be traced: the trace is what the compiler checks
+  // the expected variables against, so it is only worth producing when the
+  // test declares some.
+  const hasExpected = props.test.variables.size > 0;
+
   const scrollToFirstUnset = (): void => {
     scrollToFirstInvalidOrUnset(unsetElementRef.current ?? document, 0);
   };
@@ -98,7 +148,15 @@ export default function TestEditor(props: Props): ReactElement {
       const confirmed = await confirm('RunTestWithUnsetValues');
       if (!confirmed) return;
     }
-    props.onTestRun(props.test.testing_scope);
+    props.onTestRun(props.test.testing_scope, hasExpected);
+  };
+
+  const openTraceEditor = (): void => {
+    getVsCodeApi().postMessage({
+      kind: 'openTraceEditor',
+      scope: props.test.testing_scope,
+      trace: props.trace,
+    });
   };
 
   const resetWithUnsetCheck = async (): Promise<void> => {
@@ -107,7 +165,7 @@ export default function TestEditor(props: Props): ReactElement {
       const confirmed = await confirm('RunTestWithUnsetValues');
       if (!confirmed) return;
     }
-    props.onTestOutputsReset(props.test.testing_scope);
+    props.onTestOutputsReset(props.test.testing_scope, hasExpected);
   };
 
   return (
@@ -147,7 +205,6 @@ export default function TestEditor(props: Props): ReactElement {
             <textarea
               value={props.test.description}
               onChange={onDescriptionChange}
-              onBlur={onDescriptionChange}
               placeholder={intl.formatMessage({
                 id: 'testEditor.descriptionPlaceholder',
               })}
@@ -166,6 +223,14 @@ export default function TestEditor(props: Props): ReactElement {
             onTestInputsChange={onTestInputsChange}
           />
         </div>
+        <ExpectedVariablesEditor
+          test={props.test}
+          trace={props.trace}
+          runTrace={props.runTrace}
+          failures={variableFailures}
+          focusFailure={focusVariableFailure}
+          onChange={onVariablesChange}
+        />
         <div
           className="test-section"
           id={expectedAnchorId}
@@ -196,11 +261,19 @@ export default function TestEditor(props: Props): ReactElement {
                 ></span>{' '}
                 {intl.formatMessage({ id: 'testEditor.runTest' })}
               </button>
+              <button
+                className="button-action-dvp body-b3"
+                title={intl.formatMessage({ id: 'testEditor.openTrace' })}
+                onClick={openTraceEditor}
+              >
+                <span className="codicon codicon-graph"></span> Trace
+              </button>
             </div>
             <div className="test-result">
               {props.runState?.status === 'success' &&
                 props.runState?.results?.kind === 'Ok' &&
-                !props.runState.results.value.assert_failures && (
+                !props.runState.results.value.assert_failures &&
+                variableFailures.length === 0 && (
                   <p className="test-run-result test-run-success body-1">
                     <span className="codicon codicon-check-all"></span>
                     <FormattedMessage
@@ -211,7 +284,8 @@ export default function TestEditor(props: Props): ReactElement {
                 )}
               {(props.runState?.status === 'error' ||
                 (props.runState?.results?.kind === 'Ok' &&
-                  props.runState.results.value.assert_failures)) && (
+                  (props.runState.results.value.assert_failures ||
+                    variableFailures.length > 0))) && (
                 <div className="test-result-information">
                   <p className="test-run-result test-run-error body-1">
                     <span className="codicon codicon-warning"></span>

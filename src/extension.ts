@@ -3,11 +3,19 @@ import type {
   Executable,
   LanguageClientOptions,
   ServerOptions,
+  Command,
 } from 'vscode-languageclient/node';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TestCaseEditorProvider } from './extension/testCaseEditorProvider';
+import { TraceEditorProvider } from './extension/traceEditorProvider';
+import { initTraceCache } from './trace-editor/traceRunner';
+// Emitted to dist as `codicon.css`; linked into the trace-editor webview so the
+// vscode-elements icon component can find the Codicons font.
+import codiconsCssPath from '@vscode/codicons/dist/codicon.css?url';
 import { logger } from './extension/logger';
 import * as net from 'net';
+import { tmpdir } from 'os';
+import path, { join } from 'path';
 import { spawn } from 'child_process';
 import {
   exceptionsViewProvider,
@@ -20,12 +28,79 @@ import {
   getCwd,
   hasResourceUri,
   resolveBinaryPath,
+  tryBinaryPath,
 } from './shared/util_client';
-import type { RunArgs } from './shared/util_client';
-import { initTests } from './extension/testAndCoverage';
+import type { Binary, RunArgs } from './shared/util_client';
+import { initTests, ResultController } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
-import { listEntrypoints } from './extension/lspRequests';
+import { checkExpected, listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
+import { TestMacroController } from './test-case-editor/TestMacroController';
+
+type ItemParam = {
+  label: string;
+  descr?: string | undefined;
+  icon?: vscode.ThemeIcon | undefined;
+  command?: vscode.Command | undefined;
+};
+
+class Item extends vscode.TreeItem {
+  readonly descr: string | undefined;
+  readonly icon: vscode.ThemeIcon | undefined;
+  public children: Item[] = [];
+
+  constructor(param: ItemParam) {
+    super(param.label, vscode.TreeItemCollapsibleState.None);
+    this.descr = param.descr;
+    this.icon = param.icon;
+    this.command = param.command;
+    this.collapsibleState = vscode.TreeItemCollapsibleState.None;
+  }
+
+  public add_child(child: Item): void {
+    this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+    this.children.push(child);
+  }
+}
+
+export class tree_view implements vscode.TreeDataProvider<Item> {
+  private switches: Item[] = [];
+  private m_onDidChangeTreeData: vscode.EventEmitter<Item | undefined> =
+    new vscode.EventEmitter<Item | undefined>();
+  readonly onDidChangeTreeData?: vscode.Event<Item | undefined> =
+    this.m_onDidChangeTreeData.event;
+  private refresher?: () => Promise<Item[]>;
+
+  public constructor(switches: Item[], refresher?: () => Promise<Item[]>) {
+    this.switches = switches;
+    this.refresher = refresher;
+  }
+
+  public getTreeItem(
+    element: Item
+  ): vscode.TreeItem | Thenable<vscode.TreeItem> {
+    const item = new vscode.TreeItem(element.label!, element.collapsibleState);
+    item.description = element.descr;
+    item.iconPath = element.icon;
+    item.command = element.command;
+    return item;
+  }
+
+  public getChildren(element: Item | undefined): vscode.ProviderResult<Item[]> {
+    if (element === undefined) {
+      return this.switches;
+    } else {
+      return element.children;
+    }
+  }
+
+  public async refresh(): Promise<void> {
+    if (this.refresher) {
+      this.switches = await this.refresher();
+      this.m_onDidChangeTreeData.fire(undefined);
+    }
+  }
+}
 
 let client: LanguageClient;
 
@@ -100,12 +175,82 @@ async function selectScope(with_inputs: boolean): Promise<RunArgs | undefined> {
   }
 }
 
+function asyncRun(
+  command: string,
+  args: string[],
+  cwd: string | undefined
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const options = cwd ? { cwd } : undefined;
+    const proc = spawn(command, args, options);
+    proc.stdout.on('data', (data: Buffer) => {
+      logger.log(data.toString());
+    });
+    proc.stderr.on('data', (data: Buffer) => {
+      logger.log(data.toString());
+    });
+    proc.on('error', reject);
+    proc.on('close', () => resolve());
+  });
+}
+
 async function runScope(args?: RunArgs): Promise<void> {
   const inputs = args?.inputs;
   args ??= await selectScope(inputs ? true : false);
-  if (args) {
-    const cwd = getCwd(args.uri);
-    const termName = `${args.scope} execution`;
+  if (!args) {
+    return;
+  }
+  const cwd = getCwd(args.uri);
+  // Single-quote a shell argument so spaces in paths survive. PowerShell
+  // escapes an embedded quote by doubling it; POSIX shells by '\''.
+  const sq = (s: string): string =>
+    args.headless
+      ? s
+      : process.platform === 'win32'
+        ? `'${s.replace(/'/g, "''")}'`
+        : `'${s.replace(/'/g, "'\\''")}'`;
+
+  let inputArgs: string[] = [];
+  if (inputs) {
+    const json = JSON.stringify(inputs);
+    // Single-quote the JSON; on Windows (PowerShell) also backslash-escape the
+    // inner double quotes so they survive the native-command re-parse.
+    const input = args.headless
+      ? json
+      : process.platform === 'win32'
+        ? `'${json.replace(/"/g, '\\"')}'`
+        : `'${json}'`;
+    inputArgs = ['--input', input];
+  }
+
+  let traceOutputFile = args.traceOutputFile;
+  if (args.withTrace && traceOutputFile === undefined) {
+    traceOutputFile = join(tmpdir(), `${args.scope}_trace.json`);
+  }
+  const traceArgs =
+    args.withTrace && traceOutputFile !== undefined
+      ? ['--trace', traceOutputFile]
+      : [];
+  const buildDirArgs = args.buildDir ? ['--build-dir', sq(args.buildDir)] : [];
+  const ninjaOutputArgs = args.ninjaOutput
+    ? ['--ninja-output-file', sq(args.ninjaOutput)]
+    : [];
+
+  const clerkArgs = [
+    'run',
+    sq(args.uri),
+    '--scope',
+    args.scope,
+    ...inputArgs,
+    ...traceArgs,
+    ...buildDirArgs,
+    ...ninjaOutputArgs,
+  ];
+
+  if (args.headless) {
+    await asyncRun(clerkPath, clerkArgs, cwd);
+  } else {
+    const termName = `${args.scope} ${args.withTrace ? 'trace' : 'execution'}`;
     vscode.window.terminals.find((t) => t.name === termName)?.dispose();
     const term = vscode.window.createTerminal({
       name: termName,
@@ -114,34 +259,8 @@ async function runScope(args?: RunArgs): Promise<void> {
       // (cmd.exe would need the opposite escaping).
       ...(process.platform === 'win32' && { shellPath: 'powershell.exe' }),
     });
-    // Single-quote a shell argument so spaces in paths survive. PowerShell
-    // escapes an embedded quote by doubling it; POSIX shells by '\''.
-    const sq = (s: string): string =>
-      process.platform === 'win32'
-        ? `'${s.replace(/'/g, "''")}'`
-        : `'${s.replace(/'/g, "'\\''")}'`;
-    let extra_args: string[] = [];
-    if (inputs) {
-      const json = JSON.stringify(inputs);
-      // Single-quote the JSON; on Windows (PowerShell) also backslash-escape the
-      // inner double quotes so they survive the native-command re-parse.
-      const quoted =
-        process.platform === 'win32'
-          ? `'${json.replace(/"/g, '\\"')}'`
-          : `'${json}'`;
-      extra_args = ['--input', quoted];
-    }
     term.show();
-    term.sendText(
-      [
-        clerkPath,
-        'run',
-        sq(args.uri),
-        '--scope',
-        args.scope,
-        ...extra_args,
-      ].join(' ')
-    );
+    term.sendText([clerkPath, ...clerkArgs].join(' '));
   }
 }
 
@@ -205,9 +324,170 @@ async function debugScope(args?: RunArgs): Promise<void> {
   }
 }
 
+async function opamSwitch(): Promise<string[]> {
+  return new Promise((resolve) => {
+    let proc = spawn('opam', ['switch', 'list', '-s']);
+    let ocamlSwitch: string | undefined;
+
+    proc.stdout.on('data', (data) => {
+      ocamlSwitch = data.toString();
+    });
+
+    proc.on('close', (code: number | null) => {
+      if (code != null && code == 0) {
+        let splitted = ocamlSwitch?.split('\n');
+        resolve(splitted ?? []);
+      } else {
+        resolve([]);
+      }
+    });
+  });
+}
+
+type Toolchain = {
+  catalaPath?: Binary;
+  clerkPath?: Binary;
+  catalaFormatPath?: Binary;
+  lspServerPath?: Binary;
+};
+
+// Binary name behind each setting: friendlier to read than the setting key in
+// the confirmation modal.
+const toolchainBinaryNames: Record<keyof Toolchain, string> = {
+  catalaPath: 'catala',
+  clerkPath: 'clerk',
+  catalaFormatPath: 'catala-format',
+  lspServerPath: 'catala-lsp',
+};
+
+/**
+ * Renders toolchain entries as a bulleted list for a modal 'detail' field. That
+ * field is plain text in a proportional font, so padding cannot be used to line
+ * columns up: each entry gets its own bullet instead, with the version between
+ * the binary name and its path.
+ */
+function formatToolchain(entries: [string, Binary][]): string {
+  return entries
+    .map(([key, value]) => {
+      const name = toolchainBinaryNames[key as keyof Toolchain] ?? key;
+      return `•  ${name} →  ${value.path}${value.version != undefined ? ` (version ${value.version})` : ''}`;
+    })
+    .join('\n');
+}
+
+async function createItemSwitch(
+  title: string,
+  singlePath: string
+): Promise<Item | undefined> {
+  const [catala, clerk, catalaFormat, lsp] = await Promise.all([
+    tryBinaryPath('catala', singlePath),
+    tryBinaryPath('clerk', singlePath),
+    tryBinaryPath('catala-format', singlePath),
+    //  opam show catala-lsp --switch=/home/arnaud/catala-pj --field version --raw
+    // We can use this command on opam switch to get the lsp version
+    tryBinaryPath('catala-lsp', singlePath, true),
+  ]);
+
+  const toolchain: Toolchain = {
+    ...(catala && { catalaPath: catala }),
+    ...(clerk && { clerkPath: clerk }),
+    ...(catalaFormat && { catalaFormatPath: catalaFormat }),
+    ...(lsp && { lspServerPath: lsp }),
+  };
+
+  const keys = Object.keys(toolchain);
+  if (keys.length === 0) return undefined;
+
+  let commandUpdateToolchain: (toolchain: Toolchain) => vscode.Command = (
+    toolchain: Toolchain
+  ): Command => {
+    return {
+      title: 'Update toolchain',
+      command: 'catala.useToolchain',
+      arguments: [toolchain],
+    };
+  };
+
+  let catalaSwitch = new Item({
+    label: title,
+    command: commandUpdateToolchain(toolchain),
+  });
+  for (const [key, value] of Object.entries(toolchain)) {
+    let littleItem = new Item({
+      label: value.path,
+      descr: value.version,
+      command: commandUpdateToolchain({ [key]: value }),
+    });
+    catalaSwitch.add_child(littleItem);
+  }
+  return catalaSwitch;
+}
+
+async function searchSwitches(): Promise<Item[]> {
+  let opamItem: Item = new Item({
+    label: 'Catala switches (OPAM)',
+  });
+
+  let ocamlSwitches = await opamSwitch();
+
+  let opamRoot = await new Promise<string | undefined>((resolve) => {
+    let proc = spawn('opam', ['var', 'root']);
+    let root: string | undefined;
+    proc.stdout.on('data', (data) => {
+      root = data.toString();
+    });
+
+    proc.on('close', (code: number | null) => {
+      if (code != null && code == 0) {
+        resolve(root?.trim());
+      } else {
+        resolve(undefined);
+      }
+    });
+  });
+
+  for (const ocSwitch of ocamlSwitches) {
+    let switchPath: string;
+    if (path.isAbsolute(ocSwitch)) {
+      switchPath = path.join(ocSwitch, '_opam', 'bin');
+    } else if (opamRoot) {
+      switchPath = path.join(opamRoot, ocSwitch, 'bin');
+    } else {
+      continue;
+    }
+    let item = await createItemSwitch(ocSwitch, switchPath);
+    if (item) {
+      opamItem.add_child(item);
+    }
+  }
+
+  let pathItem: Item = new Item({
+    label: 'Catala switches (PATH)',
+  });
+
+  let envPath = process.env.PATH;
+  let currentSwitch = process.env.OPAM_SWITCH_PREFIX;
+  if (envPath) {
+    let paths = envPath.split(':');
+    for (const singlePath of paths) {
+      if (currentSwitch && singlePath.includes(currentSwitch)) continue;
+      let item = await createItemSwitch(singlePath, singlePath);
+      if (item) {
+        pathItem.add_child(item);
+      }
+    }
+  }
+  let items = [];
+  if (opamItem.children.length > 0) items.push(opamItem);
+  if (pathItem.children.length > 0) items.push(pathItem);
+  return items;
+}
+
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
+  // Enable the persistent trace cache (stored under global storage).
+  initTraceCache(context.globalStorageUri.fsPath);
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
@@ -253,12 +533,20 @@ export async function activate(
     )
   );
 
+  const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
+  // Placeholder to display something while tests are retrieved
+  ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
+
   const lsp_path = resolveBinaryPath(
     'catala-lsp',
     context,
     'main_lsp.exe',
     getConfig('lspServerPath')
   );
+
+  const language = vscode.env.language;
+
+  let resultController = new ResultController(context.workspaceState, language);
   if (lsp_path) {
     const run: Executable = {
       command: lsp_path,
@@ -304,11 +592,198 @@ export async function activate(
       serverOptions,
       clientOptions
     );
-    await Promise.all([client.start(), initTests(context, client)]);
+
+    let entrypointsRequest = listEntrypoints(
+      client,
+      [{ kind: 'GUI' }, { kind: 'Test' }],
+      undefined,
+      false,
+      true
+    ).finally(() => ctrl.items.replace([]));
+
+    initTests(entrypointsRequest, context, client, ctrl, resultController);
+
+    const macroTestsView = new TestMacroController();
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        'catala.debugAllTests',
+        async (_arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+          const columnToShowIn = vscode.window.activeTextEditor
+            ? vscode.window.activeTextEditor.viewColumn
+            : undefined;
+          macroTestsView.show(
+            client,
+            context,
+            entrypointsRequest,
+            resultController,
+            ctrl,
+            columnToShowIn
+          );
+        }
+      )
+    );
   }
 
-  // Always register the custom editor provider
-  context.subscriptions.push(TestCaseEditorProvider.register(context));
+  let command: Command = {
+    title: language == 'fr' ? 'Vue globale des tests' : 'General tests view',
+    command: 'catala.debugAllTests',
+  };
+  let catala_utils = new Item({
+    label: language == 'fr' ? 'Ouvrir les tests' : 'Open all tests',
+    icon: new vscode.ThemeIcon('beaker'),
+    command,
+  });
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider(
+      'catala.openAllTests',
+      new tree_view([catala_utils])
+    )
+  );
+
+  logger.log(`Register "Catala Tests" data in th Tree data provider`);
+
+  vscode.commands.registerCommand(
+    'catala.useToolchain',
+    async (toolchain: Toolchain) => {
+      let entries = Object.entries(toolchain);
+      const yes: vscode.MessageItem = { title: vscode.l10n.t('Yes') };
+      // isCloseAffordance makes 'No' replace the Cancel button VSCode adds to
+      // every modal, instead of sitting next to it.
+      const no: vscode.MessageItem = {
+        title: vscode.l10n.t('No'),
+        isCloseAffordance: true,
+      };
+      const answer = await vscode.window.showWarningMessage(
+        vscode.l10n.t('You are about to change Catala user settings'),
+        {
+          modal: true,
+          detail: `${vscode.l10n.t(
+            'The following settings will be updated:'
+          )}\n\n
+            ${formatToolchain(entries)})}`,
+        },
+        yes,
+        no
+      );
+      if (answer !== yes) {
+        return;
+      }
+      const cfg = vscode.workspace.getConfiguration('catala');
+      for (const [key, value] of entries) {
+        await cfg.update(key, value.path);
+      }
+      await vscode.window.showInformationMessage(
+        vscode.l10n.t('Settings changed !'),
+        {
+          modal: true,
+          detail: vscode.l10n.t(
+            'Your settings were changed, reload the window to notice some changes'
+          ),
+        }
+      );
+    }
+  );
+
+  let items = await searchSwitches();
+
+  let switchTree = new tree_view(items, searchSwitches);
+
+  vscode.commands.registerCommand('catala.refreshSwitches', async () => {
+    await switchTree.refresh();
+  });
+
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider('catala.switches', switchTree)
+  );
+
+  let command_books: Command = {
+    title: language == 'fr' ? 'Ouvrir le livre Catala' : 'Open Catala book',
+    command: 'vscode.open',
+    arguments: [
+      vscode.Uri.parse(`https://book.catala-lang.org/${language}/0-intro.html`),
+    ],
+  };
+  let catala_books = new Item({
+    label:
+      language == 'fr'
+        ? 'Apprendre à faire du Catala'
+        : 'Learn how to do Catala',
+    icon: new vscode.ThemeIcon('book'),
+    command: command_books,
+  });
+
+  let command_github: Command = {
+    title: language == 'fr' ? 'Ouvrir Github' : 'Open Github',
+    command: 'vscode.open',
+    arguments: [vscode.Uri.parse(`https://github.com/CatalaLang/catala`)],
+  };
+  let catala_github = new Item({
+    label:
+      language == 'fr'
+        ? 'Répertoire Github Catala'
+        : 'Catala Github repository',
+    icon: new vscode.ThemeIcon('github'),
+    command: command_github,
+  });
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider(
+      'catala.help',
+      new tree_view([catala_books, catala_github])
+    )
+  );
+  logger.log(
+    `Register "Catala Help and feedback" data in th Tree data provider`
+  );
+
+  // Always register the custom editor providers
+  context.subscriptions.push(
+    TestCaseEditorProvider.register(
+      context,
+      codiconsCssPath,
+      resultController,
+      checkExpected(client)
+    )
+  );
+  logger.log(`Register "Catala Test case editor"`);
+
+  context.subscriptions.push(
+    TraceEditorProvider.register(context, () => client, codiconsCssPath)
+  );
+  logger.log(`Register "Catala Trace Editor"`);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.openWithTraceEditor',
+      async (arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+        const uri =
+          arg instanceof vscode.Uri
+            ? arg
+            : hasResourceUri(arg)
+              ? arg.resourceUri
+              : vscode.window.activeTextEditor?.document.uri;
+        if (!uri) {
+          return;
+        }
+        await vscode.commands.executeCommand(
+          'vscode.openWith',
+          uri,
+          TraceEditorProvider.viewType
+        );
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('catala.trace.viewWithFilter', () =>
+      TraceEditorProvider.snippetMenuItem('viewWithFilter')
+    ),
+    vscode.commands.registerCommand('catala.trace.addToFilter', () =>
+      TraceEditorProvider.snippetMenuItem('addToFilter')
+    )
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
@@ -320,8 +795,7 @@ export async function activate(
       showExceptionsAtCursor(client)
     )
   );
-
-  // register_memoryFileProvider(context);
+  logger.log(`Register "Catala Exception View"`);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -340,6 +814,7 @@ export async function activate(
 
   // Ensure the logger is disposed when the extension is deactivated
   context.subscriptions.push({ dispose: () => logger.dispose() });
+  logger.log(`Activate Catala extension`);
 }
 
 export function deactivate(): Thenable<void> | undefined {
