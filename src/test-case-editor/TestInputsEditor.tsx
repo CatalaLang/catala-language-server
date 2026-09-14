@@ -7,6 +7,7 @@ import ValueEditor, {
 } from '../editors/ValueEditors';
 import { CompositeEditor, type EditorItem } from '../editors/CompositeEditor';
 import { confirm } from '../messaging/confirm';
+import { Identifier } from '../editors/Identifier';
 
 type InputFieldProps = {
   inputName: string;
@@ -114,7 +115,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
           >
             C
           </span>
-          {inputName}
+          <Identifier name={inputName} />
         </span>
       ) : (
         inputName

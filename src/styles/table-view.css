@@ -72,9 +72,18 @@
   min-width: 120px; /* Ensure content columns don't get compressed */
 }
 
-/* Regular content headers */
-.table-header {
+/* Regular content headers: long names wrap at underscores, two lines max */
+.table-view th.table-header {
   min-width: 150px; /* Give content columns breathing room */
+  white-space: normal;
+}
+
+.table-header-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.2;
 }
 
 .table-header-sub-array {
