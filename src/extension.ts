@@ -99,6 +99,33 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
   }
 }
 
+type Binary = { path: string; version?: string };
+
+type Toolchain = {
+  catalaPath?: Binary;
+  clerkPath?: Binary;
+  catalaFormatPath?: Binary;
+  lspServerPath?: Binary;
+};
+
+// Binary name behind each setting: friendlier to read than the setting key in
+// the confirmation modal.
+const toolchainBinaryNames: Record<keyof Toolchain, string> = {
+  catalaPath: 'catala',
+  clerkPath: 'clerk',
+  catalaFormatPath: 'catala-format',
+  lspServerPath: 'catala-lsp',
+};
+
+function formatToolchain(entries: [string, Binary][]): string {
+  return entries
+    .map(([key, value]) => {
+      const name = toolchainBinaryNames[key as keyof Toolchain] ?? key;
+      return `•  ${name} →  ${value.path}${value.version != undefined ? ` (version ${value.version})` : ''}`;
+    })
+    .join('\n');
+}
+
 let client: LanguageClient;
 
 async function selectScope(with_inputs: boolean): Promise<RunArgs | undefined> {
@@ -378,6 +405,48 @@ export async function activate(
     );
     await Promise.all([client.start(), initTests(context, client)]);
   }
+
+  vscode.commands.registerCommand(
+    'catala.useToolchain',
+    async (toolchain: Toolchain) => {
+      let entries = Object.entries(toolchain);
+      const yes: vscode.MessageItem = { title: vscode.l10n.t('Yes') };
+      // isCloseAffordance makes 'No' replace the Cancel button VSCode adds to
+      // every modal, instead of sitting next to it.
+      const no: vscode.MessageItem = {
+        title: vscode.l10n.t('No'),
+        isCloseAffordance: true,
+      };
+      const answer = await vscode.window.showWarningMessage(
+        vscode.l10n.t('You are about to change Catala user settings'),
+        {
+          modal: true,
+          detail: `${vscode.l10n.t(
+            'The following settings will be updated:'
+          )}\n\n
+            ${formatToolchain(entries)})}`,
+        },
+        yes,
+        no
+      );
+      if (answer !== yes) {
+        return;
+      }
+      const cfg = vscode.workspace.getConfiguration('catala');
+      for (const [key, value] of entries) {
+        await cfg.update(key, value.path);
+      }
+      await vscode.window.showInformationMessage(
+        vscode.l10n.t('Settings changed !'),
+        {
+          modal: true,
+          detail: vscode.l10n.t(
+            'Your settings were changed, reload the window to notice some changes'
+          ),
+        }
+      );
+    }
+  );
 
   const language = vscode.env.language;
 
