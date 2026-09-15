@@ -20,12 +20,15 @@ import {
   getCwd,
   hasResourceUri,
   resolveBinaryPath,
+  spawnStdout,
+  tryBinaryPath,
 } from './shared/util_client';
 import type { RunArgs } from './shared/util_client';
 import { initTests } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
+import path from 'path';
 
 // `icon` are codicon id, the (id without the `codicon-` prefix).
 // `new vscode.ThemeIcon('github')`
@@ -33,7 +36,7 @@ type ItemParam = {
   label: string;
   descr?: string | undefined;
   icon?: vscode.ThemeIcon | undefined;
-  command: vscode.Command;
+  command?: vscode.Command;
 };
 
 class Item extends vscode.TreeItem {
@@ -73,9 +76,11 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
   // and vscode will access the event by using a readonly onDidChangeTreeData (this member has to be named like here, otherwise vscode doesnt update our treeview.
   readonly onDidChangeTreeData?: vscode.Event<Item | undefined> =
     this.m_onDidChangeTreeData.event;
+  private refresher?: () => Promise<Item[]>;
 
-  public constructor(switches: Item[]) {
+  public constructor(switches: Item[], refresher?: () => Promise<Item[]>) {
     this.switches = switches;
+    this.refresher = refresher;
   }
 
   // we need to implement getTreeItem to receive items from our tree view
@@ -95,6 +100,13 @@ export class tree_view implements vscode.TreeDataProvider<Item> {
       return this.switches;
     } else {
       return element.children;
+    }
+  }
+
+  public async refresh(): Promise<void> {
+    if (this.refresher) {
+      this.switches = await this.refresher();
+      this.m_onDidChangeTreeData.fire(undefined);
     }
   }
 }
@@ -124,6 +136,118 @@ function formatToolchain(entries: [string, Binary][]): string {
       return `•  ${name} →  ${value.path}${value.version != undefined ? ` (version ${value.version})` : ''}`;
     })
     .join('\n');
+}
+
+async function opamSwitch(): Promise<string[]> {
+  let ocamlSwitch = await spawnStdout('opam', ['switch', 'list', '-s']);
+  let splitted = ocamlSwitch?.split('\n');
+  return splitted ?? [];
+}
+
+async function createItemSwitch(
+  title: string,
+  singlePath: string
+): Promise<Item | undefined> {
+  const [catala, clerk, catalaFormat, lsp] = await Promise.all([
+    tryBinaryPath(toolchainBinaryNames['catalaPath'], singlePath),
+    tryBinaryPath(toolchainBinaryNames['clerkPath'], singlePath),
+    tryBinaryPath(toolchainBinaryNames['catalaFormatPath'], singlePath),
+    //  opam show catala-lsp --switch=/home/arnaud/catala-pj --field version --raw
+    // We can use this command on opam switch to get the lsp version
+    tryBinaryPath(toolchainBinaryNames['lspServerPath'], singlePath, true),
+  ]);
+
+  const toolchain: Toolchain = {
+    ...(catala && { catalaPath: catala }),
+    ...(clerk && { clerkPath: clerk }),
+    ...(catalaFormat && { catalaFormatPath: catalaFormat }),
+    ...(lsp && { lspServerPath: lsp }),
+  };
+
+  const keys = Object.keys(toolchain);
+  if (keys.length === 0) return undefined;
+
+  let commandUpdateToolchain = (toolchain: Toolchain): vscode.Command => {
+    return {
+      title: 'Update toolchain',
+      command: 'catala.useToolchain',
+      arguments: [toolchain],
+    };
+  };
+
+  let catalaSwitch = new Item({
+    label: title,
+    command: commandUpdateToolchain(toolchain),
+  });
+  for (const [key, value] of Object.entries(toolchain)) {
+    let littleItem = new Item({
+      label: toolchainBinaryNames[key as keyof Toolchain],
+      descr: value.version,
+      command: commandUpdateToolchain({ [key]: value }),
+    });
+    catalaSwitch.add_child(littleItem);
+  }
+  return catalaSwitch;
+}
+
+async function searchSwitches(): Promise<Item[]> {
+  let opamItem: Item = new Item({
+    label: 'Catala switches (OPAM)',
+  });
+
+  let ocamlSwitches = await opamSwitch();
+
+  let opamRoot = await new Promise<string | undefined>((resolve) => {
+    let proc = spawn('opam', ['var', 'root']);
+    let root: string | undefined;
+    proc.stdout.on('data', (data) => {
+      root = data.toString();
+    });
+
+    proc.on('close', (code: number | null) => {
+      if (code != null && code == 0) {
+        resolve(root?.trim());
+      } else {
+        resolve(undefined);
+      }
+    });
+  });
+
+  for (const ocSwitch of ocamlSwitches) {
+    let switchPath: string;
+    if (path.isAbsolute(ocSwitch)) {
+      switchPath = path.join(ocSwitch, '_opam', 'bin');
+    } else if (opamRoot) {
+      switchPath = path.join(opamRoot, ocSwitch, 'bin');
+    } else {
+      continue;
+    }
+    let item = await createItemSwitch(ocSwitch, switchPath);
+    if (item) {
+      opamItem.add_child(item);
+    }
+  }
+
+  let pathItem: Item = new Item({
+    label: 'Catala switches (PATH)',
+  });
+
+  let envPath = process.env.PATH;
+  let currentSwitch = process.env.OPAM_SWITCH_PREFIX;
+  if (envPath) {
+    let paths = envPath.split(':');
+    for (const singlePath of paths) {
+      if (currentSwitch && singlePath.includes(currentSwitch)) continue;
+      let item = await createItemSwitch(singlePath, singlePath);
+      if (item) {
+        pathItem.add_child(item);
+      }
+    }
+  }
+  let items = [];
+  if (opamItem.children.length > 0) items.push(opamItem);
+  if (pathItem.children.length > 0) items.push(pathItem);
+  return items;
 }
 
 let client: LanguageClient;
@@ -446,6 +570,21 @@ export async function activate(
         }
       );
     }
+  );
+
+  // Retrieve multiple catala binary from existing switches
+  // in opam and checking the PATH env variable
+  let items = await searchSwitches();
+
+  let switchTree = new tree_view(items, searchSwitches);
+
+  vscode.commands.registerCommand('catala.refreshSwitches', async () => {
+    await switchTree.refresh();
+  });
+
+  context.subscriptions.push(
+    // note: we need to provide the same name here as we added in the package.json file
+    vscode.window.registerTreeDataProvider('catala.switches', switchTree)
   );
 
   const language = vscode.env.language;

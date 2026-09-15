@@ -5,5 +5,6 @@
   "view.catala.exceptionsView.name": "Arbre de définitions",
   "category.catala": "Catala",
   "customEditor.testCaseEditor.displayName": "Éditeur de cas de test Catala",
-  "view.catala.help.title": "Aides et retours"
+  "view.catala.help.title": "Aides et retours",
+  "view.catala.switches.title": "Catala switches"
 }
