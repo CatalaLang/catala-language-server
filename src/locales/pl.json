@@ -41,6 +41,8 @@
   "type.array": "tablica {baseType}",
   "type.optional": "opcjonalny {baseType}",
   "type.unset": "nieustawiony",
+  "option.absent": "Nieobecny",
+  "option.present": "Obecny",
   "arrayEditor.movePrevious": "Przenieś element na poprzednią pozycję",
   "arrayEditor.moveNext": "Przenieś element na następną pozycję",
   "arrayEditor.deleteElement": "Usuń element",
