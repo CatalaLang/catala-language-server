@@ -5,7 +5,7 @@
   padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid;
   box-sizing: border-box;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   font-size: 13px;
 }
 
@@ -37,7 +37,7 @@
 .value-editor.date-editor-wrapper,
 .value-editor.duration-editor,
 .value-editor.money-editor {
-  max-width: 250px;
+  max-width: var(--field-width);
 }
 
 /* Complex editors (struct, enum, array) get no max-width constraint */
