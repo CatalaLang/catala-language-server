@@ -17,7 +17,7 @@ import { fieldValue, readTraceTest } from './traceUtils';
 import type { AddFilter } from './TraceData';
 import { DataPanel } from './TraceData';
 import TraceTreeView from './TraceTreeView';
-import type { Filter } from '../FilterPin';
+import { FilterPins, type Filter } from '../FilterPin';
 
 type RunState =
   | { status: 'idle' }
@@ -290,6 +290,7 @@ function LayoutSlider({
 function TraceResult({
   filters,
   runState,
+  setFilters,
   cwd,
   test,
 }: {
@@ -303,6 +304,7 @@ function TraceResult({
   const [view, setView] = useState<OutputView>('tree');
   const [expand, setExpand] = useState<boolean | null>(null);
   const [filter, setFilter] = useState<string>('');
+  const addFilter = createAddFilter(setFilters);
 
   switch (runState.status) {
     case 'idle':
@@ -368,8 +370,26 @@ function TraceResult({
                   })}
                   value={filter}
                   onInput={(e) => setFilter(fieldValue(e))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addFilter(filter);
+                      setFilter('');
+                    }
+                  }}
                   style={{ flex: 1 }}
-                ></VscodeTextfield>
+                >
+                  <span
+                    style={{ cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      addFilter(filter);
+                      setFilter('');
+                    }}
+                    className="codicon codicon-save"
+                    slot="content-after"
+                  />
+                </VscodeTextfield>
                 <VscodeButton
                   icon="expand-all"
                   secondary
@@ -387,6 +407,7 @@ function TraceResult({
                   <FormattedMessage id="trace.collapseAll" />
                 </VscodeButton>
               </div>
+              <FilterPins filters={filters} setFilters={setFilters} />
               <TraceTreeView
                 trace={runState.trace}
                 filters={filters}
