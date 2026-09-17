@@ -23,6 +23,7 @@ import {
   stepIndexMap,
 } from './traceUtils';
 import { FormattedMessage, useIntl, type IntlShape } from 'react-intl';
+import type { Filter } from '../FilterPin';
 
 type Match = 'match' | 'mismatch' | undefined;
 
@@ -274,9 +275,9 @@ function asCodeLocation(v: JsonValue | undefined): CodeLocation | undefined {
 
 function filterMatches(
   el: TraceElement,
-  filter: string,
+  filters: Filter[],
   intl: IntlShape
-): boolean {
+): [Filter[], boolean] {
   const { label, detail } = describe(el.element, intl);
   const value =
     el.value !== undefined ? formatTraceValue(el.value, intl) : undefined;
@@ -289,19 +290,39 @@ function filterMatches(
   ]
     .join(' ')
     .toLowerCase();
-  return text.includes(filter);
+  let remaining_filters = [];
+  let exclusion = false;
+  for (let filter of filters) {
+    if (text.includes(filter.filter) && filter.option == 'include') {
+      continue;
+    } else if (filter.option == 'ignore') {
+      continue;
+    } else if (text.includes(filter.filter) && filter.option == 'exclude') {
+      exclusion = true;
+    } else {
+      remaining_filters.push(filter);
+    }
+  }
+  return [remaining_filters, exclusion];
 }
 
 function subtreeMatches(
   el: TraceElement,
-  filter: string,
+  filters: Filter[],
   intl: IntlShape
 ): boolean {
-  if (filterMatches(el, filter, intl)) {
+  let [remaining_filters, forbidden] = filterMatches(el, filters, intl);
+  if (forbidden) {
+    return false;
+  }
+  // If the only remaining filters are exclude type and that there are no more
+  // children, filter matches
+  let without_exclude = remaining_filters.filter((f) => f.option != 'exclude');
+  const children = Array.isArray(el.trace) ? el.trace : [];
+  if (without_exclude.length == 0 && children.length == 0) {
     return true;
   }
-  const children = Array.isArray(el.trace) ? el.trace : [];
-  return children.some((c) => subtreeMatches(c, filter, intl));
+  return children.some((c) => subtreeMatches(c, remaining_filters, intl));
 }
 
 function indexedSegment(
@@ -375,13 +396,13 @@ function subtreeHasMismatch(
 
 export default function TraceTreeView({
   trace,
-  filter,
+  filters,
   cwd,
   expand,
   test,
 }: {
   trace: TraceElement[];
-  filter?: string;
+  filters?: Filter[];
   cwd?: string;
   expand?: boolean | null;
   test?: TraceTest;
@@ -409,7 +430,14 @@ export default function TraceTreeView({
     );
   }
 
-  const f = (filter ?? '').trim().toLowerCase();
+  const f = (filters ?? [])
+    .map((filter) => {
+      return {
+        filter: filter.filter.trim().toLowerCase(),
+        option: filter.option,
+      };
+    })
+    .filter((filter) => filter.filter.length > 0);
   const anyVisible = f ? roots.some((el) => subtreeMatches(el, f, intl)) : true;
   if (!anyVisible) {
     return (
@@ -449,7 +477,7 @@ export default function TraceTreeView({
                   key={i}
                   te={el}
                   depth={0}
-                  filter={f}
+                  filters={f}
                   prefix=""
                   tested_scope={testedScope}
                 />
@@ -465,13 +493,13 @@ export default function TraceTreeView({
 function TraceNode({
   te,
   depth,
-  filter,
+  filters,
   prefix,
   tested_scope,
 }: {
   te: TraceElement;
   depth: number;
-  filter: string;
+  filters: Filter[];
   prefix: string;
   tested_scope?: string;
 }): ReactElement | null {
@@ -479,7 +507,10 @@ function TraceNode({
   const [showCode, setShowCode] = useState(false);
   if (te.element.kind === 'exception' && depth === 1) return null;
 
-  const filtering = filter.length > 0;
+  const filtering = filters.length > 0;
+  // `filters` is a fresh array on every render, so it cannot be used as an
+  // effect dependency: the effect below would re-run each time
+  const filterKey = filters.map((f) => `${f.option}:${f.filter}`).join('\n');
   const expected = useContext(ExpectedContext);
   const stepIndices = useContext(IndexContext);
   const intl = useIntl();
@@ -528,8 +559,10 @@ function TraceNode({
         : depth < 1;
   const [expanded, setExpanded] = useState(defaultExpanded);
   useEffect(() => {
-    setExpanded(filtering ? true : defaultExpanded);
-  }, [filter, defaultExpanded, filtering]);
+    setExpanded(
+      filters.some((f) => f.option == 'include') ? true : defaultExpanded
+    );
+  }, [filterKey, defaultExpanded, filtering]);
 
   const expandCmd = useContext(ExpandContext);
   useEffect(() => {
@@ -565,12 +598,10 @@ function TraceNode({
 
   const open = expanded;
 
-  if (filtering && !subtreeMatches(node, filter, intl)) {
+  if (filtering && !subtreeMatches(node, filters, intl)) {
     return null;
   }
-  const childFilter =
-    filtering && !filterMatches(node, filter, intl) ? filter : '';
-
+  const [childFilters] = filtering ? filterMatches(node, filters, intl) : [[]];
   let matchBackground: string | undefined;
   if (
     expected &&
@@ -697,7 +728,7 @@ function TraceNode({
                   key={i}
                   te={c}
                   depth={depth + 1}
-                  filter={childFilter}
+                  filters={childFilters}
                   prefix={childPrefix}
                   tested_scope={testedScope}
                 />
