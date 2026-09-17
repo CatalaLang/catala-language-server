@@ -3,7 +3,7 @@
   position: relative;
   border: 1px solid var(--vscode-editorError-foreground, #f14c4c);
   padding: 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   min-width: 0; /* Allow flex shrinking so nested table editors can scroll */
 }
 
@@ -37,7 +37,7 @@
   font-weight: bold;
   padding: 8px;
   margin: 4px 0;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   position: relative;
 }
 
@@ -67,7 +67,7 @@
 .phantom-actual-value {
   margin-top: 8px;
   border: 1px solid var(--vscode-editorWarning-foreground, #d19a66);
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 

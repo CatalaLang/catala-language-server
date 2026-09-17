@@ -48,6 +48,23 @@
   /* table cells */
   --cell-pad: var(--spacing4) var(--spacing8);
 
+  /* Widths shared across components */
+  /* scalar field: grid column, primitive editor, table column */
+  --field-width: 250px;
+  --field-width-min: 150px;
+  /* array element card */
+  --card-width-min: 200px;
+  --card-width-max: 300px;
+  /* table row-controls column: number + label/buttons (+ parent link) */
+  --table-index-width: 60px;
+  --table-controls-width: 180px;
+  --table-parent-width: 80px;
+
+  /* Radii */
+  --radius-control: 2px;
+  --radius-card: 4px;
+  --radius-pill: 12px;
+
   /* Custom Catala Colors */
   --background-color-lvl-1: var(--stormgray50);
   --background-color-lvl-2: var(--stormgray00);
@@ -140,7 +157,7 @@ input {
 .button-action-dvp {
   padding: var(--spacing4) var(--spacing12) var(--spacing4) var(--spacing12);
   border: 1px solid;
-  border-radius: var(--spacing12);
+  border-radius: var(--radius-pill);
 }
 
 /* Color theming */

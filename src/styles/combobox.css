@@ -62,7 +62,7 @@
   list-style: none;
   overflow-y: auto;
   border: 1px solid var(--vscode-input-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(
     --vscode-dropdown-background,
     var(--vscode-input-background, #fff)

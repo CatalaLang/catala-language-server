@@ -9,7 +9,10 @@
    auto-fill sizes columns by the max; the min only matters when narrower. */
 .simple-items-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 250px));
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--field-width-min), var(--field-width))
+  );
   justify-content: start;
   align-items: start;
   gap: var(--field-gap);
