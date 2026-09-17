@@ -121,6 +121,10 @@
         "category": "catala",
         "title": "Refresh Switches",
         "icon": "$(sync-compact)"
+      },
+      {
+        "command": "catala.trace.addToFilter",
+        "title": "%command.catala.trace.addToFilter.title%"
       }
     ],
     "menus": {
@@ -131,6 +135,10 @@
         },
         {
           "command": "catala.refreshSwitches",
+          "when": "false"
+        },
+        {
+          "command": "catala.trace.addToFilter",
           "when": "false"
         }
       ],
@@ -180,6 +188,12 @@
           "command": "catala.openWithTraceEditor",
           "when": "editorLangId == catala_fr || editorLangId == catala_en",
           "group": "navigation@13"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "catala.trace.addToFilter",
+          "when": "webviewSection == 'tracePanelSelection'"
         }
       ]
     },

@@ -11,6 +11,7 @@ import type { JsonValue } from '../shared/util_client';
 import { getVsCodeApi } from '../shared/webviewApi';
 import type { TraceUpMessage } from './messages';
 import { CwdContext, LocationSnippet, resolvePath } from './LocationSnippet';
+import { isSelectingText } from './traceMenu';
 import type { CodeLocation, TraceElement, TraceKind } from './traceUtils';
 import {
   type TraceValue,
@@ -649,7 +650,9 @@ function TraceNode({
           cursor: expandable ? 'pointer' : 'default',
           background: matchBackground,
         }}
-        onClick={() => expandable && setExpanded((e) => !e)}
+        onClick={() =>
+          expandable && !isSelectingText() && setExpanded((e) => !e)
+        }
       >
         {expandable ? (
           <span

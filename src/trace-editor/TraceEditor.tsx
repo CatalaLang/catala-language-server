@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type { WebviewApi } from 'vscode-webview';
 import {
@@ -14,10 +14,11 @@ import { setVsCodeApi } from '../shared/webviewApi';
 import type { TraceDownMessage, TraceUpMessage } from './messages';
 import type { TraceElement, TraceTest } from './traceUtils';
 import { fieldValue, readTraceTest } from './traceUtils';
-import type { AddFilter } from './TraceData';
+import type { AddFilter } from './traceMenu';
 import { DataPanel } from './TraceData';
 import TraceTreeView from './TraceTreeView';
 import { FilterPins, type Filter } from '../FilterPin';
+import { useTraceMenu } from './traceMenu';
 
 type RunState =
   | { status: 'idle' }
@@ -306,6 +307,8 @@ function TraceResult({
   const [filter, setFilter] = useState<string>('');
   const addFilter = createAddFilter(setFilters);
 
+  const menuProps = useTraceMenu(useMemo(() => ({ addFilter }), [addFilter]));
+
   switch (runState.status) {
     case 'idle':
       return null;
@@ -326,7 +329,7 @@ function TraceResult({
       );
     case 'success':
       return (
-        <div>
+        <div {...menuProps}>
           <div
             style={{
               display: 'flex',

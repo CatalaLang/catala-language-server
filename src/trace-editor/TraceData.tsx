@@ -22,6 +22,7 @@ import {
   variablePath,
   variableSegment,
 } from './traceUtils';
+import type { AddFilter } from './traceMenu';
 
 const ExpandContext = createContext<ExpandCommand | null>(null);
 
@@ -280,8 +281,6 @@ function typeIcon(kind?: string): string {
 }
 
 // -- Components ----------------------------------------------------------------
-
-export type AddFilter = (filter: string) => void;
 
 export function DataPanel({
   test,

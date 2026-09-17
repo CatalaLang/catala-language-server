@@ -68,6 +68,14 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
     }
   >();
 
+  private static activePanel: vscode.WebviewPanel | undefined;
+
+  public static snippetMenuItem(kind: 'addToFilter'): void {
+    void TraceEditorProvider.activePanel?.webview.postMessage({
+      kind,
+    } satisfies TraceDownMessage);
+  }
+
   public static openWith(
     uri: vscode.Uri,
     inputs: TraceEditorInputs
@@ -258,9 +266,20 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
       panel: webviewPanel,
       sendInit,
     });
+    if (webviewPanel.active) {
+      TraceEditorProvider.activePanel = webviewPanel;
+    }
+    webviewPanel.onDidChangeViewState(() => {
+      if (webviewPanel.active) {
+        TraceEditorProvider.activePanel = webviewPanel;
+      }
+    });
     webviewPanel.onDidDispose(() => {
       if (TraceEditorProvider.openEditors.get(file)?.panel === webviewPanel) {
         TraceEditorProvider.openEditors.delete(file);
+      }
+      if (TraceEditorProvider.activePanel === webviewPanel) {
+        TraceEditorProvider.activePanel = undefined;
       }
     });
   }
