@@ -18,6 +18,7 @@ import { assertUnreachable } from './shared/util';
 import { setVsCodeApi } from './shared/webviewApi';
 import type { Filter } from './FilterPin';
 import { FilterPins } from './FilterPin';
+import { HighlightText } from './shared/Highlight';
 
 type TestGridArg = {
   vscode: WebviewApi<unknown>;
@@ -25,6 +26,7 @@ type TestGridArg = {
   grid: boolean;
   filterScope: string[];
   onRun: (id: number) => void;
+  filters: Filter[];
 };
 
 type GeneralTestsArg = {
@@ -42,6 +44,7 @@ type TestMacro = TestDebugger & TestState;
 type TestItemArg = {
   vscode: WebviewApi<unknown>;
   test: TestMacro;
+  filters: Filter[];
   onRun: (id: number) => void;
 };
 /**
@@ -272,7 +275,7 @@ function OpenTextEditor({
  * mostly items with css to render them poperly
  *
  */
-function TestItem({ vscode, test, onRun }: TestItemArg): ReactElement {
+function TestItem({ vscode, test, filters, onRun }: TestItemArg): ReactElement {
   const intl = useIntl();
   return (
     <Box className="test-item">
@@ -284,7 +287,7 @@ function TestItem({ vscode, test, onRun }: TestItemArg): ReactElement {
             defaultMessage: 'Titre',
           })}
         >
-          {testTitle(test)}
+          <HighlightText filters={filters} text={testTitle(test)} />
         </b>
         <span
           className="test-number"
@@ -307,7 +310,7 @@ function TestItem({ vscode, test, onRun }: TestItemArg): ReactElement {
           defaultMessage: 'Description',
         })}
       >
-        {testDescription(test)}
+        <HighlightText filters={filters} text={testDescription(test)} />
       </span>
       <SeparationLine />
       <div className="footer">
@@ -357,6 +360,7 @@ function isOverflowActive(event: HTMLSpanElement): boolean {
 function TestLine({
   vscode,
   test,
+  filters,
   onRun,
 }: TestItemArg & { expected: string[] }): ReactElement {
   // This textRef is used on the description span, it will be set when
@@ -396,10 +400,14 @@ function TestLine({
   return (
     <tr>
       <th className="path-column">
-        <TestPath vscode={vscode} test={test} />
+        <TestPath vscode={vscode} test={test} filters={filters} />
       </th>
-      <td>{testTitle(test)}</td>
-      <td>{testingScope(test)}</td>
+      <td>
+        <HighlightText filters={filters} text={testDescription(test)} />
+      </td>
+      <td>
+        <HighlightText filters={filters} text={testingScope(test)} />
+      </td>
       <td
         className={overflowActive ? `descr-column` : ''}
         onClick={(event) => {
@@ -416,7 +424,7 @@ function TestLine({
           ref={textRef}
           className={`test-descr ${expanded ? 'text' : 'test-descr-hidden'}`}
         >
-          {description}
+          <HighlightText filters={filters} text={description} />
         </span>
         {overflowActive && (
           <span
@@ -584,9 +592,11 @@ function matchFilter(
 function TestPath({
   vscode,
   test,
+  filters,
 }: {
   vscode: WebviewApi<unknown>;
   test: TestMacro;
+  filters: Filter[];
 }): ReactElement {
   const displayed = test.relative_filename ?? test.filename;
   // `+ 1` keeps the separator on the directory side, and yields 0 (hence an
@@ -615,9 +625,11 @@ function TestPath({
       }}
     >
       {directory == '' ? null : (
-        <span className="test-path-directory">{directory}</span>
+        <span className="test-path-directory">
+          <HighlightText filters={filters} text={directory} />
+        </span>
       )}
-      {name}
+      <HighlightText filters={filters} text={name} />
     </a>
   );
 }
@@ -627,6 +639,7 @@ type CardGridArg = {
   filteredScope: string[];
   tests: TestMacro[];
   onRun: (id: number) => void;
+  filters: Filter[];
 };
 
 function CardGrid({
@@ -634,6 +647,7 @@ function CardGrid({
   tests,
   filteredScope,
   onRun,
+  filters,
 }: CardGridArg): ReactElement {
   let gridTests = new Map<string, TestMacro[]>();
   if (filteredScope.length != 0) {
@@ -662,7 +676,12 @@ function CardGrid({
               {tests.map((elt, index) => (
                 <Grid key={index} size={1}>
                   <div style={{ fontSize: '8px', height: '100%' }}>
-                    <TestItem vscode={vscode} test={elt} onRun={onRun} />
+                    <TestItem
+                      vscode={vscode}
+                      test={elt}
+                      onRun={onRun}
+                      filters={filters}
+                    />
                   </div>
                 </Grid>
               ))}
@@ -677,7 +696,12 @@ function CardGrid({
         {tests.map((elt, index) => (
           <Grid key={index} size={1}>
             <div style={{ fontSize: '8px', height: '100%' }}>
-              <TestItem vscode={vscode} test={elt} onRun={onRun} />
+              <TestItem
+                vscode={vscode}
+                test={elt}
+                onRun={onRun}
+                filters={filters}
+              />
             </div>
           </Grid>
         ))}
@@ -695,6 +719,7 @@ function TestList({
   onRun,
   tests,
   filteredScope,
+  filters,
 }: CardGridArg): ReactElement {
   let map = new Map<string, TestMacro[]>();
   let not_gui: TestMacro[] = [];
@@ -744,6 +769,7 @@ function TestList({
                     test={test}
                     onRun={onRun}
                     expected={[]}
+                    filters={filters}
                   />
                 ))}
               </tbody>
@@ -765,6 +791,7 @@ function TestList({
                     test={test}
                     onRun={onRun}
                     expected={[]}
+                    filters={filters}
                   />
                 );
               })}
@@ -781,6 +808,7 @@ function TestsGrid({
   filtered,
   grid,
   filterScope,
+  filters,
   onRun,
 }: TestGridArg): ReactElement {
   if (filtered == undefined || filtered.length == 0) {
@@ -809,6 +837,7 @@ function TestsGrid({
       vscode={vscode}
       tests={filtered}
       onRun={onRun}
+      filters={filters}
     />
   ) : (
     <TestList
@@ -816,6 +845,7 @@ function TestsGrid({
       vscode={vscode}
       tests={filtered}
       onRun={onRun}
+      filters={filters}
     />
   );
 }
@@ -1296,6 +1326,7 @@ export default function GeneralTests({
           grid={grid}
           filterScope={filterScope}
           onRun={onRun}
+          filters={filters}
         />
       )}
     </div>

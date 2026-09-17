@@ -25,6 +25,7 @@ import {
 } from './traceUtils';
 import { FormattedMessage, useIntl, type IntlShape } from 'react-intl';
 import type { Filter } from '../FilterPin';
+import { HighlightText } from '../shared/Highlight';
 
 type Match = 'match' | 'mismatch' | undefined;
 
@@ -199,22 +200,25 @@ function isSingleLine(pos?: CodeLocation): pos is CodeLocation {
 
 function formatPos(
   pos: CodeLocation | undefined,
+  filters: Filter[],
   inline = false
 ): ReactElement | null {
   const text = posText(pos);
   if (!pos || !text) {
     return null;
   }
-  return <PosLink pos={pos} text={text} inline={inline} />;
+  return <PosLink pos={pos} text={text} inline={inline} filters={filters} />;
 }
 
 function PosLink({
   pos,
   text,
+  filters,
   inline = false,
 }: {
   pos: CodeLocation;
   text: string;
+  filters: Filter[];
   inline?: boolean;
 }): ReactElement {
   const cwd = useContext(CwdContext);
@@ -235,7 +239,7 @@ function PosLink({
       title={intl.formatMessage({ id: 'trace.openLocation' }, { target: text })}
       style={inline ? posLinkInlineStyle : posLinkStyle}
     >
-      {text}
+      <HighlightText filters={filters} text={text} />
     </a>
   );
 }
@@ -666,12 +670,14 @@ function TraceNode({
           {described.symbol}
         </span>
         <span style={{ ...labelStyle, color: accentColor }}>
-          {described.label}
+          <HighlightText filters={filters} text={described.label} />
         </span>
         {described.detail && (
-          <span style={detailStyle}>{described.detail}</span>
+          <span style={detailStyle}>
+            <HighlightText filters={filters} text={described.detail} />
+          </span>
         )}
-        <ValueView te={te} described={described} />
+        <ValueView te={te} described={described} filters={filters} />
         {(containerValue !== undefined || snippetPos) && (
           <span style={pillsStyle}>
             {containerValue !== undefined && (
@@ -720,7 +726,7 @@ function TraceNode({
                 <FormattedMessage id="trace.relatedLocations" />
               </span>
               {related.map((r, i) => (
-                <span key={i}>{formatPos(r, true)}</span>
+                <span key={i}>{formatPos(r, filters, true)}</span>
               ))}
             </div>
           )}
@@ -747,9 +753,11 @@ function TraceNode({
 function ValueView({
   te,
   described,
+  filters,
 }: {
   te: TraceElement;
   described: Described;
+  filters: Filter[];
 }): ReactElement | null {
   const intl = useIntl();
   if (te.element.kind === 'exception') {
@@ -775,7 +783,11 @@ function ValueView({
   if (te.value.kind === 'absent') {
     return (
       <span style={valueStyle}>
-        = {intl.formatMessage({ id: 'trace.absent' })}
+        ={' '}
+        <HighlightText
+          filters={filters}
+          text={intl.formatMessage({ id: 'trace.absent' })}
+        />
       </span>
     );
   }
@@ -783,7 +795,11 @@ function ValueView({
   if (fv === undefined) {
     return null;
   }
-  return <span style={valueStyle}>= {fv}</span>;
+  return (
+    <span style={valueStyle}>
+      = <HighlightText filters={filters} text={fv} />
+    </span>
+  );
 }
 
 // -- Styles -------------------------------------------------------------------
