@@ -7,10 +7,7 @@ export type Filter = {
   option: 'include' | 'ignore' | 'exclude';
 };
 
-// To Remove: ByPass the @typescript-eslint/no-unused-vars
-FilterPins;
-
-function FilterPins({
+export function FilterPins({
   filters,
   setFilters,
 }: {
