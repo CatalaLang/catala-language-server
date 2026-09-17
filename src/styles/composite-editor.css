@@ -4,17 +4,28 @@
   gap: var(--field-gap);
 }
 
+/* Grid + subgrid: the container owns the column widths and each row's
+   label/control tracks, so a wrapped label never shifts its own control.
+   auto-fill sizes columns by the max; the min only matters when narrower. */
 .simple-items-container {
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 250px));
+  justify-content: start;
+  align-items: start;
   gap: var(--field-gap);
 }
 
 .simple-item {
   box-sizing: border-box;
-  min-width: 150px;
-  /* Cap so a long label wraps instead of stretching the card */
-  max-width: 250px;
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 2;
+  /* label to control */
+  row-gap: var(--label-gap);
+}
+
+.simple-item > .item-label {
+  margin-bottom: 0;
 }
 
 .simple-items-vertical {
