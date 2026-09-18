@@ -1,0 +1,12 @@
+> Module Lists
+
+```catala-metadata
+declaration scope Sum:
+  input xs content list of money
+  output total content money
+```
+
+```catala
+scope Sum:
+  definition total equals $0.00
+```

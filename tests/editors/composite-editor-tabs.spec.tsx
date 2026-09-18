@@ -8,7 +8,7 @@ import {
   type EditorItem,
 } from '../../src/editors/CompositeEditor';
 import ValueEditor from '../../src/editors/ValueEditors';
-import { renderEditor, arrayVal, intVal, structVal } from './test-helpers';
+import { renderEditor, arrayVal, intVal, rv, structVal } from './test-helpers';
 import enMessages from '../../src/locales/en.json';
 
 function arrayItem(key: string, count?: number): EditorItem {
@@ -53,8 +53,10 @@ describe('CompositeEditor tab labels', () => {
         />
       </IntlProvider>
     );
-    expect(screen.getByText('children (3)')).toBeInTheDocument();
-    expect(screen.getByText('pets (1)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 3' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'pets 1' })).toBeInTheDocument();
   });
 
   it('shows plain label when count is undefined', () => {
@@ -65,8 +67,10 @@ describe('CompositeEditor tab labels', () => {
         />
       </IntlProvider>
     );
-    expect(screen.getByText('children')).toBeInTheDocument();
-    expect(screen.getByText('pets (5)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'pets 5' })).toBeInTheDocument();
   });
 
   it('shows zero count', () => {
@@ -77,20 +81,26 @@ describe('CompositeEditor tab labels', () => {
         />
       </IntlProvider>
     );
-    expect(screen.getByText('children (0)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 0' })
+    ).toBeInTheDocument();
   });
 });
 
 describe('StructEditor tab count from value', () => {
   it('shows correct counts for each array field', () => {
     renderEditor(personTyp, vi.fn(), { value: mkPersonValue(3, 1) });
-    expect(screen.getByText('children (3)')).toBeInTheDocument();
-    expect(screen.getByText('pets (1)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 3' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'pets 1' })).toBeInTheDocument();
   });
 
   it('shows zero count for empty arrays', () => {
     renderEditor(personTyp, vi.fn(), { value: mkPersonValue(0, 1) });
-    expect(screen.getByText('children (0)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 0' })
+    ).toBeInTheDocument();
   });
 
   it('count updates when re-rendered with a new value', () => {
@@ -106,7 +116,9 @@ describe('StructEditor tab count from value', () => {
       </IntlProvider>
     );
 
-    expect(screen.getByText('children (2)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 2' })
+    ).toBeInTheDocument();
 
     rerender(
       <IntlProvider locale="en" messages={enMessages}>
@@ -119,6 +131,63 @@ describe('StructEditor tab count from value', () => {
       </IntlProvider>
     );
 
-    expect(screen.getByText('children (4)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'children 4' })
+    ).toBeInTheDocument();
+  });
+});
+
+describe('Unfilled badges', () => {
+  it('shows how many values are left to fill in a tab', () => {
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <CompositeEditor
+          items={[
+            { ...arrayItem('children', 2), unfilled: 2 },
+            { ...arrayItem('pets', 1), unfilled: 0 },
+          ]}
+        />
+      </IntlProvider>
+    );
+    const badges = document.querySelectorAll('.count-badge-unfilled');
+    expect(badges.length).toBe(1);
+    expect(badges[0]).toHaveAttribute('title', '2 items, 2 values to fill');
+    expect(badges[0].textContent).toBe('2·2');
+  });
+
+  it('counts unset elements inside an inactive tab from the value', () => {
+    const value = structVal(
+      personDecl,
+      new Map([
+        ['children', arrayVal([intVal(1), intVal(2)])],
+        ['pets', arrayVal([rv({ kind: 'Unset' }), intVal(3)])],
+      ])
+    );
+    renderEditor(personTyp, vi.fn(), { value });
+    const badge = document.querySelector('.count-badge-unfilled');
+    expect(badge?.textContent).toBe('2·1');
+  });
+});
+
+describe('Tab labels keep their decorations', () => {
+  it('renders the item label, not just its key, next to the count', () => {
+    const decorated: EditorItem = {
+      ...arrayItem('children', 2),
+      label: (
+        <>
+          children
+          <span data-testid="mark" />
+        </>
+      ),
+    };
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <CompositeEditor items={[decorated, arrayItem('pets', 1)]} />
+      </IntlProvider>
+    );
+    expect(screen.getByTestId('mark').closest('.tab')).not.toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'children 2' })
+    ).toBeInTheDocument();
   });
 });

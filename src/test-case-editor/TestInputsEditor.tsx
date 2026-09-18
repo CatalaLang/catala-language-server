@@ -1,11 +1,17 @@
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, type ReactNode, useState } from 'react';
 import { useIntl } from 'react-intl';
-import type { TestInputs, TestIo, ScopeDef } from '../generated/catala_types';
+import type {
+  PathSegment,
+  TestInputs,
+  TestIo,
+  ScopeDef,
+} from '../generated/catala_types';
 import ValueEditor, {
   getDefaultValue,
   createRuntimeValue,
 } from '../editors/ValueEditors';
 import { CompositeEditor, type EditorItem } from '../editors/CompositeEditor';
+import { countUnsetIn } from '../editors/unsetValidation';
 import { confirm } from '../messaging/confirm';
 import { Identifier } from '../editors/Identifier';
 
@@ -13,14 +19,18 @@ type InputFieldProps = {
   inputName: string;
   testIo: TestIo;
   isContext: boolean;
+  readOnly?: boolean;
   onTestInputChange(newValue: TestIo): void;
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
 };
 
 function InputField({
   inputName,
   testIo,
   isContext,
+  readOnly,
   onTestInputChange,
+  editorHook,
 }: InputFieldProps): ReactElement {
   const intl = useIntl();
   // false iff the context var is NotOverridden (using scope-computed default)
@@ -58,9 +68,11 @@ function InputField({
         <span className="context-var-default-text">
           {intl.formatMessage({ id: 'testEditor.usingComputedDefault' })}
         </span>
-        <button className="button-action-dvp body-b3" onClick={startOverride}>
-          {intl.formatMessage({ id: 'testEditor.override' })}
-        </button>
+        {!readOnly && (
+          <button className="button-action-dvp body-b3" onClick={startOverride}>
+            {intl.formatMessage({ id: 'testEditor.override' })}
+          </button>
+        )}
       </div>
     );
   }
@@ -70,10 +82,12 @@ function InputField({
       <ValueEditor
         testIO={testIo}
         onValueChange={onTestInputChange}
+        editable={!readOnly}
+        editorHook={editorHook}
         currentPath={[{ kind: 'StructField', value: inputName }]}
         diffs={[]}
       />
-      {isContext && (
+      {isContext && !readOnly && (
         <button
           className="context-var-reset-btn"
           onClick={resetToDefault}
@@ -90,6 +104,11 @@ type Props = {
   test_inputs: TestInputs;
   tested_scope: ScopeDef;
   onTestInputsChange(newValue: TestInputs): void;
+  readOnly?: boolean;
+  /** Rendered next to an input's name (the recovery view's carry marks). */
+  labelExtra?: (inputName: string) => ReactNode;
+  /** Decorates any nested editor by path, as the diff highlighter does. */
+  editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
 };
 
 export default function TestInputsEditor(props: Props): ReactElement {
@@ -106,19 +125,23 @@ export default function TestInputsEditor(props: Props): ReactElement {
         );
       }
 
-      const label = isContext ? (
-        <span className="context-var-label">
-          <span
-            className="context-var-badge"
-            title={intl.formatMessage({ id: 'testEditor.contextVarTitle' })}
-            aria-hidden="true"
-          >
-            C
-          </span>
-          <Identifier name={inputName} />
-        </span>
-      ) : (
-        inputName
+      const label = (
+        <>
+          {isContext ? (
+            <span className="context-var-label">
+              <span
+                className="context-var-badge"
+                title={intl.formatMessage({ id: 'testEditor.contextVarTitle' })}
+                aria-hidden="true"
+              >
+                C
+              </span>
+              <Identifier name={inputName} />
+            </span>
+          ) : (
+            <Identifier name={inputName} />
+          )}
+        </>
       );
 
       const rawValue = testIo.value?.value.value;
@@ -130,14 +153,20 @@ export default function TestInputsEditor(props: Props): ReactElement {
       return {
         key: inputName,
         label,
+        mark: props.labelExtra?.(inputName),
         type: testIo.typ,
         count,
+        unfilled: props.readOnly
+          ? 0
+          : countUnsetIn(testIo.value?.value, testIo.typ),
         editor: (
           <InputField
             inputName={inputName}
             testIo={testIo}
             isContext={isContext}
+            readOnly={props.readOnly}
             onTestInputChange={onTestInputChange}
+            editorHook={props.editorHook}
           />
         ),
       };
@@ -146,7 +175,11 @@ export default function TestInputsEditor(props: Props): ReactElement {
 
   return (
     <div className="test-inputs data-card">
-      <CompositeEditor items={editorItems} atomicElements={true} />
+      <CompositeEditor
+        items={editorItems}
+        atomicElements={true}
+        currentPath={[]}
+      />
     </div>
   );
 }

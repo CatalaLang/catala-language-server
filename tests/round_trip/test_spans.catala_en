@@ -1,0 +1,16 @@
+> Using Spans
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "A span of more than one unit"]
+declaration scope Span_multi:
+  output s scope Spans.Span
+```
+
+```catala
+scope Span_multi:
+  definition s.len equals 1 year + 2 month + 3 day
+  assertion (s.ok = true)
+```

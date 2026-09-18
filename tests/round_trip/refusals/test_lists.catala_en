@@ -1,0 +1,16 @@
+> Using Lists
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Mixed list"]
+declaration scope Sum_mixed:
+  output calc scope Lists.Sum
+```
+
+```catala
+scope Sum_mixed:
+  definition calc.xs equals [ $1.00; |2020-01-01| ]
+  assertion (calc.total = $0.00)
+```

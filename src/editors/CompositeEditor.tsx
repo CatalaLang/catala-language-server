@@ -1,6 +1,14 @@
-import { useState, type ReactElement, type ReactNode } from 'react';
-import type { Typ } from '../generated/catala_types';
-import { Identifier, wrapIdentifier } from './Identifier';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import type { PathSegment, Typ } from '../generated/catala_types';
+import { wrapIdentifier } from './Identifier';
+import { pathStartsWith, useReveal } from './reveal';
+import { CountBadge } from './badges';
 
 /**
  * Base for StructEditor and TestInputsEditor. Renders label/editor pairs with
@@ -14,11 +22,17 @@ export type EditorItem = {
   type: Typ;
   editor: ReactElement;
   count?: number;
+  unfilled?: number;
+  /** A decoration next to the label, e.g. a carry mark. On a tab header a
+   *  non-zero [unfilled] count stands in for it. */
+  mark?: ReactNode;
 };
 
 type CompositeEditorProps = {
   items: EditorItem[];
   atomicElements?: boolean;
+  /** Where these items live; lets a reveal request open the right tab. */
+  currentPath?: PathSegment[];
 };
 
 // True if the type needs full-width rendering (not suitable for compact wrap).
@@ -41,15 +55,17 @@ function categorize(item: EditorItem): 'scalar' | 'structural' | 'array' {
   return 'scalar';
 }
 
-function getTabDisplayName(item: EditorItem): ReactNode {
-  if (item.count !== undefined) {
-    return (
-      <>
-        <Identifier name={item.key} /> ({item.count})
-      </>
-    );
-  }
-  return wrapIdentifier(item.label);
+function TabHeader({ item }: { item: EditorItem }): ReactElement {
+  const unfilled = item.unfilled ?? 0;
+  return (
+    <>
+      <span className="tab-name">{wrapIdentifier(item.label)}</span>{' '}
+      <span className="tab-meta">
+        <CountBadge items={item.count} unfilled={unfilled} />
+        {unfilled === 0 && item.mark}
+      </span>
+    </>
+  );
 }
 
 export function CompositeEditor(props: CompositeEditorProps): ReactElement {
@@ -65,6 +81,25 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
     arrayItems.length > 0 ? arrayItems[0].key : ''
   );
 
+  const reveal = useReveal();
+  const revealed = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      reveal === undefined ||
+      reveal.nonce === revealed.current ||
+      props.currentPath === undefined ||
+      !pathStartsWith(reveal.path, props.currentPath)
+    )
+      return;
+    revealed.current = reveal.nonce;
+    const next = reveal.path[props.currentPath.length];
+    if (
+      next?.kind === 'StructField' &&
+      arrayItems.some((i) => i.key === next.value)
+    )
+      setActiveTab(next.value);
+  }, [reveal, props.currentPath, arrayItems]);
+
   return (
     <div className="composite-editor">
       {scalarItems.length > 0 && !hasNonScalar && (
@@ -76,6 +111,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
             >
               <label className="item-label body-1">
                 {wrapIdentifier(item.label)}
+                {item.mark}
               </label>
               {item.editor}
             </div>
@@ -92,6 +128,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
             >
               <label className="item-label body-1">
                 {wrapIdentifier(item.label)}
+                {item.mark}
               </label>
               {item.editor}
             </div>
@@ -103,6 +140,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
         <div key={item.key} className="structural-item">
           <label className="item-label body-1">
             {wrapIdentifier(item.label)}
+            {item.mark}
           </label>
           {item.editor}
         </div>
@@ -117,7 +155,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
                 className={`tab ${activeTab === item.key ? 'active' : ''}`}
                 onClick={() => setActiveTab(item.key)}
               >
-                {getTabDisplayName(item)}
+                <TabHeader item={item} />
               </button>
             ))}
           </div>
@@ -138,6 +176,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
         <div className="structural-item">
           <label className="item-label body-1">
             {wrapIdentifier(arrayItems[0].label)}
+            {arrayItems[0].mark}
           </label>
           {arrayItems[0].editor}
         </div>

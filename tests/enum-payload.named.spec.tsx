@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { IntlProvider } from 'react-intl';
 import enMessages from '../src/locales/en.json';
 import TestOutputsEditor from '../src/test-case-editor/TestOutputsEditor';
-import type { Diff, PathSegment, Typ } from '../src/generated/test_case';
+import type { Diff, PathSegment, Typ } from '../src/generated/catala_types';
 import { tStruct, tEnum, tRat, io, structValue, enumValue } from './helpers';
 
 function seg(kind: PathSegment['kind'], value: any): PathSegment {

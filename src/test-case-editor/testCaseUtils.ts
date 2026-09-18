@@ -1,10 +1,15 @@
 import type {
   EnumDeclaration,
+  RecoveredTest,
+  Recovery,
+  ReplaceLosses,
+  ParseResults,
   Test,
   TestList,
   RuntimeValue,
 } from '../generated/catala_types';
 import { isAtomicRaw } from '../diff/diff';
+import { countUnsetIn } from '../editors/unsetValidation';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -89,4 +94,58 @@ export function renderAtomicValue(
     default:
       return 'Unknown value';
   }
+}
+
+/** What "Replace the original" would lose, by field name (scope-qualified
+ *  when the file holds several tests). An output the live scope no longer has
+ *  is not listed: the authored pane already says so, and nothing can hold it. */
+export function replaceLosses(
+  view: Recovery,
+  rebuilt: TestList
+): ReplaceLosses {
+  const qualify = (scope: string, name: string): string =>
+    view.tests.length > 1 ? `${scope}.${name}` : name;
+  const droppedAssertions: string[] = [];
+  const unsetFields: string[] = [];
+  const droppedTests: string[] = [];
+  for (const { authored } of view.tests) {
+    const scope = authored.testing_scope;
+    const live = rebuilt.find((t) => t.testing_scope === scope);
+    if (live === undefined) {
+      droppedTests.push(scope);
+      continue;
+    }
+    for (const [name, io] of authored.test_outputs) {
+      const out = live.test_outputs.get(name);
+      if (
+        io.value !== undefined &&
+        out !== undefined &&
+        out.value === undefined
+      )
+        droppedAssertions.push(qualify(scope, name));
+    }
+    for (const [name, io] of [...live.test_inputs, ...live.test_outputs]) {
+      if (io.value !== undefined && countUnsetIn(io.value.value, io.typ) > 0)
+        unsetFields.push(qualify(scope, name));
+    }
+  }
+  return {
+    dropped_assertions: droppedAssertions,
+    unset_fields: unsetFields,
+    dropped_tests: droppedTests,
+  };
+}
+
+/**
+ * The rebuild a recovery produced, if any: the right pane's state at open. The
+ * webview only posts subsequent edits.
+ */
+export function rebuiltOf(tests: RecoveredTest[]): TestList {
+  return tests.flatMap((t) => (t.rebuilt === undefined ? [] : [t.rebuilt]));
+}
+
+export function rebuiltFrom(results: ParseResults): TestList | undefined {
+  return results.kind === 'BrokenTest'
+    ? rebuiltOf(results.value.tests)
+    : undefined;
 }
