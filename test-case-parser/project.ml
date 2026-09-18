@@ -176,15 +176,25 @@ let project_root (from_dir : string) : string =
 module Scan = Clerk_utils.Scan
 
 (* Per-file failures dropped: broken files are recovery's normal case. *)
+(* One process, one command: the tree does not change under it. *)
+let scanned : (string, Scan.item list) Hashtbl.t = Hashtbl.create 4
+
 let scan_catala_files (dir : string) : Scan.item list =
-  File.scan_tree
-    (fun f ->
-      match Scan.get_lang f with
-      | None -> None
-      | Some lang -> ( try Some (Scan.catala_file f lang) with _ -> None))
-    dir
-  |> Seq.concat_map (fun (_, _, items) -> List.to_seq items)
-  |> List.of_seq
+  match Hashtbl.find_opt scanned dir with
+  | Some items -> items
+  | None ->
+    let items =
+      File.scan_tree
+        (fun f ->
+          match Scan.get_lang f with
+          | None -> None
+          | Some lang -> ( try Some (Scan.catala_file f lang) with _ -> None))
+        dir
+      |> Seq.concat_map (fun (_, _, items) -> List.to_seq items)
+      |> List.of_seq
+    in
+    Hashtbl.add scanned dir items;
+    items
 
 (* Lexical scan: resolves in a project that does not compile. *)
 let find_module_file (name : string) (from_dir : string) : string option =

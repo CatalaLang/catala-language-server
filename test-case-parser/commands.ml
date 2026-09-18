@@ -877,11 +877,16 @@ let run_clerk ~root args =
        Run 'clerk build -d' there to see the compiler errors.@\n%s"
       (String.concat " " args) status root output
 
-let prepare_runtime_plugins (file : string) =
-  match find_project_root (Filename.dirname (File.make_absolute file)) with
-  | None -> ()
-  | Some root ->
-    run_clerk ~root ["run"; "--prepare-only"; File.make_absolute file]
+(* One clerk run for all of them: each spawn re-reads the whole project. *)
+let prepare_runtime_plugins_of (files : string list) =
+  match List.map File.make_absolute files with
+  | [] -> ()
+  | first :: _ as files -> (
+    match find_project_root (Filename.dirname first) with
+    | None -> ()
+    | Some root -> run_clerk ~root ("run" :: "--prepare-only" :: files))
+
+let prepare_runtime_plugins (file : string) = prepare_runtime_plugins_of [file]
 
 let build_runtime_plugins ?buffer_path (options : Global.options) =
   let file =
@@ -910,15 +915,12 @@ let run_test_cmd include_dirs options test_scope_name scope_input_opt buffer_pat
       in
       (match Driver.Passes.surface options with
       | prg ->
-        List.iter
-          (fun (u : Surface.Ast.module_use) ->
-            match
-              find_module_file (Mark.remove u.mod_use_name)
-                (Filename.dirname b)
-            with
-            | Some f -> prepare_runtime_plugins f
-            | None -> ())
-          prg.Surface.Ast.program_used_modules
+        prepare_runtime_plugins_of
+          (List.filter_map
+             (fun (u : Surface.Ast.module_use) ->
+               find_module_file (Mark.remove u.mod_use_name)
+                 (Filename.dirname b))
+             prg.Surface.Ast.program_used_modules)
       | exception _ -> ());
       options
     | _ ->
