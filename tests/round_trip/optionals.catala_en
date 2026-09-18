@@ -1,0 +1,13 @@
+> Module Optionals
+
+```catala-metadata
+declaration scope Grant:
+  input base content money
+  input bonus content optional of money
+  output total content money
+```
+
+```catala
+scope Grant:
+  definition total equals base
+```

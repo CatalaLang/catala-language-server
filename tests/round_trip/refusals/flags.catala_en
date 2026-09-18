@@ -1,0 +1,12 @@
+> Module Flags
+
+```catala-metadata
+declaration scope Switch:
+  input on content boolean
+  output done content boolean
+```
+
+```catala
+scope Switch:
+  definition done equals on
+```

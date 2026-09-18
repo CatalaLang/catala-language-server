@@ -1,0 +1,21 @@
+> Module Tint
+
+```catala-metadata
+declaration enumeration Colour:
+  -- Red
+  -- Green
+  -- Blue
+
+declaration scope Paint:
+  input tint content Colour
+  output is_red content boolean
+```
+
+```catala
+scope Paint:
+  definition is_red equals
+    match tint with pattern
+    -- Red : true
+    -- Green : false
+    -- Blue : false
+```

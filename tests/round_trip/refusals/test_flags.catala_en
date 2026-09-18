@@ -1,0 +1,16 @@
+> Using Flags
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "A rule, not a literal"]
+declaration scope Switch_on:
+  output calc scope Flags.Switch
+```
+
+```catala
+scope Switch_on:
+  rule calc.on filled
+  assertion (calc.done = true)
+```

@@ -1,20 +1,22 @@
 (library
- (name test_case_parser_lib)
- (modules test_case_parser_lib)
+ (name testcase)
+ (modules project model commands recovery)
  (libraries
    catala.driver
    catala.clerk_lib
    catala_types_atd
    catala.clerk_backend
-   catala.clerk_utils)
+   catala.clerk_utils
+   re
+   unix)
  (flags
   (:standard -open Catala_types_atd)))
 
 (executable
- (name testcase)
+ (name testcase_plugin)
  (modes plugin)
- (modules testcase)
- (libraries yojson atdgen-runtime test_case_parser_lib catala.clerk_utils)
+ (modules testcase_plugin)
+ (libraries yojson atdgen-runtime testcase catala.clerk_utils)
  (embed_in_plugin_libraries
   otoml
   ninja_utils
@@ -23,9 +25,9 @@
   catala.clerk_backend
   atdgen-runtime
   catala_types_atd
-  test_case_parser_lib))
+  testcase))
 
 (install
  (files
-  (testcase.cmxs as catala/plugins/testcase.cmxs))
+  (testcase_plugin.cmxs as catala/plugins/testcase.cmxs))
  (section libexec_root))

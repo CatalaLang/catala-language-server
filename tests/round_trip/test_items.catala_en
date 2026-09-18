@@ -1,0 +1,28 @@
+> Using Items
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Two lines"]
+declaration scope Basket_two:
+  output calc scope Items.Basket
+```
+
+```catala
+scope Basket_two:
+  definition calc.lines equals
+    [
+      #[testcase.uid = "aaaaaaaa-0000-0000-0000-000000000001"]
+      Items.Line {
+        -- amount: $10.00
+        -- taxed: true
+      };
+      #[testcase.uid = "bbbbbbbb-0000-0000-0000-000000000002"]
+      Items.Line {
+        -- amount: $20.00
+        -- taxed: false
+      }
+    ]
+  assertion (calc.total = $0.00)
+```
