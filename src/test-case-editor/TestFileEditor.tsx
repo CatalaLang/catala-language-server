@@ -5,17 +5,20 @@ import {
   type Test,
   type TestList,
   type TestRunResults,
+  type Recovery,
   type PathSegment,
   type Diff,
   readDownMessage,
   writeUpMessage,
 } from '../generated/catala_types';
 import TestEditor from './TestEditor';
+import BrokenTestView from './BrokenTestView';
 import { assertUnreachable } from '../shared/util';
 import { pathEquals, isPathPrefix } from '../diff/highlight';
 import type { WebviewApi } from 'vscode-webview';
 import { setVsCodeApi } from '../shared/webviewApi';
-import { resolveConfirmResult } from '../messaging/confirm';
+import { confirm, resolveConfirmResult } from '../messaging/confirm';
+import { replaceLosses } from './testCaseUtils';
 
 // Note:
 //
@@ -39,6 +42,7 @@ type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
   | { state: 'emptyTestListMismatch' }
+  | { state: 'brokenTest'; view: Recovery }
   | { state: 'success'; tests: TestList };
 
 export type TestRunStatus = 'running' | 'success' | 'error' | 'cancelled';
@@ -93,9 +97,6 @@ export default function TestFileEditor({
         const newTestState = state.tests.filter(
           (test) => test.testing_scope !== testScope
         );
-        console.log('Deleting test:', testScope);
-        console.log('New test state:', newTestState);
-
         // optimistic update
         setState({ state: 'success', tests: newTestState });
 
@@ -206,6 +207,23 @@ export default function TestFileEditor({
     }
   }
 
+  /* preventDefault keeps the focused input's native undo from eating
+     Ctrl+Z; the key still reaches the workbench, which owns the document's
+     undo. Only here: the scope-input webview has no document. */
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')
+      ) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return (): void => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
       const message = readDownMessage(event.data);
@@ -254,6 +272,64 @@ export default function TestFileEditor({
     }
     case 'emptyTestListMismatch': {
       return <EmptyTestListMismatchWarning vscode={vscode} />;
+    }
+    case 'brokenTest': {
+      return (
+        <BrokenTestView
+          view={state.view}
+          onRebuildChange={(tests): void => {
+            vscode.postMessage(
+              writeUpMessage({ kind: 'GuiEdit', value: [tests, true] })
+            );
+          }}
+          runStates={testRunState}
+          onRetarget={(scope): void => {
+            vscode.postMessage(
+              writeUpMessage({ kind: 'RetargetRequest', value: scope })
+            );
+          }}
+          onReplace={async (rebuilt): Promise<void> => {
+            const losses = replaceLosses(state.view, rebuilt);
+            if (
+              (losses.dropped_assertions.length > 0 ||
+                losses.unset_fields.length > 0 ||
+                losses.dropped_tests.length > 0) &&
+              !(await confirm({
+                kind: 'ReplaceOriginalWithLosses',
+                value: losses,
+              }))
+            ) {
+              return;
+            }
+            vscode.postMessage(
+              writeUpMessage({ kind: 'ReplaceOriginalRequest' })
+            );
+          }}
+          onDiscard={async (): Promise<void> => {
+            if (!(await confirm('DiscardWorkingCopy'))) return;
+            vscode.postMessage(
+              writeUpMessage({ kind: 'DiscardWorkingCopyRequest' })
+            );
+          }}
+          onRun={(scope): void => {
+            setTestRunState((prev) => ({
+              ...prev,
+              [scope]: { status: 'running' },
+            }));
+            vscode.postMessage(
+              writeUpMessage({
+                kind: 'TestRunRequest',
+                value: {
+                  scope,
+                  reset_outputs: false,
+                  in_shell: false,
+                  debug: false,
+                },
+              })
+            );
+          }}
+        />
+      );
     }
     case 'initializing':
       return (
@@ -361,6 +437,8 @@ function parseResultsToUiState(tests: ParseResults): UIState {
   switch (tests.kind) {
     case 'ParseError':
       return { state: 'error', message: tests.value };
+    case 'BrokenTest':
+      return { state: 'brokenTest', view: tests.value };
     case 'EmptyTestListMismatch':
       return { state: 'emptyTestListMismatch' };
     case 'Results':

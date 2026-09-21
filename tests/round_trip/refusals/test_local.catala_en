@@ -1,0 +1,21 @@
+```catala-metadata
+declaration scope Local:
+  input x content integer
+  output y content integer
+
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "No module"]
+declaration scope Local_test:
+  output calc scope Local
+```
+
+```catala
+scope Local:
+  definition y equals x
+
+scope Local_test:
+  definition calc.x equals 1
+  assertion (calc.y = 1)
+```

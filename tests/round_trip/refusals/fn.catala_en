@@ -1,0 +1,12 @@
+> Module Fn
+
+```catala-metadata
+declaration scope Apply:
+  input f content integer depends on x content integer
+  output y content integer
+```
+
+```catala
+scope Apply:
+  definition y equals f of 1
+```

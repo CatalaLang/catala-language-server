@@ -24,6 +24,7 @@ import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../shared/util';
 import { Combobox } from './Combobox';
 import { CompositeEditor } from './CompositeEditor';
+import { countUnsetIn } from './unsetValidation';
 import { useNestingDepth, NestingDepthIncrementer } from './NestingDepth';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
@@ -970,6 +971,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
         label: fieldName,
         type: fieldType,
         count,
+        unfilled: countUnsetIn(fieldValue, fieldType),
         editor: (
           <ValueEditor
             testIO={{
@@ -1000,7 +1002,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
       <div
         className={`struct-editor struct-container nest-${nestingDepth % 2}`}
       >
-        <CompositeEditor items={editorItems} />
+        <CompositeEditor items={editorItems} currentPath={currentPath} />
       </div>
     </NestingDepthIncrementer>
   );

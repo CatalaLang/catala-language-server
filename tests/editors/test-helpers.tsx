@@ -5,6 +5,8 @@ import { vi } from 'vitest';
 import enMessages from '../../src/locales/en.json';
 import ValueEditor from '../../src/editors/ValueEditors';
 import type {
+  Recovery,
+  Test,
   TestIo,
   Typ,
   RuntimeValue,
@@ -72,6 +74,45 @@ export function enumVal(
     kind: 'Enum',
     value: [decl, [label, payload ? { value: payload } : null]],
   });
+}
+
+export function ioOf(typ: Typ, value?: TestIo['value']): TestIo {
+  return { typ, value };
+}
+
+/** A test on scope `M.S` with the given inputs and outputs. */
+export function testOf(
+  scope: string,
+  inputs: Record<string, TestIo>,
+  outputs: Record<string, TestIo>
+): Test {
+  return {
+    testing_scope: scope,
+    tested_scope: {
+      name: 'S',
+      module_name: 'M',
+      inputs: new Map(),
+      outputs: new Map(),
+      module_deps: [],
+    },
+    test_inputs: new Map(Object.entries(inputs)),
+    test_outputs: new Map(Object.entries(outputs)),
+    description: '',
+    title: '',
+  };
+}
+
+/** A recovery view pairing each authored test with its rebuild, if any. */
+export function recoveryOf(...pairs: [Test, Test | undefined][]): Recovery {
+  return {
+    tests: pairs.map(([authored, rebuilt]) => ({
+      authored,
+      rebuilt,
+      outcomes: [],
+    })),
+    notes: [],
+    working_copy: '.repair',
+  };
 }
 
 export function renderEditor(

@@ -34,7 +34,8 @@
   ptime.clock.os
   uri
   re
-  catala_types_atd)
+  catala_types_atd
+  stdlib_aliases)
  (modules
   (:standard \ Main_lsp Main_dap))
  (preprocess

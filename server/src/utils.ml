@@ -310,42 +310,10 @@ let get_timestamp ?(no_brackets = false) () =
   if no_brackets then Format.asprintf "%02d:%02d:%02d.%02Ld" hh mm ss cs
   else Format.asprintf "[%02d:%02d:%02d.%02Ld]" hh mm ss cs
 
-let lookup_alias_name : Global.backend_lang -> string -> string =
-  (* TODO: officialize this list in catala/clerk directly *)
-  let en_names =
-    [
-      "Date";
-      "Duration";
-      "MonthYear";
-      "Period";
-      "Money";
-      "Integer";
-      "Decimal";
-      "List";
-    ]
-  in
-  let en_aliases = List.map (fun s -> s ^ "_en") en_names in
-  let fr_aliases = List.map (fun s -> s ^ "_fr") en_names in
-  let fr_names =
-    [
-      "Date";
-      "Durée";
-      "MoisAnnée";
-      "Période";
-      "Argent";
-      "Entier";
-      "Décimal";
-      "Liste";
-    ]
-  in
-  let en_alias_map = String.Map.of_list (List.combine en_aliases en_names) in
-  let fr_alias_map = String.Map.of_list (List.combine fr_aliases fr_names) in
-  let lookup_alias_name lang s =
-    match lang with
-    | `Fr -> String.Map.find s fr_alias_map
-    | `En | _ -> String.Map.find s en_alias_map
-  in
-  lookup_alias_name
+let lookup_alias_name (lang : Global.backend_lang) s =
+  match Stdlib_aliases.target lang s with
+  | Some n -> n
+  | None -> raise Not_found
 
 let rename_alias_in_path locale map_info x =
   map_info

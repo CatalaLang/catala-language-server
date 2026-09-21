@@ -1,0 +1,16 @@
+> Usage de Opt_fr
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Avec bonus"]
+déclaration champ d'application Prime_test:
+  résultat calc champ d'application Opt_fr.Prime
+```
+
+```catala
+champ d'application Prime_test:
+  définition calc.bonus égal à Présent contenu 50,00 €
+  assertion (calc.total = 0,00 €)
+```

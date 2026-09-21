@@ -131,6 +131,15 @@ export class ScopeInputController {
           throw new Error(`Trying to select scope while in input scope mode`);
         case 'TestGenerateRequest':
           throw new Error(`Trying to generate scope while in input scope mode`);
+        case 'RetargetRequest':
+          throw new Error(
+            `Trying to retarget a test while in input scope mode`
+          );
+        case 'ReplaceOriginalRequest':
+        case 'DiscardWorkingCopyRequest':
+          throw new Error(
+            `Trying to finish a rebuild while in input scope mode`
+          );
         default:
           assertUnreachable(typed_msg);
       }
