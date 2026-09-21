@@ -1,0 +1,28 @@
+> Module Moods
+
+```catala-metadata
+declaration enumeration Colour:
+  -- Red
+  -- Green
+
+declaration enumeration Mood:
+  -- Red
+  -- Blue
+
+declaration structure Box:
+  data x content integer
+  data gone content integer
+
+declaration scope Paint:
+  input shade content Colour
+  input box content Box
+  output is_red content boolean
+```
+
+```catala
+scope Paint:
+  definition is_red equals
+    match shade with pattern
+    -- Colour.Red : true
+    -- Colour.Green : false
+```

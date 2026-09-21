@@ -1,0 +1,4 @@
+(library
+ (name stdlib_aliases)
+ (public_name catala-lsp.stdlib_aliases)
+ (libraries catala.catala_utils))

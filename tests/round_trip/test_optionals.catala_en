@@ -1,0 +1,48 @@
+> Using Optionals
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Bonus absent"]
+declaration scope Grant_absent:
+  output calc scope Optionals.Grant
+```
+
+```catala
+scope Grant_absent:
+  definition calc.base equals $1000.00
+  definition calc.bonus equals Absent
+  assertion (calc.total = $1000.00)
+```
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Bonus present"]
+declaration scope Grant_present:
+  output calc scope Optionals.Grant
+```
+
+```catala
+scope Grant_present:
+  definition calc.base equals $1000.00
+  definition calc.bonus equals Present content $50.00
+  assertion (calc.total = $1000.00)
+```
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Half filled"]
+declaration scope Grant_hole:
+  output calc scope Optionals.Grant
+```
+
+```catala
+scope Grant_hole:
+  definition calc.base equals impossible
+  definition calc.bonus equals Absent
+```

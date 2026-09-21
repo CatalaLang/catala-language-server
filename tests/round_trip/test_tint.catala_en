@@ -1,0 +1,16 @@
+> Using Tint
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Bare user-enum input"]
+declaration scope Paint_tint:
+  output calc scope Tint.Paint
+```
+
+```catala
+scope Paint_tint:
+  definition calc.tint equals Red
+  assertion (calc.is_red = true)
+```

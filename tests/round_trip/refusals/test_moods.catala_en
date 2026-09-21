@@ -1,0 +1,17 @@
+> Using Moods
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Qualified names"]
+declaration scope Paint_red:
+  output calc scope Moods.Paint
+```
+
+```catala
+scope Paint_red:
+  definition calc.shade equals Moods.Colour.Red
+  definition calc.box equals Moods.Box { -- x: 1 -- gone: 2 }
+  assertion (calc.is_red = true)
+```
