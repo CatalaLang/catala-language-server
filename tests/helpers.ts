@@ -7,7 +7,7 @@ import type {
   ValueDef,
   TestIo,
   Option,
-} from '../src/generated/test_case';
+} from '../src/generated/catala_types';
 
 export function tStruct(name: string, fields: Map<string, Typ>): Typ {
   return { kind: 'TStruct', value: { struct_name: name, fields } };
