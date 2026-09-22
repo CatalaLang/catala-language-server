@@ -30,6 +30,18 @@ type ComboboxProps = {
   onChange(value: string | null): void;
 };
 
+// Focus changes caused by Tab open the list; others (window refocus,
+// programmatic) do not
+let tabbing = false;
+if (typeof document !== 'undefined') {
+  const track = (e: KeyboardEvent): void => {
+    if (e.key === 'Tab') tabbing = e.type === 'keydown';
+  };
+  document.addEventListener('keydown', track, true);
+  document.addEventListener('keyup', track, true);
+  window.addEventListener('blur', () => (tabbing = false));
+}
+
 export function Combobox(props: ComboboxProps): ReactElement {
   const {
     options,
@@ -179,8 +191,6 @@ export function Combobox(props: ComboboxProps): ReactElement {
         if (isOpen) {
           if (activeIndex >= 0 && activeIndex < filtered.length) {
             onChange(filtered[activeIndex].value);
-          } else {
-            onChange(null);
           }
           close();
         }
@@ -193,6 +203,10 @@ export function Combobox(props: ComboboxProps): ReactElement {
         }
         break;
     }
+  };
+
+  const handleFocus = (): void => {
+    if (tabbing && !isOpen) open();
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -224,6 +238,7 @@ export function Combobox(props: ComboboxProps): ReactElement {
             if (!disabled) open();
           }}
           onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
         >
           <span className="combobox-display-name">{selectedLabel}</span>
           <span className="combobox-description">{selectedDescription}</span>
@@ -237,10 +252,11 @@ export function Combobox(props: ComboboxProps): ReactElement {
           aria-activedescendant={activeId}
           aria-autocomplete="list"
           value={isOpen ? filter : selectedLabel}
-          placeholder={placeholder}
+          placeholder={(isOpen && selectedLabel) || placeholder}
           disabled={disabled}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
           onClick={() => {
             if (!isOpen) open();
           }}
