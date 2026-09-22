@@ -11,7 +11,10 @@ import { execSync } from 'child_process';
 import * as vscode from 'vscode';
 import { CatalaTestCaseDocument } from '../../shared/CatalaTestCaseDocument';
 
-const fixtures = path.resolve(__dirname, '../../../tests/round_trip');
+const fixtures = path.resolve(
+  __dirname,
+  '../../../tests/cli/fixtures/round_trip'
+);
 
 /** A project whose tests no longer fit their scope. `broken` says how. */
 function project(

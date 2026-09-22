@@ -1,0 +1,5 @@
+; The plugin under test, alone in its directory: CATALA_PLUGINS loads every
+; plugin it finds there instead of the installed ones.
+
+(rule
+ (copy ../../../test-case-parser/testcase.cmxs testcase.cmxs))

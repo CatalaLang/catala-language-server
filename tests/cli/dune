@@ -1,0 +1,11 @@
+; The testcase plugin through its command line, as the editor drives it.
+
+(test
+ (name main)
+ (package catala-lsp)
+ (libraries tezt catala_types_atd re)
+ (deps
+  (source_tree fixtures)
+  plugins/testcase.cmxs)
+ (action
+  (run %{test} -j 4)))
