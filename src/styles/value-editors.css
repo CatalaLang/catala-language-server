@@ -169,6 +169,12 @@
     background-color 0.15s;
 }
 
+/* Fits the longest word (pl "prawda") so toggling doesn't shift layout */
+.bool-toggle__label {
+  min-width: 6ch;
+  font-size: var(--field-label-font-size);
+}
+
 /* True: accent track, thumb slides right */
 .bool-toggle input[type='checkbox']:checked ~ .bool-toggle__track {
   background-color: var(--caribbean-green-600);
@@ -211,6 +217,9 @@
     transparent
   );
   transform: none;
+}
+.bool-toggle--unset .bool-toggle__label {
+  color: var(--vscode-editorWarning-foreground, #8a6d3b);
 }
 
 /* Date inputs */
