@@ -175,7 +175,7 @@ let round_trip ?(lang = "en") f =
   write_file (dir // out) ~contents:written;
   let* () = typecheck dir out in
   Check.((count written (header lang) = 1) int)
-    ~error_msg:"the editor's header appears %L times";
+    ~error_msg:(sf "the editor's header %S appears %%L times" (header lang));
   Check.((stray_declarations written = []) (list string))
     ~error_msg:"declared outside a metadata block: %L";
   (* the next save writes the same bytes, and a partial read accepts it *)
