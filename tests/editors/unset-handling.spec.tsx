@@ -46,6 +46,9 @@ describe('ValueEditors - Unset handling', () => {
     const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
     expect(container.querySelector('.bool-toggle--unset')).toBeInTheDocument();
+    expect(container.querySelector('.bool-toggle__label')).toHaveTextContent(
+      'Unset'
+    );
   });
 
   it('BoolEditor: first click on Unset sets false', () => {
@@ -64,6 +67,7 @@ describe('ValueEditors - Unset handling', () => {
       { value: boolVal(from) }
     );
     expect(container.querySelector('.bool-toggle--unset')).toBeNull();
+    expect(screen.getByText(String(from))).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox'));
     expectValueKind(onValueChange, 'Bool', to);
   });

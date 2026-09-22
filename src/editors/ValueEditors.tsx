@@ -595,6 +595,11 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
           disabled={props.editable === false}
         />
         <span className="bool-toggle__track" />
+        <span className="bool-toggle__label">
+          <FormattedMessage
+            id={isUnset ? 'editor.unset' : boolValue ? 'true' : 'false'}
+          />
+        </span>
       </label>
     </div>
   );
