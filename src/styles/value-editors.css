@@ -137,15 +137,17 @@
   pointer-events: none;
 }
 
-/* The track: pill shape rendered via ::before (background) and ::after (thumb) */
+/* The pill; ::after is the thumb */
 .bool-toggle__track {
   position: relative;
   display: inline-block;
   width: 36px;
   height: 20px;
+  box-sizing: border-box;
   border-radius: 10px;
-  border: 1.5px solid var(--stormgray300);
-  background-color: var(--stormgray100);
+  /* False: subtle red, so it doesn't read as disabled */
+  border: 1.5px solid color-mix(in srgb, var(--thunderbird500) 55%, transparent);
+  background-color: color-mix(in srgb, var(--thunderbird500) 12%, transparent);
   transition:
     background-color 0.15s,
     border-color 0.15s;
@@ -158,9 +160,10 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  top: 3px;
-  left: 2px;
-  background-color: var(--stormgray400);
+  inset: 0;
+  margin: auto;
+  transform: translateX(-8px);
+  background-color: color-mix(in srgb, var(--thunderbird500) 70%, transparent);
   transition:
     transform 0.15s,
     background-color 0.15s;
@@ -173,20 +176,12 @@
 }
 .bool-toggle input[type='checkbox']:checked ~ .bool-toggle__track::after {
   background-color: var(--stormgray00);
-  transform: translateX(16px);
+  transform: translateX(8px);
 }
 
-/* Unset: dashed border + reduced opacity — signals "not yet filled in" */
-.bool-toggle--unset {
-  opacity: 0.8;
-}
-.bool-toggle--unset .bool-toggle__track {
-  border-style: dashed;
-  border-color: var(--stormgray300);
-  background-color: transparent;
-}
-.bool-toggle--unset .bool-toggle__track::after {
-  background-color: var(--stormgray300);
+.bool-toggle input[type='checkbox']:focus-visible ~ .bool-toggle__track {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
 }
 
 /* Disabled */
@@ -203,20 +198,19 @@
   border: none !important;
 }
 
-/* Dark mode overrides */
-.vscode-dark .bool-toggle__track {
-  border-color: var(--stormgray700);
-  background-color: var(--stormgray900);
-}
-.vscode-dark .bool-toggle__track::after {
-  background-color: var(--stormgray600);
-}
-.vscode-dark .bool-toggle--unset .bool-toggle__track {
-  border-color: var(--stormgray700);
+/* Unset: same amber as the other fields' unset underline; thumb centred,
+   neither true nor false. Must follow the base track rules. */
+.bool-toggle--unset .bool-toggle__track {
+  border: 1.5px dashed var(--vscode-editorWarning-foreground, #8a6d3b);
   background-color: transparent;
 }
-.vscode-dark .bool-toggle--unset .bool-toggle__track::after {
-  background-color: var(--stormgray700);
+.bool-toggle--unset .bool-toggle__track::after {
+  background-color: color-mix(
+    in srgb,
+    var(--vscode-editorWarning-foreground, #8a6d3b) 35%,
+    transparent
+  );
+  transform: none;
 }
 
 /* Date inputs */

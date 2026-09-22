@@ -575,8 +575,8 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
     runtimeValue?.value.kind === 'Bool' ? runtimeValue.value.value : false;
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    // First interaction promotes unset → true; subsequent clicks toggle normally.
-    const newVal = isUnset ? true : event.target.checked;
+    // Unset → false → true → false …; no way back to Unset.
+    const newVal = isUnset ? false : event.target.checked;
     props.onValueChange(
       createRuntimeValue({ kind: 'Bool', value: newVal }, runtimeValue)
     );
@@ -587,7 +587,7 @@ function BoolEditor(props: BoolEditorProps): ReactElement {
       className={`value-editor bool-editor-wrapper ${vProps.className}`}
       title={vProps.title}
     >
-      <label className="bool-toggle">
+      <label className={`bool-toggle${isUnset ? ' bool-toggle--unset' : ''}`}>
         <input
           type="checkbox"
           checked={boolValue}
