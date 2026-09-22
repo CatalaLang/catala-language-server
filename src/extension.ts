@@ -711,7 +711,7 @@ export async function activate(
 
   // Always register the custom editor providers
   context.subscriptions.push(
-    TestCaseEditorProvider.register(context, resultController, ctrl)
+    TestCaseEditorProvider.register(context, resultController)
   );
 
   context.subscriptions.push(
