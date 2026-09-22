@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
-import { renderEditor, expectValueKind } from './test-helpers.tsx';
+import { renderEditor, expectValueKind, boolVal } from './test-helpers.tsx';
 
 describe('ValueEditors - Unset handling', () => {
   describe.each([
@@ -45,6 +45,27 @@ describe('ValueEditors - Unset handling', () => {
     expect(container.querySelector('.value-editor.unset')).toBeInTheDocument();
     const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
+    expect(container.querySelector('.bool-toggle--unset')).toBeInTheDocument();
+  });
+
+  it('BoolEditor: first click on Unset sets false', () => {
+    const { onValueChange } = renderEditor({ kind: 'TBool' });
+    fireEvent.click(screen.getByRole('checkbox'));
+    expectValueKind(onValueChange, 'Bool', false);
+  });
+
+  it.each([
+    [false, true],
+    [true, false],
+  ])('BoolEditor toggles %s → %s, never back to Unset', (from, to) => {
+    const { onValueChange, container } = renderEditor(
+      { kind: 'TBool' },
+      vi.fn(),
+      { value: boolVal(from) }
+    );
+    expect(container.querySelector('.bool-toggle--unset')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox'));
+    expectValueKind(onValueChange, 'Bool', to);
   });
 
   it('ArrayEditor shows no unset indicator initially (empty array is valid)', () => {
