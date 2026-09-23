@@ -230,6 +230,7 @@ type project = {
   project_dir : string;
   project_kind : project_kind;
   project_files : project_file Doc_id.Map.t;
+  project_include_dirs : Global.raw_file list;
   project_graph : Project_graph.t;
   known_modules : ScanItemFiles.t ModuleMap.t;
 }
@@ -306,12 +307,12 @@ let clean_item ({ Scan.file_name; included_files; _ } as item) : Scan.item =
 
 let find_module_candidate
     ~(on_error : error_handler)
-    ~includes
+    ~(includes : Global.raw_file list)
     (file : Scan_item.t)
     (known_modules : ScanItemFiles.t ModuleMap.t)
     (used_module : string Mark.pos) : Scan_item.t option =
   let file_dir = File.dirname file.file_name in
-  let includes = file_dir :: includes in
+  let includes = file_dir :: (includes :> string list) in
   let used_module_name = Mark.remove used_module in
   let possible_modules =
     Option.value ~default:ScanItemFiles.empty
@@ -345,14 +346,10 @@ let find_module_candidate
       (* TODO: handle the multiple case list *)
       None)
 
-let retrieve_project_files
-    ~on_error
-    (clerk_config : Clerk_config.t)
-    ~project_dir =
-  let open Scan in
+let retrieve_project_files ~on_error ~project_dir include_dirs =
   Log.info (fun m -> m "building inclusion graph of directory %s" project_dir);
-  let tree = tree project_dir in
-  let known_items : (string, item) Hashtbl.t = Hashtbl.create 10 in
+  let tree = Scan.tree project_dir in
+  let known_items : (string, Scan.item) Hashtbl.t = Hashtbl.create 10 in
   let known_modules =
     Seq.fold_left
       (fun mod_map (_, _, items) ->
@@ -376,7 +373,7 @@ let retrieve_project_files
   let g =
     Hashtbl.fold
       (fun _n item g ->
-        Doc_id.(Map.add (of_file item.file_name))
+        Doc_id.(Map.add (of_file item.Scan.file_name))
           {
             file = item;
             including_files = ScanItemFiles.empty;
@@ -399,13 +396,13 @@ let retrieve_project_files
                     m "Did not find included file '%s' declared in '%s'"
                       (Mark.remove includ) n);
                 None)
-            item.included_files
+            item.Scan.included_files
         in
         (* Update including files *)
         let g =
           List.fold_left
             (fun g included_item ->
-              Doc_id.(Map.update (of_file included_item.file_name))
+              Doc_id.(Map.update (of_file included_item.Scan.file_name))
                 (function
                   | None ->
                     Some
@@ -427,9 +424,8 @@ let retrieve_project_files
         (* Update used-by files *)
         List.fold_left
           (fun g (used_module : string Mark.pos) ->
-            find_module_candidate ~on_error
-              ~includes:clerk_config.global.include_dirs item known_modules
-              used_module
+            find_module_candidate ~on_error ~includes:include_dirs item
+              known_modules used_module
             |> function
             | None -> (* No file using this module *) g
             | Some modul ->
@@ -452,26 +448,63 @@ let retrieve_project_files
   in
   project_files, known_modules
 
+let retrieve_include_dirs clerk_config =
+  let config =
+    {
+      Clerk_cli.file = clerk_config;
+      fix_path = Fun.id;
+      ninja_file = None;
+      test_flags = [];
+      include_objects = false;
+    }
+  in
+  let include_dirs =
+    Scan.include_dirs ~config
+    |> List.map File.clean_path
+    |> List.map Global.raw_file
+  in
+  Log.debug (fun m ->
+      m "Project included directories: %a" Utils.pp_string_list
+        (include_dirs :> string list));
+  include_dirs
+
 let process_config ~on_error (clerk_config, clerk_root_dir) =
   Log.debug (fun m -> m "clerk file found in '%s' directory" clerk_root_dir);
   let project_kind = Clerk { clerk_root_dir; clerk_config } in
   let project_dir = clerk_root_dir in
+  let project_include_dirs = retrieve_include_dirs clerk_config in
   let project_files, known_modules =
-    retrieve_project_files ~on_error clerk_config ~project_dir
+    retrieve_project_files ~on_error ~project_dir project_include_dirs
   in
   let project_graph = Project_graph.build_graph project_files in
-  { project_dir; project_kind; project_files; project_graph; known_modules }
+  {
+    project_dir;
+    project_kind;
+    project_files;
+    project_graph;
+    project_include_dirs;
+    known_modules;
+  }
 
 let default_config_from_dir ~on_error dir =
   Log.warn (fun m ->
       m "no clerk config file found, assuming default configuration");
   let project_dir = dir in
+  let clerk_config = Clerk_config.default_config in
+  let project_include_dirs = retrieve_include_dirs clerk_config in
   let project_files, known_modules =
-    retrieve_project_files ~on_error Clerk_config.default_config ~project_dir
+    retrieve_project_files ~on_error ~project_dir project_include_dirs
   in
   let project_kind = No_clerk in
   let project_graph = Project_graph.build_graph project_files in
-  { project_dir; project_kind; project_files; project_graph; known_modules }
+  {
+    project_dir;
+    project_kind;
+    project_files;
+    project_graph;
+    project_include_dirs;
+    known_modules;
+  }
 
 let project_of_dir ~on_error dir =
   match Utils.lookup_clerk_toml_in_parents dir with
@@ -688,13 +721,8 @@ let update_project_file
           ~compute_used_modules:(fun () ->
             List.filter_map
               (fun mod_use ->
-                let includes =
-                  match project.project_kind with
-                  | Clerk { clerk_config; _ } ->
-                    clerk_config.global.include_dirs
-                  | No_clerk -> []
-                in
-                find_module_candidate ~on_error ~includes new_item known_modules
+                find_module_candidate ~on_error
+                  ~includes:project.project_include_dirs new_item known_modules
                   mod_use)
               new_item.used_modules
             |> ScanItemFiles.of_list)
@@ -750,11 +778,6 @@ let remove_project_file ~on_error doc_id project projects =
               if ScanItemFiles.is_empty s then None else Some s)
           project.known_modules
     in
-    let includes =
-      match project.project_kind with
-      | Clerk { clerk_config; _ } -> clerk_config.global.include_dirs
-      | No_clerk -> []
-    in
     let project_files =
       (* We also remove existing [used_by] relations *)
       let used_by_files =
@@ -780,7 +803,8 @@ let remove_project_file ~on_error doc_id project projects =
           (fun mod_use ->
             Log.debug (fun m ->
                 m "lookup module candidate for %a" Doc_id.format doc_id);
-            find_module_candidate ~on_error ~includes file known_modules mod_use)
+            find_module_candidate ~on_error
+              ~includes:project.project_include_dirs file known_modules mod_use)
           file.used_modules
         |> ScanItemFiles.of_list
     in

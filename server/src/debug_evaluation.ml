@@ -244,12 +244,12 @@ let load_program options ((clerk_config : Clerk_config.t), root_dir) file scope
   let stdlib_path = File.(root_dir / "_build" / "libcatala") in
   if not (File.exists stdlib_path) then
     failwith "Stdlib not found - Please compile your project first.";
+  let include_dirs = Projects.retrieve_include_dirs clerk_config in
   let mod_uses, modules =
     try
       Surface.Parser_driver.load_modules options
         ~stdlib:(Some (Global.raw_file stdlib_path))
-        (List.map Global.raw_file clerk_config.global.include_dirs)
-        surface
+        include_dirs surface
     with e -> raise e
   in
   let ctx =
