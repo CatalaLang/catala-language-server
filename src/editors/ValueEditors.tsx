@@ -785,10 +785,18 @@ function DurationEditor(props: DurationEditorProps): ReactElement {
   );
 }
 
-const MONEY_PATTERN = /^-?\d+(\.\d{1,2})?$/;
+const MONEY_PATTERN = /^-?\d+(\.\d{0,2})?$/;
 
 function isValidMoney(value: string): boolean {
   return MONEY_PATTERN.test(value);
+}
+
+function centsOf(text: string): number {
+  return Math.round(parseFloat(text) * 100);
+}
+
+function centsToDisplayValue(cents: number | undefined): string {
+  return cents === undefined ? '' : (cents / 100).toFixed(2);
 }
 
 type MoneyEditorProps = {
@@ -802,19 +810,6 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
   const isUnset = !runtimeValue || runtimeValue.value.kind === 'Unset';
   const initialValue = // in cents
     runtimeValue?.value.kind === 'Money' ? runtimeValue.value.value : undefined;
-
-  const centsToDisplayValue = (cents: number | undefined): string => {
-    if (cents === undefined) {
-      return '';
-    }
-    if (cents % 100 === 0) {
-      return String(cents / 100);
-    }
-    if (cents % 10 === 0) {
-      return (cents / 100).toFixed(1);
-    }
-    return (cents / 100).toFixed(2);
-  };
 
   const [displayValue, setDisplayValue] = useState(
     centsToDisplayValue(initialValue)
@@ -832,6 +827,10 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
       runtimeValue?.value.kind === 'Money'
         ? runtimeValue.value.value
         : undefined;
+    // The text the user is typing may already denote the incoming amount
+    // ('12.' or '12.0' for 1200): reformatting it would eat their keystrokes.
+    if (isValidMoney(displayValue) && centsOf(displayValue) === newValue)
+      return;
     setDisplayValue(centsToDisplayValue(newValue));
   }, [runtimeValue, isInvalid]);
 
@@ -841,10 +840,9 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
 
     if (isValidMoney(valueStr)) {
       setIsInvalid(false);
-      const centsValue = Math.round(parseFloat(valueStr) * 100);
       const newValueRaw: RuntimeValueRaw = {
         kind: 'Money',
-        value: centsValue,
+        value: centsOf(valueStr),
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     } else if (valueStr.trim() === '') {
@@ -861,6 +859,9 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
       props.onValueChange(makeUnset(runtimeValue));
       setIsInvalid(false);
       return;
+    }
+    if (isValidMoney(displayValue)) {
+      setDisplayValue(centsToDisplayValue(centsOf(displayValue)));
     }
   };
 
