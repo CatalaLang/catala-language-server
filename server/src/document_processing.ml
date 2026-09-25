@@ -250,7 +250,7 @@ let surface_to_scopelang
       | Clerk { clerk_root_dir; clerk_config } -> clerk_root_dir, clerk_config
       | No_clerk -> project.project_dir, Clerk_config.default_config
     in
-    let includes = List.map Global.raw_file clerk_config.global.include_dirs in
+    let includes = project.project_include_dirs in
     let mod_uses, modules =
       let check stdlib k =
         if File.exists stdlib then

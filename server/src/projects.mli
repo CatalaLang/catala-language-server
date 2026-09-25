@@ -47,6 +47,7 @@ type project = {
   project_dir : string;
   project_kind : project_kind;
   project_files : project_file Doc_id.Map.t;
+  project_include_dirs : Catala_utils.Global.raw_file list;
   project_graph : Project_graph.t;
   known_modules : ScanItemFiles.t ModuleMap.t;
 }
@@ -66,6 +67,9 @@ val find_file_in_project : Doc_id.t -> project -> project_file option
 
 val reload_project :
   on_error:error_handler -> project -> Projects.t -> project * Projects.t
+
+val retrieve_include_dirs :
+  Clerk_config.config_file -> Catala_utils.Global.raw_file list
 
 exception Project_not_found
 

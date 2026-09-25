@@ -557,9 +557,12 @@ let retrieve_assertions_values
 let retrieve_program include_dirs options scope_name =
   let path_to_build, include_dirs =
     if include_dirs = [] then
-      let _path_to_build, include_dirs = lookup_include_dirs options in
-      let path_to_build, build_include_dirs =
-        lookup_include_dirs ~prefix_build:true options
+      let path_to_build, include_dirs = lookup_include_dirs options in
+      let build_include_dirs =
+        List.map
+          (fun (p : Global.raw_file) ->
+            File.(path_to_build / "_build" / (p :> string)) |> Global.raw_file)
+          include_dirs
       in
       path_to_build, build_include_dirs @ include_dirs
     else ".", []
@@ -878,9 +881,16 @@ let prepare_runtime_plugins_of (files : string list) =
   match List.map File.make_absolute files with
   | [] -> ()
   | first :: _ as files -> (
+    let extra_includes =
+      List.map Filename.dirname files
+      |> List.sort_uniq compare
+      |> List.concat_map (fun d -> ["-I"; d])
+    in
     match find_project_root (Filename.dirname first) with
-    | None -> ()
-    | Some root -> run_clerk ~root ("run" :: "--prepare-only" :: files))
+    | None ->
+      run_clerk ~root:"." (("run" :: "--prepare-only" :: files) @ extra_includes)
+    | Some root ->
+      run_clerk ~root (("run" :: "--prepare-only" :: files) @ extra_includes))
 
 let prepare_runtime_plugins (file : string) = prepare_runtime_plugins_of [file]
 

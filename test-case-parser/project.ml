@@ -37,7 +37,7 @@ let lookup_clerk_toml from_dir =
     end
   with _ -> None
 
-let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
+let lookup_include_dirs ?buffer_path options =
   (* Otherwise, lookup for the toml *)
   let dir =
     match options.Global.input_src with
@@ -47,37 +47,51 @@ let lookup_include_dirs ?(prefix_build = false) ?buffer_path options =
       | None -> Sys.getcwd ()
       | Some buffer_path -> Filename.dirname buffer_path)
   in
-  match lookup_clerk_toml dir with
-  | None -> ".", []
-  | Some (config, rel) ->
-    let path_to_build = to_relative File.(dir / rel) in
-    let all_include_dirs =
-      match options.Global.input_src with
-      | Stdin _ ->
-        (* We add the test file directory as catala is unable to retrieve its
-           dir *)
-        List.sort_uniq String.compare
-          (to_relative dir :: config.global.include_dirs)
-      | _ -> config.global.include_dirs
-    in
-    let include_dirs =
-      if prefix_build then
-        List.map (fun p -> File.(path_to_build / "_build" / p)) all_include_dirs
-      else List.map (File.( / ) path_to_build) all_include_dirs
-    in
-    let all_include_dirs =
-      match options.Global.input_src with
-      | Stdin _ ->
-        (* We add the test file directory as catala is unable to retrieve its
-           dir *)
-        List.sort_uniq String.compare (to_relative dir :: include_dirs)
-      | _ -> include_dirs
-    in
-    Message.debug "@[<h>Found %s dirs:@ %a@]"
-      (if prefix_build then "build" else "include")
-      Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
-      all_include_dirs;
-    path_to_build, List.map Global.raw_file all_include_dirs
+  let make_config config =
+    {
+      Clerk_cli.file = config;
+      fix_path = Fun.id;
+      ninja_file = None;
+      test_flags = [];
+      include_objects = false;
+    }
+  in
+  let path_to_build, include_dirs =
+    match lookup_clerk_toml dir with
+    | None ->
+      let include_dirs =
+        Clerk_utils.Scan.include_dirs
+          ~config:(make_config Clerk_config.default_config)
+      in
+      ".", List.map Global.raw_file include_dirs
+    | Some (config, rel) ->
+      let path_to_build = to_relative File.(dir / rel) in
+      let include_dirs =
+        Clerk_utils.Scan.include_dirs ~config:(make_config config)
+      in
+      let all_include_dirs =
+        match options.Global.input_src with
+        | Stdin _ ->
+          (* We add the test file directory as catala is unable to retrieve its
+             dir *)
+          List.sort_uniq String.compare (to_relative dir :: include_dirs)
+        | _ -> include_dirs
+      in
+      let include_dirs = List.map (File.( / ) path_to_build) all_include_dirs in
+      let all_include_dirs =
+        match options.Global.input_src with
+        | Stdin _ ->
+          (* We add the test file directory as catala is unable to retrieve its
+             dir *)
+          List.sort_uniq String.compare (to_relative dir :: include_dirs)
+        | _ -> include_dirs
+      in
+      path_to_build, List.map Global.raw_file all_include_dirs
+  in
+  Message.debug "@[<h>Found include dirs:@ %a@]"
+    Format.(pp_print_list ~pp_sep:pp_print_space pp_print_string)
+    (include_dirs :> string list);
+  path_to_build, include_dirs
 
 let build_dir_rel ?buffer_path options =
   (* Otherwise, lookup for the toml *)
