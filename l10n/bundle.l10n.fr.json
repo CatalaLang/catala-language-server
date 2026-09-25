@@ -26,5 +26,14 @@
   "Discard the working copy? The rebuild so far will be lost. The original is not affected.": "Abandonner la copie de travail ? La reconstruction en cours sera perdue. L’original n’est pas affecté.",
   "Discard": "Abandonner",
   "Nothing to save yet: this test has no rebuild to write. Your original values, shown on the left, are untouched.": "Rien à enregistrer pour l’instant : ce test n’a pas de reconstruction à écrire. Vos valeurs d’origine, affichées à gauche, sont intactes.",
-  "Saved the working copy to {0}. The original is untouched.": "Copie de travail enregistrée dans {0}. L’original est intact."
+  "Saved the working copy to {0}. The original is untouched.": "Copie de travail enregistrée dans {0}. L’original est intact.",
+  "You are about to change Catala user settings": "Vous êtes sur le point de modifier les paramètres Catala",
+  "Your settings were changed, reload the window to notice some changes": "Vos paramètres ont changés, rechargez votre éditeur vscode afin d'observer des changements",
+  "The following settings will be updated:": "Les paramètres suivants seront mis à jour:",
+  "Settings changed !": "Paramètres modifiés !",
+  "Yes": "Oui",
+  "No": "Non",
+  "Create test file": "Créer un fichier de test",
+  "Invalid test file name": "Nom de fichier de test invalide",
+  "The test file name must contain the word \"test\".": "Le nom du fichier de test doit contenir le mot « test »."
 }

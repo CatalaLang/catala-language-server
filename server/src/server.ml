@@ -825,15 +825,27 @@ class catala_lsp_server =
                      no_variables = None;
                    }
           in
-          let all_projects = Projects.elements projects in
+          (* Rescan every project before listing. [projects] is the snapshot
+             taken when the workspace was loaded: a file created since then is
+             absent from [project_files], and both the file filtering below and
+             [get_prog] would skip it. Diagnostics produced by the scan are
+             dropped, this request only reports entrypoints — the files get
+             their own when opened or saved. *)
+          let _scan_errors, on_error = make_error_handler () in
+          let all_projects =
+            List.map
+              (fun project -> fst (reload_project ~on_error project projects))
+              (Projects.elements projects)
+          in
           let* entrypoint_list =
             Lwt_list.map_s
               (fun project ->
                 let get_prog doc_id =
                   Doc_id.Map.find_opt doc_id open_documents
                   |> function
-                  | Some { last_valid_result = Some { prg; _ }; _ } ->
-                    Lwt.return_some prg
+                  | Some { last_valid_result = Some { prg; desugared; _ }; _ }
+                    ->
+                    Lwt.return_some (prg, desugared.program_root.module_scopes)
                   | _ -> (
                     let*? project_file =
                       Lwt.return
@@ -854,7 +866,9 @@ class catala_lsp_server =
                     in
                     match validation_result with
                     | Skipped | Faulty _ | Partial _ -> Lwt.return_none
-                    | Valid (_, r) -> Lwt.return_some r.prg)
+                    | Valid (_, r) ->
+                      Lwt.return_some
+                        (r.prg, r.desugared.program_root.module_scopes))
                 in
                 list_entrypoints ~get_prog project params)
               all_projects
