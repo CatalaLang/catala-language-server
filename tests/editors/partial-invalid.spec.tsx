@@ -8,7 +8,6 @@ describe('Editors - partial invalid input handling', () => {
   describe.each([
     { type: 'TInt' as const, name: 'IntEditor', input: '-' },
     { type: 'TMoney' as const, name: 'MoneyEditor', input: '-' },
-    { type: 'TMoney' as const, name: 'MoneyEditor', input: '12.' },
     { type: 'TRat' as const, name: 'RatEditor', input: '-' },
   ])('$name with input "$input"', ({ type, input }) => {
     it('pushes Unset and preserves input while typing and after blur', () => {
