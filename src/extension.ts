@@ -23,6 +23,7 @@ import {
 } from './shared/util_client';
 import type { RunArgs } from './shared/util_client';
 import { initTests } from './extension/testAndCoverage';
+import { extendMarkdownIt } from './extension/markdownPreviewHighlight';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
@@ -205,9 +206,12 @@ async function debugScope(args?: RunArgs): Promise<void> {
   }
 }
 
+// The return value here becomes vscode.extensions.getExtension(...).exports, which is
+// how markdown-language-features looks up extendMarkdownIt on us — a module-level
+// export wouldn't be seen, since it reads .exports, not this module's own exports.
 export async function activate(
   context: vscode.ExtensionContext
-): Promise<void> {
+): Promise<{ extendMarkdownIt: typeof extendMarkdownIt }> {
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
@@ -249,6 +253,28 @@ export async function activate(
           uri,
           'catala.testCaseEditor'
         );
+      }
+    )
+  );
+
+  // Delegate to the built-in Markdown preview: catala_en/fr files are valid
+  // Markdown, and its `showPreviewToSide` command only inspects the given
+  // URI's text (no languageId check), so this works despite the command's
+  // own menu entries being restricted to editorLangId == markdown.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'catala.showMarkdownPreview',
+      async (arg?: vscode.Uri | { resourceUri: vscode.Uri }) => {
+        const uri =
+          arg instanceof vscode.Uri
+            ? arg
+            : hasResourceUri(arg)
+              ? arg.resourceUri
+              : vscode.window.activeTextEditor?.document.uri;
+        if (!uri) {
+          return;
+        }
+        await vscode.commands.executeCommand('markdown.showPreviewToSide', uri);
       }
     )
   );
@@ -340,6 +366,8 @@ export async function activate(
 
   // Ensure the logger is disposed when the extension is deactivated
   context.subscriptions.push({ dispose: () => logger.dispose() });
+
+  return { extendMarkdownIt };
 }
 
 export function deactivate(): Thenable<void> | undefined {
