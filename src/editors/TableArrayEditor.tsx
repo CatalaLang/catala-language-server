@@ -408,8 +408,9 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                 prevRowIndex !== null ? rowMetadata?.[prevRowIndex] : null;
               const isNewParentGroup =
                 metadata &&
-                (!prevMetadata ||
-                  prevMetadata.parentRowIndex !== metadata.parentRowIndex);
+                (prevMetadata
+                  ? prevMetadata.parentRowIndex !== metadata.parentRowIndex
+                  : true);
 
               // Check if this is a successfully computed struct
               const isStruct = isStructRow(displayRow);

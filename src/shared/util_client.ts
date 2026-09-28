@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import cmd_exists from 'command-exists';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import path from 'path';
 import { logger } from '../extension/logger';
 
@@ -10,6 +10,58 @@ export type RunArgs = {
   scope: string;
   inputs?: JSON;
 };
+
+export type Binary = { path: string; version?: string };
+
+// Spawns `command` and resolves with its stdout
+export function spawnStdout(
+  command: string,
+  args: string[]
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const proc = spawn(command, args);
+    // Without an encoding, 'data' hands us Buffers: they interpolate fine in a
+    // template literal but are not strings, which silently breaks any consumer
+    // expecting one (e.g. TreeItem.description).
+    let out = '';
+    proc.stdout.setEncoding('utf8');
+    proc.stdout.on('data', (data: string) => {
+      // Concatenate: output may arrive in several chunks.
+      out += data;
+    });
+    proc.on('error', (err) => {
+      logger.log(`Failed to spawn '${command}': ${err.message}`);
+      resolve(undefined);
+    });
+    proc.on('close', (code: number | null) => {
+      resolve(code === 0 ? out : undefined);
+    });
+  });
+}
+
+// Verify if a binary exists and has a version
+//
+export async function tryBinaryPath(
+  binaryName: string,
+  pathEnv: string,
+  noVersion?: boolean
+): Promise<Binary | undefined> {
+  let binary = path.join(pathEnv, binaryName);
+  if (!fs.existsSync(binary)) {
+    return undefined;
+  }
+  if (noVersion) {
+    // Server doesn't have version command and never hands so just returning the binary name
+    return { path: binary };
+  }
+  const version = (await spawnStdout(binary, ['--version']))?.trim();
+
+  if (version === undefined) {
+    // A non-zero exit means the binary is not usable, not merely version-less.
+    return undefined;
+  }
+  return { path: binary, version: version || undefined };
+}
 
 var warned = false;
 

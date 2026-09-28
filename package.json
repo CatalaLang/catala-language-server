@@ -36,14 +36,34 @@
           "title": "%view.catala.exceptionsView.name%",
           "icon": "logo.png"
         }
+      ],
+      "activitybar": [
+        {
+          "id": "catala",
+          "title": "Catala",
+          "icon": "./logo_alt.svg"
+        }
       ]
     },
     "views": {
+      "catala": [
+        {
+          "id": "catala.switches",
+          "name": "%view.catala.switches.title%",
+          "icon": "$(info)"
+        },
+        {
+          "id": "catala.help",
+          "name": "%view.catala.help.title%",
+          "icon": ""
+        }
+      ],
       "catala-exceptions-panel": [
         {
           "type": "webview",
           "id": "catala.exceptionsView",
-          "name": "%view.catala.exceptionsView.name%"
+          "name": "%view.catala.exceptionsView.name%",
+          "icon": ""
         }
       ]
     },
@@ -80,6 +100,12 @@
         "command": "catala.showExceptionsAtCursor",
         "title": "%command.catala.showExceptionsAtCursor.title%",
         "category": "%category.catala%"
+      },
+      {
+        "command": "catala.refreshSwitches",
+        "category": "catala",
+        "title": "Refresh Switches",
+        "icon": "$(sync-compact)"
       }
     ],
     "menus": {
@@ -87,6 +113,17 @@
         {
           "command": "catala.showExceptions",
           "when": "false"
+        },
+        {
+          "command": "catala.refreshSwitches",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "catala.refreshSwitches",
+          "when": "view == catala.switches",
+          "group": "navigation"
         }
       ],
       "explorer/context": [
