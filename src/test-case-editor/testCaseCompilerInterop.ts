@@ -1,6 +1,7 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
   ScopeDefList,
+  ScopeTestResult,
   TestGenerateResults,
   TestInputs,
 } from '../generated/catala_types';
@@ -219,6 +220,12 @@ export function atdToCatala(tests: TestList, lang: string): string {
   return result.output;
 }
 
+// Outcome of running a scope test: either a successful `ScopeTestResult`,
+// or a failure carrying an error message.
+export type ScopeRunResult =
+  | { kind: 'Success'; value: ScopeTestResult }
+  | { kind: 'Failed'; value: string };
+
 export function runTestScope(
   filename: string,
   testScope: string,
@@ -250,6 +257,23 @@ export function runTestScope(
   // Runtime plugins are prepared by the testcase backend itself
   // (`prepare_runtime_plugins`); no clerk invocation is needed here.
   const cwd = getCwd(filename);
+  if (cwd) {
+    const relFilename = path.relative(cwd, filename);
+    //compile dependencies (hack), do not fail on asserts
+    const clerkResult = execBinary(
+      clerkPath,
+      ['run', '-c--no-fail-on-assert', relFilename],
+      {
+        cwd,
+      }
+    );
+    if (!clerkResult.ok) {
+      window.showErrorMessage(clerkResult.stderr);
+      return { kind: 'Error', value: clerkResult.stderr };
+    }
+  }
+  // Here we *do* want to fail on asserts, as we catch failures through
+  // the `register_lsp_error_notifier` hook.
   const execResult = execBinary(catalaPath, args, {
     ...(cwd && { cwd }),
     ...(inputJson !== undefined && { input: inputJson }),
