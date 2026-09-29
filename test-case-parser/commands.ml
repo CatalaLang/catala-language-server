@@ -880,17 +880,11 @@ let run_clerk ~root args =
 let prepare_runtime_plugins_of (files : string list) =
   match List.map File.make_absolute files with
   | [] -> ()
-  | first :: _ as files -> (
-    let extra_includes =
-      List.map Filename.dirname files
-      |> List.sort_uniq compare
-      |> List.concat_map (fun d -> ["-I"; d])
+  | first :: _ as files ->
+    let root =
+      Option.value ~default:"." (find_project_root (Filename.dirname first))
     in
-    match find_project_root (Filename.dirname first) with
-    | None ->
-      run_clerk ~root:"." (("run" :: "--prepare-only" :: files) @ extra_includes)
-    | Some root ->
-      run_clerk ~root (("run" :: "--prepare-only" :: files) @ extra_includes))
+    run_clerk ~root ("run" :: "--prepare-only" :: files)
 
 let prepare_runtime_plugins (file : string) = prepare_runtime_plugins_of [file]
 
