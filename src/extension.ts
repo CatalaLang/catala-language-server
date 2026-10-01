@@ -197,21 +197,7 @@ async function searchSwitches(): Promise<Item[]> {
 
   let ocamlSwitches = await opamSwitch();
 
-  let opamRoot = await new Promise<string | undefined>((resolve) => {
-    let proc = spawn('opam', ['var', 'root']);
-    let root: string | undefined;
-    proc.stdout.on('data', (data) => {
-      root = data.toString();
-    });
-
-    proc.on('close', (code: number | null) => {
-      if (code != null && code == 0) {
-        resolve(root?.trim());
-      } else {
-        resolve(undefined);
-      }
-    });
-  });
+  let opamRoot = (await spawnStdout('opam', ['var', 'root']))?.trim();
 
   for (const ocSwitch of ocamlSwitches) {
     let switchPath: string;
