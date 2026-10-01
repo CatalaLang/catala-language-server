@@ -1,2 +1,4 @@
+# Older Node fails below with errors that don't mention the version
+node -e 'const [a, b] = process.versions.node.split(".").map(Number); if (a < 20 || (a === 20 && b < 19)) { console.error(`Node ${process.version}: these hooks and vsce need Node >= 20.19 (CI uses 22)`); process.exit(1); }' || exit 1
 npx --no-install lint-staged
 npx --no-install knip --include exports --no-progress
