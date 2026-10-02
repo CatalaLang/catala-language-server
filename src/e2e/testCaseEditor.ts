@@ -37,7 +37,9 @@ describe('Test case editor, as displayed', function () {
     const file = 'test_optionals.catala_en';
     await VSBrowser.instance.openResources(dir, path.join(dir, file));
     await new EditorView().openEditor(file);
-    await new Workbench().executeCommand('Catala: Open with Catala Test Editor');
+    await new Workbench().executeCommand(
+      'Catala: Open with Catala Test Editor'
+    );
     const page = new WebView();
     await page.switchToFrame(120_000);
     try {

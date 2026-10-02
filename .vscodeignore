@@ -36,3 +36,6 @@ clerk.toml
 .aider.tags.cache.v*/
 .claude/
 .devcontainer/
+dist/test/
+dist/e2e/
+.extest/

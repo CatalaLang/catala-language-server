@@ -60,6 +60,50 @@ jobs:
           (cd tests/regressions && opam exec -- ./enum_path_test.sh)
           (cd tests/regressions && opam exec -- ./output_module_deps_test.sh)
 
+  e2e:
+    # Drives a real VS Code window: slower than the build job's tests, and a
+    # failure here means the packaged extension doesn't work as a whole.
+    runs-on: ubuntu-latest
+    env:
+      DUNE_PROFILE: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.2.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Update opam repo
+        run: opam update
+
+      - name: Install dependencies
+        run: |
+          opam pin catala --dev-repo -n
+          opam install . --deps-only --with-test
+          npm ci
+
+      - name: Build and install the language server
+        run: |
+          opam exec -- dune build
+          opam exec -- dune install
+
+      - name: Run end-to-end tests
+        run: xvfb-run -a opam exec -- npm run test:e2e
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: .extest/screenshots
+
   release:
     needs: build
     if: github.event_name == 'release'
