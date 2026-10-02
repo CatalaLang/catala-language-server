@@ -428,6 +428,7 @@
     "vscode:prepublish": "npm run package",
     "compile": "opam exec -- dune build @lsp; webpack --mode development",
     "test": "tsc && vscode-test",
+    "test:e2e": "tsc && extest setup-and-run \"dist/e2e/*.js\" --storage .extest --locale en",
     "webview:test": "node node_modules/vitest/vitest.mjs run",
     "webview:test:watch": "node node_modules/vitest/vitest.mjs",
     "format": "prettier --write .",
