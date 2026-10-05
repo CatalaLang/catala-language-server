@@ -19,6 +19,10 @@ import { logger } from '../extension/logger';
 import * as path from 'path';
 import { window } from 'vscode';
 import { catalaPath, clerkPath, getCwd, shellArg } from '../shared/util_client';
+import {
+  hasUnsetInTest,
+  withoutUnfilledAssertions,
+} from '../editors/unsetValidation';
 
 type ExecOptions = { input?: string; cwd?: string };
 type ExecResult = { ok: true; output: string } | { ok: false; stderr: string };
@@ -217,6 +221,33 @@ export function atdToCatala(tests: TestList, lang: string): string {
     throw new Error(result.stderr);
   }
   return result.output;
+}
+
+/** A saved test, run from its file; one with an unfilled assertion runs from
+ *  memory without it, as the file asserts [impossible] there. */
+export function runSavedTest(
+  parsed: ParseResults,
+  fileName: string,
+  testScope: string,
+  lang: string
+): TestRunResults {
+  const test =
+    parsed.kind === 'Results'
+      ? parsed.value.find((t) => t.testing_scope === testScope)
+      : undefined;
+  if (
+    parsed.kind === 'Results' &&
+    test !== undefined &&
+    hasUnsetInTest(test, { checkInputs: false })
+  ) {
+    return runRebuiltTest(
+      withoutUnfilledAssertions(parsed.value),
+      testScope,
+      lang,
+      fileName
+    );
+  }
+  return runTestScope(fileName, testScope);
 }
 
 export function runTestScope(

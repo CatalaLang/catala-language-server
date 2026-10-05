@@ -8,6 +8,7 @@ import type {
   PathSegment,
   RuntimeValue,
   Test,
+  TestList,
   Typ,
 } from '../generated/catala_types';
 
@@ -98,9 +99,9 @@ function unsetPathIn(
   }
 }
 
-/** The path of the first value still to fill, inputs before outputs. */
+/** The path of the first input still to fill. */
 export function firstUnsetPath(test: Test): PathSegment[] | undefined {
-  for (const [name, io] of [...test.test_inputs, ...test.test_outputs]) {
+  for (const [name, io] of test.test_inputs) {
     if (io.value === undefined) continue;
     const found = unsetPathIn(io.value.value, [
       { kind: 'StructField', value: name },
@@ -157,14 +158,24 @@ export function countUnsetIn(rv: RuntimeValue | undefined, typ: Typ): number {
   return rv === undefined ? 0 : countUnset(rv, typ);
 }
 
-/** How many values (inputs and outputs together) are still to fill. */
+/** How many inputs are still to fill: expected outputs come from a run. */
 export function countUnsetValues(test: Test): number {
   const holes = (io: { typ: Typ; value?: { value: RuntimeValue } }): number =>
     io.value === undefined ? 0 : countUnset(io.value.value, io.typ);
-  return (
-    [...test.test_inputs.values()].reduce((n, io) => n + holes(io), 0) +
-    [...test.test_outputs.values()].reduce((n, io) => n + holes(io), 0)
-  );
+  return [...test.test_inputs.values()].reduce((n, io) => n + holes(io), 0);
+}
+
+/** Without the assertions still holding an unset value: written as
+ *  [impossible], they would stop the run before it yields any output. */
+export function withoutUnfilledAssertions(tests: TestList): TestList {
+  return tests.map((test) => ({
+    ...test,
+    test_outputs: new Map(
+      [...test.test_outputs].filter(
+        ([, io]) => io.value === undefined || !containsUnset(io.value.value)
+      )
+    ),
+  }));
 }
 
 export function hasUnsetInTest(

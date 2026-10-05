@@ -15,7 +15,7 @@ import {
 import * as path from 'path';
 import PQueue from 'p-queue';
 import {
-  runTestScope,
+  runSavedTest,
   parseTestFile,
   generate,
   getAvailableScopes,
@@ -23,6 +23,7 @@ import {
   retargetBrokenTest,
 } from '../test-case-editor/testCaseCompilerInterop';
 import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
+import { withoutUnfilledAssertions } from '../editors/unsetValidation';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
 
 export function parseContents(
@@ -174,7 +175,12 @@ export class TestCaseEditorProvider
       fileName: string,
       scope: string
     ): Promise<TestRunResults> {
-      return runTestScope(fileName, scope);
+      return runSavedTest(
+        document.parseResults,
+        fileName,
+        scope,
+        document.language
+      );
     }
 
     function applyGuiEdit(
@@ -221,7 +227,7 @@ export class TestCaseEditorProvider
                   rebuilt === undefined || rebuilt.length === 0
                     ? { kind: 'Error', value: 'Nothing to run yet.' }
                     : runRebuiltTest(
-                        rebuilt,
+                        withoutUnfilledAssertions(rebuilt),
                         typed_msg.value.scope,
                         document.language,
                         document.uri.fsPath

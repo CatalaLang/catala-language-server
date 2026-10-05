@@ -515,9 +515,12 @@ function TestPanes({
     if (path) setReveal((r) => ({ path, nonce: (r?.nonce ?? 0) + 1 }));
     scrollToFirstInvalidOrUnset(rebuiltPaneRef.current ?? document, 50);
   };
-  // An unset value fails the run with an interpreter error: ask first.
+  // An unset input fails the run with an interpreter error: ask first.
   const runWithUnsetCheck = async (): Promise<void> => {
-    if (rebuilt !== undefined && hasUnsetInTest(rebuilt)) {
+    if (
+      rebuilt !== undefined &&
+      hasUnsetInTest(rebuilt, { checkOutputs: false })
+    ) {
       jumpToFirstUnset();
       if (!(await confirm('RunTestWithUnsetValues'))) return;
     }

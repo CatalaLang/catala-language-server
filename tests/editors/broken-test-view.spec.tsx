@@ -3,8 +3,8 @@
  * must be inert and complete: it is the only copy of what the tester wrote.
  */
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import type {
   CarryRecord,
@@ -27,6 +27,11 @@ import {
   structVal,
 } from './test-helpers';
 import enMessages from '../../src/locales/en.json';
+
+const confirm = vi.fn(async () => true);
+vi.mock('../../src/messaging/confirm', () => ({
+  confirm: (...args: unknown[]) => confirm(...(args as [])),
+}));
 
 const endDateEnum: Typ = {
   kind: 'TEnum',
@@ -957,5 +962,57 @@ describe('regression: authored-tab-mark', () => {
       const gone = tabs.find((t) => t.textContent?.includes('gone'))!;
       expect(gone.querySelector('.fate-dropped')).not.toBeNull();
     });
+  });
+});
+
+describe('running the working copy', () => {
+  function runWorkingCopy(v: Recovery): () => void {
+    const onRun = vi.fn();
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <BrokenTestView view={v} onRun={onRun} />
+      </IntlProvider>
+    );
+    Element.prototype.scrollIntoView = vi.fn();
+    confirm.mockClear();
+    fireEvent.click(screen.getByText('Run the working copy'));
+    return onRun;
+  }
+  function withInputs(inputs: Map<string, TestIo>): Recovery {
+    const v = view();
+    const copy = v.tests[0].rebuilt!;
+    copy.test_inputs = inputs;
+    copy.test_outputs = new Map<string, TestIo>([
+      ['total', io({ kind: 'TInt' }, { value: rv({ kind: 'Unset' }) })],
+    ]);
+    return v;
+  }
+
+  it('does not ask when only an assertion is still to fill', async () => {
+    const onRun = runWorkingCopy(
+      withInputs(
+        new Map([
+          ['start_date', io({ kind: 'TDate' }, { value: dateVal(2025, 1, 1) })],
+        ])
+      )
+    );
+    await waitFor(() => expect(onRun).toHaveBeenCalled());
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('still asks when an input is unset', async () => {
+    runWorkingCopy(
+      withInputs(
+        new Map([
+          [
+            'start_date',
+            io({ kind: 'TDate' }, { value: rv({ kind: 'Unset' }) }),
+          ],
+        ])
+      )
+    );
+    await waitFor(() =>
+      expect(confirm).toHaveBeenCalledWith('RunTestWithUnsetValues')
+    );
   });
 });
