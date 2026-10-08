@@ -17,6 +17,7 @@ import {
 } from '../generated/catala_types';
 import { logger } from '../extension/logger';
 import { decideOnReadFailure } from './openDecision';
+import * as fs from 'fs';
 import * as path from 'path';
 import { window } from 'vscode';
 import { catalaPath, clerkPath, getCwd, shellArg } from '../shared/util_client';
@@ -183,7 +184,15 @@ export function parseTestFile(
       return { kind: 'ParseError', value: execResult.stderr };
     }
     if (recovered.kind !== 'BrokenTest') return recovered;
-    const decision = decideOnReadFailure(execResult.stderr, recovered.value);
+    const draft = path.join(
+      path.dirname(bufferPath),
+      recovered.value.working_copy
+    );
+    const decision = decideOnReadFailure(
+      execResult.stderr,
+      recovered.value,
+      fs.existsSync(draft)
+    );
     if (decision.kind === 'repair') return recovered;
     return {
       kind: 'CannotOpen',

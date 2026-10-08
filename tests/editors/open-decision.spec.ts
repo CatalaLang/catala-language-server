@@ -65,7 +65,10 @@ const toolProblem = (message: string): OpenDecision => ({
   message,
 });
 
-const rows: [string, Recovery, OpenDecision][] = [
+const noDraft = false;
+const draft = true;
+
+const rows: [string, Recovery, boolean, OpenDecision][] = [
   [
     'scope renamed: repair, picking a new scope',
     view(
@@ -77,21 +80,24 @@ const rows: [string, Recovery, OpenDecision][] = [
       ],
       'no rebuild'
     ),
+    noDraft,
     repair,
   ],
   [
     'module renamed: repair, picking a new module',
     view([{ kind: 'ModuleNotFound', value: notFound }], 'no rebuild'),
+    noDraft,
     repair,
   ],
-  ['a field renamed: repair', view([], ['Fits', 'Dropped']), repair],
-  ['a value wrapped in an option: repair', view([], ['Wrap']), repair],
+  ['a field renamed: repair', view([], ['Fits', 'Dropped']), noDraft, repair],
+  ['a value wrapped in an option: repair', view([], ['Wrap']), noDraft, repair],
   [
     'module does not build (or not from where catala runs): error page',
     view(
       [{ kind: 'ModuleWontCompile', value: { name: 'B', error: moduleError } }],
       'no rebuild'
     ),
+    noDraft,
     moduleWontBuild,
   ],
   [
@@ -100,27 +106,42 @@ const rows: [string, Recovery, OpenDecision][] = [
       [{ kind: 'Other', value: { name: 'B.C', error: 'Not_found' } }],
       'no rebuild'
     ),
+    noDraft,
     toolProblem('Not_found'),
   ],
   [
     'everything fits (catala ran from above the project): read error',
     view([], ['Fits', 'Fits']),
+    noDraft,
     toolProblem(readError),
   ],
   [
-    'everything fits, working copy unreadable: still the read error',
-    view([{ kind: 'WorkingCopyUnreadable', value: workingCopy }], ['Fits']),
-    toolProblem(readError),
-  ],
-  [
-    'a working copy note does not hide a broken test',
-    view([{ kind: 'WorkingCopyUnreadable', value: workingCopy }], ['Unwrap']),
+    'a draft that fits its target is a repair ready to apply: repair',
+    view([], ['Fits', 'Fits']),
+    draft,
     repair,
+  ],
+  [
+    'a draft that cannot be read is still a draft: repair',
+    view([{ kind: 'WorkingCopyUnreadable', value: workingCopy }], ['Fits']),
+    draft,
+    repair,
+  ],
+  [
+    'a draft whose module does not build: error page, the draft is kept',
+    view(
+      [{ kind: 'ModuleWontCompile', value: { name: 'B', error: moduleError } }],
+      'no rebuild'
+    ),
+    draft,
+    moduleWontBuild,
   ],
 ];
 
 describe('decideOnReadFailure', () => {
-  it.each(rows)('%s', (_, recovery, expected) => {
-    expect(decideOnReadFailure(readError, recovery)).toEqual(expected);
+  it.each(rows)('%s', (_, recovery, hasDraft, expected) => {
+    expect(decideOnReadFailure(readError, recovery, hasDraft)).toEqual(
+      expected
+    );
   });
 });
