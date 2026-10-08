@@ -32,5 +32,6 @@
   "The following settings will be updated:": "Les paramètres suivants seront mis à jour:",
   "Settings changed !": "Paramètres modifiés !",
   "Yes": "Oui",
-  "No": "Non"
+  "No": "Non",
+  "Could not open {0}: {1}": "Impossible d’ouvrir {0} : {1}"
 }

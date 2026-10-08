@@ -337,6 +337,15 @@ suite('Broken test document', function () {
     assert.strictEqual(doc.rebuilt, undefined);
     assert.ok(!fs.existsSync(file + '.repair'), 'nothing written');
     assert.ok(fs.readFileSync(file).equals(original), 'original untouched');
+
+    // Retry, once the module is fixed.
+    const module = path.join(dir, 'optionals.catala_en');
+    fs.writeFileSync(
+      module,
+      fs.readFileSync(module, 'utf8').replace('Count', 'money')
+    );
+    await doc.revert(token);
+    assert.strictEqual(doc.parseResults.kind, 'Results');
   });
 
   test('a blocked rebuild has nothing to save, and saving does not fail', async () => {

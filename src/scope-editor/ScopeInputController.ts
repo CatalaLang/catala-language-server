@@ -140,6 +140,9 @@ export class ScopeInputController {
           throw new Error(
             `Trying to finish a rebuild while in input scope mode`
           );
+        case 'RetryOpenRequest':
+        case 'OpenLocation':
+          throw new Error(`Trying to reopen a test while in input scope mode`);
         default:
           assertUnreachable(typed_msg);
       }

@@ -329,6 +329,8 @@ type up_message = [
   | RetargetRequest of string (* rebuild against this scope: "Scope" or "Module.Scope" *)
   | ReplaceOriginalRequest (* write the working copy over the original *)
   | DiscardWorkingCopyRequest (* delete the working copy, start over *)
+  | RetryOpenRequest (* read the file again *)
+  | OpenLocation of source_location
 ]
 
 type down_message = [
@@ -336,6 +338,12 @@ type down_message = [
   | TestRunResults of test_run_results_msg
   | ConfirmResult of confirm_result
 ]
+
+(* As printed in a catala message: [file] may be relative. *)
+type source_location = {
+  file: string;
+  line: int;
+}
 
 (* List entrypoints *)
 

@@ -385,6 +385,33 @@ export class TestCaseEditorProvider
           }
           break;
         }
+        case 'RetryOpenRequest':
+          // Sends the new reading to the page.
+          await document.revert(new vscode.CancellationTokenSource().token);
+          break;
+        case 'OpenLocation': {
+          const results = document.parseResults;
+          const { file, line } = typed_msg.value;
+          const target =
+            results.kind === 'CannotOpen'
+              ? path.resolve(results.value.ran_from, file)
+              : file;
+          const position = new vscode.Position(Math.max(line - 1, 0), 0);
+          try {
+            await vscode.window.showTextDocument(vscode.Uri.file(target), {
+              selection: new vscode.Range(position, position),
+            });
+          } catch (err) {
+            vscode.window.showErrorMessage(
+              vscode.l10n.t(
+                'Could not open {0}: {1}',
+                target,
+                err instanceof Error ? err.message : String(err)
+              )
+            );
+          }
+          break;
+        }
         case 'OpenInTextEditor':
           vscode.commands.executeCommand(
             'vscode.openWith',

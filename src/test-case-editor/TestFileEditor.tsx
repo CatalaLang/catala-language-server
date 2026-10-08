@@ -1,4 +1,10 @@
-import { useEffect, useState, type ReactElement, useCallback } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useState,
+  type ReactElement,
+  useCallback,
+} from 'react';
 import { FormattedMessage } from 'react-intl';
 import {
   type ParseResults,
@@ -8,6 +14,7 @@ import {
   type Recovery,
   type PathSegment,
   type Diff,
+  type CannotOpen,
   readDownMessage,
   writeUpMessage,
 } from '../generated/catala_types';
@@ -41,6 +48,7 @@ import { replaceLosses } from './testCaseUtils';
 type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
+  | { state: 'cannotOpen'; value: CannotOpen }
   | { state: 'emptyTestListMismatch' }
   | { state: 'brokenTest'; view: Recovery }
   | { state: 'success'; tests: TestList };
@@ -270,6 +278,9 @@ export default function TestFileEditor({
     case 'error': {
       return <ParsingErrorWarning message={state.message} vscode={vscode} />;
     }
+    case 'cannotOpen': {
+      return <CannotOpenPage value={state.value} vscode={vscode} />;
+    }
     case 'emptyTestListMismatch': {
       return <EmptyTestListMismatchWarning vscode={vscode} />;
     }
@@ -402,6 +413,106 @@ function ParsingErrorWarning({
   );
 }
 
+/** A catala location line: `├─➤ <file>:<line>.<col>…:`. */
+const locationLine = /^(.*─➤ )(.+):(\d+)\.\d+(?:-[\d.]+)?:?\s*$/;
+
+function locationOf(
+  messageLine: string
+): { prefix: string; file: string; line: number } | undefined {
+  const m = locationLine.exec(messageLine);
+  // A test fed on stdin has no file to open.
+  if (!m || m[2] === '-stdin-') return undefined;
+  return { prefix: m[1], file: m[2], line: Number(m[3]) };
+}
+
+/** `read` failed, and the test is not what needs fixing. Writes nothing. */
+export function CannotOpenPage({
+  value,
+  vscode,
+}: {
+  value: CannotOpen;
+  vscode: WebviewApi<unknown>;
+}): ReactElement {
+  const lines = value.message.split('\n');
+  const first = lines.map(locationOf).find((l) => l !== undefined);
+  const open = (loc: { file: string; line: number }): void =>
+    vscode.postMessage(
+      writeUpMessage({
+        kind: 'OpenLocation',
+        value: { file: loc.file, line: loc.line },
+      })
+    );
+  return (
+    <div role="alert" className="test-editor-warning">
+      <h2>
+        <FormattedMessage id="testFile.cannotOpenTitle" />
+      </h2>
+      <p>
+        {value.cause.kind === 'ModuleWontBuild' ? (
+          <FormattedMessage id="testFile.cannotOpenModuleWontBuild" />
+        ) : (
+          <FormattedMessage id="testFile.cannotOpenToolProblem" />
+        )}
+      </p>
+      <pre className="test-editor-error-message">
+        {lines.map((l, i) => {
+          const loc = locationOf(l);
+          return (
+            <Fragment key={i}>
+              {loc ? (
+                <>
+                  {loc.prefix}
+                  <a href="#" onClick={() => open(loc)}>
+                    {l.slice(loc.prefix.length)}
+                  </a>
+                </>
+              ) : (
+                l
+              )}
+              {i < lines.length - 1 && '\n'}
+            </Fragment>
+          );
+        })}
+      </pre>
+      <p>
+        <FormattedMessage
+          id="testFile.cannotOpenRanFrom"
+          values={{ dir: <code>{value.ran_from}</code> }}
+        />
+      </p>
+      <div className="test-editor-warning-actions">
+        {first && (
+          <button className="test-editor-open-text" onClick={() => open(first)}>
+            <span className="codicon codicon-go-to-file"></span>
+            <FormattedMessage
+              id="testFile.cannotOpenOpenFile"
+              values={{ file: first.file.split(/[\\/]/).pop() }}
+            />
+          </button>
+        )}
+        <button
+          className="test-editor-open-text"
+          onClick={() =>
+            vscode.postMessage(writeUpMessage({ kind: 'RetryOpenRequest' }))
+          }
+        >
+          <span className="codicon codicon-refresh"></span>
+          <FormattedMessage id="testFile.cannotOpenRetry" />
+        </button>
+        <button
+          className="test-editor-open-text"
+          onClick={() =>
+            vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+          }
+        >
+          <span className="codicon codicon-edit"></span>
+          <FormattedMessage id="testFile.openTextEditor" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EmptyTestListMismatchWarning({
   vscode,
 }: {
@@ -440,7 +551,7 @@ function parseResultsToUiState(tests: ParseResults): UIState {
     case 'BrokenTest':
       return { state: 'brokenTest', view: tests.value };
     case 'CannotOpen':
-      return { state: 'error', message: tests.value.message };
+      return { state: 'cannotOpen', value: tests.value };
     case 'EmptyTestListMismatch':
       return { state: 'emptyTestListMismatch' };
     case 'Results':
