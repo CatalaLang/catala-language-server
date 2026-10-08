@@ -2,7 +2,12 @@
 
 cd "$(dirname "$0")"
 
+# --update-reference rewrites the reference_* files from the current writer.
+update_reference=0
+[ "${1:-}" = --update-reference ] && update_reference=1
+
 function cleanup(){
+    rm -f reference_written.tmp
     rm -f rename_to_typecheck.catala_en
     rm -f to_typecheck.catala_en
     rm -f context_vars_roundtrip.catala_en
@@ -36,6 +41,24 @@ rm -f unqual.catala_en
 trap cleanup EXIT
 
 clerk start
+
+# ── saving is pinned ────────────────────────────────────────────────────────
+# reference_* are files as the editor writes them: saving one gives it back
+# byte for byte, so saving is idempotent and its format fixed. A change to the
+# writer's format fails here; if intended, run `./round_trip.sh
+# --update-reference` and commit the references with it: every saved test will
+# get that diff.
+for ref in reference_*.catala_*; do
+    catala testcase read $ref | catala testcase write --language ${ref##*.catala_} \
+        > reference_written.tmp \
+        || { echo "FAIL: could not read and write $ref"; exit 1; }
+    if [ $update_reference = 1 ]; then
+        cp reference_written.tmp $ref
+    else
+        cmp -s $ref reference_written.tmp \
+            || { echo "FAIL: the written form of $ref changed"; diff $ref reference_written.tmp; exit 1; }
+    fi
+done
 
 # make round-trip (read then write)
 catala testcase read test_implicit_import.catala_en | catala testcase write --language en > to_typecheck.catala_en
@@ -381,13 +404,6 @@ for f in test_implicit_import test_context_vars test_optionals test_items \
         || { echo "FAIL: could not write $f"; exit 1; }
     catala testcase partial-read written_$f.catala_en >/dev/null 2>&1 \
         || { echo "FAIL: partial-read cannot read back what write emitted for $f"; exit 1; }
-    # ...and writing is idempotent: a file the editor wrote is not rewritten
-    # differently the next time it is saved.
-    catala testcase read written_$f.catala_en | catala testcase write --language en \
-        > written2_$f.catala_en \
-        || { echo "FAIL: could not read back what write emitted for $f"; exit 1; }
-    cmp -s written_$f.catala_en written2_$f.catala_en \
-        || { echo "FAIL: write is not idempotent on $f"; diff written_$f.catala_en written2_$f.catala_en; exit 1; }
     # the file says who owns it, once
     [ "$(grep -c 'Written by the Catala testcase editor' written_$f.catala_en)" = 1 ] \
         || { echo "FAIL: written $f does not carry the editor's header exactly once"; exit 1; }

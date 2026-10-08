@@ -1,0 +1,25 @@
+Written by the Catala testcase editor. Do not edit by hand.
+
+> Using Periods
+> Using Rename
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Two modules"]
+declaration scope Example_two_modules:
+  output example scope Rename.Example
+  
+```
+
+```catala
+scope Example_two_modules:
+  definition example.inp equals
+    Periods.Period { -- start_date: |2024-01-01| -- end_date: |2024-12-31| }
+  assertion (example.outp =
+             Periods.Period {
+               -- start_date: |2024-01-01|
+               -- end_date: |2024-12-31|
+             })
+```
