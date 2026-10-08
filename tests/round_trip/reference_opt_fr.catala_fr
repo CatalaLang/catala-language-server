@@ -1,0 +1,19 @@
+Fichier écrit par l’éditeur de tests métier Catala. Ne pas modifier à la main.
+
+> Usage de Opt_fr
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Avec bonus"]
+déclaration champ d'application Prime_test:
+  résultat prime champ d'application Opt_fr.Prime
+  
+```
+
+```catala
+champ d'application Prime_test:
+  définition prime.bonus égal à Présent contenu 50,00 €
+  assertion (prime.total = 0,00 €)
+```

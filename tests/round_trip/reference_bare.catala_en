@@ -1,0 +1,19 @@
+Written by the Catala testcase editor. Do not edit by hand.
+
+> Using Bare
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Bare constructor"]
+declaration scope Paint_bare:
+  output paint scope Bare.Paint
+  
+```
+
+```catala
+scope Paint_bare:
+  definition paint.shade equals Present content Bare.Colour.Green
+  assertion (paint.done = true)
+```
