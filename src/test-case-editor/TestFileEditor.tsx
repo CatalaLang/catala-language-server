@@ -439,6 +439,8 @@ function parseResultsToUiState(tests: ParseResults): UIState {
       return { state: 'error', message: tests.value };
     case 'BrokenTest':
       return { state: 'brokenTest', view: tests.value };
+    case 'CannotOpen':
+      return { state: 'error', message: tests.value.message };
     case 'EmptyTestListMismatch':
       return { state: 'emptyTestListMismatch' };
     case 'Results':

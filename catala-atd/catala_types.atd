@@ -157,7 +157,22 @@ type parse_results = [
   (* The test no longer fits its scope; its values were recovered from the
      file's own literals. *)
   | BrokenTest of recovery
+  (* [read] failed and there is nothing to repair: the module, the folder
+     catala ran from or the tool is at fault. *)
+  | CannotOpen of cannot_open
 ]
+
+type cannot_open = {
+  cause: cannot_open_cause;
+  message: string; (* catala's, as is *)
+  (* Relative paths in [message] start here. *)
+  ran_from: string;
+}
+
+type cannot_open_cause = [
+  | ModuleWontBuild
+  | ToolProblem
+] <ocaml repr="classic">
 
 type recovery = {
   tests: recovered_test list;

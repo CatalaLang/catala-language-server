@@ -16,6 +16,7 @@ import {
   type TestRunResults,
 } from '../generated/catala_types';
 import { logger } from '../extension/logger';
+import { decideOnReadFailure } from './openDecision';
 import * as path from 'path';
 import { window } from 'vscode';
 import { catalaPath, clerkPath, getCwd, shellArg } from '../shared/util_client';
@@ -177,13 +178,21 @@ export function parseTestFile(
     { input: content, ...(cwd && { cwd }) }
   );
   if (!execResult.ok) {
-    // Usually the scope moved underneath the test.
-    return (
-      recoverBrokenTest(bufferPath, content) ?? {
-        kind: 'ParseError',
-        value: execResult.stderr,
-      }
-    );
+    const recovered = recoverBrokenTest(bufferPath, content);
+    if (recovered === null) {
+      return { kind: 'ParseError', value: execResult.stderr };
+    }
+    if (recovered.kind !== 'BrokenTest') return recovered;
+    const decision = decideOnReadFailure(execResult.stderr, recovered.value);
+    if (decision.kind === 'repair') return recovered;
+    return {
+      kind: 'CannotOpen',
+      value: {
+        cause: decision.cause,
+        message: decision.message,
+        ran_from: cwd ?? process.cwd(),
+      },
+    };
   }
   let parsed: unknown;
   try {

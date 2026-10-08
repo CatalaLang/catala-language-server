@@ -15,7 +15,11 @@ const fixtures = path.resolve(__dirname, '../../../tests/round_trip');
 
 /** A project whose tests no longer fit their scope. `broken` says how. */
 function project(
-  broken: 'field renamed' | 'module renamed' | 'nothing'
+  broken:
+    | 'field renamed'
+    | 'module renamed'
+    | 'module does not build'
+    | 'nothing'
 ): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'catala-doc-'));
   for (const f of ['clerk.toml', 'test_optionals.catala_en']) {
@@ -27,6 +31,11 @@ function project(
   );
   if (broken === 'nothing') {
     fs.writeFileSync(path.join(dir, 'optionals.catala_en'), module);
+  } else if (broken === 'module does not build') {
+    fs.writeFileSync(
+      path.join(dir, 'optionals.catala_en'),
+      module.replace('input base content money', 'input base content Count')
+    );
   } else if (broken === 'field renamed') {
     fs.writeFileSync(
       path.join(dir, 'optionals.catala_en'),
@@ -310,6 +319,24 @@ suite('Broken test document', function () {
       fs.existsSync(bfile + '.repair'),
       'a working copy in use was discarded'
     );
+  });
+
+  test('a module that does not build is an error, not a test to repair', async () => {
+    const dir = project('module does not build');
+    const file = path.join(dir, 'test_optionals.catala_en');
+    const original = fs.readFileSync(file);
+
+    const doc = await CatalaTestCaseDocument.create(
+      vscode.Uri.file(file),
+      undefined
+    );
+    const results = doc.parseResults;
+    assert.ok(results.kind === 'CannotOpen', `got ${results.kind}`);
+    assert.strictEqual(results.value.cause.kind, 'ModuleWontBuild');
+    assert.match(results.value.message, /Count/);
+    assert.strictEqual(doc.rebuilt, undefined);
+    assert.ok(!fs.existsSync(file + '.repair'), 'nothing written');
+    assert.ok(fs.readFileSync(file).equals(original), 'original untouched');
   });
 
   test('a blocked rebuild has nothing to save, and saving does not fail', async () => {
