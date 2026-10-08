@@ -1,0 +1,18 @@
+/* Token colors for ```catala/```catala-metadata fences in the Markdown preview.
+   See src/extension/markdownPreviewHighlight.ts for what produces these classes. */
+.cat-comment {
+  color: var(--vscode-descriptionForeground, #6a9955);
+  font-style: italic;
+}
+.cat-keyword {
+  color: var(--vscode-symbolIcon-keywordForeground, #c586c0);
+}
+.cat-type {
+  color: var(--vscode-symbolIcon-typeParameterForeground, #4ec9b0);
+}
+.cat-class {
+  color: var(--vscode-symbolIcon-classForeground, #4ec9b0);
+}
+.cat-number {
+  color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+}
