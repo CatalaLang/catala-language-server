@@ -301,17 +301,11 @@ export type UpMessage =
 | { kind: 'ReplaceOriginalRequest' }
 | { kind: 'DiscardWorkingCopyRequest' }
 | { kind: 'RetryOpenRequest' }
-| { kind: 'OpenLocation'; value: SourceLocation }
 
 export type DownMessage =
 | { kind: 'Update'; value: ParseResults }
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
 | { kind: 'ConfirmResult'; value: ConfirmResult }
-
-export type SourceLocation = {
-  file: string;
-  line: number /*int*/;
-}
 
 export type GuiEntrypoint = {
   scope: string;
@@ -1390,8 +1384,6 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return 'DiscardWorkingCopyRequest'
     case 'RetryOpenRequest':
       return 'RetryOpenRequest'
-    case 'OpenLocation':
-      return ['OpenLocation', writeSourceLocation(x.value, x)]
   }
 }
 
@@ -1428,8 +1420,6 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'ConfirmRequest', value: readConfirmRequest(x[1], x) }
       case 'RetargetRequest':
         return { kind: 'RetargetRequest', value: _atd_read_string(x[1], x) }
-      case 'OpenLocation':
-        return { kind: 'OpenLocation', value: readSourceLocation(x[1], x) }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')
@@ -1461,20 +1451,6 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')
   }
-}
-
-export function writeSourceLocation(x: SourceLocation, context: any = x): any {
-  return {
-    'file': _atd_write_required_field('SourceLocation', 'file', _atd_write_string, x.file, x),
-    'line': _atd_write_required_field('SourceLocation', 'line', _atd_write_int, x.line, x),
-  };
-}
-
-export function readSourceLocation(x: any, context: any = x): SourceLocation {
-  return {
-    file: _atd_read_required_field('SourceLocation', 'file', _atd_read_string, x['file'], x),
-    line: _atd_read_required_field('SourceLocation', 'line', _atd_read_int, x['line'], x),
-  };
 }
 
 export function writeGuiEntrypoint(x: GuiEntrypoint, context: any = x): any {

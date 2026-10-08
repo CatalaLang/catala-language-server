@@ -165,8 +165,7 @@ type parse_results = [
 type cannot_open = {
   cause: cannot_open_cause;
   message: string; (* catala's, as is *)
-  (* Relative paths in [message] start here. *)
-  ran_from: string;
+  ran_from: string; (* the folder catala ran from *)
 }
 
 type cannot_open_cause = [
@@ -330,7 +329,6 @@ type up_message = [
   | ReplaceOriginalRequest (* write the working copy over the original *)
   | DiscardWorkingCopyRequest (* delete the working copy, start over *)
   | RetryOpenRequest (* read the file again *)
-  | OpenLocation of source_location
 ]
 
 type down_message = [
@@ -338,12 +336,6 @@ type down_message = [
   | TestRunResults of test_run_results_msg
   | ConfirmResult of confirm_result
 ]
-
-(* As printed in a catala message: [file] may be relative. *)
-type source_location = {
-  file: string;
-  line: int;
-}
 
 (* List entrypoints *)
 

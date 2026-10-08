@@ -11,7 +11,6 @@
   "testFile.cannotOpenModuleWontBuild": "Un module utilisé par ce test ne compile pas, ou est introuvable depuis le dossier où catala a été lancé. Le test lui-même n'a rien à réparer.",
   "testFile.cannotOpenToolProblem": "Le test correspond toujours à son champ d'application, mais il n'a pas pu être lu : le problème vient probablement des outils, pas du test.",
   "testFile.cannotOpenRanFrom": "Catala a été lancé depuis {dir}. Si le clerk.toml du projet est ailleurs, ses modules peuvent être introuvables depuis ce dossier.",
-  "testFile.cannotOpenOpenFile": "Ouvrir {file}",
   "testFile.cannotOpenRetry": "Réessayer",
   "testEditor.runTest": "Lancer le calcul",
   "testEditor.ready": "Tous les champs sont remplis",

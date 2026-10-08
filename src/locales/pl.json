@@ -11,7 +11,6 @@
   "testFile.cannotOpenModuleWontBuild": "Moduł używany przez ten test nie kompiluje się lub nie można go znaleźć z folderu, w którym uruchomiono catala. Sam test nie wymaga naprawy.",
   "testFile.cannotOpenToolProblem": "Test nadal pasuje do swojego zakresu, ale nie udało się go odczytać: to prawdopodobnie problem z narzędziami, nie z testem.",
   "testFile.cannotOpenRanFrom": "Catala uruchomiono z {dir}. Jeśli plik clerk.toml projektu jest gdzie indziej, jego moduły mogą być stamtąd nieosiągalne.",
-  "testFile.cannotOpenOpenFile": "Otwórz {file}",
   "testFile.cannotOpenRetry": "Ponów",
   "testEditor.description": "Opis",
   "testEditor.title": "Tytuł",

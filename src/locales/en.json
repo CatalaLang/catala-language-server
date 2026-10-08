@@ -11,7 +11,6 @@
   "testFile.cannotOpenModuleWontBuild": "A module this test uses does not build, or cannot be found from the folder catala ran from. The test itself needs no repair.",
   "testFile.cannotOpenToolProblem": "The test still fits its scope, yet it could not be read: this is probably a problem with the tools, not with the test.",
   "testFile.cannotOpenRanFrom": "Catala ran from {dir}. If the project's clerk.toml is elsewhere, its modules may not be found from there.",
-  "testFile.cannotOpenOpenFile": "Open {file}",
   "testFile.cannotOpenRetry": "Retry",
   "testEditor.description": "Description",
   "testEditor.title": "Title",

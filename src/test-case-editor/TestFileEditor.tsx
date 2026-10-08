@@ -1,10 +1,4 @@
-import {
-  Fragment,
-  useEffect,
-  useState,
-  type ReactElement,
-  useCallback,
-} from 'react';
+import { useEffect, useState, type ReactElement, useCallback } from 'react';
 import { FormattedMessage } from 'react-intl';
 import {
   type ParseResults,
@@ -413,18 +407,6 @@ function ParsingErrorWarning({
   );
 }
 
-/** A catala location line: `├─➤ <file>:<line>.<col>…:`. */
-const locationLine = /^(.*─➤ )(.+):(\d+)\.\d+(?:-[\d.]+)?:?\s*$/;
-
-function locationOf(
-  messageLine: string
-): { prefix: string; file: string; line: number } | undefined {
-  const m = locationLine.exec(messageLine);
-  // A test fed on stdin has no file to open.
-  if (!m || m[2] === '-stdin-') return undefined;
-  return { prefix: m[1], file: m[2], line: Number(m[3]) };
-}
-
 /** `read` failed, and the test is not what needs fixing. Writes nothing. */
 export function CannotOpenPage({
   value,
@@ -433,15 +415,6 @@ export function CannotOpenPage({
   value: CannotOpen;
   vscode: WebviewApi<unknown>;
 }): ReactElement {
-  const lines = value.message.split('\n');
-  const first = lines.map(locationOf).find((l) => l !== undefined);
-  const open = (loc: { file: string; line: number }): void =>
-    vscode.postMessage(
-      writeUpMessage({
-        kind: 'OpenLocation',
-        value: { file: loc.file, line: loc.line },
-      })
-    );
   return (
     <div role="alert" className="test-editor-warning">
       <h2>
@@ -454,26 +427,7 @@ export function CannotOpenPage({
           <FormattedMessage id="testFile.cannotOpenToolProblem" />
         )}
       </p>
-      <pre className="test-editor-error-message">
-        {lines.map((l, i) => {
-          const loc = locationOf(l);
-          return (
-            <Fragment key={i}>
-              {loc ? (
-                <>
-                  {loc.prefix}
-                  <a href="#" onClick={() => open(loc)}>
-                    {l.slice(loc.prefix.length)}
-                  </a>
-                </>
-              ) : (
-                l
-              )}
-              {i < lines.length - 1 && '\n'}
-            </Fragment>
-          );
-        })}
-      </pre>
+      <pre className="test-editor-error-message">{value.message}</pre>
       <p>
         <FormattedMessage
           id="testFile.cannotOpenRanFrom"
@@ -481,15 +435,6 @@ export function CannotOpenPage({
         />
       </p>
       <div className="test-editor-warning-actions">
-        {first && (
-          <button className="test-editor-open-text" onClick={() => open(first)}>
-            <span className="codicon codicon-go-to-file"></span>
-            <FormattedMessage
-              id="testFile.cannotOpenOpenFile"
-              values={{ file: first.file.split(/[\\/]/).pop() }}
-            />
-          </button>
-        )}
         <button
           className="test-editor-open-text"
           onClick={() =>
