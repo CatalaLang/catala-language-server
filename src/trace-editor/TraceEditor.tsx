@@ -111,6 +111,29 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
           }
           break;
         }
+        case 'scopes': {
+          const extra = new Map<string, TraceTest | undefined>(
+            message.scopes.map(([s, json]) => [
+              s,
+              json !== null ? readTraceTest(json) : undefined,
+            ])
+          );
+          setScopes((prev) => {
+            const merged = new Map(prev);
+            for (const [name, test] of extra) {
+              if (!merged.has(name)) merged.set(name, test);
+            }
+            return merged;
+          });
+          setScope((prev: ScopeWithInfo): ScopeWithInfo => {
+            if (prev.scopeName !== '') {
+              return prev;
+            }
+            const first = extra.entries().next().value;
+            return first ? { scopeName: first[0], test: first[1] } : prev;
+          });
+          break;
+        }
         case 'result':
           if (message.ok) {
             setRunState({ status: 'success', trace: message.trace });
@@ -189,7 +212,7 @@ export default function TraceEditor({ vscode }: Props): ReactElement {
         )}
       </div>
 
-      {!scopePreset && scopes.size > 1 && (
+      {!scopePreset && scopes.size !== 1 && (
         <label style={fieldStyle}>
           <span style={{ fontWeight: 600 }}>
             <FormattedMessage id="trace.scope" />

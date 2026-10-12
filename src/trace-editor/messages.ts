@@ -27,6 +27,7 @@ export type TraceDownMessage =
       trace?: TraceElement[];
       run?: boolean;
     }
+  | { kind: 'scopes'; scopes: [string, JsonValue][] }
   | { kind: 'result'; ok: true; trace: TraceElement[] }
   | { kind: 'result'; ok: false; error: string }
   | { kind: 'extract'; id: number; text: string | null }

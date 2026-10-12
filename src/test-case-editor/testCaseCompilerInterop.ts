@@ -1,4 +1,4 @@
-import { execFileSync, type SpawnSyncReturns } from 'child_process';
+import { execFile, execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
   ScopeDefList,
   ScopeTestResult,
@@ -23,6 +23,59 @@ import { catalaPath, clerkPath, getCwd, shellArg } from '../shared/util_client';
 
 type ExecOptions = { input?: string; cwd?: string };
 type ExecResult = { ok: true; output: string } | { ok: false; stderr: string };
+
+function execBinaryAsync(
+  bin: string,
+  args: string[],
+  opts: ExecOptions = {}
+): Promise<ExecResult> {
+  logger.log(`Running ${bin} ${args.join(' ')}`);
+  const useShell = process.platform === 'win32';
+  const { input, ...spawnOpts } = opts;
+  return new Promise((resolve) => {
+    const child = execFile(
+      bin,
+      useShell ? args.map(shellArg) : args,
+      {
+        encoding: 'utf8',
+        shell: useShell,
+        env: {
+          ...process.env,
+          ...(path.isAbsolute(clerkPath) && { CATALA_CLERK_PATH: clerkPath }),
+        },
+        ...spawnOpts,
+      },
+      (error, stdout, stderr) =>
+        resolve(
+          error
+            ? { ok: false, stderr: stderr || String(error) }
+            : { ok: true, output: stdout }
+        )
+    );
+    if (input !== undefined) {
+      child.stdin?.end(input);
+    }
+  });
+}
+
+const stdlibReady = new Map<string, Promise<void>>();
+
+function ensureStdlib(cwd: string | undefined): Promise<void> {
+  if (cwd === undefined) {
+    return Promise.resolve();
+  }
+  const pending = stdlibReady.get(cwd);
+  if (pending !== undefined) {
+    return pending;
+  }
+  const started = execBinaryAsync(clerkPath, ['start'], { cwd }).then((r) => {
+    if (!r.ok) {
+      logger.log(`clerk start failed in ${cwd}: ${r.stderr}`);
+    }
+  });
+  stdlibReady.set(cwd, started);
+  return started;
+}
 
 function execBinary(
   bin: string,
@@ -170,14 +223,15 @@ export function runRebuiltTest(
   }
 }
 
-export function parseTestFile(
+export async function parseTestFile(
   content: string,
   bufferPath: string,
   lang?: string,
   scope?: string
-): ParseResults {
+): Promise<ParseResults> {
   const cwd = getCwd(bufferPath);
-  const execResult = execBinary(
+  await ensureStdlib(cwd);
+  const execResult = await execBinaryAsync(
     catalaPath,
     [
       'testcase',

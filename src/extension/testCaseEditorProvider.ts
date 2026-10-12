@@ -42,7 +42,7 @@ export function parseContents(
   content: Uint8Array,
   uri: vscode.Uri,
   language: string
-): ParseResults {
+): Promise<ParseResults> {
   const documentText = new TextDecoder('utf-8').decode(content);
   return parseTestFile(documentText, uri.fsPath, language);
 }

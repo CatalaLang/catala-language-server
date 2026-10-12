@@ -149,57 +149,72 @@ export class TraceEditorProvider implements vscode.CustomTextEditorProvider {
       webview.postMessage(message);
     }
 
-    const sendInit = async (ins?: TraceEditorInputs): Promise<void> => {
-      let scopesWithInfo: Map<string, Test | undefined> = new Map();
-      let scope = ins?.scope;
-      if (ins?.test) {
-        const test = ins.test;
-        scope = test.testing_scope;
-        scopesWithInfo = new Map([[test.testing_scope, test]]);
-      } else {
-        const client = this.getClient();
-        if (client) {
-          try {
-            const entrypoints = await listEntrypoints(
-              client,
-              [{ kind: 'Test' }, { kind: 'GUI' }, { kind: 'NoInputScope' }],
-              file,
-              false,
-              true
-            );
-            const scopes = entrypoints.map(scopeName);
-            const lang = file.match(/\.catala_(\w+)/)?.[1];
-            const parsed = parseTestFile(document.getText(), file, lang, scope);
-            if (parsed.kind === 'Results') {
-              scopesWithInfo = new Map(
-                scopes.map((s) => [
-                  s,
-                  parsed.value.find((t) => t.testing_scope == s),
-                ])
-              );
-            } else {
-              scopesWithInfo = new Map(scopes.map((s) => [s, undefined]));
-              logger.log(
-                `Trace editor: could not parse tests (${parsed.kind}).`
-              );
-            }
-          } catch (e) {
-            logger.log(`Trace editor: could not list scopes: ${String(e)}`);
-          }
-        }
+    const asScopeList = (
+      scopes: Map<string, Test | undefined>
+    ): [string, JsonValue][] =>
+      [...scopes].map(([s, test]) => [
+        s,
+        test ? (writeTest(test) as JsonValue) : null,
+      ]);
+
+    const scopesFromFile = async (
+      scope: string | undefined
+    ): Promise<Map<string, Test | undefined>> => {
+      const lang = file.match(/\.catala_(\w+)/)?.[1];
+      const parsed = await parseTestFile(document.getText(), file, lang, scope);
+      if (parsed.kind !== 'Results') {
+        logger.log(`Trace editor: could not parse tests (${parsed.kind}).`);
+        return new Map();
       }
+      return new Map(parsed.value.map((t) => [t.testing_scope, t]));
+    };
+
+    const scopesFromProject = async (): Promise<string[]> => {
+      const client = this.getClient();
+      if (!client) return [];
+      const entrypoints = await listEntrypoints(
+        client,
+        [{ kind: 'Test' }, { kind: 'GUI' }, { kind: 'NoInputScope' }],
+        file,
+        false,
+        true
+      );
+      return entrypoints.map(scopeName);
+    };
+
+    const sendInit = async (ins?: TraceEditorInputs): Promise<void> => {
+      const scope = ins?.test ? ins.test.testing_scope : ins?.scope;
+      const known: Map<string, Test | undefined> = ins?.test
+        ? new Map([[ins.test.testing_scope, ins.test]])
+        : await scopesFromFile(scope).catch((e) => {
+            logger.log(`Trace editor: could not read tests: ${String(e)}`);
+            return new Map<string, Test | undefined>();
+          });
+
       postToWebView({
         kind: 'init',
         file,
         cwd: getCwd(file) ?? '',
-        scopes: [...scopesWithInfo].map(([s, test]): [string, JsonValue] => [
-          s,
-          test ? (writeTest(test) as JsonValue) : null,
-        ]),
+        scopes: asScopeList(known),
         scope,
         trace: ins?.trace,
         run: ins?.run,
       });
+
+      if (ins?.test) return;
+      void scopesFromProject()
+        .then((names) => {
+          const merged = new Map(known);
+          for (const name of names) {
+            if (!merged.has(name)) merged.set(name, undefined);
+          }
+          if (merged.size !== known.size) {
+            postToWebView({ kind: 'scopes', scopes: asScopeList(merged) });
+          }
+        })
+        .catch((e) =>
+          logger.log(`Trace editor: could not list scopes: ${String(e)}`)
+        );
     };
 
     webviewPanel.webview.onDidReceiveMessage(async (raw: unknown) => {
