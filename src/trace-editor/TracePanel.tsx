@@ -9,12 +9,7 @@ import {
   useState,
 } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
-import {
-  VscodeButton,
-  VscodeRadio,
-  VscodeRadioGroup,
-  VscodeTextfield,
-} from '@vscode-elements/react-elements';
+import { VscodeButton, VscodeTextfield } from '@vscode-elements/react-elements';
 import type { Expected, Match, TraceElement, TraceTest } from './traceUtils';
 import {
   PANEL_HEIGHT_VAR,
@@ -41,7 +36,6 @@ import TraceNode from './TraceNode';
 import { useCatalaSettings } from '../shared/useSettings';
 import { showsTraceKind } from '../shared/settings';
 
-type OutputView = 'tree' | 'json';
 type SetFilter = React.Dispatch<React.SetStateAction<Filter[]>>;
 
 /** A filter pushed into a panel from the outside (data panel, context menu). */
@@ -206,7 +200,6 @@ export default function TracePanel({
   fromClosestMatch?: boolean;
 }): ReactElement {
   const intl = useIntl();
-  const [view, setView] = useState<OutputView>('tree');
   const [expand, setExpand] = useState<boolean | null>(null);
   const [filter, setFilter] = useState<string>('');
 
@@ -262,24 +255,7 @@ export default function TracePanel({
           margin: 0,
         }}
       >
-        <span style={{ fontWeight: 600 }}>
-          {label ?? <FormattedMessage id="trace.label" />}
-        </span>
-        <VscodeRadioGroup
-          variant="horizontal"
-          onChange={(e) => setView(fieldValue(e) as OutputView)}
-        >
-          <VscodeRadio
-            value="tree"
-            label={intl.formatMessage({ id: 'trace.view.tree' })}
-            checked={view === 'tree'}
-          />
-          <VscodeRadio
-            value="json"
-            label={intl.formatMessage({ id: 'trace.view.json' })}
-            checked={view === 'json'}
-          />
-        </VscodeRadioGroup>
+        {label && <span style={{ fontWeight: 600 }}>{label}</span>}
         {onClose && (
           <span
             className="codicon codicon-close"
@@ -290,88 +266,66 @@ export default function TracePanel({
           />
         )}
       </div>
-      {view === 'tree' ? (
-        <>
-          <div
-            style={{
-              display: 'flex',
-              gap: 8,
-              alignItems: 'center',
-              margin: '8px 0',
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          margin: '8px 0',
+        }}
+      >
+        <VscodeTextfield
+          placeholder={intl.formatMessage({
+            id: 'trace.filterPlaceholder',
+          })}
+          value={filter}
+          onInput={(e) => setFilter(fieldValue(e))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addFilter(filter);
+              setFilter('');
+            }
+          }}
+          style={{ flex: 1 }}
+        >
+          <span
+            style={{ cursor: 'pointer' }}
+            onClick={(e) => {
+              e.preventDefault();
+              addFilter(filter);
+              setFilter('');
             }}
-          >
-            <VscodeTextfield
-              placeholder={intl.formatMessage({
-                id: 'trace.filterPlaceholder',
-              })}
-              value={filter}
-              onInput={(e) => setFilter(fieldValue(e))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addFilter(filter);
-                  setFilter('');
-                }
-              }}
-              style={{ flex: 1 }}
-            >
-              <span
-                style={{ cursor: 'pointer' }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  addFilter(filter);
-                  setFilter('');
-                }}
-                className="codicon codicon-save"
-                slot="content-after"
-              />
-            </VscodeTextfield>
-            <VscodeButton
-              icon="expand-all"
-              secondary
-              title={intl.formatMessage({ id: 'trace.expandAllTitle' })}
-              onClick={() => setExpand(true)}
-            >
-              <FormattedMessage id="trace.expandAll" />
-            </VscodeButton>
-            <VscodeButton
-              icon="collapse-all"
-              secondary
-              title={intl.formatMessage({ id: 'trace.collapseAllTitle' })}
-              onClick={() => setExpand(false)}
-            >
-              <FormattedMessage id="trace.collapseAll" />
-            </VscodeButton>
-          </div>
-          <FilterPins filters={savedFilters} setFilters={setSavedFilters} />
-          <TraceTreeView
-            trace={trace}
-            filters={savedFilters}
-            cwd={cwd}
-            expand={expand}
-            fromClosestMatch={fromClosestMatch}
-            test={test}
+            className="codicon codicon-save"
+            slot="content-after"
           />
-        </>
-      ) : (
-        <>
-          <div style={{ margin: '8px 0' }}>
-            <VscodeButton
-              icon="copy"
-              secondary
-              title={intl.formatMessage({ id: 'trace.copyJson' })}
-              onClick={() => {
-                void navigator.clipboard.writeText(
-                  JSON.stringify(trace, null, 2)
-                );
-              }}
-            >
-              <FormattedMessage id="trace.copyJson" />
-            </VscodeButton>
-          </div>
-          <pre style={preStyle}>{JSON.stringify(trace, null, 2)}</pre>
-        </>
-      )}
+        </VscodeTextfield>
+        <VscodeButton
+          icon="expand-all"
+          secondary
+          title={intl.formatMessage({ id: 'trace.expandAllTitle' })}
+          onClick={() => setExpand(true)}
+        >
+          <FormattedMessage id="trace.expandAll" />
+        </VscodeButton>
+        <VscodeButton
+          icon="collapse-all"
+          secondary
+          title={intl.formatMessage({ id: 'trace.collapseAllTitle' })}
+          onClick={() => setExpand(false)}
+        >
+          <FormattedMessage id="trace.collapseAll" />
+        </VscodeButton>
+      </div>
+      <FilterPins filters={savedFilters} setFilters={setSavedFilters} />
+      <TraceTreeView
+        trace={trace}
+        filters={savedFilters}
+        cwd={cwd}
+        expand={expand}
+        fromClosestMatch={fromClosestMatch}
+        test={test}
+      />
       {derived.map((d) => (
         <div key={d.id} style={derivedPanelStyle}>
           <TracePanel
