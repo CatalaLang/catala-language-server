@@ -64,6 +64,7 @@ jobs:
     # Drives a real VS Code window: slower than the build job's tests, and a
     # failure here means the packaged extension doesn't work as a whole.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       DUNE_PROFILE: check
     steps:

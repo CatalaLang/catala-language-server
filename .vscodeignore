@@ -39,3 +39,4 @@ clerk.toml
 dist/test/
 dist/e2e/
 .extest/
+_opam/
