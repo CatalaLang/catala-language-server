@@ -9,3 +9,4 @@ node_modules
 _build
 src/.DS_Store
 test-case-parser/examples/.DS_Store
+.extest/
