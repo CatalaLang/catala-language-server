@@ -225,21 +225,6 @@
   background-color: var(--vscode-button-hoverBackground);
 }
 
-.count-badge-unfilled {
-  gap: 3px;
-  background: var(--vscode-inputValidation-warningBackground, #352a05);
-  color: var(--vscode-foreground);
-  border-color: var(--vscode-inputValidation-warningBorder, #cca700);
-}
-
-.count-badge .codicon {
-  font-size: 11px;
-}
-
-.count-badge-sep {
-  opacity: 0.6;
-}
-
 .count-badge-zero {
   opacity: 0.5;
   cursor: default;

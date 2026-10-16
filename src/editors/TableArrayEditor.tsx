@@ -1,5 +1,4 @@
 import { type ReactElement, useMemo, useState, useRef } from 'react';
-import { countUnsetIn } from './unsetValidation';
 import { CountBadge } from './badges';
 import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
@@ -788,7 +787,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                       arrayValue?.value.kind === 'Array'
                         ? arrayValue.value.value.length
                         : 0;
-                    const unfilled = countUnsetIn(arrayValue, arr.arrayType);
 
                     const subTableId = `sub-table-${arr.label}`;
                     const arrElemType =
@@ -807,7 +805,6 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
                         <div className="sub-array-cell-content">
                           <CountBadge
                             items={count}
-                            unfilled={unfilled}
                             onClick={
                               count > 0
                                 ? (): void =>
@@ -1025,13 +1022,7 @@ export function TableArrayEditor(props: TableArrayEditorProps): ReactElement {
           <div key={idx} id={subTableId} className="sub-table-section">
             <div className="sub-table-header">
               <Identifier name={subArray.label} />
-              <CountBadge
-                items={subArray.items.length}
-                unfilled={subArray.items.reduce(
-                  (n, item) => n + countUnsetIn(item.value, subElementType),
-                  0
-                )}
-              />
+              <CountBadge items={subArray.items.length} />
             </div>
             <div className="sub-table-content">
               <TableArrayEditor
