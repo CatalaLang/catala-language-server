@@ -33,6 +33,7 @@
   "true": "vrai",
   "editor.unset": "Non défini",
   "editor.invalid": "Invalide",
+  "editor.invalidDate": "Date invalide",
   "durationEditor.years": "Années :",
   "durationEditor.months": "Mois :",
   "durationEditor.days": "Jours :",
