@@ -8,6 +8,7 @@ import {
 import type { PathSegment, Typ } from '../generated/catala_types';
 import { wrapIdentifier } from './Identifier';
 import { pathStartsWith, useReveal } from './reveal';
+import { useIntl } from 'react-intl';
 import { CountBadge } from './badges';
 
 /**
@@ -22,9 +23,10 @@ export type EditorItem = {
   type: Typ;
   editor: ReactElement;
   count?: number;
-  unfilled?: number;
-  /** A decoration next to the label, e.g. a carry mark. On a tab header a
-   *  non-zero [unfilled] count stands in for it. */
+  /** Flagged on a tab header only, where the hole would be out of sight. */
+  hasUnset?: boolean;
+  /** A decoration next to the label, e.g. a carry mark. On a tab header the
+   *  [hasUnset] sign stands in for it. */
   mark?: ReactNode;
 };
 
@@ -56,13 +58,24 @@ function categorize(item: EditorItem): 'scalar' | 'structural' | 'array' {
 }
 
 function TabHeader({ item }: { item: EditorItem }): ReactElement {
-  const unfilled = item.unfilled ?? 0;
+  const intl = useIntl();
+  const hint = intl.formatMessage({ id: 'tab.hasUnset' });
   return (
     <>
-      <span className="tab-name">{wrapIdentifier(item.label)}</span>{' '}
+      <span className="tab-name">
+        {wrapIdentifier(item.label)}
+        {item.hasUnset && (
+          <span
+            className="tab-unset codicon codicon-circle-large-outline"
+            role="img"
+            aria-label={hint}
+            title={hint}
+          ></span>
+        )}
+      </span>{' '}
       <span className="tab-meta">
-        <CountBadge items={item.count} unfilled={unfilled} />
-        {unfilled === 0 && item.mark}
+        <CountBadge items={item.count} />
+        {!item.hasUnset && item.mark}
       </span>
     </>
   );

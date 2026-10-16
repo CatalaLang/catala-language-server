@@ -11,7 +11,7 @@ import ValueEditor, {
   createRuntimeValue,
 } from '../editors/ValueEditors';
 import { CompositeEditor, type EditorItem } from '../editors/CompositeEditor';
-import { countUnsetIn } from '../editors/unsetValidation';
+import { containsUnset } from '../editors/unsetValidation';
 import { confirm } from '../messaging/confirm';
 import { Identifier } from '../editors/Identifier';
 
@@ -156,9 +156,10 @@ export default function TestInputsEditor(props: Props): ReactElement {
         mark: props.labelExtra?.(inputName),
         type: testIo.typ,
         count,
-        unfilled: props.readOnly
-          ? 0
-          : countUnsetIn(testIo.value?.value, testIo.typ),
+        hasUnset:
+          !props.readOnly &&
+          testIo.value !== undefined &&
+          containsUnset(testIo.value.value),
         editor: (
           <InputField
             inputName={inputName}

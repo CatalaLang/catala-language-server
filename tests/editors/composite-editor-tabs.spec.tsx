@@ -137,25 +137,29 @@ describe('StructEditor tab count from value', () => {
   });
 });
 
-describe('Unfilled badges', () => {
-  it('shows how many values are left to fill in a tab', () => {
+describe('Unfilled tabs', () => {
+  it('flags a tab holding values to fill; the pill only counts items', () => {
     render(
       <IntlProvider locale="en" messages={enMessages}>
         <CompositeEditor
           items={[
-            { ...arrayItem('children', 2), unfilled: 2 },
-            { ...arrayItem('pets', 1), unfilled: 0 },
+            { ...arrayItem('children', 2), hasUnset: true },
+            { ...arrayItem('pets', 1), hasUnset: false },
           ]}
         />
       </IntlProvider>
     );
-    const badges = document.querySelectorAll('.count-badge-unfilled');
-    expect(badges.length).toBe(1);
-    expect(badges[0]).toHaveAttribute('title', '2 items, 2 values to fill');
-    expect(badges[0].textContent).toBe('2·2');
+    const signs = document.querySelectorAll('.tab-unset');
+    expect(signs.length).toBe(1);
+    expect(signs[0]).toHaveAttribute('title', 'Contains values to fill');
+    expect(
+      screen
+        .getByRole('button', { name: /children/ })
+        .querySelector('.count-badge')?.textContent
+    ).toBe('2');
   });
 
-  it('counts unset elements inside an inactive tab from the value', () => {
+  it('flags an inactive tab from the unset elements in its value', () => {
     const value = structVal(
       personDecl,
       new Map([
@@ -164,8 +168,9 @@ describe('Unfilled badges', () => {
       ])
     );
     renderEditor(personTyp, vi.fn(), { value });
-    const badge = document.querySelector('.count-badge-unfilled');
-    expect(badge?.textContent).toBe('2·1');
+    const signs = document.querySelectorAll('.tab-unset');
+    expect(signs.length).toBe(1);
+    expect(signs[0].closest('.tab')?.textContent).toContain('pets');
   });
 });
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import type { TestRunStatus } from './TestFileEditor';
 import type { Test, TestRunResults } from '../generated/catala_types';
-import { countUnsetValues } from '../editors/unsetValidation';
+import { hasUnsetInTest } from '../editors/unsetValidation';
 
 /** The run button and its result, shared by the test editor and the recovery view. */
 
@@ -16,8 +16,7 @@ export function ReadinessChip({
   onJump: () => void;
 }): React.JSX.Element {
   const intl = useIntl();
-  const count = countUnsetValues(test);
-  if (count === 0) {
+  if (!hasUnsetInTest(test)) {
     return (
       <span className="readiness-chip readiness-ready">
         <span className="codicon codicon-pass"></span>{' '}
@@ -32,7 +31,7 @@ export function ReadinessChip({
       title={intl.formatMessage({ id: 'testEditor.jumpToUnfilled' })}
     >
       <span className="codicon codicon-circle-large-outline"></span>{' '}
-      <FormattedMessage id="testEditor.unfilled" values={{ count }} />
+      <FormattedMessage id="testEditor.unfilled" />
     </button>
   );
 }
