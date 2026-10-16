@@ -390,6 +390,7 @@ function DateEditor(props: DateEditorProps): ReactElement {
     )}-${String(date.day).padStart(2, '0')}`;
   };
 
+  const intl = useIntl();
   const [internalValue, setInternalValue] = useState(formatDate(initialValue));
   const [isInvalid, setIsInvalid] = useState(false);
   const vProps = useValidationHint(
@@ -426,7 +427,8 @@ function DateEditor(props: DateEditorProps): ReactElement {
 
     const newDate = parseDate(dateStr);
     if (dateStr.trim() === '') {
-      setIsInvalid(false);
+      // The browser reports an impossible or partial date as ''.
+      setIsInvalid(event.target.validity.badInput);
       props.onValueChange(makeUnset(runtimeValue));
       return;
     }
@@ -440,18 +442,22 @@ function DateEditor(props: DateEditorProps): ReactElement {
     }
   };
 
-  const handleBlur = (): void => {
+  const handleBlur = (event: React.FocusEvent<HTMLInputElement>): void => {
     if (internalValue === '') {
       props.onValueChange(makeUnset(runtimeValue));
-      setIsInvalid(false);
-      return;
+      // Typing into an empty field fires no change until the date is whole.
+      setIsInvalid(event.target.validity.badInput);
     }
   };
 
   return (
     <div
       className={`value-editor date-editor-wrapper ${vProps.className}`}
-      title={vProps.title}
+      title={
+        isInvalid
+          ? intl.formatMessage({ id: 'editor.invalidDate' })
+          : vProps.title
+      }
     >
       <input
         type="date"
