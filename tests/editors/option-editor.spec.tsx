@@ -136,4 +136,30 @@ describe('OptionEditor', () => {
     expect(screen.getByDisplayValue('3')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Back to Absent' })).toBeTruthy();
   });
+
+  it('nested option with an absent inner level: dropdown then chip', () => {
+    const { lastValue } = renderOption(
+      { kind: 'TOption', value: optInt },
+      present(optInt, absent(tInt))
+    );
+    expect(screen.getAllByRole('combobox')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: /Absent/ }));
+    const outer = lastValue().value;
+    expect(outer.kind === 'Enum' && outer.value[1][0]).toBe('Present');
+    const inner = outer.kind === 'Enum' ? outer.value[1][1]?.value.value : null;
+    expect(inner?.kind === 'Enum' && inner.value[1][0]).toBe('Present');
+  });
+
+  it('three levels: two dropdowns, then the compact editor', () => {
+    const optOptInt: Typ = { kind: 'TOption', value: optInt };
+    renderOption(
+      { kind: 'TOption', value: optOptInt },
+      present(optOptInt, present(optInt, present(tInt, intVal(3))))
+    );
+    expect(screen.getAllByRole('combobox')).toHaveLength(2);
+    expect(screen.getByDisplayValue('3')).toBeTruthy();
+    expect(
+      screen.getAllByRole('button', { name: 'Back to Absent' })
+    ).toHaveLength(1);
+  });
 });
