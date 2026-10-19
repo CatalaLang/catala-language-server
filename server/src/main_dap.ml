@@ -179,8 +179,8 @@ let update_env env =
     | (_, (EAbs _, _)) :: t ->
       (* Skip lambdas *)
       loop acc t
-    | (s, e) :: t -> begin
-      match children s e with
+    | (s, e) :: t ->
+      begin match children s e with
       | None ->
         let id = !cpt in
         incr cpt;
@@ -198,7 +198,7 @@ let update_env env =
         let v = Node (id, s, e, children) in
         m := M.add id v !m;
         loop (v :: acc) t
-    end
+      end
   in
   let env : (string * dcalc_expr) list =
     Var.Map.bindings env |> List.map (fun (v, (e, _)) -> Bindlib.name_of v, e)

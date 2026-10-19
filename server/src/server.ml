@@ -208,13 +208,13 @@ let unlocked_process_document
     match validation_result with
     | Skipped -> false, document, Doc_id.Map.empty
     | Faulty diags -> false, document, diags
-    | Partial (diags, result) -> begin
-      if document.last_valid_result = None then
+    | Partial (diags, result) ->
+      begin if document.last_valid_result = None then
         (* If the document was never valid, a partial result is better than
            nothing... *)
         false, { document with last_valid_result = Some result }, diags
       else false, document, diags
-    end
+      end
     | Valid (diags, result) ->
       let last_saved_intf =
         if document.buffer_state = Saved then Some result.sig_hash

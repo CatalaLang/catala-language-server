@@ -416,8 +416,8 @@ let continue_back_until_breakpoint state : [ `Start | `B of step ] =
 let find_breakpoint (pos_map : PMap.pmap) doc_id (bp : Source_breakpoint.t) :
     (Pos.t * Breakpoint.t) option =
   match bp.column with
-  | None -> begin
-    match PMap.lookup_best_on_line doc_id bp.line pos_map with
+  | None ->
+    begin match PMap.lookup_best_on_line doc_id bp.line pos_map with
     | None ->
       Log.debug (fun m ->
           m "Did not find a satisfying candidate at line %d" bp.line);
@@ -426,7 +426,7 @@ let find_breakpoint (pos_map : PMap.pmap) doc_id (bp : Source_breakpoint.t) :
       let pos = get_pos e in
       Some (pos, expr_to_breakpoint ~l:bp.line e)
     | Some _ -> None
-  end
+    end
   | Some c ->
     let pos = Pos.from_info (doc_id :> string) bp.line c bp.line c in
     PMap.lookup pos pos_map
