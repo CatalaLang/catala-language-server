@@ -196,14 +196,21 @@ let hash_local_context (ctx : Desugared.Name_resolution.context) : Hash.t =
             scope_decl_context_io_output;
           } =
         raw (Mark.remove scope_decl_context_io_input)
-        % raw scope_decl_context_io_output
+        % raw (Mark.remove scope_decl_context_io_output)
       in
       hash_typ var_sig_typ
       % option (fun (l, _) -> list hash_typ (List.map snd l)) var_sig_parameters
       % hash_io var_sig_io
-      % list StateName.hash var_sig_states_list
+      % list StateName.hash
+          (List.map
+             (StateName.map_info (fun (s, _p) -> s, Pos.void))
+             var_sig_states_list)
     in
     map ScopeVar.Map.fold ScopeVar.hash hash_var_sig var_typs
+  in
+  let module_ids =
+    (* Ignore [ModuleName] it considers code positions, ident is sufficient *)
+    Ident.Map.keys local.used_modules
   in
   local_scopes_hash
   % local_topdefs
@@ -211,7 +218,7 @@ let hash_local_context (ctx : Desugared.Name_resolution.context) : Hash.t =
   % local_enums
   % local_abs_typs
   % local_var_typs
-  % map Ident.Map.fold Ident.hash ModuleName.hash local.used_modules
+  % list Ident.hash module_ids
 
 let surface_to_scopelang
     ?resolve_included_file
