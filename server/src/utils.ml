@@ -329,3 +329,61 @@ let rename_alias_in_path locale map_info x =
           path,
         r ))
     x
+
+let with_progress ~(notify_back : Jsonrpc2.notify_back) ~label ~total f =
+  let open Linol.Lsp in
+  let open Server_request in
+  let* progress =
+    let w, r = Lwt.wait () in
+    let init_token = `String "init_progress" in
+    let* _req_id =
+      notify_back#send_request
+        (WorkDoneProgressCreate
+           (WorkDoneProgressCreateParams.create ~token:init_token))
+        (function
+          | Ok () ->
+            let notify_progress tok =
+              notify_back#send_notification
+                (Server_notification.WorkDoneProgress
+                   { token = init_token; value = tok })
+            in
+            Lwt.wakeup r (Some notify_progress);
+            Lwt.return_unit
+          | Error _r ->
+            Log.warn (fun m -> m "could not setup task progress");
+            Lwt.wakeup r None;
+            Lwt.return_unit)
+    in
+    let* k = w in
+    match k with
+    | None -> Lwt.return (fun _ -> Lwt.return_unit)
+    | Some k -> Lwt.return k
+  in
+  let* () =
+    let begin_token =
+      WorkDoneProgressBegin.create ~cancellable:false ~title:label
+        ~percentage:100 ()
+    in
+    progress (Progress.Begin begin_token)
+  in
+  let cpt = ref 0 in
+  let tick ~message =
+    incr cpt;
+    let progress_token =
+      let percentage =
+        Float.round (100. *. (float !cpt /. float total))
+        |> int_of_float
+        |> min 99
+      in
+      let message = Format.sprintf "%d%% %s" percentage message in
+      WorkDoneProgressReport.create ~cancellable:false ~message ~percentage ()
+    in
+    progress (Report progress_token)
+  in
+  let* r =
+    Lwt.finalize
+      (fun () -> f tick)
+      (fun () ->
+        progress (End (WorkDoneProgressEnd.create ~message:"Finished" ())))
+  in
+  Lwt.return r
