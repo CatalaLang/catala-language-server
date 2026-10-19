@@ -48,6 +48,8 @@
   "type.unset": "non défini",
   "option.absent": "Absent",
   "option.present": "Présent",
+  "option.setValue": "Définir une valeur",
+  "option.clear": "Revenir à Absent",
   "arrayEditor.movePrevious": "Déplacer l'élément à la position précédente",
   "arrayEditor.moveNext": "Déplacer l'élément à la position suivante",
   "arrayEditor.deleteElement": "Supprimer l'élément",

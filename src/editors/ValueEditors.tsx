@@ -1,6 +1,6 @@
 // Editors for a single value type (grouped with a factory function)
 
-import { type ReactElement, useState, useEffect } from 'react';
+import { type ReactElement, useState, useEffect, useRef } from 'react';
 import type React from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
@@ -28,6 +28,7 @@ import { containsUnset } from './unsetValidation';
 import { useNestingDepth, NestingDepthIncrementer } from './NestingDepth';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
+import { confirm } from '../messaging/confirm';
 
 // Helper to create a RuntimeValue from a RuntimeValueRaw, preserving attrs
 export function createRuntimeValue(
@@ -249,8 +250,11 @@ export default function ValueEditor(props: Props): ReactElement {
       );
       break;
     case 'TOption': {
+      // Directly nested options keep the dropdown: compact at every level,
+      // Absent and Present(Absent) would look the same.
+      const Editor = typ.value.kind === 'TOption' ? EnumEditor : OptionEditor;
       editor = (
-        <EnumEditor
+        <Editor
           enumDeclaration={optionEnumDeclaration(typ.value)}
           valueDef={valueDef}
           onValueChange={handleValueChange}
@@ -1012,6 +1016,17 @@ type EnumEditorProps = {
   onInvalidateDiffs?: (pathPrefix: PathSegment[]) => void;
 };
 
+function needsEnumActualPreview(diff: Diff | undefined): diff is Diff {
+  if (diff?.actual.value.kind !== 'Enum' || diff.expected.value.kind !== 'Enum')
+    return false;
+  const [, [labelA, payloadA]] = diff.actual.value.value;
+  const [, [labelE]] = diff.expected.value.value;
+  const payloadActualRv = payloadA?.value;
+  return (
+    labelA !== labelE && !!payloadActualRv && !isAtomicRuntime(payloadActualRv)
+  );
+}
+
 function EnumEditor(props: EnumEditorProps): ReactElement {
   const {
     enumDeclaration,
@@ -1039,21 +1054,7 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   // (read-only), similar to arrays' phantom view.
   const enumTyp: Typ = { kind: 'TEnum', value: enumDeclaration };
   const matchingDiff = findMatchingDiff(props.diffs, currentPath);
-
-  const showEnumActualPreview =
-    !!matchingDiff &&
-    matchingDiff.actual.value.kind === 'Enum' &&
-    matchingDiff.expected.value.kind === 'Enum' &&
-    ((): boolean => {
-      const [, [labelA, payloadA]] = matchingDiff.actual.value.value;
-      const [, [labelE]] = matchingDiff.expected.value.value;
-      const payloadActualRv = payloadA?.value;
-      return (
-        labelA !== labelE &&
-        !!payloadActualRv &&
-        !isAtomicRuntime(payloadActualRv)
-      );
-    })();
+  const showEnumActualPreview = needsEnumActualPreview(matchingDiff);
 
   // Note: do not early-return here; we render the expected editor and, when applicable,
   // an "actual preview" block alongside it further below.
@@ -1200,4 +1201,120 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
 
   // Fallback: just the expected editor
   return expectedEditor;
+}
+
+// Clearing silently is fine for a single value; not for a filled struct or list.
+function holdsWorkToLose(rv: RuntimeValue): boolean {
+  const v = rv.value;
+  switch (v.kind) {
+    case 'Array':
+      return v.value.length > 0;
+    case 'Struct':
+      return Array.from(v.value[1].values()).some(
+        (field) => field.value.kind !== 'Unset'
+      );
+    case 'Enum':
+      return !!v.value[1][1] && holdsWorkToLose(v.value[1][1].value);
+    default:
+      return false;
+  }
+}
+
+/** One line per optional: an "Absent ＋" chip, or the payload editor with a
+ *  × back to Absent. */
+function OptionEditor(props: EnumEditorProps): ReactElement {
+  const { enumDeclaration, valueDef, onValueChange, currentPath, editable } =
+    props;
+  const intl = useIntl();
+  const payloadRef = useRef<HTMLDivElement>(null);
+  const [focusPayload, setFocusPayload] = useState(false);
+
+  useEffect(() => {
+    if (!focusPayload) return;
+    setFocusPayload(false);
+    payloadRef.current
+      ?.querySelector<HTMLElement>('input, select, button')
+      ?.focus();
+  }, [focusPayload]);
+
+  const runtimeValue = valueDef?.value;
+  const enumData =
+    runtimeValue?.value.kind === 'Enum' ? runtimeValue.value.value[1] : null;
+  // Unset options and the expected/actual preview stay with the dropdown.
+  if (
+    !enumData ||
+    needsEnumActualPreview(findMatchingDiff(props.diffs, currentPath))
+  ) {
+    return <EnumEditor {...props} />;
+  }
+  const [ctor, payload] = enumData;
+  const payloadType = enumDeclaration.constructors.get('Present')!.value;
+  const absentLabel = getOptionCtorLabel('Absent', intl);
+
+  const setCtor = (newCtor: string, newPayload: Option<RuntimeValue>): void =>
+    onValueChange(
+      createRuntimeValue(
+        { kind: 'Enum', value: [enumDeclaration, [newCtor, newPayload]] },
+        runtimeValue
+      )
+    );
+
+  if (ctor === 'Absent') {
+    if (editable === false) {
+      return <span className="value-editor option-absent">{absentLabel}</span>;
+    }
+    return (
+      <button
+        className="value-editor option-absent option-absent-chip"
+        title={intl.formatMessage({ id: 'option.setValue' })}
+        onClick={() => {
+          setCtor('Present', { value: getDefaultValue(payloadType) });
+          setFocusPayload(true);
+        }}
+      >
+        {absentLabel}
+        <span className="codicon codicon-add"></span>
+      </button>
+    );
+  }
+
+  const clear = async (): Promise<void> => {
+    if (
+      payload &&
+      holdsWorkToLose(payload.value) &&
+      !(await confirm('ClearOptional'))
+    )
+      return;
+    setCtor('Absent', null);
+  };
+
+  return (
+    <div className="value-editor option-editor" ref={payloadRef}>
+      <ValueEditor
+        testIO={{ typ: payloadType, value: payload ?? undefined }}
+        onValueChange={(newPayload) =>
+          setCtor(
+            ctor,
+            newPayload.value ? { value: newPayload.value.value } : null
+          )
+        }
+        editorHook={props.editorHook}
+        currentPath={[...currentPath, { kind: 'EnumPayload', value: ctor }]}
+        diffs={props.diffs}
+        editable={editable}
+        onDiffResolved={props.onDiffResolved}
+        onInvalidateDiffs={props.onInvalidateDiffs}
+      />
+      {editable !== false && (
+        <button
+          className="option-clear-btn"
+          title={intl.formatMessage({ id: 'option.clear' })}
+          aria-label={intl.formatMessage({ id: 'option.clear' })}
+          onClick={() => void clear()}
+        >
+          <span className="codicon codicon-close"></span>
+        </button>
+      )}
+    </div>
+  );
 }
