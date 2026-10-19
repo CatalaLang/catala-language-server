@@ -1261,11 +1261,11 @@ function OptionEditor(props: EnumEditorProps): ReactElement {
 
   if (ctor === 'Absent') {
     if (editable === false) {
-      return <span className="value-editor option-absent">{absentLabel}</span>;
+      return <span className="option-absent">{absentLabel}</span>;
     }
     return (
       <button
-        className="value-editor option-absent option-absent-chip"
+        className="option-absent option-absent-chip"
         title={intl.formatMessage({ id: 'option.setValue' })}
         onClick={() => {
           setCtor('Present', { value: getDefaultValue(payloadType) });
@@ -1289,7 +1289,7 @@ function OptionEditor(props: EnumEditorProps): ReactElement {
   };
 
   return (
-    <div className="value-editor option-editor" ref={payloadRef}>
+    <div className="option-editor" ref={payloadRef}>
       <ValueEditor
         testIO={{ typ: payloadType, value: payload ?? undefined }}
         onValueChange={(newPayload) =>

@@ -1,6 +1,12 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+} from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import enMessages from '../../src/locales/en.json';
 import ValueEditor from '../../src/editors/ValueEditors';
@@ -104,6 +110,17 @@ describe('OptionEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to Absent' }));
     await waitFor(() => expect(confirmMock).toHaveBeenCalledOnce());
     expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  // .value-editor is painted like an input and forced to display: block in tables.
+  it('keeps the chip and wrapper out of .value-editor', () => {
+    renderOption(optInt, absent(tInt));
+    const chip = screen.getByRole('button', { name: /Absent/ });
+    expect(chip.closest('.value-editor')).toBeNull();
+    cleanup();
+    renderOption(optInt, present(tInt, intVal(3)));
+    const clear = screen.getByRole('button', { name: 'Back to Absent' });
+    expect(clear.parentElement!.classList.contains('value-editor')).toBe(false);
   });
 
   it('read-only: plain Absent, no buttons', () => {

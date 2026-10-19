@@ -73,11 +73,12 @@
   margin-top: var(--label-gap);
 }
 
-.value-editor.option-editor {
+/* Option wrapper and chip are not .value-editor: the theme would paint them
+   like inputs, and tables force .value-editor to display: block. */
+.option-editor {
   display: flex;
   align-items: center;
   gap: 2px;
-  max-width: none;
 }
 
 .option-editor > :first-child {
@@ -90,17 +91,25 @@
   opacity: 0.7;
 }
 
+/* Same box as the inputs, so rows keep one height. */
 .option-absent-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  width: fit-content;
-  padding: 1px 6px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px dashed var(--vscode-input-border, currentColor);
-  border-radius: 3px;
+  border-radius: var(--radius-control);
+  box-sizing: border-box;
+  font-size: 13px;
+  line-height: normal;
   background: none;
   color: var(--vscode-foreground);
   cursor: pointer;
+}
+
+.option-absent-chip .codicon {
+  font-size: 13px;
+  line-height: 1;
 }
 
 .option-absent-chip:hover,
