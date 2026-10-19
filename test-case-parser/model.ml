@@ -628,17 +628,20 @@ let get_value_strings =
   in
   function `Fr -> fr_strings | `En -> en_strings | `Pl -> pl_strings
 
+(* Sorted: reading reverses attributes, so following the list would flip them on
+   every save. *)
 let print_attrs ppf (attrs : O.attr_def list) =
-  let open Format in
-  pp_print_list
-    (fun ppf (attr : O.attr_def) ->
-      match attr with
-      | Uid s -> fprintf ppf "#[testcase.uid = \"%s\"]@\n" s
-      | ArrayItemLabel s ->
-        fprintf ppf "#[testcase.array_item_label = \"%s\"]@\n" s
-      (* TODO error out if we come across TestDescription or TestTitle? *)
-      | _ -> ())
-    ppf attrs
+  let line : O.attr_def -> string option = function
+    | Uid s -> Some (Format.sprintf "#[testcase.uid = \"%s\"]" s)
+    | ArrayItemLabel s ->
+      Some (Format.sprintf "#[testcase.array_item_label = \"%s\"]" s)
+    (* TODO error out if we come across TestDescription or TestTitle? *)
+    | _ -> None
+  in
+  attrs
+  |> List.filter_map line
+  |> List.sort String.compare
+  |> List.iter (Format.fprintf ppf "%s@\n")
 
 let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
     =
