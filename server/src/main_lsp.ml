@@ -17,7 +17,8 @@
 let () =
   let _options =
     Catala_utils.Global.enforce_options
-    (* FIXME: this still prints warnings on stderr due to [Message] hard-wiring
+      ~path_rewrite:(fun rf -> (rf :> string))
+        (* FIXME: this still prints warnings on stderr due to [Message] hard-wiring
        [ifprintf] formatters *)
       ~disable_warnings:false ~message_format:Lsp ()
   in

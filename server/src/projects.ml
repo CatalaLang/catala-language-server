@@ -231,6 +231,7 @@ type project = {
   project_kind : project_kind;
   project_files : project_file Doc_id.Map.t;
   project_include_dirs : Global.raw_file list;
+  project_stdlib : Global.raw_file option;
   project_graph : Project_graph.t;
   known_modules : ScanItemFiles.t ModuleMap.t;
 }
@@ -468,6 +469,13 @@ let retrieve_include_dirs clerk_config =
         (include_dirs :> string list));
   include_dirs
 
+let retrieve_project_stdlib project_dir clerk_config =
+  let build_stdlib_path =
+    File.(
+      project_dir / clerk_config.Clerk_config.global.build_dir / "libcatala")
+  in
+  Some (Global.raw_file build_stdlib_path)
+
 let process_config ~on_error (clerk_config, clerk_root_dir) =
   Log.debug (fun m -> m "clerk file found in '%s' directory" clerk_root_dir);
   let project_kind = Clerk { clerk_root_dir; clerk_config } in
@@ -477,11 +485,13 @@ let process_config ~on_error (clerk_config, clerk_root_dir) =
     retrieve_project_files ~on_error ~project_dir project_include_dirs
   in
   let project_graph = Project_graph.build_graph project_files in
+  let project_stdlib = retrieve_project_stdlib project_dir clerk_config in
   {
     project_dir;
     project_kind;
     project_files;
     project_graph;
+    project_stdlib;
     project_include_dirs;
     known_modules;
   }
@@ -497,11 +507,13 @@ let default_config_from_dir ~on_error dir =
   in
   let project_kind = No_clerk in
   let project_graph = Project_graph.build_graph project_files in
+  let project_stdlib = retrieve_project_stdlib project_dir clerk_config in
   {
     project_dir;
     project_kind;
     project_files;
     project_graph;
+    project_stdlib;
     project_include_dirs;
     known_modules;
   }

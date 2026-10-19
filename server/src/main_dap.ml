@@ -715,7 +715,8 @@ let launch rpc =
 let () =
   let _options =
     Catala_utils.Global.enforce_options
-    (* FIXME: this still prints warnings on stderr due to [Message] hard-wiring
+      ~path_rewrite:(fun s -> (s :> string))
+        (* FIXME: this still prints warnings on stderr due to [Message] hard-wiring
        [ifprintf] formatters *)
       ~disable_warnings:false ()
   in

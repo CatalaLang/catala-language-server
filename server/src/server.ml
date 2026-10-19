@@ -179,6 +179,7 @@ let unlocked_send_all_diagnostics
   unlocked_raw_send_all_diagnostics ~notify_back all_diagnostics
 
 let unlocked_process_document
+    ?module_candidates
     document
     open_documents
     ~(get_module_content : Surface.Parser_driver.module_loading) :
@@ -201,7 +202,7 @@ let unlocked_process_document
   in
   let validation_result =
     Document_processing.process ~resolve_file_content ~get_module_content
-      document
+      ?module_candidates document
   in
   let document = { document with last_result = Some validation_result } in
   let is_valid, document, diags =
@@ -254,7 +255,16 @@ let make_error_handler () =
 let add_diagnostics ({ St.diagnostics; _ } as server_state) new_diags =
   St.{ server_state with diagnostics = merge_diags new_diags diagnostics }
 
-let process_affected_files project possibly_affected_files server_state =
+let load_module_candidates ~get_module_content (project : Projects.project) =
+  Surface.Parser_driver.load_included_modules Global.options
+    ~includes:project.project_include_dirs ~stdlib:project.project_stdlib
+    ~load_module:get_module_content ()
+
+let process_affected_files
+    project
+    possibly_affected_files
+    ~module_candidates
+    server_state =
   let open_documents = server_state.St.open_documents in
   let diagnostics, new_open_documents =
     Doc_id.Set.fold
@@ -280,7 +290,7 @@ let process_affected_files project possibly_affected_files server_state =
               Server_state.get_module_content server_state
             in
             unlocked_process_document ~get_module_content document
-              open_documents
+              ~module_candidates open_documents
           in
           let is_empty =
             Doc_id.Map.is_empty new_diags
@@ -304,6 +314,7 @@ let process_document_dependencies
     ~on_error
     doc_id
     (document : St.document_state)
+    ~module_candidates
     ({ St.projects; open_documents; _ } as server_state) :
     diagnostics * St.server_state =
   (* Check project files for potential errors *)
@@ -332,7 +343,8 @@ let process_document_dependencies
           l);
   let new_server_state = { server_state with projects } in
   let diagnostics, new_server_state =
-    process_affected_files project possibly_affected_files new_server_state
+    process_affected_files project possibly_affected_files ~module_candidates
+      new_server_state
   in
   diagnostics, new_server_state
 
@@ -356,9 +368,12 @@ let unlocked_process_file
       let projects = Option.value ~default:projects new_projects_opt in
       St.make_document buffer_state doc_id project project_file, projects, None
   in
+  let get_module_content = Server_state.get_module_content sstate in
+  let module_candidates =
+    load_module_candidates ~get_module_content document.project
+  in
   let is_valid, new_document, document_diagnostics =
-    let get_module_content = Server_state.get_module_content sstate in
-    unlocked_process_document ~get_module_content
+    unlocked_process_document ~module_candidates ~get_module_content
       { document with buffer_state }
       open_documents
   in
@@ -410,7 +425,7 @@ let unlocked_process_file
     if should_process_dependencies then
       let other_diagnostics, new_server_state =
         process_document_dependencies ~on_error doc_id new_document
-          new_server_state
+          ~module_candidates new_server_state
       in
       other_diagnostics, new_server_state
     else document_diagnostics, new_server_state
@@ -583,8 +598,13 @@ class catala_lsp_server =
           let { Projects.projects; project; possibly_affected_files } =
             Projects.remove_project_file ~on_error doc_id project projects
           in
+          let get_module_content = Server_state.get_module_content sstate in
+          let module_candidates =
+            load_module_candidates ~get_module_content project
+          in
           let new_diagnostics, new_server_state =
-            process_affected_files project possibly_affected_files sstate
+            process_affected_files project possibly_affected_files
+              ~module_candidates sstate
           in
           let diagnostics =
             let existing_diagnostics =
@@ -663,6 +683,10 @@ class catala_lsp_server =
       let* _, (diagnostics, open_documents) =
         Projects.Projects.fold
           (fun project acc ->
+            let get_module_content = Server_state.get_module_content sstate in
+            let module_candidates =
+              load_module_candidates ~get_module_content project
+            in
             Doc_id.Map.fold
               (fun doc_id _ r ->
                 let* n, (diagnostics, documents) = r in
@@ -700,8 +724,8 @@ class catala_lsp_server =
                       let get_module_content =
                         Server_state.get_module_content sstate
                       in
-                      unlocked_process_document ~get_module_content document
-                        open_documents
+                      unlocked_process_document ~get_module_content
+                        ~module_candidates document open_documents
                     in
                     let new_diagnostics =
                       merge_diags document_diagnostics diagnostics

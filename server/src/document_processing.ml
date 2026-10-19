@@ -374,11 +374,7 @@ let process
       FileName including_file.file_name, Some resolve_file_content
     end
   in
-  let options =
-    Catala_utils.Global.enforce_options
-      ~path_rewrite:(fun rf -> (rf :> string))
-      ~input_src ()
-  in
+  let options = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
   let get_errors () = !l in
   let on_error e =

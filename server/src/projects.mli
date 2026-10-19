@@ -48,6 +48,7 @@ type project = {
   project_kind : project_kind;
   project_files : project_file Doc_id.Map.t;
   project_include_dirs : Catala_utils.Global.raw_file list;
+  project_stdlib : Catala_utils.Global.raw_file option;
   project_graph : Project_graph.t;
   known_modules : ScanItemFiles.t ModuleMap.t;
 }
