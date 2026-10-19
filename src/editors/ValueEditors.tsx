@@ -250,11 +250,8 @@ export default function ValueEditor(props: Props): ReactElement {
       );
       break;
     case 'TOption': {
-      // Directly nested options keep the dropdown: compact at every level,
-      // Absent and Present(Absent) would look the same.
-      const Editor = typ.value.kind === 'TOption' ? EnumEditor : OptionEditor;
       editor = (
-        <Editor
+        <OptionEditor
           enumDeclaration={optionEnumDeclaration(typ.value)}
           valueDef={valueDef}
           onValueChange={handleValueChange}
@@ -1203,8 +1200,8 @@ function EnumEditor(props: EnumEditorProps): ReactElement {
   return expectedEditor;
 }
 
-// Clearing silently is fine for a single value; not for a filled struct or list.
-function holdsWorkToLose(rv: RuntimeValue): boolean {
+// A single value is quick to retype; a filled struct or list is not.
+function needsClearConfirm(rv: RuntimeValue): boolean {
   const v = rv.value;
   switch (v.kind) {
     case 'Array':
@@ -1213,42 +1210,39 @@ function holdsWorkToLose(rv: RuntimeValue): boolean {
       return Array.from(v.value[1].values()).some(
         (field) => field.value.kind !== 'Unset'
       );
-    case 'Enum':
-      return !!v.value[1][1] && holdsWorkToLose(v.value[1][1].value);
+    case 'Enum': {
+      const payload = v.value[1][1];
+      return !!payload && needsClearConfirm(payload.value);
+    }
     default:
       return false;
   }
 }
 
-/** One line per optional: an "Absent ＋" chip, or the payload editor with a
+/** One line per optional: an "Absent +" chip, or the payload editor with a
  *  × back to Absent. */
 function OptionEditor(props: EnumEditorProps): ReactElement {
   const { enumDeclaration, valueDef, onValueChange, currentPath, editable } =
     props;
   const intl = useIntl();
-  const payloadRef = useRef<HTMLDivElement>(null);
-  const [focusPayload, setFocusPayload] = useState(false);
-
-  useEffect(() => {
-    if (!focusPayload) return;
-    setFocusPayload(false);
-    payloadRef.current
-      ?.querySelector<HTMLElement>('input, select, button')
-      ?.focus();
-  }, [focusPayload]);
+  // Set on "Absent +": focus the payload once it has rendered.
+  const focusPayload = useRef(false);
 
   const runtimeValue = valueDef?.value;
   const enumData =
     runtimeValue?.value.kind === 'Enum' ? runtimeValue.value.value[1] : null;
-  // Unset options and the expected/actual preview stay with the dropdown.
+  const payloadType = enumDeclaration.constructors.get('Present')!.value;
+  // Kept as a dropdown: unset options, the expected/actual preview, and directly
+  // nested options (compact at every level, Absent and Present(Absent) would
+  // look the same).
   if (
     !enumData ||
+    payloadType.kind === 'TOption' ||
     needsEnumActualPreview(findMatchingDiff(props.diffs, currentPath))
   ) {
     return <EnumEditor {...props} />;
   }
   const [ctor, payload] = enumData;
-  const payloadType = enumDeclaration.constructors.get('Present')!.value;
   const absentLabel = getOptionCtorLabel('Absent', intl);
 
   const setCtor = (newCtor: string, newPayload: Option<RuntimeValue>): void =>
@@ -1268,8 +1262,8 @@ function OptionEditor(props: EnumEditorProps): ReactElement {
         className="option-absent option-absent-chip"
         title={intl.formatMessage({ id: 'option.setValue' })}
         onClick={() => {
+          focusPayload.current = true;
           setCtor('Present', { value: getDefaultValue(payloadType) });
-          setFocusPayload(true);
         }}
       >
         {absentLabel}
@@ -1281,7 +1275,7 @@ function OptionEditor(props: EnumEditorProps): ReactElement {
   const clear = async (): Promise<void> => {
     if (
       payload &&
-      holdsWorkToLose(payload.value) &&
+      needsClearConfirm(payload.value) &&
       !(await confirm('ClearOptional'))
     )
       return;
@@ -1289,7 +1283,15 @@ function OptionEditor(props: EnumEditorProps): ReactElement {
   };
 
   return (
-    <div className="option-editor" ref={payloadRef}>
+    <div
+      className="option-editor"
+      ref={(div) => {
+        if (div && focusPayload.current) {
+          focusPayload.current = false;
+          div.querySelector<HTMLElement>('input, select, button')?.focus();
+        }
+      }}
+    >
       <ValueEditor
         testIO={{ typ: payloadType, value: payload ?? undefined }}
         onValueChange={(newPayload) =>

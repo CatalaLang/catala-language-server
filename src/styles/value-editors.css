@@ -73,8 +73,7 @@
   margin-top: var(--label-gap);
 }
 
-/* Option wrapper and chip are not .value-editor: the theme would paint them
-   like inputs, and tables force .value-editor to display: block. */
+/* Not .value-editor: the theme paints it like an input, tables make it a block. */
 .option-editor {
   display: flex;
   align-items: center;

@@ -82,6 +82,40 @@ describe('OptionEditor', () => {
     expect(v.kind === 'Enum' && v.value[1][1]?.value.value.kind).toBe('Unset');
   });
 
+  // Feeds each change back in, like the real test editor.
+  function renderStateful(initial: RuntimeValue) {
+    function Stateful(): React.ReactElement {
+      const [value, setValue] = React.useState(initial);
+      return (
+        <ValueEditor
+          testIO={{ typ: optInt, value: { value } }}
+          onValueChange={(io) => setValue(io.value!.value)}
+          currentPath={[]}
+          diffs={[]}
+        />
+      );
+    }
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <Stateful />
+      </IntlProvider>
+    );
+  }
+
+  it('focuses the new field after "Absent +"', () => {
+    renderStateful(absent(tInt));
+    fireEvent.click(screen.getByRole('button', { name: /Absent/ }));
+    expect(document.activeElement).toBe(screen.getByRole('textbox'));
+  });
+
+  it('does not take focus for a value that was already present', () => {
+    renderStateful(present(tInt, intVal(3)));
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '4' } });
+    expect(screen.getByDisplayValue('4')).toBeTruthy();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('shows the payload alone, with a × back to Absent', () => {
     const { lastValue } = renderOption(optInt, present(tInt, intVal(3)));
     expect(screen.queryByRole('combobox')).toBeNull();
