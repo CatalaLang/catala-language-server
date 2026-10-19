@@ -24,7 +24,7 @@ import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../shared/util';
 import { Combobox } from './Combobox';
 import { CompositeEditor } from './CompositeEditor';
-import { countUnsetIn } from './unsetValidation';
+import { containsUnset } from './unsetValidation';
 import { useNestingDepth, NestingDepthIncrementer } from './NestingDepth';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
@@ -963,7 +963,7 @@ function StructEditor(props: StructEditorProps): ReactElement {
         label: fieldName,
         type: fieldType,
         count,
-        unfilled: countUnsetIn(fieldValue, fieldType),
+        hasUnset: fieldValue !== undefined && containsUnset(fieldValue),
         editor: (
           <ValueEditor
             testIO={{

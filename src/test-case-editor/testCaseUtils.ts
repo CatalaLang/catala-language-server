@@ -9,7 +9,7 @@ import type {
   RuntimeValue,
 } from '../generated/catala_types';
 import { isAtomicRaw } from '../diff/diff';
-import { countUnsetIn } from '../editors/unsetValidation';
+import { containsUnset } from '../editors/unsetValidation';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -125,7 +125,7 @@ export function replaceLosses(
         droppedAssertions.push(qualify(scope, name));
     }
     for (const [name, io] of [...live.test_inputs, ...live.test_outputs]) {
-      if (io.value !== undefined && countUnsetIn(io.value.value, io.typ) > 0)
+      if (io.value !== undefined && containsUnset(io.value.value))
         unsetFields.push(qualify(scope, name));
     }
   }
