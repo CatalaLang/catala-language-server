@@ -459,6 +459,8 @@ let server_initialized, resolve_init =
   in
   w, r
 
+let ongoing_project_scan = ref false
+
 class catala_lsp_server =
   let open Linol_lwt in
   object (self)
@@ -642,79 +644,86 @@ class catala_lsp_server =
         changes
 
     method private scan_projects ~(notify_back : Jsonrpc2.notify_back) sstate =
-      let () = Server_state.reset_module_contents sstate in
-      let errors, on_error = make_error_handler () in
-      let projects = Projects.init ~on_error initialize_params in
-      let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
-      let all_files =
-        Projects.Projects.fold
-          (fun (project : Projects.project) acc ->
-            Doc_id.Map.union (fun _ l _ -> Some l) project.project_files acc)
-          projects Doc_id.Map.empty
-      in
-      let nb_files = Doc_id.Map.cardinal all_files in
-      let* _, (diagnostics, open_documents) =
-        Utils.with_progress ~notify_back ~label:"Catala project scan"
-          ~total:nb_files (fun tick ->
+      ongoing_project_scan := true;
+      Lwt.finalize
+        (fun () ->
+          let () = Server_state.reset_module_contents sstate in
+          let errors, on_error = make_error_handler () in
+          let projects = Projects.init ~on_error initialize_params in
+          let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
+          let all_files =
             Projects.Projects.fold
-              (fun project acc ->
-                let get_module_content =
-                  Server_state.get_module_content sstate
-                in
-                let module_candidates =
-                  load_module_candidates ~get_module_content project
-                in
-                Doc_id.Map.fold
-                  (fun doc_id _ r ->
-                    let* n, (diagnostics, documents) = r in
-                    let* () =
-                      tick ~message:(Format.asprintf "%a" Doc_id.format doc_id)
+              (fun (project : Projects.project) acc ->
+                Doc_id.Map.union (fun _ l _ -> Some l) project.project_files acc)
+              projects Doc_id.Map.empty
+          in
+          let nb_files = Doc_id.Map.cardinal all_files in
+          let* _, (diagnostics, open_documents) =
+            Utils.with_progress ~notify_back ~label:"Catala project scan"
+              ~total:nb_files (fun tick ->
+                Projects.Projects.fold
+                  (fun project acc ->
+                    let get_module_content =
+                      Server_state.get_module_content sstate
                     in
-                    let acc =
-                      if Projects.is_an_included_file doc_id project then
-                        (* We do not consider included files *)
-                        diagnostics, documents
-                      else
-                        (* Affected files are necessarily present in the project *)
-                        let project_file =
-                          Option.get
-                          @@ Projects.find_file_in_project doc_id project
-                        in
-                        let document =
-                          match Doc_id.Map.find_opt doc_id documents with
-                          | None ->
-                            St.make_document St.Saved doc_id project
-                              project_file
-                          | Some document -> document
-                        in
-                        let _is_valid, document, document_diagnostics =
-                          let get_module_content =
-                            Server_state.get_module_content sstate
-                          in
-                          unlocked_process_document ~get_module_content
-                            ~module_candidates document documents
-                        in
-                        let new_diagnostics =
-                          merge_diags document_diagnostics diagnostics
-                        in
-                        ( new_diagnostics,
-                          Doc_id.Map.add doc_id document documents )
+                    let module_candidates =
+                      load_module_candidates ~get_module_content project
                     in
-                    Lwt.return (succ n, acc))
-                  project.project_files acc)
-              projects
-              (Lwt.return (0, (Doc_id.Map.empty, Doc_id.Map.empty))))
-      in
-      let sstate =
-        {
-          St.projects;
-          open_documents;
-          module_cache = sstate.module_cache;
-          diagnostics;
-        }
-      in
-      let* () = unlocked_send_all_diagnostics ~notify_back sstate in
-      Lwt.return (projects, sstate)
+                    Doc_id.Map.fold
+                      (fun doc_id _ r ->
+                        let* n, (diagnostics, documents) = r in
+                        let* () =
+                          tick
+                            ~message:(Format.asprintf "%a" Doc_id.format doc_id)
+                        in
+                        let acc =
+                          if Projects.is_an_included_file doc_id project then
+                            (* We do not consider included files *)
+                            diagnostics, documents
+                          else
+                            (* Affected files are necessarily present in the project *)
+                            let project_file =
+                              Option.get
+                              @@ Projects.find_file_in_project doc_id project
+                            in
+                            let document =
+                              match Doc_id.Map.find_opt doc_id documents with
+                              | None ->
+                                St.make_document St.Saved doc_id project
+                                  project_file
+                              | Some document -> document
+                            in
+                            let _is_valid, document, document_diagnostics =
+                              let get_module_content =
+                                Server_state.get_module_content sstate
+                              in
+                              unlocked_process_document ~get_module_content
+                                ~module_candidates document documents
+                            in
+                            let new_diagnostics =
+                              merge_diags document_diagnostics diagnostics
+                            in
+                            ( new_diagnostics,
+                              Doc_id.Map.add doc_id document documents )
+                        in
+                        Lwt.return (succ n, acc))
+                      project.project_files acc)
+                  projects
+                  (Lwt.return (0, (Doc_id.Map.empty, Doc_id.Map.empty))))
+          in
+          let sstate =
+            {
+              St.projects;
+              open_documents;
+              module_cache = sstate.module_cache;
+              diagnostics;
+            }
+          in
+          let* () = unlocked_send_all_diagnostics ~notify_back sstate in
+          Lwt.return (projects, sstate))
+        (fun () ->
+          ongoing_project_scan := false;
+          Lwt.return_unit)
 
     method! on_notification_unhandled ~notify_back (n : Client_notification.t) =
       match n with
@@ -880,11 +889,14 @@ class catala_lsp_server =
     method private rescan_projects ~(notify_back : Jsonrpc2.notify_back) () :
         Yojson.Safe.t Lwt.t =
       let* () =
-        St.use_and_update_now server_state
-        @@ fun sstate ->
-        let* projects, sstate = self#scan_projects ~notify_back sstate in
-        let sstate = { sstate with projects } in
-        Lwt.return sstate
+        if !ongoing_project_scan then Lwt.return_unit
+        else
+          let* () = server_initialized in
+          St.use_and_update_now server_state
+          @@ fun sstate ->
+          let* projects, sstate = self#scan_projects ~notify_back sstate in
+          let sstate = { sstate with projects } in
+          Lwt.return sstate
       in
       Lwt.return `Null
 
