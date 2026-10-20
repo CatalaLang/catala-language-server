@@ -115,7 +115,8 @@ let retrieve_existing_document doc_id server_state =
 
 let unlocked_raw_send_all_diagnostics =
   let previous_faulty_documents = ref Doc_id.Set.empty in
-  fun ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
+  fun ?(all_files = false)
+    ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
     (diags : diagnostic Range.Map.t Doc_id.Map.t)
   ->
     let send_diagnostics (doc_id, diags) =
@@ -127,7 +128,7 @@ let unlocked_raw_send_all_diagnostics =
         (fun doc_id rmap ->
           (* We do not send empty diagnostics for file that weren't faulty -- it
              saves a communication *)
-          if Range.Map.is_empty rmap then
+          if Range.Map.is_empty rmap && not all_files then
             Doc_id.Set.mem doc_id !previous_faulty_documents
           else true)
         diags
@@ -159,6 +160,7 @@ let merge_diags new_diags diags =
 
 let unlocked_send_all_diagnostics
     ?doc_id
+    ?(all_files = false)
     ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
     { St.open_documents; diagnostics; _ } =
   let diags =
@@ -179,7 +181,7 @@ let unlocked_send_all_diagnostics
         merge_diags (merge_diags acc diags) including_files_empty_diags)
       open_documents diags
   in
-  unlocked_raw_send_all_diagnostics ~notify_back all_diagnostics
+  unlocked_raw_send_all_diagnostics ~all_files ~notify_back all_diagnostics
 
 let unlocked_process_document
     ?module_candidates
@@ -719,7 +721,10 @@ class catala_lsp_server =
               diagnostics;
             }
           in
-          let* () = unlocked_send_all_diagnostics ~notify_back sstate in
+          (* [all_files] resets every existing diagnostics to clear them up *)
+          let* () =
+            unlocked_send_all_diagnostics ~all_files:true ~notify_back sstate
+          in
           Lwt.return (projects, sstate))
         (fun () ->
           ongoing_project_scan := false;
@@ -887,18 +892,15 @@ class catala_lsp_server =
           Lwt.return `Null)
 
     method private rescan_projects ~(notify_back : Jsonrpc2.notify_back) () :
-        Yojson.Safe.t Lwt.t =
-      let* () =
-        if !ongoing_project_scan then Lwt.return_unit
-        else
-          let* () = server_initialized in
-          St.use_and_update_now server_state
-          @@ fun sstate ->
-          let* projects, sstate = self#scan_projects ~notify_back sstate in
-          let sstate = { sstate with projects } in
-          Lwt.return sstate
-      in
-      Lwt.return `Null
+        unit Lwt.t =
+      if !ongoing_project_scan then Lwt.return_unit
+      else
+        let* () = server_initialized in
+        St.use_and_update_now server_state
+        @@ fun sstate ->
+        let* projects, sstate = self#scan_projects ~notify_back sstate in
+        let sstate = { sstate with projects } in
+        Lwt.return sstate
 
     method! on_unknown_request ~notify_back ~server_request:_ ~id meth params =
       self#on_request_unhandled ~notify_back ~id
@@ -930,7 +932,8 @@ class catala_lsp_server =
           self#exceptions_at
             (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
         | UnknownRequest { meth = "catala.rescanProjects"; params = _ } ->
-          self#rescan_projects ~notify_back ()
+          let* () = self#rescan_projects ~notify_back () in
+          Lwt.return `Null
         | UnknownRequest { meth; _ } ->
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
