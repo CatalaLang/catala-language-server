@@ -48,7 +48,10 @@ let set_log_level =
     Logs.set_level (Some Debug);
     Logs.app (fun m -> m "switching log level to [verbose]")
 
-let scan_project_config = ref true
+let scan_project_config =
+  (* This defaults to false to prevent LSP-clients, such as eglot,
+     from having to scan with no benefits *)
+  ref false
 
 let protect_project_not_found f =
   Lwt.catch f (function
