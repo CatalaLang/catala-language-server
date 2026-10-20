@@ -1253,24 +1253,14 @@ function OptionEditor(props: EnumEditorProps): ReactElement {
       )
     );
 
-  if (ctor === 'Absent') {
-    if (editable === false) {
-      return <span className="option-absent">{absentLabel}</span>;
-    }
-    return (
-      <button
-        className="option-absent option-absent-chip"
-        title={intl.formatMessage({ id: 'option.setValue' })}
-        onClick={() => {
-          focusPayload.current = true;
-          setCtor('Present', { value: getDefaultValue(payloadType) });
-        }}
-      >
-        {absentLabel}
-        <span className="codicon codicon-add"></span>
-      </button>
-    );
+  if (ctor === 'Absent' && editable === false) {
+    return <span className="option-absent">{absentLabel}</span>;
   }
+
+  const setPresent = (): void => {
+    focusPayload.current = true;
+    setCtor('Present', { value: getDefaultValue(payloadType) });
+  };
 
   const clear = async (): Promise<void> => {
     if (
@@ -1282,6 +1272,11 @@ function OptionEditor(props: EnumEditorProps): ReactElement {
     setCtor('Absent', null);
   };
 
+  const toggleLabel = intl.formatMessage({
+    id: ctor === 'Absent' ? 'option.setValue' : 'option.clear',
+  });
+
+  // The toggle stays the same element in both states, so it keeps the focus.
   return (
     <div
       className="option-editor"
@@ -1292,29 +1287,40 @@ function OptionEditor(props: EnumEditorProps): ReactElement {
         }
       }}
     >
-      <ValueEditor
-        testIO={{ typ: payloadType, value: payload ?? undefined }}
-        onValueChange={(newPayload) =>
-          setCtor(
-            ctor,
-            newPayload.value ? { value: newPayload.value.value } : null
-          )
-        }
-        editorHook={props.editorHook}
-        currentPath={[...currentPath, { kind: 'EnumPayload', value: ctor }]}
-        diffs={props.diffs}
-        editable={editable}
-        onDiffResolved={props.onDiffResolved}
-        onInvalidateDiffs={props.onInvalidateDiffs}
-      />
+      {ctor === 'Absent' ? (
+        <span
+          className="option-absent option-absent-field"
+          onClick={setPresent}
+        >
+          {absentLabel}
+        </span>
+      ) : (
+        <ValueEditor
+          testIO={{ typ: payloadType, value: payload ?? undefined }}
+          onValueChange={(newPayload) =>
+            setCtor(
+              ctor,
+              newPayload.value ? { value: newPayload.value.value } : null
+            )
+          }
+          editorHook={props.editorHook}
+          currentPath={[...currentPath, { kind: 'EnumPayload', value: ctor }]}
+          diffs={props.diffs}
+          editable={editable}
+          onDiffResolved={props.onDiffResolved}
+          onInvalidateDiffs={props.onInvalidateDiffs}
+        />
+      )}
       {editable !== false && (
         <button
-          className="option-clear-btn"
-          title={intl.formatMessage({ id: 'option.clear' })}
-          aria-label={intl.formatMessage({ id: 'option.clear' })}
-          onClick={() => void clear()}
+          className="option-toggle-btn"
+          title={toggleLabel}
+          aria-label={toggleLabel}
+          onClick={() => (ctor === 'Absent' ? setPresent() : void clear())}
         >
-          <span className="codicon codicon-close"></span>
+          <span
+            className={`codicon codicon-${ctor === 'Absent' ? 'add' : 'close'}`}
+          ></span>
         </button>
       )}
     </div>

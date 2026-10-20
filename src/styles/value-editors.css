@@ -90,33 +90,23 @@
   opacity: 0.7;
 }
 
-/* Same box as the inputs, so rows keep one height. */
-.option-absent-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+/* Same box as the inputs, so the row keeps its size when a value is set. */
+.option-absent-field {
+  max-width: var(--field-width);
   padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px dashed var(--vscode-input-border, currentColor);
   border-radius: var(--radius-control);
   box-sizing: border-box;
   font-size: 13px;
   line-height: normal;
-  background: none;
-  color: var(--vscode-foreground);
   cursor: pointer;
 }
 
-.option-absent-chip .codicon {
-  font-size: 13px;
-  line-height: 1;
-}
-
-.option-absent-chip:hover,
-.option-absent-chip:focus-visible {
+.option-absent-field:hover {
   opacity: 1;
 }
 
-.option-clear-btn {
+.option-toggle-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -126,8 +116,8 @@
   flex-shrink: 0;
 }
 
-.option-clear-btn:hover,
-.option-clear-btn:focus-visible {
+.option-toggle-btn:hover,
+.option-toggle-btn:focus-visible {
   opacity: 1;
 }
 

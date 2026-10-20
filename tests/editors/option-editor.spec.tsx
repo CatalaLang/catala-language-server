@@ -73,13 +73,20 @@ const optInt: Typ = { kind: 'TOption', value: tInt };
 describe('OptionEditor', () => {
   beforeEach(() => confirmMock.mockClear());
 
-  it('shows Absent as a chip that sets an unset value', () => {
+  it('shows Absent with a + that sets an unset value', () => {
     const { lastValue } = renderOption(optInt, absent(tInt));
     expect(screen.queryByRole('combobox')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Absent/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Set a value' }));
     const v = lastValue().value;
     expect(v.kind === 'Enum' && v.value[1][0]).toBe('Present');
     expect(v.kind === 'Enum' && v.value[1][1]?.value.value.kind).toBe('Unset');
+  });
+
+  it('also sets a value from a click on Absent', () => {
+    const { lastValue } = renderOption(optInt, absent(tInt));
+    fireEvent.click(screen.getByText('Absent'));
+    const v = lastValue().value;
+    expect(v.kind === 'Enum' && v.value[1][0]).toBe('Present');
   });
 
   // Feeds each change back in, like the real test editor.
@@ -102,10 +109,19 @@ describe('OptionEditor', () => {
     );
   }
 
-  it('focuses the new field after "Absent +"', () => {
+  it('focuses the new field after +', () => {
     renderStateful(absent(tInt));
-    fireEvent.click(screen.getByRole('button', { name: /Absent/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Set a value' }));
     expect(document.activeElement).toBe(screen.getByRole('textbox'));
+  });
+
+  it('keeps the focus on the toggle after ×', () => {
+    renderStateful(present(tInt, intVal(3)));
+    const toggle = screen.getByRole('button', { name: 'Back to Absent' });
+    toggle.focus();
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Set a value' })).toBe(toggle);
+    expect(document.activeElement).toBe(toggle);
   });
 
   it('does not take focus for a value that was already present', () => {
@@ -147,10 +163,9 @@ describe('OptionEditor', () => {
   });
 
   // .value-editor is painted like an input and forced to display: block in tables.
-  it('keeps the chip and wrapper out of .value-editor', () => {
+  it('keeps Absent and the wrapper out of .value-editor', () => {
     renderOption(optInt, absent(tInt));
-    const chip = screen.getByRole('button', { name: /Absent/ });
-    expect(chip.closest('.value-editor')).toBeNull();
+    expect(screen.getByText('Absent').closest('.value-editor')).toBeNull();
     cleanup();
     renderOption(optInt, present(tInt, intVal(3)));
     const clear = screen.getByRole('button', { name: 'Back to Absent' });
@@ -171,13 +186,13 @@ describe('OptionEditor', () => {
     expect(screen.getByRole('button', { name: 'Back to Absent' })).toBeTruthy();
   });
 
-  it('nested option with an absent inner level: dropdown then chip', () => {
+  it('nested option with an absent inner level: dropdown then compact', () => {
     const { lastValue } = renderOption(
       { kind: 'TOption', value: optInt },
       present(optInt, absent(tInt))
     );
     expect(screen.getAllByRole('combobox')).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: /Absent/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Set a value' }));
     const outer = lastValue().value;
     expect(outer.kind === 'Enum' && outer.value[1][0]).toBe('Present');
     const inner = outer.kind === 'Enum' ? outer.value[1][1]?.value.value : null;
