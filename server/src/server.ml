@@ -635,15 +635,31 @@ class catala_lsp_server =
           Lwt.return new_state
 
     method private on_notif_did_change_watched_files ~notify_back changes =
+      (* Triggers even on save *)
       let* () = server_initialized in
-      (* Triggers even on save.. *)
-      Lwt_list.iter_p
-        (fun { FileEvent.uri; type_ } ->
-          let doc_id = Doc_id.of_lsp_uri uri in
-          match type_ with
-          | Created | Changed -> self#process_saved_document ~notify_back doc_id
-          | Deleted -> self#on_doc_delete ~notify_back doc_id)
-        changes
+      let process_change (doc_id, type_) =
+        match type_ with
+        | FileChangeType.Created | Changed ->
+          self#process_saved_document ~notify_back doc_id
+        | Deleted -> self#on_doc_delete ~notify_back doc_id
+      in
+      let changes =
+        List.filter_map
+          (fun { FileEvent.uri; type_ } ->
+            let doc_id = Doc_id.of_lsp_uri uri in
+            if should_ignore doc_id then None else Some (doc_id, type_))
+          changes
+      in
+      let len_changes = List.length changes in
+      let rescan_threshold = 5 in
+      if len_changes >= rescan_threshold then (
+        (* When a lot file changes (e.g., git checkout), best is to
+           trigger a full rescan to avoid redondant document
+           processing *)
+        Log.info (fun m ->
+            m "too many watched files changes: triggering a full rescan");
+        self#rescan_projects ~notify_back ())
+      else Lwt_list.iter_p process_change changes
 
     method private scan_projects ~(notify_back : Jsonrpc2.notify_back) sstate =
       ongoing_project_scan := true;
