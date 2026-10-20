@@ -266,6 +266,7 @@ let surface_to_scopelang
     let module_candidates =
       match module_candidates with
       | None ->
+        let includes = File.Set.elements includes |> List.map Global.raw_file in
         Surface.Parser_driver.load_included_modules options ~includes ~stdlib
           ~load_module ()
       | Some c -> c

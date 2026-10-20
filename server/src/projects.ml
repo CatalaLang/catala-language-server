@@ -230,7 +230,7 @@ type project = {
   project_dir : string;
   project_kind : project_kind;
   project_files : project_file Doc_id.Map.t;
-  project_include_dirs : Global.raw_file list;
+  project_include_dirs : File.Set.t;
   project_stdlib : Global.raw_file option;
   project_graph : Project_graph.t;
   known_modules : ScanItemFiles.t ModuleMap.t;
@@ -308,18 +308,18 @@ let clean_item ({ Scan.file_name; included_files; _ } as item) : Scan.item =
 
 let find_module_candidate
     ~(on_error : error_handler)
-    ~(includes : Global.raw_file list)
+    ~(includes : File.Set.t)
     (file : Scan_item.t)
     (known_modules : ScanItemFiles.t ModuleMap.t)
     (used_module : string Mark.pos) : Scan_item.t option =
   let file_dir = File.dirname file.file_name in
-  let includes = file_dir :: (includes :> string list) in
+  let includes = File.Set.add file_dir includes in
   let used_module_name = Mark.remove used_module in
   let possible_modules =
     Option.value ~default:ScanItemFiles.empty
       (ModuleMap.find_opt used_module_name known_modules)
     |> ScanItemFiles.filter (fun m ->
-        List.mem (File.dirname m.Scan.file_name) includes)
+        File.Set.mem (File.dirname m.Scan.file_name) includes)
     |> ScanItemFiles.elements
   in
   match possible_modules with
@@ -349,7 +349,7 @@ let find_module_candidate
 
 let retrieve_project_files ~on_error ~project_dir include_dirs =
   Log.info (fun m -> m "building inclusion graph of directory %s" project_dir);
-  let tree = Scan.tree project_dir in
+  let tree = Scan.tree ~includes:include_dirs project_dir in
   let known_items : (string, Scan.item) Hashtbl.t = Hashtbl.create 10 in
   let known_modules =
     Seq.fold_left
@@ -467,7 +467,7 @@ let retrieve_include_dirs clerk_config =
   Log.debug (fun m ->
       m "Project included directories: %a" Utils.pp_string_list
         (include_dirs :> string list));
-  include_dirs
+  File.Set.of_list (include_dirs :> string list)
 
 let retrieve_project_stdlib project_dir clerk_config =
   let build_stdlib_path =

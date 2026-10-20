@@ -22,6 +22,9 @@ open Utils
 module St = Server_state
 module DQ = Doc_queries
 
+(* Server state *)
+let server_state : St.locked_server_state = St.make ()
+
 let ( let*? ) v f =
   Lwt.bind v @@ function None -> Lwt.return_none | Some x -> f x
 
@@ -65,17 +68,40 @@ let protect_project_not_found_opt f =
       Lwt.return_none
     | e -> Lwt.fail e)
 
-let should_ignore (uri : Doc_id.t) =
+let do_nothing () = Lwt.return_unit
+let do_none () = Lwt.return_none
+
+let check_ignore (uri : Doc_id.t) f t =
   let file = (uri :> File.t) in
   let _, p = File.path_to_list file in
-  let b =
-    List.exists (fun s -> String.length s > 0 && (s.[0] = '.' || s.[0] = '_')) p
+  let* should_ignore =
+    let is_hidden =
+      List.exists
+        (fun s -> String.length s > 0 && (s.[0] = '.' || s.[0] = '_'))
+        p
+    in
+    if is_hidden then Lwt.return_true
+    else
+      let* is_in_included_dir =
+        Server_state.use_now server_state
+        @@ fun sstate ->
+        match Projects.lookup_project uri sstate.projects with
+        | None ->
+          (* No project associated: allow it in case it's an orphan file *)
+          Lwt.return_true
+        | Some project ->
+          Lwt.return
+            (File.Set.mem (File.dirname file) project.project_include_dirs)
+      in
+      Lwt.return (not is_in_included_dir)
   in
-  Log.debug (fun m ->
-      if b then
+  if should_ignore then begin
+    Log.debug (fun m ->
         m "file %s ignored: either a hidden file or inside an ignored directory"
           file);
-  b
+    f ()
+  end
+  else t ()
 
 let retrieve_existing_document_if_ready doc_id server_state =
   protect_project_not_found_opt
@@ -261,9 +287,11 @@ let add_diagnostics ({ St.diagnostics; _ } as server_state) new_diags =
   St.{ server_state with diagnostics = merge_diags new_diags diagnostics }
 
 let load_module_candidates ~get_module_content (project : Projects.project) =
-  Surface.Parser_driver.load_included_modules Global.options
-    ~includes:project.project_include_dirs ~stdlib:project.project_stdlib
-    ~load_module:get_module_content ()
+  let includes =
+    File.Set.elements project.project_include_dirs |> List.map Global.raw_file
+  in
+  Surface.Parser_driver.load_included_modules Global.options ~includes
+    ~stdlib:project.project_stdlib ~load_module:get_module_content ()
 
 let process_affected_files
     project
@@ -496,9 +524,6 @@ class catala_lsp_server =
         ~save:(`SaveOptions (SaveOptions.create ~includeText:false ()))
         ()
 
-    (* Server state *)
-    val server_state : St.locked_server_state = St.make ()
-
     method! on_req_initialize ~notify_back:_ (i : InitializeParams.t) :
         InitializeResult.t t =
       Logs.app (fun m -> m "Starting lsp server");
@@ -528,50 +553,48 @@ class catala_lsp_server =
     method private process_saved_document
         ~(notify_back : Linol_lwt.Jsonrpc2.notify_back) (doc_id : Doc_id.t) =
       let* () = server_initialized in
-      if should_ignore doc_id then Lwt.return_unit
-      else
-        protect_project_not_found
-        @@ fun () -> process_saved_file ~notify_back server_state doc_id
+      check_ignore doc_id do_nothing
+      @@ fun () ->
+      protect_project_not_found
+      @@ fun () -> process_saved_file ~notify_back server_state doc_id
 
     method on_notif_doc_did_open ~notify_back d ~content:_ =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri d.uri in
-      if should_ignore doc_id then Lwt.return_unit
+      check_ignore doc_id do_nothing
+      @@ fun () ->
+      protect_project_not_found
+      @@ fun () ->
+      St.use_and_update server_state
+      @@ fun ({ open_documents; _ } as sstate) ->
+      if Doc_id.Map.mem doc_id open_documents then
+        (* Document exists: it should have been processed, do nothing. *)
+        Lwt.return sstate
       else
-        protect_project_not_found
-        @@ fun () ->
-        St.use_and_update server_state
-        @@ fun ({ open_documents; _ } as sstate) ->
-        if Doc_id.Map.mem doc_id open_documents then
-          (* Document exists: it should have been processed, do nothing. *)
-          Lwt.return sstate
-        else
-          let new_state = unlocked_process_file St.Saved doc_id sstate in
-          let* () =
-            unlocked_send_all_diagnostics ~doc_id ~notify_back new_state
-          in
-          (* Invalidate the cache *)
-          Server_state.unload_module_content new_state doc_id;
-          Lwt.return new_state
-
-    method private document_changed ~notify_back ~new_contents doc_id =
-      let* () = server_initialized in
-      if should_ignore doc_id then Lwt.return_unit
-      else
-        protect_project_not_found
-        @@ fun () ->
-        notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
-        St.delayed_update doc_id server_state
-        @@ fun state ->
-        let new_state =
-          unlocked_process_file
-            (St.Modified { contents = new_contents })
-            doc_id state
-        in
+        let new_state = unlocked_process_file St.Saved doc_id sstate in
         let* () =
           unlocked_send_all_diagnostics ~doc_id ~notify_back new_state
         in
+        (* Invalidate the cache *)
+        Server_state.unload_module_content new_state doc_id;
         Lwt.return new_state
+
+    method private document_changed ~notify_back ~new_contents doc_id =
+      let* () = server_initialized in
+      check_ignore doc_id do_nothing
+      @@ fun () ->
+      protect_project_not_found
+      @@ fun () ->
+      notify_back#set_uri (Doc_id.to_lsp_uri doc_id);
+      St.delayed_update doc_id server_state
+      @@ fun state ->
+      let new_state =
+        unlocked_process_file
+          (St.Modified { contents = new_contents })
+          doc_id state
+      in
+      let* () = unlocked_send_all_diagnostics ~doc_id ~notify_back new_state in
+      Lwt.return new_state
 
     method on_notif_doc_did_change ~notify_back d
         (_c : TextDocumentContentChangeEvent.t list) ~old_content:_
@@ -586,53 +609,53 @@ class catala_lsp_server =
 
     method private on_doc_delete ~notify_back (doc_id : Doc_id.doc_id) =
       let* () = server_initialized in
-      if should_ignore doc_id then Lwt.return_unit
-      else
-        protect_project_not_found
-        @@ fun () ->
-        St.use_and_update server_state
-        @@ fun ({ projects; open_documents; module_cache; diagnostics = _ } as
-                sstate)
-        ->
-        (* Invalidate the cache *)
-        Server_state.unload_module_content sstate doc_id;
-        let doc_errors, on_error = make_error_handler () in
-        match Projects.lookup_project doc_id projects with
-        | None ->
-          (* Shouldn't happen but nothing to do otherwise *)
-          Lwt.return sstate
-        | Some project ->
-          let { Projects.projects; project; possibly_affected_files } =
-            Projects.remove_project_file ~on_error doc_id project projects
+      check_ignore doc_id do_nothing
+      @@ fun () ->
+      protect_project_not_found
+      @@ fun () ->
+      St.use_and_update server_state
+      @@ fun ({ projects; open_documents; module_cache; diagnostics = _ } as
+              sstate)
+      ->
+      (* Invalidate the cache *)
+      Server_state.unload_module_content sstate doc_id;
+      let doc_errors, on_error = make_error_handler () in
+      match Projects.lookup_project doc_id projects with
+      | None ->
+        (* Shouldn't happen but nothing to do otherwise *)
+        Lwt.return sstate
+      | Some project ->
+        let { Projects.projects; project; possibly_affected_files } =
+          Projects.remove_project_file ~on_error doc_id project projects
+        in
+        let get_module_content = Server_state.get_module_content sstate in
+        let module_candidates =
+          load_module_candidates ~get_module_content project
+        in
+        let new_diagnostics, new_server_state =
+          process_affected_files project possibly_affected_files
+            ~module_candidates sstate
+        in
+        let diagnostics =
+          let existing_diagnostics =
+            Doc_id.Map.remove doc_id new_server_state.diagnostics
           in
-          let get_module_content = Server_state.get_module_content sstate in
-          let module_candidates =
-            load_module_candidates ~get_module_content project
-          in
-          let new_diagnostics, new_server_state =
-            process_affected_files project possibly_affected_files
-              ~module_candidates sstate
-          in
-          let diagnostics =
-            let existing_diagnostics =
-              Doc_id.Map.remove doc_id new_server_state.diagnostics
-            in
-            let new_diagnostics = merge_diags !doc_errors new_diagnostics in
-            Doc_id.Map.union
-              (fun _doc_id new_diag _ -> Some new_diag)
-              new_diagnostics existing_diagnostics
-          in
-          let new_open_documents = Doc_id.Map.remove doc_id open_documents in
-          let new_state =
-            {
-              St.projects;
-              open_documents = new_open_documents;
-              module_cache;
-              diagnostics;
-            }
-          in
-          let* () = unlocked_send_all_diagnostics ~notify_back new_state in
-          Lwt.return new_state
+          let new_diagnostics = merge_diags !doc_errors new_diagnostics in
+          Doc_id.Map.union
+            (fun _doc_id new_diag _ -> Some new_diag)
+            new_diagnostics existing_diagnostics
+        in
+        let new_open_documents = Doc_id.Map.remove doc_id open_documents in
+        let new_state =
+          {
+            St.projects;
+            open_documents = new_open_documents;
+            module_cache;
+            diagnostics;
+          }
+        in
+        let* () = unlocked_send_all_diagnostics ~notify_back new_state in
+        Lwt.return new_state
 
     method private on_notif_did_change_watched_files ~notify_back changes =
       (* Triggers even on save *)
@@ -643,11 +666,13 @@ class catala_lsp_server =
           self#process_saved_document ~notify_back doc_id
         | Deleted -> self#on_doc_delete ~notify_back doc_id
       in
-      let changes =
-        List.filter_map
+      let* changes =
+        Lwt_list.filter_map_s
           (fun { FileEvent.uri; type_ } ->
             let doc_id = Doc_id.of_lsp_uri uri in
-            if should_ignore doc_id then None else Some (doc_id, type_))
+            check_ignore doc_id
+              (fun () -> Lwt.return_none)
+              (fun () -> Lwt.return_some (doc_id, type_)))
           changes
       in
       let len_changes = List.length changes in
@@ -962,109 +987,108 @@ class catala_lsp_server =
         ~workDoneToken:_ ~partialResultToken:_ doc_state =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let*? document, diagnostics =
-          retrieve_existing_document_now doc_id server_state
-        in
-        let*? completions =
-          Lwt.return
-            (DQ.lookup_completions document ~doc_content:doc_state.content pos
-               diagnostics)
-        in
-        Lwt.return_some (`List completions)
+      check_ignore doc_id do_none
+      @@ fun () ->
+      let*? document, diagnostics =
+        retrieve_existing_document_now doc_id server_state
+      in
+      let*? completions =
+        Lwt.return
+          (DQ.lookup_completions document ~doc_content:doc_state.content pos
+             diagnostics)
+      in
+      Lwt.return_some (`List completions)
 
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ _doc_state =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let*? doc, _diagnostics =
-          retrieve_existing_document doc_id server_state
+      check_ignore doc_id do_none
+      @@ fun () ->
+      let*? doc, _diagnostics =
+        retrieve_existing_document doc_id server_state
+      in
+      match DQ.lookup_def ~doc_id doc pos with
+      | None -> Lwt.return_none
+      | Some l ->
+        let locs =
+          List.map
+            (fun (file, range) ->
+              let uri = DocumentUri.of_path file in
+              Location.create ~range ~uri)
+            l
         in
-        match DQ.lookup_def ~doc_id doc pos with
-        | None -> Lwt.return_none
-        | Some l ->
-          let locs =
-            List.map
-              (fun (file, range) ->
-                let uri = DocumentUri.of_path file in
-                Location.create ~range ~uri)
-              l
-          in
-          if locs = [] then Lwt.return_none
-          else Lwt.return_some (`Location locs)
+        if locs = [] then Lwt.return_none else Lwt.return_some (`Location locs)
 
     method private on_req_declaration ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Locations.t option t =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let*? doc, _ = retrieve_existing_document doc_id server_state in
-        match DQ.lookup_declaration ~doc_id doc pos with
-        | None -> Lwt.return_none
-        | Some l ->
-          let locations =
-            List.map
-              (fun (file, range) ->
-                let uri = DocumentUri.of_path file in
-                Location.create ~range ~uri)
-              l
-          in
-          let locs : Linol_lwt.Locations.t = `Location locations in
-          Lwt.return_some locs
+      check_ignore doc_id do_none
+      @@ fun () ->
+      let*? doc, _ = retrieve_existing_document doc_id server_state in
+      match DQ.lookup_declaration ~doc_id doc pos with
+      | None -> Lwt.return_none
+      | Some l ->
+        let locations =
+          List.map
+            (fun (file, range) ->
+              let uri = DocumentUri.of_path file in
+              Location.create ~range ~uri)
+            l
+        in
+        let locs : Linol_lwt.Locations.t = `Location locations in
+        Lwt.return_some locs
 
     method private on_req_references ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Location.t list option Lwt.t =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let*? doc, _ = retrieve_existing_document doc_id server_state in
-        match DQ.lookup_usages ~doc_id doc pos with
-        | None -> Lwt.return_none
-        | Some l ->
-          let locs =
-            List.map
-              (fun (file, range) ->
-                let uri = DocumentUri.of_path file in
-                Location.create ~range ~uri)
-              l
-          in
-          if locs = [] then Lwt.return_none else Lwt.return_some locs
+      check_ignore doc_id do_none
+      @@ fun () ->
+      let*? doc, _ = retrieve_existing_document doc_id server_state in
+      match DQ.lookup_usages ~doc_id doc pos with
+      | None -> Lwt.return_none
+      | Some l ->
+        let locs =
+          List.map
+            (fun (file, range) ->
+              let uri = DocumentUri.of_path file in
+              Location.create ~range ~uri)
+            l
+        in
+        if locs = [] then Lwt.return_none else Lwt.return_some locs
 
     method! on_req_hover ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         _doc_state : Hover.t option Lwt.t =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let*? doc, _ = retrieve_existing_document doc_id server_state in
-        let markdown =
-          let ( let*? ) = Option.bind in
-          let*? { hover; _ } = initialize_params.capabilities.textDocument in
-          let*? { contentFormat; _ } = hover in
-          Option.map (fun l -> List.mem MarkupKind.Markdown l) contentFormat
-        in
-        match DQ.get_hover_type ?markdown doc pos with
-        | None -> Lwt.return_none
-        | Some content -> Lwt.return_some content
+      check_ignore doc_id do_none
+      @@ fun () ->
+      let*? doc, _ = retrieve_existing_document doc_id server_state in
+      let markdown =
+        let ( let*? ) = Option.bind in
+        let*? { hover; _ } = initialize_params.capabilities.textDocument in
+        let*? { contentFormat; _ } = hover in
+        Option.map (fun l -> List.mem MarkupKind.Markdown l) contentFormat
+      in
+      match DQ.get_hover_type ?markdown doc pos with
+      | None -> Lwt.return_none
+      | Some content -> Lwt.return_some content
 
     method private on_req_type_definition ~notify_back:_ ~(uri : Uri0.t)
         ~(pos : Position.t) () : Locations.t option Lwt.t =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let*? doc, _ = retrieve_existing_document doc_id server_state in
-        match DQ.lookup_type_declaration doc pos with
-        | None -> Lwt.return_none
-        | Some (file, range) ->
-          let uri = DocumentUri.of_path file in
-          let loc = Location.create ~range ~uri in
-          Lwt.return_some (`Location [loc])
+      check_ignore doc_id do_none
+      @@ fun () ->
+      let*? doc, _ = retrieve_existing_document doc_id server_state in
+      match DQ.lookup_type_declaration doc pos with
+      | None -> Lwt.return_none
+      | Some (file, range) ->
+        let uri = DocumentUri.of_path file in
+        let loc = Location.create ~range ~uri in
+        Lwt.return_some (`Location [loc])
 
     method! on_req_symbol ~notify_back:_ ~id:_ ~uri ~workDoneToken:_
         ~partialResultToken:_ () :
@@ -1074,55 +1098,53 @@ class catala_lsp_server =
         t =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        let*? doc, _ = retrieve_existing_document doc_id server_state in
-        let all_symbols = DQ.lookup_document_symbols doc in
-        Lwt.return_some (`SymbolInformation all_symbols)
+      check_ignore doc_id do_none
+      @@ fun () ->
+      let*? doc, _ = retrieve_existing_document doc_id server_state in
+      let all_symbols = DQ.lookup_document_symbols doc in
+      Lwt.return_some (`SymbolInformation all_symbols)
 
     method! on_req_code_lens ~notify_back:_ ~id:_ ~uri ~workDoneToken:_
         ~partialResultToken:_ _doc_state : CodeLens.t list Lwt.t =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri uri in
-      if should_ignore doc_id then Lwt.return_nil
-      else
-        let* r =
-          let*? doc, _ =
-            retrieve_existing_document_when_ready doc_id server_state
-          in
-          Lwt.return (DQ.lookup_lenses doc)
+      check_ignore doc_id (fun () -> Lwt.return_nil)
+      @@ fun () ->
+      let* r =
+        let*? doc, _ =
+          retrieve_existing_document_when_ready doc_id server_state
         in
-        match r with None -> Lwt.return_nil | Some l -> Lwt.return l
+        Lwt.return (DQ.lookup_lenses doc)
+      in
+      match r with None -> Lwt.return_nil | Some l -> Lwt.return l
 
     method private on_req_document_formatting ~notify_back
         (params : DocumentFormattingParams.t) : TextEdit.t list option Lwt.t =
       let* () = server_initialized in
       let doc_id = Doc_id.of_lsp_uri params.textDocument.uri in
-      if should_ignore doc_id then Lwt.return_none
-      else
-        protect_project_not_found_opt
-        @@ fun () ->
-        St.use server_state
-        @@ fun _ ->
-        Log.info (fun m ->
-            m "trying to format document %a" Doc_id.format doc_id);
-        match self#find_doc params.textDocument.uri with
+      check_ignore doc_id do_none
+      @@ fun () ->
+      protect_project_not_found_opt
+      @@ fun () ->
+      St.use server_state
+      @@ fun _ ->
+      Log.info (fun m -> m "trying to format document %a" Doc_id.format doc_id);
+      match self#find_doc params.textDocument.uri with
+      | None ->
+        Log.warn (fun m ->
+            m "cannot find document content of document %a" Doc_id.format doc_id);
+        Lwt.return_none
+      | Some { content = doc_content; _ } -> (
+        let* r =
+          Formatting.try_format_document ~notify_back ~doc_content doc_id
+        in
+        match r with
         | None ->
-          Log.warn (fun m ->
-              m "cannot find document content of document %a" Doc_id.format
-                doc_id);
+          Log.info (fun m -> m "failed to format document");
           Lwt.return_none
-        | Some { content = doc_content; _ } -> (
-          let* r =
-            Formatting.try_format_document ~notify_back ~doc_content doc_id
-          in
-          match r with
-          | None ->
-            Log.info (fun m -> m "failed to format document");
-            Lwt.return_none
-          | Some r ->
-            Log.info (fun m -> m "document formatting done");
-            Lwt.return_some r)
+        | Some r ->
+          Log.info (fun m -> m "document formatting done");
+          Lwt.return_some r)
 
     method private on_req_document_rename ~notify_back:_
         {
@@ -1134,30 +1156,24 @@ class catala_lsp_server =
       let* () = server_initialized in
       let empty_response = WorkspaceEdit.create () in
       let doc_id = Doc_id.of_lsp_uri textDocument.uri in
-      if should_ignore doc_id then Lwt.return empty_response
-      else
-        let* r =
-          protect_project_not_found_opt
-          @@ fun () ->
-          let*? doc, _ = retrieve_existing_document doc_id server_state in
-          let*? all_occurences =
-            Lwt.return (DQ.lookup_occurences doc position)
-          in
-          let changes : (Uri0.t * TextEdit.t list) list =
-            let open Server_types in
-            Doc_id.Map.map
-              (fun rs ->
-                Range.Set.elements rs
-                |> List.map (fun range ->
-                    TextEdit.create ~newText:newName ~range))
-              all_occurences
-            |> Doc_id.Map.bindings
-            |> List.map (fun (doc_id, ranges) ->
-                Doc_id.to_lsp_uri doc_id, ranges)
-          in
-          Lwt.return_some (WorkspaceEdit.create ~changes ())
+      check_ignore doc_id (fun () -> Lwt.return empty_response)
+      @@ fun () ->
+      let* r =
+        protect_project_not_found_opt
+        @@ fun () ->
+        let*? doc, _ = retrieve_existing_document doc_id server_state in
+        let*? all_occurences = Lwt.return (DQ.lookup_occurences doc position) in
+        let changes : (Uri0.t * TextEdit.t list) list =
+          let open Server_types in
+          Doc_id.Map.map
+            (fun rs ->
+              Range.Set.elements rs
+              |> List.map (fun range -> TextEdit.create ~newText:newName ~range))
+            all_occurences
+          |> Doc_id.Map.bindings
+          |> List.map (fun (doc_id, ranges) -> Doc_id.to_lsp_uri doc_id, ranges)
         in
-        match r with
-        | None -> Lwt.return empty_response
-        | Some r -> Lwt.return r
+        Lwt.return_some (WorkspaceEdit.create ~changes ())
+      in
+      match r with None -> Lwt.return empty_response | Some r -> Lwt.return r
   end
