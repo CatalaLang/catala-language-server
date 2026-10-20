@@ -75,3 +75,8 @@ export async function exceptionsAt(
   );
   return result ?? null;
 }
+
+export async function rescanProjects(client: LanguageClient): Promise<void> {
+  await client.sendRequest('catala.rescanProjects');
+  return;
+}

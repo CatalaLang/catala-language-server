@@ -74,13 +74,15 @@
       },
       {
         "command": "catala.run",
-        "icon": "$(play)",
-        "title": "Run a scope"
+        "title": "Run a scope",
+        "category": "%category.catala%",
+        "icon": "$(play)"
       },
       {
         "command": "catala.debug",
-        "icon": "$(debug-alt)",
-        "title": "Debug a scope"
+        "title": "Debug a scope",
+        "category": "%category.catala%",
+        "icon": "$(debug-alt)"
       },
       {
         "command": "catala.openWithTestEditor",
@@ -97,13 +99,19 @@
         "title": "%command.catala.showExceptions.title%"
       },
       {
+        "command": "catala.rescanProjects",
+        "title": "%command.catala.rescanProjects.title%",
+        "category": "%category.catala%",
+        "icon": "$(issue-reopened)"
+      },
+      {
         "command": "catala.showExceptionsAtCursor",
         "title": "%command.catala.showExceptionsAtCursor.title%",
         "category": "%category.catala%"
       },
       {
         "command": "catala.refreshSwitches",
-        "category": "catala",
+        "category": "%category.catala%",
         "title": "Refresh Switches",
         "icon": "$(sync-compact)"
       }
@@ -142,14 +150,19 @@
       ],
       "editor/title": [
         {
-          "command": "catala.run",
+          "command": "catala.rescanProjects",
           "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
           "group": "navigation@10"
         },
         {
-          "command": "catala.debug",
+          "command": "catala.run",
           "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
           "group": "navigation@11"
+        },
+        {
+          "command": "catala.debug",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "group": "navigation@12"
         },
         {
           "command": "catala.openWithTestEditor",

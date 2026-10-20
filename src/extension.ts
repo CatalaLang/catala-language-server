@@ -26,7 +26,7 @@ import {
 import type { RunArgs } from './shared/util_client';
 import { initTests } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
-import { listEntrypoints } from './extension/lspRequests';
+import { listEntrypoints, rescanProjects } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
 import path from 'path';
 
@@ -459,6 +459,12 @@ export async function activate(
           'catala.testCaseEditor'
         );
       }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('catala.rescanProjects', (_ctx) =>
+      rescanProjects(client)
     )
   );
 
