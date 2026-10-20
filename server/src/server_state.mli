@@ -81,6 +81,9 @@ val use_now : locked_server_state -> (server_state -> 'a Lwt.t) -> 'a Lwt.t
 val use_and_update :
   locked_server_state -> (server_state -> server_state Lwt.t) -> unit Lwt.t
 
+val use_and_update_now :
+  locked_server_state -> (server_state -> server_state Lwt.t) -> unit Lwt.t
+
 val delayed_update :
   ?delay:float ->
   Doc_id.doc_id ->
@@ -91,3 +94,4 @@ val delayed_update :
 val make : unit -> locked_server_state
 val get_module_content : server_state -> Surface.Parser_driver.module_loading
 val unload_module_content : server_state -> Doc_id.t -> unit
+val reset_module_contents : server_state -> unit

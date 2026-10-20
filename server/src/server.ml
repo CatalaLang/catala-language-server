@@ -641,14 +641,18 @@ class catala_lsp_server =
           | Deleted -> self#on_doc_delete ~notify_back doc_id)
         changes
 
-    method private scan_project ~(notify_back : Jsonrpc2.notify_back)
-        ({ St.projects; open_documents; module_cache; diagnostics = _ } as
-         sstate) =
-      let nb_files =
+    method private scan_projects ~(notify_back : Jsonrpc2.notify_back) sstate =
+      let () = Server_state.reset_module_contents sstate in
+      let errors, on_error = make_error_handler () in
+      let projects = Projects.init ~on_error initialize_params in
+      let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
+      let all_files =
         Projects.Projects.fold
-          (fun project acc -> Doc_id.Map.cardinal project.project_files + acc)
-          projects 0
+          (fun (project : Projects.project) acc ->
+            Doc_id.Map.union (fun _ l _ -> Some l) project.project_files acc)
+          projects Doc_id.Map.empty
       in
+      let nb_files = Doc_id.Map.cardinal all_files in
       let* _, (diagnostics, open_documents) =
         Utils.with_progress ~notify_back ~label:"Catala project scan"
           ~total:nb_files (fun tick ->
@@ -688,7 +692,7 @@ class catala_lsp_server =
                             Server_state.get_module_content sstate
                           in
                           unlocked_process_document ~get_module_content
-                            ~module_candidates document open_documents
+                            ~module_candidates document documents
                         in
                         let new_diagnostics =
                           merge_diags document_diagnostics diagnostics
@@ -699,11 +703,18 @@ class catala_lsp_server =
                     Lwt.return (succ n, acc))
                   project.project_files acc)
               projects
-              (Lwt.return (0, (Doc_id.Map.empty, open_documents))))
+              (Lwt.return (0, (Doc_id.Map.empty, Doc_id.Map.empty))))
       in
-      let sstate = { St.projects; open_documents; module_cache; diagnostics } in
+      let sstate =
+        {
+          St.projects;
+          open_documents;
+          module_cache = sstate.module_cache;
+          diagnostics;
+        }
+      in
       let* () = unlocked_send_all_diagnostics ~notify_back sstate in
-      Lwt.return sstate
+      Lwt.return (projects, sstate)
 
     method! on_notification_unhandled ~notify_back (n : Client_notification.t) =
       match n with
@@ -743,26 +754,27 @@ class catala_lsp_server =
             Lwt.return_unit
         in
         set_log_level initialize_params.trace;
-        St.use_and_update server_state
+        St.use_and_update_now server_state
         @@ fun sstate ->
-        let errors, on_error = make_error_handler () in
-        let projects = Projects.init ~on_error initialize_params in
-        let sstate = { sstate with projects } in
         let is_eglot =
           match initialize_params.clientInfo with
           | Some { name = "Eglot"; _ } -> true
           | None -> false
           | _ -> false
         in
-        let* sstate =
-          if not is_eglot then
+        let* projects, sstate =
+          if is_eglot then
             (* We scan the project even when [!scan_project_config] is
                set to false as the vscode extension list entrypoints
                which ends up in a less-verbose scanning anyway. *)
-            self#scan_project ~notify_back sstate
-          else Lwt.return sstate
+            let errors, on_error = make_error_handler () in
+            let projects = Projects.init ~on_error initialize_params in
+            let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
+            let sstate = { sstate with projects } in
+            Lwt.return (projects, sstate)
+          else self#scan_projects ~notify_back sstate
         in
-        let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
+        let sstate = { sstate with projects } in
         Lwt.wakeup resolve_init ();
         Lwt.return sstate
       | _ -> Lwt.return_unit
@@ -865,6 +877,17 @@ class catala_lsp_server =
               m "listEntrypoint request failed: %s" (Printexc.to_string exn));
           Lwt.return `Null)
 
+    method private rescan_projects ~(notify_back : Jsonrpc2.notify_back) () :
+        Yojson.Safe.t Lwt.t =
+      let* () =
+        St.use_and_update_now server_state
+        @@ fun sstate ->
+        let* projects, sstate = self#scan_projects ~notify_back sstate in
+        let sstate = { sstate with projects } in
+        Lwt.return sstate
+      in
+      Lwt.return `Null
+
     method! on_unknown_request ~notify_back ~server_request:_ ~id meth params =
       self#on_request_unhandled ~notify_back ~id
         (Client_request.UnknownRequest { meth; params })
@@ -894,6 +917,8 @@ class catala_lsp_server =
         | UnknownRequest { meth = "catala.exceptionsAt"; params } ->
           self#exceptions_at
             (Option.map Linol_jsonrpc.Jsonrpc.Structured.yojson_of_t params)
+        | UnknownRequest { meth = "catala.rescanProjects"; params = _ } ->
+          self#rescan_projects ~notify_back ()
         | UnknownRequest { meth; _ } ->
           Format.kasprintf Lwt.fail_with "Unknown LSP request received: %s" meth
         | _ -> super#on_request_unhandled ~notify_back ~id r
