@@ -748,8 +748,18 @@ class catala_lsp_server =
         let errors, on_error = make_error_handler () in
         let projects = Projects.init ~on_error initialize_params in
         let sstate = { sstate with projects } in
+        let is_eglot =
+          match initialize_params.clientInfo with
+          | Some { name = "Eglot"; _ } -> true
+          | None -> false
+          | _ -> false
+        in
         let* sstate =
-          if !scan_project_config then self#scan_project ~notify_back sstate
+          if not is_eglot then
+            (* We scan the project even when [!scan_project_config] is
+               set to false as the vscode extension list entrypoints
+               which ends up in a less-verbose scanning anyway. *)
+            self#scan_project ~notify_back sstate
           else Lwt.return sstate
         in
         let* () = unlocked_raw_send_all_diagnostics ~notify_back !errors in
