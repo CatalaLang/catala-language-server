@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          opam pin catala --dev-repo -n
+          opam pin catala "git+https://github.com/CatalaLang/catala#${{ github.head_ref || github.ref_name }}" -n || opam pin catala --dev-repo -n
           opam install . --deps-only --with-test
           npm ci
 
