@@ -81,6 +81,71 @@ function TabHeader({ item }: { item: EditorItem }): ReactElement {
   );
 }
 
+function usePersistentTabOrder(arrayItems: EditorItem[]) {
+  const currentKeys = arrayItems.map((i) => i.key);
+  const signature = [...currentKeys].sort().join('::');
+  const storageKey = signature ? `tab-order:${signature}` : '';
+
+  const readSavedOrder = (): string[] => {
+    if (!storageKey) return currentKeys;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        const valid = parsed.filter((k) => currentKeys.includes(k));
+        const missing = currentKeys.filter((k) => !valid.includes(k));
+        return [...valid, ...missing];
+      }
+    } catch {
+
+    }
+    return currentKeys;
+  };
+
+  const [tabOrder, setTabOrder] = useState<string[]>(readSavedOrder);
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTabOrder(readSavedOrder());
+  }, [storageKey, arrayItems]);
+
+  const saveOrder = (newOrder: string[]) => {
+    setTabOrder(newOrder);
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(newOrder));
+    } catch  {
+
+    }
+  };
+
+  const handleDragStart = (key: string) => setDraggedKey(key);
+
+  const handleDragOver = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault();
+    if (!draggedKey || draggedKey === targetKey) return;
+
+    const fromIdx = tabOrder.indexOf(draggedKey);
+    const toIdx = tabOrder.indexOf(targetKey);
+    const newOrder = [...tabOrder];
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, draggedKey);
+
+    saveOrder(newOrder);
+  };
+
+  const sortedArrayItems = [...arrayItems].sort(
+    (a, b) => tabOrder.indexOf(a.key) - tabOrder.indexOf(b.key)
+  );
+
+  return {
+    sortedArrayItems,
+    handleDragStart,
+    handleDragOver,
+    resetDrag: () => setDraggedKey(null),
+  };
+}
+
 export function CompositeEditor(props: CompositeEditorProps): ReactElement {
   const scalarItems = props.items.filter((i) => categorize(i) === 'scalar');
   const structuralItems = props.items.filter(
@@ -89,6 +154,13 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
   const arrayItems = props.items.filter((i) => categorize(i) === 'array');
 
   const hasNonScalar = structuralItems.length + arrayItems.length > 0;
+
+  const {
+    sortedArrayItems,
+    handleDragStart,
+    handleDragOver,
+    resetDrag,
+  } = usePersistentTabOrder(arrayItems);
 
   const [activeTab, setActiveTab] = useState(
     arrayItems.length > 0 ? arrayItems[0].key : ''
@@ -159,12 +231,16 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
         </div>
       ))}
 
-      {arrayItems.length > 1 && (
+      {sortedArrayItems.length > 1 && (
         <div className="complex-items-container">
           <div className="tabs">
-            {arrayItems.map((item) => (
+            {sortedArrayItems.map((item) => (
               <button
                 key={item.key}
+                draggable
+                onDragStart={() => handleDragStart(item.key)}
+                onDragOver={(e) => handleDragOver(e, item.key)}
+                onDragEnd={resetDrag}
                 className={`tab ${activeTab === item.key ? 'active' : ''}`}
                 onClick={() => setActiveTab(item.key)}
               >
@@ -173,7 +249,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
             ))}
           </div>
           <div className="tab-content">
-            {arrayItems.map((item) => (
+            {sortedArrayItems.map((item) => (
               <div
                 key={item.key}
                 className={`tab-panel ${activeTab === item.key ? 'active' : 'hidden'}`}
