@@ -556,16 +556,7 @@ let retrieve_assertions_values
 
 let retrieve_program include_dirs options scope_name =
   let path_to_build, include_dirs =
-    if include_dirs = [] then
-      let path_to_build, include_dirs = lookup_include_dirs options in
-      let build_include_dirs =
-        List.map
-          (fun (p : Global.raw_file) ->
-            File.(path_to_build / "_build" / (p :> string)) |> Global.raw_file)
-          include_dirs
-      in
-      path_to_build, build_include_dirs @ include_dirs
-    else ".", []
+    if include_dirs = [] then lookup_include_dirs options else ".", []
   in
   let desugared_prg, naming_ctx =
     read_program include_dirs path_to_build options
