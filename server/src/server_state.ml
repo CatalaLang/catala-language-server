@@ -164,6 +164,21 @@ let use_and_update s (f : server_state -> server_state Lwt.t) : unit Lwt.t =
   s.delayed_state <- Ready new_state;
   Lwt.return_unit
 
+let use_and_update_now s (f : server_state -> server_state Lwt.t) : unit Lwt.t =
+  Lwt_mutex.with_lock s.lock
+  @@ fun () ->
+  let f = protect s f in
+  let* new_state =
+    match s.delayed_state with
+    | Ready state -> f state
+    | Delayed { doc_id = _; curr_server_state; delayed_action; _ } ->
+      Lwt.cancel delayed_action;
+      Log.debug (fun m -> m "canceling delayed action");
+      f curr_server_state
+  in
+  s.delayed_state <- Ready new_state;
+  Lwt.return_unit
+
 let make_delayed_action ?(delay = 1.) s action =
   Log.debug (fun m -> m "start waiting on delayed action");
   let* () = Lwt_unix.sleep delay in
@@ -259,3 +274,7 @@ let get_module_content server_state =
 let unload_module_content server_state doc_id =
   let module H = Doc_id.Hashtbl in
   H.remove server_state.module_cache doc_id
+
+let reset_module_contents server_state =
+  let module H = Doc_id.Hashtbl in
+  H.clear server_state.module_cache

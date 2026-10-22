@@ -259,8 +259,9 @@ and val_to_runtime : type d r.
     | TLit TUnit, _ -> (
       let exception
         (* Constant constructor case *)
-        Found of int
-      in
+          Found of
+          int
+        in
       match
         EnumConstructor.Map.fold
           (fun c ty n ->
@@ -273,8 +274,9 @@ and val_to_runtime : type d r.
     | ty -> (
       let exception
         (* Non-constant constructor *)
-        Found of int
-      in
+          Found of
+          int
+        in
       match
         EnumConstructor.Map.fold
           (fun c ty n ->
@@ -822,7 +824,7 @@ let rec evaluate_expr_with_env : type d r.
         "Variable '%s#%d' missing from environment at evaluation (should not \
          happen if term was well-typed)"
         (Bindlib.name_of v) (Bindlib.uid_of v)
-  end
+    end
   | EExternal { name } ->
     let path =
       match Mark.remove name with

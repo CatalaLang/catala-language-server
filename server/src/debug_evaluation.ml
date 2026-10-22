@@ -244,7 +244,11 @@ let load_program options ((clerk_config : Clerk_config.t), root_dir) file scope
   let stdlib_path = File.(root_dir / "_build" / "libcatala") in
   if not (File.exists stdlib_path) then
     failwith "Stdlib not found - Please compile your project first.";
-  let include_dirs = Projects.retrieve_include_dirs clerk_config in
+  let include_dirs =
+    Projects.retrieve_include_dirs clerk_config
+    |> File.Set.elements
+    |> List.map Global.raw_file
+  in
   let mod_uses, modules =
     try
       Surface.Parser_driver.load_modules options
@@ -310,7 +314,6 @@ let run_debugger ?inputs rpc ~file ~scope logger : debugger_state Lwt.t =
   let options =
     Catala_utils.Global.enforce_options ~input_src:(FileName file)
       ~whole_program:true ~bin_dir:build_dir
-      ~path_rewrite:(fun i -> (i :> string))
       ~language:(Some (Cli.file_lang file))
       ~stop_on_error:true ()
   in
@@ -416,8 +419,8 @@ let continue_back_until_breakpoint state : [ `Start | `B of step ] =
 let find_breakpoint (pos_map : PMap.pmap) doc_id (bp : Source_breakpoint.t) :
     (Pos.t * Breakpoint.t) option =
   match bp.column with
-  | None -> begin
-    match PMap.lookup_best_on_line doc_id bp.line pos_map with
+  | None ->
+    begin match PMap.lookup_best_on_line doc_id bp.line pos_map with
     | None ->
       Log.debug (fun m ->
           m "Did not find a satisfying candidate at line %d" bp.line);
@@ -426,7 +429,7 @@ let find_breakpoint (pos_map : PMap.pmap) doc_id (bp : Source_breakpoint.t) :
       let pos = get_pos e in
       Some (pos, expr_to_breakpoint ~l:bp.line e)
     | Some _ -> None
-  end
+    end
   | Some c ->
     let pos = Pos.from_info (doc_id :> string) bp.line c bp.line c in
     PMap.lookup pos pos_map

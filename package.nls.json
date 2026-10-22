@@ -1,6 +1,7 @@
 {
   "command.catala.openWithTestEditor.title": "Open with Catala Test Editor",
   "command.catala.showExceptions.title": "Show definition tree",
+  "command.catala.rescanProjects.title": "Scan all files of every project",
   "command.catala.showExceptionsAtCursor.title": "Show definition tree",
   "view.catala.exceptionsView.name": "Definition tree",
   "category.catala": "Catala",

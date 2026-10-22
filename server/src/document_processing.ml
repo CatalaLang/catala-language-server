@@ -196,14 +196,21 @@ let hash_local_context (ctx : Desugared.Name_resolution.context) : Hash.t =
             scope_decl_context_io_output;
           } =
         raw (Mark.remove scope_decl_context_io_input)
-        % raw scope_decl_context_io_output
+        % raw (Mark.remove scope_decl_context_io_output)
       in
       hash_typ var_sig_typ
       % option (fun (l, _) -> list hash_typ (List.map snd l)) var_sig_parameters
       % hash_io var_sig_io
-      % list StateName.hash var_sig_states_list
+      % list StateName.hash
+          (List.map
+             (StateName.map_info (fun (s, _p) -> s, Pos.void))
+             var_sig_states_list)
     in
     map ScopeVar.Map.fold ScopeVar.hash hash_var_sig var_typs
+  in
+  let module_ids =
+    (* Ignore [ModuleName] it considers code positions, ident is sufficient *)
+    Ident.Map.keys local.used_modules
   in
   local_scopes_hash
   % local_topdefs
@@ -211,13 +218,14 @@ let hash_local_context (ctx : Desugared.Name_resolution.context) : Hash.t =
   % local_enums
   % local_abs_typs
   % local_var_typs
-  % map Ident.Map.fold Ident.hash ModuleName.hash local.used_modules
+  % list Ident.hash module_ids
 
 let surface_to_scopelang
+    ?resolve_included_file
+    ?module_candidates
     ~on_error
     ~get_errors
     ~(get_module_content : Surface.Parser_driver.module_loading)
-    ?resolve_included_file
     (doc_id : Doc_id.t)
     options
     project
@@ -251,18 +259,26 @@ let surface_to_scopelang
       | No_clerk -> project.project_dir, Clerk_config.default_config
     in
     let includes = project.project_include_dirs in
+    let build_stdlib_path =
+      File.(root_dir / clerk_config.global.build_dir / "libcatala")
+    in
+    let stdlib = Some (Global.raw_file build_stdlib_path) in
+    let module_candidates =
+      match module_candidates with
+      | None ->
+        let includes = File.Set.elements includes |> List.map Global.raw_file in
+        Surface.Parser_driver.load_included_modules options ~includes ~stdlib
+          ~load_module ()
+      | Some c -> c
+    in
     let mod_uses, modules =
-      let check stdlib k =
-        if File.exists stdlib then
-          Surface.Parser_driver.load_modules options
-            ~stdlib:(Some (Global.raw_file stdlib))
-            ~load_module includes surface
+      let check k =
+        if File.exists build_stdlib_path then
+          Surface.Parser_driver.load_modules_with_candidates options ~stdlib
+            module_candidates surface
         else k ()
       in
-      let build_stdlib_path =
-        File.(root_dir / clerk_config.global.build_dir / "libcatala")
-      in
-      check build_stdlib_path
+      check
       @@ fun () ->
       let cmd, args =
         ( "clerk",
@@ -277,12 +293,11 @@ let surface_to_scopelang
       Log.debug (fun m ->
           m "Stdlib not found - calling `clerk %s`" (String.concat " " args));
       let _ = File.process_out cmd args in
-      check build_stdlib_path
+      check
       @@ fun () ->
       try
-        Surface.Parser_driver.load_modules options
-          ~stdlib:(Some (Global.raw_file build_stdlib_path))
-          ~load_module includes surface
+        Surface.Parser_driver.load_modules_with_candidates options ~stdlib
+          module_candidates surface
       with e ->
         on_error
           {
@@ -338,6 +353,7 @@ let surface_to_scopelang
     | Ok () -> k r)
 
 let process
+    ?module_candidates
     ~(resolve_file_content : string -> string Global.input_src)
     ~(get_module_content : Surface.Parser_driver.module_loading)
     { document_id = doc_id; buffer_state; project; project_file; _ } :
@@ -366,11 +382,7 @@ let process
       FileName including_file.file_name, Some resolve_file_content
     end
   in
-  let options =
-    Catala_utils.Global.enforce_options
-      ~path_rewrite:(fun rf -> (rf :> string))
-      ~input_src ()
-  in
+  let options = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
   let get_errors () = !l in
   let on_error e =
@@ -381,7 +393,7 @@ let process
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
   (* From surface to scopelang *)
   surface_to_scopelang ~on_error ~get_errors ~get_module_content
-    ?resolve_included_file doc_id options project
+    ?resolve_included_file ?module_candidates doc_id options project
   @@ fun ({ prg; _ } as valid_result) ->
   let handle = function
     | Ok () -> Valid (lsp_errors_to_diag doc_id (get_errors ()), valid_result)
@@ -400,8 +412,15 @@ let process
   ignore @@ Typing.program ~internal_check:true prg;
   Message.report_delayed_errors_if_any ()
 
-let process ~resolve_file_content ~get_module_content document =
-  let r = process ~resolve_file_content ~get_module_content document in
+let process
+    ?module_candidates
+    ~resolve_file_content
+    ~get_module_content
+    document =
+  let r =
+    process ~resolve_file_content ~get_module_content ?module_candidates
+      document
+  in
   let nb_diags diags =
     Doc_id.Map.fold
       (fun _d rm i -> Server_types.Range.Map.cardinal rm + i)

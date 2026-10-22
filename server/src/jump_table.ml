@@ -328,8 +328,8 @@ let rec traverse_typ (tctx : traversal_ctxt) ((typ, pos) : naked_typ * Pos.t) m
       |> function
       | None -> (* shouldn't happen *) m
       | Some sjump -> PMap.add pos (Scope_use sjump) m
+      end
     end
-  end
   | TEnum enum_name ->
     let m =
       (* Populate enum's path components *)

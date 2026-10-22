@@ -199,8 +199,8 @@ let read_partial_test_one
       Ok (ty, O.{ value = raw; attrs = surface_value_attrs (Mark.get e) })
     in
     match Mark.remove e with
-    | Literal l -> begin
-      match translate_literal l Pos.void with
+    | Literal l ->
+      begin match translate_literal l Pos.void with
       | LBool b -> ok O.TBool (O.Bool b)
       | LInt z -> ok O.TInt (O.Integer (Z.to_int z))
       | LRat q -> ok O.TRat (O.Decimal (Q.to_float q))
@@ -212,7 +212,7 @@ let read_partial_test_one
       | LDuration dur ->
         let years, months, days = Dates_calc.period_to_ymds dur in
         ok O.TDuration (O.Duration { years; months; days })
-    end
+      end
     | EnumInject ((CBuiltin Absent, _), None) ->
       (* TOption, as in a signature, even though the value is carried as the
          Optional enum. A bare `Absent` has an unknown payload type. *)
@@ -364,11 +364,11 @@ let read_partial_test_one
     | _ -> Error "unsupported assertion"
   in
   let convert_var_def = function
-    | Definition d, _ -> begin
-      match convert_definition d with
+    | Definition d, _ ->
+      begin match convert_definition d with
       | Error s -> raise (Err s)
       | Ok v -> Some v
-    end
+      end
     | Rule _, _ -> raise (Err "a rule (filled / not filled) is not a literal")
     | DateRounding _, _ -> raise (Err "date rounding is not recoverable")
     | Assertion _, _ -> None
