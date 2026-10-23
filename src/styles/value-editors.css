@@ -73,6 +73,54 @@
   margin-top: var(--label-gap);
 }
 
+/* Not .value-editor: the theme paints it like an input, tables make it a block. */
+.option-editor {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.option-editor > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.option-absent {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* Same box as the inputs, so the row keeps its size when a value is set. */
+.option-absent-field {
+  max-width: var(--field-width);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border: 1px dashed var(--vscode-input-border, currentColor);
+  border-radius: var(--radius-control);
+  box-sizing: border-box;
+  font-size: 13px;
+  line-height: normal;
+  cursor: pointer;
+}
+
+.option-absent-field:hover {
+  opacity: 1;
+}
+
+.option-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-foreground);
+  opacity: 0.5;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.option-toggle-btn:hover,
+.option-toggle-btn:focus-visible {
+  opacity: 1;
+}
+
 .duration-fields {
   display: flex;
   gap: var(--spacing8);

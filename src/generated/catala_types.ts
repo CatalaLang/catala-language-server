@@ -265,6 +265,7 @@ export type ConfirmAction =
 | { kind: 'DeleteAssertion' }
 | { kind: 'RunTestWithUnsetValues' }
 | { kind: 'ResetContextVar' }
+| { kind: 'ClearOptional' }
 | { kind: 'ReplaceOriginalWithLosses'; value: ReplaceLosses }
 | { kind: 'DiscardWorkingCopy' }
 
@@ -1242,6 +1243,8 @@ export function writeConfirmAction(x: ConfirmAction, context: any = x): any {
       return 'RunTestWithUnsetValues'
     case 'ResetContextVar':
       return 'ResetContextVar'
+    case 'ClearOptional':
+      return 'ClearOptional'
     case 'ReplaceOriginalWithLosses':
       return ['ReplaceOriginalWithLosses', writeReplaceLosses(x.value, x)]
     case 'DiscardWorkingCopy':
@@ -1260,6 +1263,8 @@ export function readConfirmAction(x: any, context: any = x): ConfirmAction {
         return { kind: 'RunTestWithUnsetValues' }
       case 'ResetContextVar':
         return { kind: 'ResetContextVar' }
+      case 'ClearOptional':
+        return { kind: 'ClearOptional' }
       case 'DiscardWorkingCopy':
         return { kind: 'DiscardWorkingCopy' }
       default:

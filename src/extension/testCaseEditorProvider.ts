@@ -532,6 +532,13 @@ export class TestCaseEditorProvider
               buttons = [{ title: vscode.l10n.t('Reset'), action: 'Reset' }];
               successAction = 'Reset';
               break;
+            case 'ClearOptional':
+              prompt = vscode.l10n.t(
+                'Set this value back to Absent? Its current content will be lost.'
+              );
+              buttons = [{ title: vscode.l10n.t('Clear'), action: 'Reset' }];
+              successAction = 'Reset';
+              break;
             case 'ReplaceOriginalWithLosses': {
               const { dropped_assertions, unset_fields, dropped_tests } =
                 action.value;

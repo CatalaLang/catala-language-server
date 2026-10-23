@@ -48,6 +48,8 @@
   "type.unset": "nieustawiony",
   "option.absent": "Nieobecny",
   "option.present": "Obecny",
+  "option.setValue": "Set a value",
+  "option.clear": "Back to Absent",
   "arrayEditor.movePrevious": "Przenieś element na poprzednią pozycję",
   "arrayEditor.moveNext": "Przenieś element na następną pozycję",
   "arrayEditor.deleteElement": "Usuń element",
