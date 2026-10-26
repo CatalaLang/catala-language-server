@@ -1,0 +1,91 @@
+labels:
+  platform: linux/amd64
+
+when:
+  - event: push
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+  - event: pull_request
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+  - event: manual
+  - event: release
+
+variables:
+  - &catala_image registry.gitlab.inria.fr/catala/registry:20260925
+  - &build_env
+    OCAMLRUNPARAM: b
+    DUNE_PROFILE: check
+    CATALA_COLOR: "always"
+    OPAMCOLOR: "always"
+    OPAMUTF8: "always"
+    CLICOLOR_FORCE: "1" # For dune
+    CI: "true" # else jsoo build with dune complains that it's not a bool
+
+steps:
+  - name: Build dependencies
+    image: *catala_image
+    environment: *build_env
+    commands:
+      - sudo apk add xvfb-run
+      - opam pin catala "git+https://github.com/CatalaLang/catala#$${CI_COMMIT_SOURCE_BRANCH:-$${CI_COMMIT_BRANCH}}" -n || opam pin catala --dev-repo -n
+      - git config --global --add safe.directory /woodpecker/src
+      - opam install . --deps-only --with-test
+      - npm ci
+
+  - name: Lint
+    depends_on: Build dependencies
+    image: *catala_image
+    commands:
+      - npm run lint
+
+  - name: Check unused CSS
+    depends_on: Build dependencies
+    image: *catala_image
+    commands:
+      - node lint_scripts/purgecss-check.js
+
+  - name: Build project
+    depends_on: Build dependencies
+    image: *catala_image
+    environment: *build_env
+    commands:
+      - eval $(opam env)
+      - dune build
+      - dune install
+      - npm run compile
+
+  - name: Run tests
+    depends_on: Build project
+    image: *catala_image
+    environment: *build_env
+    commands:
+      - eval $(opam env)
+      - dune runtest
+      - npm run webview:test
+      - xvfb-run -a npm run test
+      - (cd tests/round_trip && ./round_trip.sh)
+      - (cd tests/regressions && ./enum_path_test.sh)
+      - (cd tests/regressions && ./output_module_deps_test.sh)
+
+  - name: Run end-to-end tests
+    depends_on: Build project
+    image: *catala_image
+    commands:
+      - eval $(opam env)
+      - xvfb-run -a npm run test:e2e
+
+  - name: Upload failure screenshots
+    depends_on: Run end-to-end tests
+    when:
+      - status: [ failure ]
+        event: [ pull_request ]
+      - event: [ pull_request_closed ]
+    failure: ignore
+    image: docker.io/woodpeckerci/plugin-surge-preview
+    settings:
+      path: .extest/screenshots
+      surge_token:
+        from_secret: surge
+      forge_type: github
+      forge_url: https://github.com
+      forge_repo_token:
+        from_secret: github-issues
