@@ -204,7 +204,13 @@ let update_env env =
       end
   in
   let env : (string * dcalc_expr) list =
-    Var.Map.bindings env |> List.map (fun (v, (e, _)) -> Bindlib.name_of v, e)
+    (* [Var.Map] iterates in decreasing variable uid order. Fresh variables are
+       created as binders are entered during evaluation, so sorting by
+       increasing uid lists variables in execution order. *)
+    Var.Map.bindings env
+    |> List.sort (fun (v1, _) (v2, _) ->
+        Int.compare (Bindlib.uid_of v1) (Bindlib.uid_of v2))
+    |> List.map (fun (v, (e, _)) -> Bindlib.name_of v, e)
   in
   current_env := loop [] env;
   current_env_lookup := fun i -> M.find i !m
