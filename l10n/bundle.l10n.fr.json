@@ -20,6 +20,7 @@
   "Clear": "Effacer",
   "Could not replace the original: {0}": "Impossible de remplacer l’original : {0}",
   "Could not discard the working copy: {0}": "Impossible d’abandonner la copie de travail : {0}",
+  "Could not open the working copy: {0}": "Impossible d’ouvrir la copie de travail : {0}",
   "the test {0}: it could not be rebuilt against the scope": "le test {0} : il n’a pas pu être reconstruit face au champ d’application",
   "the assertion on {0}: the rebuild has no expected value for it": "l’assertion sur {0} : la reconstruction n’a pas de valeur attendue pour ce champ",
   "the value of {0}: still unset, written as impossible": "la valeur de {0} : toujours non renseignée, écrite comme impossible",
