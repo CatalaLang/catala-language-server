@@ -365,6 +365,7 @@ suite('Broken test document', function () {
 
     await reads.openWorkingCopy();
     assert.strictEqual(reads.parseResults.kind, 'BrokenTest');
+    assert.ok(reads.originalReads);
     assert.strictEqual(reads.workingCopySaved, null);
 
     // Discarded from the banner: the open test is left as it is.

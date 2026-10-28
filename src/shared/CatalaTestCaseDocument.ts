@@ -83,6 +83,7 @@ export class CatalaTestCaseDocument
   /* Kept out of _parseResults, or a save would write it over the original. */
   private _rebuilt: TestList | undefined;
   private _workingCopySaved: string | null = null;
+  private _originalReads = false;
   private _sourceText: string;
   private _editManager: EditManager;
   private _rebuildManager: EditManager;
@@ -166,6 +167,11 @@ export class CatalaTestCaseDocument
     return this._workingCopySaved;
   }
 
+  /** The repair view was opened from the working copy, not from a failure. */
+  public get originalReads(): boolean {
+    return this._originalReads;
+  }
+
   private async statWorkingCopy(): Promise<void> {
     this._workingCopySaved =
       this._parseResults.kind === 'Results'
@@ -235,6 +241,7 @@ export class CatalaTestCaseDocument
       parseContents(diskContent, this._uri, this._language)
     );
     this._rebuilt = rebuiltFrom(this._parseResults);
+    this._originalReads = false;
     await this.statWorkingCopy();
 
     this._onDidChangeDocument.fire({
@@ -385,6 +392,7 @@ export class CatalaTestCaseDocument
       value: rebuilt,
     });
     this._rebuilt = undefined;
+    this._originalReads = false;
     this._onDidChangeDocument.fire({ document: this });
   }
 
@@ -410,6 +418,7 @@ export class CatalaTestCaseDocument
     this._parseResults = stampParseResultsUids(results);
     this._rebuilt = rebuiltFrom(this._parseResults);
     this._workingCopySaved = null;
+    this._originalReads = true;
     this._onDidChangeDocument.fire({ document: this });
   }
 

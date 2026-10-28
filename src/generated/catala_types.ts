@@ -307,6 +307,7 @@ export type UpMessage =
 export type Update = {
   results: ParseResults;
   working_copy_saved: (string | null);
+  original_reads: boolean;
 }
 
 export type DownMessage =
@@ -1446,6 +1447,7 @@ export function writeUpdate(x: Update, context: any = x): any {
   return {
     'results': _atd_write_required_field('Update', 'results', writeParseResults, x.results, x),
     'working_copy_saved': _atd_write_required_field('Update', 'working_copy_saved', _atd_write_nullable(_atd_write_string), x.working_copy_saved, x),
+    'original_reads': _atd_write_required_field('Update', 'original_reads', _atd_write_bool, x.original_reads, x),
   };
 }
 
@@ -1453,6 +1455,7 @@ export function readUpdate(x: any, context: any = x): Update {
   return {
     results: _atd_read_required_field('Update', 'results', readParseResults, x['results'], x),
     working_copy_saved: _atd_read_required_field('Update', 'working_copy_saved', _atd_read_nullable(_atd_read_string), x['working_copy_saved'], x),
+    original_reads: _atd_read_required_field('Update', 'original_reads', _atd_read_bool, x['original_reads'], x),
   };
 }
 

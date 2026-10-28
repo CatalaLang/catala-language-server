@@ -36,6 +36,8 @@ import type { TestRunStatus } from './TestFileEditor';
 
 type Props = {
   view: Recovery;
+  /** Opened from the banner: nothing is broken, a repair was left unfinished. */
+  originalReads?: boolean;
   /** Report the rebuild upward, so saving writes it to the workspace file. */
   onRebuildChange?: (tests: TestList) => void;
   onRun?: (testingScope: string) => void;
@@ -650,6 +652,7 @@ function TestPanes({
 
 export default function BrokenTestView({
   view,
+  originalReads,
   onRebuildChange,
   onRun,
   onRetarget,
@@ -700,12 +703,24 @@ export default function BrokenTestView({
         <div>
           <strong>
             <FormattedMessage
-              id={blocked ? 'broken.blockedTitle' : 'broken.title'}
+              id={
+                blocked
+                  ? 'broken.blockedTitle'
+                  : originalReads
+                    ? 'broken.unfinishedTitle'
+                    : 'broken.title'
+              }
             />
           </strong>
           <p>
             <FormattedMessage
-              id={blocked ? 'broken.blockedExplanation' : 'broken.explanation'}
+              id={
+                blocked
+                  ? 'broken.blockedExplanation'
+                  : originalReads
+                    ? 'broken.unfinishedExplanation'
+                    : 'broken.explanation'
+              }
             />
           </p>
           {blocked ? (

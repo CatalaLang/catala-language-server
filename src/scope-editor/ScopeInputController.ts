@@ -71,7 +71,11 @@ export class ScopeInputController {
           };
           this.postMessageToWebView({
             kind: 'Update',
-            value: { results: value, working_copy_saved: null },
+            value: {
+              results: value,
+              working_copy_saved: null,
+              original_reads: false,
+            },
           });
           this.test = generatedTest.value[0];
           break;
