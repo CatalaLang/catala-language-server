@@ -201,6 +201,8 @@ function parseResultsToUiState(tests: ParseResults): UIState {
         state: 'error',
         message: 'This scope no longer matches its test',
       };
+    case 'CannotOpen':
+      return { state: 'error', message: tests.value.message };
     case 'Results':
       return { state: 'success', test: tests.value[0] };
     default:

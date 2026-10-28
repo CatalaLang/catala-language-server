@@ -8,6 +8,7 @@ import {
   type Recovery,
   type PathSegment,
   type Diff,
+  type CannotOpen,
   readDownMessage,
   writeUpMessage,
 } from '../generated/catala_types';
@@ -41,6 +42,7 @@ import { replaceLosses } from './testCaseUtils';
 type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
+  | { state: 'cannotOpen'; value: CannotOpen }
   | { state: 'emptyTestListMismatch' }
   | { state: 'brokenTest'; view: Recovery }
   | { state: 'success'; tests: TestList };
@@ -270,6 +272,9 @@ export default function TestFileEditor({
     case 'error': {
       return <ParsingErrorWarning message={state.message} vscode={vscode} />;
     }
+    case 'cannotOpen': {
+      return <CannotOpenPage value={state.value} vscode={vscode} />;
+    }
     case 'emptyTestListMismatch': {
       return <EmptyTestListMismatchWarning vscode={vscode} />;
     }
@@ -402,6 +407,59 @@ function ParsingErrorWarning({
   );
 }
 
+/** `read` failed, and the test is not what needs fixing. Writes nothing. */
+export function CannotOpenPage({
+  value,
+  vscode,
+}: {
+  value: CannotOpen;
+  vscode: WebviewApi<unknown>;
+}): ReactElement {
+  return (
+    <div role="alert" className="test-editor-warning">
+      <h2>
+        <FormattedMessage id="testFile.cannotOpenTitle" />
+      </h2>
+      <p>
+        {value.cause.kind === 'ModuleWontBuild' ? (
+          <FormattedMessage id="testFile.cannotOpenModuleWontBuild" />
+        ) : (
+          <FormattedMessage id="testFile.cannotOpenToolProblem" />
+        )}
+      </p>
+      <pre className="test-editor-error-message">{value.message}</pre>
+      {value.ran_from !== undefined && (
+        <p>
+          <FormattedMessage
+            id="testFile.cannotOpenRanFrom"
+            values={{ dir: <code>{value.ran_from}</code> }}
+          />
+        </p>
+      )}
+      <div className="test-editor-warning-actions">
+        <button
+          className="test-editor-open-text"
+          onClick={() =>
+            vscode.postMessage(writeUpMessage({ kind: 'RetryOpenRequest' }))
+          }
+        >
+          <span className="codicon codicon-refresh"></span>
+          <FormattedMessage id="testFile.cannotOpenRetry" />
+        </button>
+        <button
+          className="test-editor-open-text"
+          onClick={() =>
+            vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+          }
+        >
+          <span className="codicon codicon-edit"></span>
+          <FormattedMessage id="testFile.openTextEditor" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EmptyTestListMismatchWarning({
   vscode,
 }: {
@@ -439,6 +497,8 @@ function parseResultsToUiState(tests: ParseResults): UIState {
       return { state: 'error', message: tests.value };
     case 'BrokenTest':
       return { state: 'brokenTest', view: tests.value };
+    case 'CannotOpen':
+      return { state: 'cannotOpen', value: tests.value };
     case 'EmptyTestListMismatch':
       return { state: 'emptyTestListMismatch' };
     case 'Results':
