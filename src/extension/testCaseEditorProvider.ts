@@ -385,6 +385,10 @@ export class TestCaseEditorProvider
           }
           break;
         }
+        case 'RetryOpenRequest':
+          // Sends the new reading to the page.
+          await document.revert(new vscode.CancellationTokenSource().token);
+          break;
         case 'OpenInTextEditor':
           vscode.commands.executeCommand(
             'vscode.openWith',
