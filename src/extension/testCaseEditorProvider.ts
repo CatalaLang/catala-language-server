@@ -173,7 +173,11 @@ export class TestCaseEditorProvider
     function postUpdate(results: ParseResults = document.parseResults): void {
       postMessageToWebView({
         kind: 'Update',
-        value: { results, working_copy_saved: document.workingCopySaved },
+        value: {
+          results,
+          working_copy_saved: document.workingCopySaved,
+          original_reads: document.originalReads,
+        },
       });
     }
 

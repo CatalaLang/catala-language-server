@@ -44,7 +44,7 @@ type UIState =
   | { state: 'error'; message: string }
   | { state: 'cannotOpen'; value: CannotOpen }
   | { state: 'emptyTestListMismatch' }
-  | { state: 'brokenTest'; view: Recovery }
+  | { state: 'brokenTest'; view: Recovery; originalReads: boolean }
   | { state: 'success'; tests: TestList; workingCopySaved: string | null };
 
 export type TestRunStatus = 'running' | 'success' | 'error' | 'cancelled';
@@ -282,6 +282,7 @@ export default function TestFileEditor({
       return (
         <BrokenTestView
           view={state.view}
+          originalReads={state.originalReads}
           onRebuildChange={(tests): void => {
             vscode.postMessage(
               writeUpMessage({ kind: 'GuiEdit', value: [tests, true] })
@@ -545,12 +546,17 @@ function EmptyTestListMismatchWarning({
 function updateToUiState({
   results: tests,
   working_copy_saved,
+  original_reads,
 }: Update): UIState {
   switch (tests.kind) {
     case 'ParseError':
       return { state: 'error', message: tests.value };
     case 'BrokenTest':
-      return { state: 'brokenTest', view: tests.value };
+      return {
+        state: 'brokenTest',
+        view: tests.value,
+        originalReads: original_reads,
+      };
     case 'CannotOpen':
       return { state: 'cannotOpen', value: tests.value };
     case 'EmptyTestListMismatch':
