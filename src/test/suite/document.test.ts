@@ -10,12 +10,17 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import * as vscode from 'vscode';
 import { CatalaTestCaseDocument } from '../../shared/CatalaTestCaseDocument';
+import { retargetBrokenTest } from '../../test-case-editor/testCaseCompilerInterop';
 
 const fixtures = path.resolve(__dirname, '../../../tests/round_trip');
 
 /** A project whose tests no longer fit their scope. `broken` says how. */
 function project(
-  broken: 'field renamed' | 'module renamed' | 'nothing'
+  broken:
+    | 'field renamed'
+    | 'module renamed'
+    | 'module does not build'
+    | 'nothing'
 ): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'catala-doc-'));
   for (const f of ['clerk.toml', 'test_optionals.catala_en']) {
@@ -27,6 +32,11 @@ function project(
   );
   if (broken === 'nothing') {
     fs.writeFileSync(path.join(dir, 'optionals.catala_en'), module);
+  } else if (broken === 'module does not build') {
+    fs.writeFileSync(
+      path.join(dir, 'optionals.catala_en'),
+      module.replace('input base content money', 'input base content Count')
+    );
   } else if (broken === 'field renamed') {
     fs.writeFileSync(
       path.join(dir, 'optionals.catala_en'),
@@ -55,6 +65,55 @@ function itemsProject(): string {
   fs.writeFileSync(
     path.join(dir, 'items.catala_en'),
     module.replace('data taxed content boolean', 'data exempt content boolean')
+  );
+  execSync('clerk start', { cwd: dir, stdio: 'ignore' });
+  return dir;
+}
+
+/** One test whose module was renamed, each field of which fits the renamed one. */
+function renamedModuleProject(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'catala-doc-'));
+  fs.copyFileSync(
+    path.join(fixtures, 'clerk.toml'),
+    path.join(dir, 'clerk.toml')
+  );
+  fs.writeFileSync(
+    path.join(dir, 'BenefitPlan.catala_en'),
+    [
+      '> Module BenefitPlan',
+      '',
+      '```catala-metadata',
+      'declaration scope Compute:',
+      '  input amount content money',
+      '  output total content money',
+      '```',
+      '',
+      '```catala',
+      'scope Compute:',
+      '  definition total equals amount',
+      '```',
+      '',
+    ].join('\n')
+  );
+  fs.writeFileSync(
+    path.join(dir, 'test_base.catala_en'),
+    [
+      '> Using Benefit',
+      '',
+      '```catala-metadata',
+      '#[test]',
+      '#[testcase.testui]',
+      'declaration scope Compute_base:',
+      '  output compute scope Benefit.Compute',
+      '```',
+      '',
+      '```catala',
+      'scope Compute_base:',
+      '  definition compute.amount equals $1200.00',
+      '  assertion (compute.total = $1200.00)',
+      '```',
+      '',
+    ].join('\n')
   );
   execSync('clerk start', { cwd: dir, stdio: 'ignore' });
   return dir;
@@ -286,30 +345,102 @@ suite('Broken test document', function () {
     }
   });
 
-  test('a working copy left over once the test reads again is discarded on open', async () => {
-    const dir = project('nothing');
+  test('a draft outlives a branch where the test reads, until opened or discarded', async () => {
+    const dir = project('field renamed');
     const file = path.join(dir, 'test_optionals.catala_en');
-    fs.writeFileSync(file + '.repair', 'left from an earlier repair');
+    const uri = vscode.Uri.file(file);
+    const doc = await CatalaTestCaseDocument.create(uri, undefined);
+    await doc.saveAs(uri, token);
+
+    // Back on a branch where the module still has `base`.
+    const module = path.join(dir, 'optionals.catala_en');
+    fs.writeFileSync(
+      module,
+      fs.readFileSync(module, 'utf8').replace(/\bamount\b/g, 'base')
+    );
+    const reads = await CatalaTestCaseDocument.create(uri, undefined);
+    assert.strictEqual(reads.parseResults.kind, 'Results');
+    assert.ok(fs.existsSync(file + '.repair'), 'the draft was dropped');
+    assert.notStrictEqual(reads.workingCopySaved, null);
+
+    await reads.openWorkingCopy();
+    assert.strictEqual(reads.parseResults.kind, 'BrokenTest');
+    assert.ok(reads.originalReads);
+    assert.strictEqual(reads.workingCopySaved, null);
+
+    // Discarded from the banner: the open test is left as it is.
+    const again = await CatalaTestCaseDocument.create(uri, undefined);
+    await again.discardWorkingCopy();
+    assert.strictEqual(again.parseResults.kind, 'Results');
+    assert.ok(!fs.existsSync(file + '.repair'));
+    assert.strictEqual(again.workingCopySaved, null);
+  });
+
+  test('a module that does not build is an error, not a test to repair', async () => {
+    const dir = project('module does not build');
+    const file = path.join(dir, 'test_optionals.catala_en');
+    const original = fs.readFileSync(file);
+
     const doc = await CatalaTestCaseDocument.create(
       vscode.Uri.file(file),
       undefined
     );
-    assert.strictEqual(doc.parseResults.kind, 'Results');
-    assert.ok(!fs.existsSync(file + '.repair'), 'the leftover is still there');
+    const results = doc.parseResults;
+    assert.ok(results.kind === 'CannotOpen', `got ${results.kind}`);
+    assert.strictEqual(results.value.cause.kind, 'ModuleWontBuild');
+    assert.match(results.value.message, /Count/);
+    assert.strictEqual(doc.rebuilt, undefined);
+    assert.ok(!fs.existsSync(file + '.repair'), 'nothing written');
+    assert.ok(fs.readFileSync(file).equals(original), 'original untouched');
 
-    // A broken test's working copy is in use: kept.
-    const broken = project('field renamed');
-    const bfile = path.join(broken, 'test_optionals.catala_en');
-    const bdoc = await CatalaTestCaseDocument.create(
-      vscode.Uri.file(bfile),
-      undefined
+    // Retry, once the module is fixed.
+    const module = path.join(dir, 'optionals.catala_en');
+    fs.writeFileSync(
+      module,
+      fs.readFileSync(module, 'utf8').replace('Count', 'money')
     );
-    await bdoc.saveAs(vscode.Uri.file(bfile), token);
-    await CatalaTestCaseDocument.create(vscode.Uri.file(bfile), undefined);
-    assert.ok(
-      fs.existsSync(bfile + '.repair'),
-      'a working copy in use was discarded'
+    await doc.revert(token);
+    assert.strictEqual(doc.parseResults.kind, 'Results');
+  });
+
+  test('a saved repair reopens in the repair view, even when it all fits', async () => {
+    const dir = renamedModuleProject();
+    const file = path.join(dir, 'test_base.catala_en');
+    const uri = vscode.Uri.file(file);
+
+    // Pick the renamed module's scope, save the draft, close.
+    const doc = await CatalaTestCaseDocument.create(uri, undefined);
+    const picked = retargetBrokenTest(
+      file,
+      doc.sourceText,
+      'BenefitPlan.Compute'
     );
+    assert.ok(typeof picked !== 'string', String(picked));
+    doc.retarget(picked);
+    await doc.saveAs(uri, token);
+    assert.ok(fs.existsSync(file + '.repair'));
+
+    // Reopened: the draft fits its new target exactly; it is still a repair.
+    const reopened = await CatalaTestCaseDocument.create(uri, undefined);
+    assert.strictEqual(reopened.parseResults.kind, 'BrokenTest');
+    assert.strictEqual(reopened.rebuilt?.length, 1);
+
+    // The draft's module stops building: an error page, the draft kept.
+    const module = path.join(dir, 'BenefitPlan.catala_en');
+    const source = fs.readFileSync(module, 'utf8');
+    fs.writeFileSync(
+      module,
+      source.replace('input amount content money', 'input amount content Count')
+    );
+    const blocked = await CatalaTestCaseDocument.create(uri, undefined);
+    assert.strictEqual(blocked.parseResults.kind, 'CannotOpen');
+    assert.ok(fs.existsSync(file + '.repair'), 'the draft was dropped');
+
+    // Fixed, then Retry: back to the draft.
+    fs.writeFileSync(module, source);
+    await blocked.revert(token);
+    assert.strictEqual(blocked.parseResults.kind, 'BrokenTest');
+    assert.strictEqual(blocked.rebuilt?.length, 1);
   });
 
   test('a blocked rebuild has nothing to save, and saving does not fail', async () => {

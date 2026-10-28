@@ -151,6 +151,17 @@ export type ParseResults =
 | { kind: 'EmptyTestListMismatch' }
 | { kind: 'Results'; value: TestList }
 | { kind: 'BrokenTest'; value: Recovery }
+| { kind: 'CannotOpen'; value: CannotOpen }
+
+export type CannotOpen = {
+  cause: CannotOpenCause;
+  message: string;
+  ran_from?: string;
+}
+
+export type CannotOpenCause =
+| { kind: 'ModuleWontBuild' }
+| { kind: 'ToolProblem' }
 
 export type Recovery = {
   tests: RecoveredTest[];
@@ -290,9 +301,17 @@ export type UpMessage =
 | { kind: 'RetargetRequest'; value: string }
 | { kind: 'ReplaceOriginalRequest' }
 | { kind: 'DiscardWorkingCopyRequest' }
+| { kind: 'OpenWorkingCopyRequest' }
+| { kind: 'RetryOpenRequest' }
+
+export type Update = {
+  results: ParseResults;
+  working_copy_saved: (string | null);
+  original_reads: boolean;
+}
 
 export type DownMessage =
-| { kind: 'Update'; value: ParseResults }
+| { kind: 'Update'; value: Update }
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
 | { kind: 'ConfirmResult'; value: ConfirmResult }
 
@@ -827,6 +846,8 @@ export function writeParseResults(x: ParseResults, context: any = x): any {
       return ['Results', writeTestList(x.value, x)]
     case 'BrokenTest':
       return ['BrokenTest', writeRecovery(x.value, x)]
+    case 'CannotOpen':
+      return ['CannotOpen', writeCannotOpen(x.value, x)]
   }
 }
 
@@ -849,10 +870,49 @@ export function readParseResults(x: any, context: any = x): ParseResults {
         return { kind: 'Results', value: readTestList(x[1], x) }
       case 'BrokenTest':
         return { kind: 'BrokenTest', value: readRecovery(x[1], x) }
+      case 'CannotOpen':
+        return { kind: 'CannotOpen', value: readCannotOpen(x[1], x) }
       default:
         _atd_bad_json('ParseResults', x, context)
         throw new Error('impossible')
     }
+  }
+}
+
+export function writeCannotOpen(x: CannotOpen, context: any = x): any {
+  return {
+    'cause': _atd_write_required_field('CannotOpen', 'cause', writeCannotOpenCause, x.cause, x),
+    'message': _atd_write_required_field('CannotOpen', 'message', _atd_write_string, x.message, x),
+    'ran_from': _atd_write_optional_field(_atd_write_string, x.ran_from, x),
+  };
+}
+
+export function readCannotOpen(x: any, context: any = x): CannotOpen {
+  return {
+    cause: _atd_read_required_field('CannotOpen', 'cause', readCannotOpenCause, x['cause'], x),
+    message: _atd_read_required_field('CannotOpen', 'message', _atd_read_string, x['message'], x),
+    ran_from: _atd_read_optional_field(_atd_read_string, x['ran_from'], x),
+  };
+}
+
+export function writeCannotOpenCause(x: CannotOpenCause, context: any = x): any {
+  switch (x.kind) {
+    case 'ModuleWontBuild':
+      return 'ModuleWontBuild'
+    case 'ToolProblem':
+      return 'ToolProblem'
+  }
+}
+
+export function readCannotOpenCause(x: any, context: any = x): CannotOpenCause {
+  switch (x) {
+    case 'ModuleWontBuild':
+      return { kind: 'ModuleWontBuild' }
+    case 'ToolProblem':
+      return { kind: 'ToolProblem' }
+    default:
+      _atd_bad_json('CannotOpenCause', x, context)
+      throw new Error('impossible')
   }
 }
 
@@ -1334,6 +1394,10 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return 'ReplaceOriginalRequest'
     case 'DiscardWorkingCopyRequest':
       return 'DiscardWorkingCopyRequest'
+    case 'OpenWorkingCopyRequest':
+      return 'OpenWorkingCopyRequest'
+    case 'RetryOpenRequest':
+      return 'RetryOpenRequest'
   }
 }
 
@@ -1350,6 +1414,10 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'ReplaceOriginalRequest' }
       case 'DiscardWorkingCopyRequest':
         return { kind: 'DiscardWorkingCopyRequest' }
+      case 'OpenWorkingCopyRequest':
+        return { kind: 'OpenWorkingCopyRequest' }
+      case 'RetryOpenRequest':
+        return { kind: 'RetryOpenRequest' }
       default:
         _atd_bad_json('UpMessage', x, context)
         throw new Error('impossible')
@@ -1375,10 +1443,26 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
   }
 }
 
+export function writeUpdate(x: Update, context: any = x): any {
+  return {
+    'results': _atd_write_required_field('Update', 'results', writeParseResults, x.results, x),
+    'working_copy_saved': _atd_write_required_field('Update', 'working_copy_saved', _atd_write_nullable(_atd_write_string), x.working_copy_saved, x),
+    'original_reads': _atd_write_required_field('Update', 'original_reads', _atd_write_bool, x.original_reads, x),
+  };
+}
+
+export function readUpdate(x: any, context: any = x): Update {
+  return {
+    results: _atd_read_required_field('Update', 'results', readParseResults, x['results'], x),
+    working_copy_saved: _atd_read_required_field('Update', 'working_copy_saved', _atd_read_nullable(_atd_read_string), x['working_copy_saved'], x),
+    original_reads: _atd_read_required_field('Update', 'original_reads', _atd_read_bool, x['original_reads'], x),
+  };
+}
+
 export function writeDownMessage(x: DownMessage, context: any = x): any {
   switch (x.kind) {
     case 'Update':
-      return ['Update', writeParseResults(x.value, x)]
+      return ['Update', writeUpdate(x.value, x)]
     case 'TestRunResults':
       return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
     case 'ConfirmResult':
@@ -1390,7 +1474,7 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
   _atd_check_json_tuple(2, x, context)
   switch (x[0]) {
     case 'Update':
-      return { kind: 'Update', value: readParseResults(x[1], x) }
+      return { kind: 'Update', value: readUpdate(x[1], x) }
     case 'TestRunResults':
       return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
     case 'ConfirmResult':

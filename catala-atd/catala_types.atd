@@ -157,7 +157,21 @@ type parse_results = [
   (* The test no longer fits its scope; its values were recovered from the
      file's own literals. *)
   | BrokenTest of recovery
+  (* [read] failed and there is nothing to repair: the module, the folder
+     catala ran from or the tool is at fault. *)
+  | CannotOpen of cannot_open
 ]
+
+type cannot_open = {
+  cause: cannot_open_cause;
+  message: string; (* catala's, as is *)
+  ?ran_from: string option; (* the folder catala ran from, when known *)
+}
+
+type cannot_open_cause = [
+  | ModuleWontBuild
+  | ToolProblem
+] <ocaml repr="classic">
 
 type recovery = {
   tests: recovered_test list;
@@ -315,10 +329,20 @@ type up_message = [
   | RetargetRequest of string (* rebuild against this scope: "Scope" or "Module.Scope" *)
   | ReplaceOriginalRequest (* write the working copy over the original *)
   | DiscardWorkingCopyRequest (* delete the working copy, start over *)
+  | OpenWorkingCopyRequest (* repair the test from its working copy *)
+  | RetryOpenRequest (* read the file again *)
 ]
 
+type update = {
+  results: parse_results;
+  (* When a working copy exists beside a test that reads: ISO 8601. *)
+  working_copy_saved: string nullable;
+  (* In the repair view: opened from the banner, the original still reads. *)
+  original_reads: bool;
+}
+
 type down_message = [
-  | Update of parse_results
+  | Update of update
   | TestRunResults of test_run_results_msg
   | ConfirmResult of confirm_result
 ]

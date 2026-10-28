@@ -1,13 +1,14 @@
 import { useEffect, useState, type ReactElement, useCallback } from 'react';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import {
-  type ParseResults,
+  type Update,
   type Test,
   type TestList,
   type TestRunResults,
   type Recovery,
   type PathSegment,
   type Diff,
+  type CannotOpen,
   readDownMessage,
   writeUpMessage,
 } from '../generated/catala_types';
@@ -41,9 +42,10 @@ import { replaceLosses } from './testCaseUtils';
 type UIState =
   | { state: 'initializing' }
   | { state: 'error'; message: string }
+  | { state: 'cannotOpen'; value: CannotOpen }
   | { state: 'emptyTestListMismatch' }
-  | { state: 'brokenTest'; view: Recovery }
-  | { state: 'success'; tests: TestList };
+  | { state: 'brokenTest'; view: Recovery; originalReads: boolean }
+  | { state: 'success'; tests: TestList; workingCopySaved: string | null };
 
 export type TestRunStatus = 'running' | 'success' | 'error' | 'cancelled';
 
@@ -78,7 +80,7 @@ export default function TestFileEditor({
         newTestState[idx] = newValue; //we can do away with this when array.with() becomes widely available
 
         // optimistic update
-        setState({ state: 'success', tests: newTestState });
+        setState({ ...state, tests: newTestState });
 
         vscode.postMessage(
           writeUpMessage({
@@ -98,7 +100,7 @@ export default function TestFileEditor({
           (test) => test.testing_scope !== testScope
         );
         // optimistic update
-        setState({ state: 'success', tests: newTestState });
+        setState({ ...state, tests: newTestState });
 
         vscode.postMessage(
           writeUpMessage({
@@ -229,7 +231,7 @@ export default function TestFileEditor({
       const message = readDownMessage(event.data);
       switch (message.kind) {
         case 'Update':
-          setState(parseResultsToUiState(message.value));
+          setState(updateToUiState(message.value));
           break;
         case 'TestRunResults': {
           const { scope, reset_outputs, results } = message.value;
@@ -270,6 +272,9 @@ export default function TestFileEditor({
     case 'error': {
       return <ParsingErrorWarning message={state.message} vscode={vscode} />;
     }
+    case 'cannotOpen': {
+      return <CannotOpenPage value={state.value} vscode={vscode} />;
+    }
     case 'emptyTestListMismatch': {
       return <EmptyTestListMismatchWarning vscode={vscode} />;
     }
@@ -277,6 +282,7 @@ export default function TestFileEditor({
       return (
         <BrokenTestView
           view={state.view}
+          originalReads={state.originalReads}
           onRebuildChange={(tests): void => {
             vscode.postMessage(
               writeUpMessage({ kind: 'GuiEdit', value: [tests, true] })
@@ -338,9 +344,13 @@ export default function TestFileEditor({
         </strong>
       );
     case 'success': {
+      const banner = state.workingCopySaved !== null && (
+        <WorkingCopyBanner saved={state.workingCopySaved} vscode={vscode} />
+      );
       if (state.tests.length === 0) {
         return (
           <>
+            {banner}
             <div className="test-editor-empty">
               <p className="test-editor-empty-message">
                 <FormattedMessage id="testFile.noTests" />
@@ -355,6 +365,7 @@ export default function TestFileEditor({
       }
       return (
         <div className="test-editor-container">
+          {banner}
           {state.tests.map((test) => (
             <TestEditor
               test={test}
@@ -402,6 +413,105 @@ function ParsingErrorWarning({
   );
 }
 
+/** `read` failed, and the test is not what needs fixing. Writes nothing. */
+export function CannotOpenPage({
+  value,
+  vscode,
+}: {
+  value: CannotOpen;
+  vscode: WebviewApi<unknown>;
+}): ReactElement {
+  return (
+    <div role="alert" className="test-editor-warning">
+      <h2>
+        <FormattedMessage id="testFile.cannotOpenTitle" />
+      </h2>
+      <p>
+        {value.cause.kind === 'ModuleWontBuild' ? (
+          <FormattedMessage id="testFile.cannotOpenModuleWontBuild" />
+        ) : (
+          <FormattedMessage id="testFile.cannotOpenToolProblem" />
+        )}
+      </p>
+      <pre className="test-editor-error-message">{value.message}</pre>
+      {value.ran_from !== undefined && (
+        <p>
+          <FormattedMessage
+            id="testFile.cannotOpenRanFrom"
+            values={{ dir: <code>{value.ran_from}</code> }}
+          />
+        </p>
+      )}
+      <div className="test-editor-warning-actions">
+        <button
+          className="test-editor-open-text"
+          onClick={() =>
+            vscode.postMessage(writeUpMessage({ kind: 'RetryOpenRequest' }))
+          }
+        >
+          <span className="codicon codicon-refresh"></span>
+          <FormattedMessage id="testFile.cannotOpenRetry" />
+        </button>
+        <button
+          className="test-editor-open-text"
+          onClick={() =>
+            vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+          }
+        >
+          <span className="codicon codicon-edit"></span>
+          <FormattedMessage id="testFile.openTextEditor" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A draft beside a test that reads, kept until the tester decides. */
+function WorkingCopyBanner({
+  saved,
+  vscode,
+}: {
+  saved: string;
+  vscode: WebviewApi<unknown>;
+}): ReactElement {
+  const intl = useIntl();
+  return (
+    <div role="status" className="working-copy-banner">
+      <span className="codicon codicon-history"></span>
+      <p>
+        <FormattedMessage
+          id="testFile.workingCopy"
+          values={{
+            date: intl.formatDate(saved, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            }),
+          }}
+        />
+      </p>
+      <button
+        className="test-editor-open-text"
+        onClick={() =>
+          vscode.postMessage(writeUpMessage({ kind: 'OpenWorkingCopyRequest' }))
+        }
+      >
+        <FormattedMessage id="testFile.workingCopyOpen" />
+      </button>
+      <button
+        className="test-editor-open-text"
+        onClick={async (): Promise<void> => {
+          if (!(await confirm('DiscardWorkingCopy'))) return;
+          vscode.postMessage(
+            writeUpMessage({ kind: 'DiscardWorkingCopyRequest' })
+          );
+        }}
+      >
+        <FormattedMessage id="testFile.workingCopyDiscard" />
+      </button>
+    </div>
+  );
+}
+
 function EmptyTestListMismatchWarning({
   vscode,
 }: {
@@ -433,16 +543,30 @@ function EmptyTestListMismatchWarning({
   );
 }
 
-function parseResultsToUiState(tests: ParseResults): UIState {
+function updateToUiState({
+  results: tests,
+  working_copy_saved,
+  original_reads,
+}: Update): UIState {
   switch (tests.kind) {
     case 'ParseError':
       return { state: 'error', message: tests.value };
     case 'BrokenTest':
-      return { state: 'brokenTest', view: tests.value };
+      return {
+        state: 'brokenTest',
+        view: tests.value,
+        originalReads: original_reads,
+      };
+    case 'CannotOpen':
+      return { state: 'cannotOpen', value: tests.value };
     case 'EmptyTestListMismatch':
       return { state: 'emptyTestListMismatch' };
     case 'Results':
-      return { state: 'success', tests: tests.value };
+      return {
+        state: 'success',
+        tests: tests.value,
+        workingCopySaved: working_copy_saved,
+      };
     default:
       assertUnreachable(tests);
   }

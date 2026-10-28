@@ -107,7 +107,7 @@ export default function ScopeInputEditor({
       const message = readDownMessage(event.data);
       switch (message.kind) {
         case 'Update':
-          setState(parseResultsToUiState(message.value));
+          setState(parseResultsToUiState(message.value.results));
           break;
         case 'TestRunResults': {
           setTestRunState((_prev) => {
@@ -201,6 +201,8 @@ function parseResultsToUiState(tests: ParseResults): UIState {
         state: 'error',
         message: 'This scope no longer matches its test',
       };
+    case 'CannotOpen':
+      return { state: 'error', message: tests.value.message };
     case 'Results':
       return { state: 'success', test: tests.value[0] };
     default:

@@ -360,6 +360,20 @@
   border-radius: var(--spacing4);
   border-left: 3px solid var(--error);
 }
+.working-copy-banner {
+  display: flex;
+  gap: var(--spacing8);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing12);
+  padding: var(--spacing8) var(--spacing12);
+  border-radius: var(--spacing4);
+  border-left: 3px solid var(--vscode-focusBorder);
+}
+.working-copy-banner p {
+  margin: 0;
+  flex: 1;
+}
 .broken-banner p {
   display: block;
   margin-top: var(--spacing4);
@@ -510,6 +524,7 @@
 }
 
 .vscode-dark .broken-banner,
+.vscode-dark .working-copy-banner,
 .vscode-dark .broken-test,
 .vscode-dark .broken-notes {
   background: var(--level-2-background-dark);
@@ -525,6 +540,7 @@
   color: var(--stormgray500);
 }
 .vscode-light .broken-banner,
+.vscode-light .working-copy-banner,
 .vscode-light .broken-test,
 .vscode-light .broken-notes {
   background: var(--level-2-background);

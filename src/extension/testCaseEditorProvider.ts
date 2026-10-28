@@ -170,6 +170,17 @@ export class TestCaseEditorProvider
     }
     TestCaseEditorProvider.registerWebview(document.uri, postMessageToWebView);
 
+    function postUpdate(results: ParseResults = document.parseResults): void {
+      postMessageToWebView({
+        kind: 'Update',
+        value: {
+          results,
+          working_copy_saved: document.workingCopySaved,
+          original_reads: document.originalReads,
+        },
+      });
+    }
+
     async function runTest(
       fileName: string,
       scope: string
@@ -195,10 +206,7 @@ export class TestCaseEditorProvider
         // document (in parsed form)
         case 'Ready': {
           logger.log(`Got ready message from webview, sending parsed document`);
-          postMessageToWebView({
-            kind: 'Update',
-            value: document.parseResults,
-          });
+          postUpdate();
           TestCaseEditorProvider.markReady(document.uri);
           break;
         }
@@ -328,10 +336,7 @@ export class TestCaseEditorProvider
 
               document.scheduleChange(updatedTests, false);
 
-              postMessageToWebView({
-                kind: 'Update',
-                value: { kind: 'Results', value: updatedTests },
-              });
+              postUpdate({ kind: 'Results', value: updatedTests });
             }
           } else {
             vscode.window.showErrorMessage(
@@ -368,13 +373,31 @@ export class TestCaseEditorProvider
           }
           break;
         }
+        case 'OpenWorkingCopyRequest': {
+          try {
+            // The rebuild reads the original from disk.
+            await saveSpecificDocument(document.uri);
+            await document.openWorkingCopy();
+          } catch (err) {
+            vscode.window.showErrorMessage(
+              vscode.l10n.t(
+                'Could not open the working copy: {0}',
+                err instanceof Error ? err.message : String(err)
+              )
+            );
+          }
+          break;
+        }
         case 'DiscardWorkingCopyRequest': {
+          // Beside a test that reads, unsaved edits must survive.
+          const repairing = document.parseResults.kind === 'BrokenTest';
           try {
             await document.discardWorkingCopy();
             // Only clears the dirty marker; the reparse already happened.
-            await vscode.commands.executeCommand(
-              'workbench.action.files.revert'
-            );
+            if (repairing)
+              await vscode.commands.executeCommand(
+                'workbench.action.files.revert'
+              );
           } catch (err) {
             vscode.window.showErrorMessage(
               vscode.l10n.t(
@@ -385,6 +408,10 @@ export class TestCaseEditorProvider
           }
           break;
         }
+        case 'RetryOpenRequest':
+          // Sends the new reading to the page.
+          await document.revert(new vscode.CancellationTokenSource().token);
+          break;
         case 'OpenInTextEditor':
           vscode.commands.executeCommand(
             'vscode.openWith',
@@ -469,10 +496,7 @@ export class TestCaseEditorProvider
 
                 document.scheduleChange(updatedTests, false);
 
-                postMessageToWebView({
-                  kind: 'Update',
-                  value: { kind: 'Results', value: updatedTests },
-                });
+                postUpdate({ kind: 'Results', value: updatedTests });
               }
             } else {
               vscode.window.showErrorMessage(
@@ -603,10 +627,7 @@ export class TestCaseEditorProvider
 
     const changeSubscription = document.onDidChangeContent((_e) => {
       // update GUI
-      postMessageToWebView({
-        kind: 'Update',
-        value: document.parseResults,
-      });
+      postUpdate();
     });
 
     webviewPanel.onDidDispose(() => {
