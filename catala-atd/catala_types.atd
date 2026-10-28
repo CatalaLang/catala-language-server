@@ -337,6 +337,8 @@ type update = {
   results: parse_results;
   (* When a working copy exists beside a test that reads: ISO 8601. *)
   working_copy_saved: string nullable;
+  (* In the repair view: opened from the banner, the original still reads. *)
+  original_reads: bool;
 }
 
 type down_message = [

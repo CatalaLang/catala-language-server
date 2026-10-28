@@ -89,6 +89,8 @@
   "testEditor.resetToDefault": "Remove override",
   "broken.title": "This test no longer fits the scope it targets",
   "broken.explanation": "Your values are shown on the left, as last saved — nothing has been lost. They cannot be edited here, because they no longer match the scope. Rebuild the test on the right.",
+  "broken.unfinishedTitle": "An unfinished repair of this test",
+  "broken.unfinishedExplanation": "The original still fits its scope: it is shown on the left, as last saved. On the right is a repair left unfinished earlier. Compare them, then replace the original or discard the working copy.",
   "broken.asAuthored": "Original",
   "broken.rebuild": "Working copy",
   "broken.retargeted": "The working copy targets this scope now.",

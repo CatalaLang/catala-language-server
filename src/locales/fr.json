@@ -89,6 +89,8 @@
   "testEditor.resetToDefault": "Supprimer la redéfinition",
   "broken.title": "Ce test ne correspond plus au champ d’application visé",
   "broken.explanation": "Vos valeurs apparaissent à gauche, telles qu’enregistrées — rien n’est perdu. Elles ne sont pas modifiables ici, car elles ne correspondent plus au champ d’application. Reconstruisez le test à droite.",
+  "broken.unfinishedTitle": "Une réparation inachevée de ce test",
+  "broken.unfinishedExplanation": "L’original correspond toujours à son champ d’application : il apparaît à gauche, tel qu’enregistré. À droite, une réparation laissée inachevée. Comparez-les, puis remplacez l’original ou abandonnez la copie de travail.",
   "broken.asAuthored": "Original",
   "broken.rebuild": "Copie de travail",
   "broken.retargeted": "La copie de travail vise désormais ce champ d’application.",
