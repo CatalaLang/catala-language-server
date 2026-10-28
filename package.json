@@ -73,6 +73,18 @@
         "title": "Select scope"
       },
       {
+        "command": "catala.foldCodeBlocks",
+        "title": "%command.catala.foldCodeBlocks.title%",
+        "icon": "$(fold)",
+        "category": "%category.catala%"
+      },
+      {
+        "command": "catala.unfoldCodeBlocks",
+        "title": "%command.catala.unfoldCodeBlocks.title%",
+        "icon": "$(unfold)",
+        "category": "%category.catala%"
+      },
+      {
         "command": "catala.run",
         "title": "Run a scope",
         "category": "%category.catala%",
@@ -163,6 +175,16 @@
           "command": "catala.debug",
           "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
           "group": "navigation@12"
+        },
+        {
+          "command": "catala.foldCodeBlocks",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "group": "navigation@13"
+        },
+        {
+          "command": "catala.unfoldCodeBlocks",
+          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "group": "navigation@14"
         },
         {
           "command": "catala.openWithTestEditor",

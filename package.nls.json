@@ -7,5 +7,7 @@
   "category.catala": "Catala",
   "customEditor.testCaseEditor.displayName": "Catala Test Case Editor",
   "view.catala.help.title": "Help and feedback",
-  "view.catala.switches.title": "Catala switches"
+  "view.catala.switches.title": "Catala switches",
+  "command.catala.foldCodeBlocks.title": "Fold all Catala code blocks",
+  "command.catala.unfoldCodeBlocks.title": "Unfold all Catala code blocks"
 }

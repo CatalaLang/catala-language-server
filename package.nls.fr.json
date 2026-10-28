@@ -7,5 +7,7 @@
   "category.catala": "Catala",
   "customEditor.testCaseEditor.displayName": "Éditeur de cas de test Catala",
   "view.catala.help.title": "Aides et retours",
-  "view.catala.switches.title": "Catala switches"
+  "view.catala.switches.title": "Catala switches",
+  "command.catala.foldCodeBlocks.title": "Replier tous les blocs de code Catala",
+  "command.catala.unfoldCodeBlocks.title": "Déplier tous les blocs de code Catala"
 }
