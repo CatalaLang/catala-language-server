@@ -18,6 +18,7 @@ import { CountBadge } from './badges';
  * array fields go into tabs (or plain if there is only one).
  */
 export type EditorItem = {
+  /** The field name; also identifies the stored tab order, so keep it stable. */
   key: string;
   label: ReactNode;
   type: Typ;
