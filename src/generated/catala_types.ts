@@ -301,10 +301,16 @@ export type UpMessage =
 | { kind: 'RetargetRequest'; value: string }
 | { kind: 'ReplaceOriginalRequest' }
 | { kind: 'DiscardWorkingCopyRequest' }
+| { kind: 'OpenWorkingCopyRequest' }
 | { kind: 'RetryOpenRequest' }
 
+export type Update = {
+  results: ParseResults;
+  working_copy_saved: (string | null);
+}
+
 export type DownMessage =
-| { kind: 'Update'; value: ParseResults }
+| { kind: 'Update'; value: Update }
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
 | { kind: 'ConfirmResult'; value: ConfirmResult }
 
@@ -1387,6 +1393,8 @@ export function writeUpMessage(x: UpMessage, context: any = x): any {
       return 'ReplaceOriginalRequest'
     case 'DiscardWorkingCopyRequest':
       return 'DiscardWorkingCopyRequest'
+    case 'OpenWorkingCopyRequest':
+      return 'OpenWorkingCopyRequest'
     case 'RetryOpenRequest':
       return 'RetryOpenRequest'
   }
@@ -1405,6 +1413,8 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
         return { kind: 'ReplaceOriginalRequest' }
       case 'DiscardWorkingCopyRequest':
         return { kind: 'DiscardWorkingCopyRequest' }
+      case 'OpenWorkingCopyRequest':
+        return { kind: 'OpenWorkingCopyRequest' }
       case 'RetryOpenRequest':
         return { kind: 'RetryOpenRequest' }
       default:
@@ -1432,10 +1442,24 @@ export function readUpMessage(x: any, context: any = x): UpMessage {
   }
 }
 
+export function writeUpdate(x: Update, context: any = x): any {
+  return {
+    'results': _atd_write_required_field('Update', 'results', writeParseResults, x.results, x),
+    'working_copy_saved': _atd_write_required_field('Update', 'working_copy_saved', _atd_write_nullable(_atd_write_string), x.working_copy_saved, x),
+  };
+}
+
+export function readUpdate(x: any, context: any = x): Update {
+  return {
+    results: _atd_read_required_field('Update', 'results', readParseResults, x['results'], x),
+    working_copy_saved: _atd_read_required_field('Update', 'working_copy_saved', _atd_read_nullable(_atd_read_string), x['working_copy_saved'], x),
+  };
+}
+
 export function writeDownMessage(x: DownMessage, context: any = x): any {
   switch (x.kind) {
     case 'Update':
-      return ['Update', writeParseResults(x.value, x)]
+      return ['Update', writeUpdate(x.value, x)]
     case 'TestRunResults':
       return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
     case 'ConfirmResult':
@@ -1447,7 +1471,7 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
   _atd_check_json_tuple(2, x, context)
   switch (x[0]) {
     case 'Update':
-      return { kind: 'Update', value: readParseResults(x[1], x) }
+      return { kind: 'Update', value: readUpdate(x[1], x) }
     case 'TestRunResults':
       return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
     case 'ConfirmResult':

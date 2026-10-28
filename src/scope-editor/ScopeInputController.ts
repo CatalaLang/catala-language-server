@@ -71,7 +71,7 @@ export class ScopeInputController {
           };
           this.postMessageToWebView({
             kind: 'Update',
-            value,
+            value: { results: value, working_copy_saved: null },
           });
           this.test = generatedTest.value[0];
           break;
@@ -140,6 +140,8 @@ export class ScopeInputController {
           throw new Error(
             `Trying to finish a rebuild while in input scope mode`
           );
+        case 'OpenWorkingCopyRequest':
+          throw new Error(`Trying to open a repair while in input scope mode`);
         case 'RetryOpenRequest':
           throw new Error(`Trying to reopen a test while in input scope mode`);
         default:

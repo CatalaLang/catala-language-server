@@ -345,30 +345,34 @@ suite('Broken test document', function () {
     }
   });
 
-  test('a working copy left over once the test reads again is discarded on open', async () => {
-    const dir = project('nothing');
+  test('a draft outlives a branch where the test reads, until opened or discarded', async () => {
+    const dir = project('field renamed');
     const file = path.join(dir, 'test_optionals.catala_en');
-    fs.writeFileSync(file + '.repair', 'left from an earlier repair');
-    const doc = await CatalaTestCaseDocument.create(
-      vscode.Uri.file(file),
-      undefined
-    );
-    assert.strictEqual(doc.parseResults.kind, 'Results');
-    assert.ok(!fs.existsSync(file + '.repair'), 'the leftover is still there');
+    const uri = vscode.Uri.file(file);
+    const doc = await CatalaTestCaseDocument.create(uri, undefined);
+    await doc.saveAs(uri, token);
 
-    // A broken test's working copy is in use: kept.
-    const broken = project('field renamed');
-    const bfile = path.join(broken, 'test_optionals.catala_en');
-    const bdoc = await CatalaTestCaseDocument.create(
-      vscode.Uri.file(bfile),
-      undefined
+    // Back on a branch where the module still has `base`.
+    const module = path.join(dir, 'optionals.catala_en');
+    fs.writeFileSync(
+      module,
+      fs.readFileSync(module, 'utf8').replace(/\bamount\b/g, 'base')
     );
-    await bdoc.saveAs(vscode.Uri.file(bfile), token);
-    await CatalaTestCaseDocument.create(vscode.Uri.file(bfile), undefined);
-    assert.ok(
-      fs.existsSync(bfile + '.repair'),
-      'a working copy in use was discarded'
-    );
+    const reads = await CatalaTestCaseDocument.create(uri, undefined);
+    assert.strictEqual(reads.parseResults.kind, 'Results');
+    assert.ok(fs.existsSync(file + '.repair'), 'the draft was dropped');
+    assert.notStrictEqual(reads.workingCopySaved, null);
+
+    await reads.openWorkingCopy();
+    assert.strictEqual(reads.parseResults.kind, 'BrokenTest');
+    assert.strictEqual(reads.workingCopySaved, null);
+
+    // Discarded from the banner: the open test is left as it is.
+    const again = await CatalaTestCaseDocument.create(uri, undefined);
+    await again.discardWorkingCopy();
+    assert.strictEqual(again.parseResults.kind, 'Results');
+    assert.ok(!fs.existsSync(file + '.repair'));
+    assert.strictEqual(again.workingCopySaved, null);
   });
 
   test('a module that does not build is an error, not a test to repair', async () => {
