@@ -8,7 +8,10 @@ import type {
 } from '../generated/catala_types';
 import { writeTestList } from '../generated/catala_types';
 import { ensureArrayUids } from '../editors/tableArrayUtils';
-import { atdToCatala } from '../test-case-editor/testCaseCompilerInterop';
+import {
+  atdToCatala,
+  recoverBrokenTest,
+} from '../test-case-editor/testCaseCompilerInterop';
 import {
   parseContents,
   getLanguageFromUri,
@@ -79,6 +82,7 @@ export class CatalaTestCaseDocument
   private _parseResults: ParseResults;
   /* Kept out of _parseResults, or a save would write it over the original. */
   private _rebuilt: TestList | undefined;
+  private _workingCopySaved: string | null = null;
   private _sourceText: string;
   private _editManager: EditManager;
   private _rebuildManager: EditManager;
@@ -94,10 +98,7 @@ export class CatalaTestCaseDocument
       typeof backupId === 'string' ? vscode.Uri.parse(backupId) : uri;
     const fileData = await CatalaTestCaseDocument.readFile(dataFile);
     const document = new CatalaTestCaseDocument(uri, fileData);
-    // A repair the test no longer needs; the next drift would pick it up.
-    if (document._parseResults.kind === 'Results') {
-      await document.deleteWorkingCopy({ useTrash: true });
-    }
+    await document.statWorkingCopy();
     return document;
   }
 
@@ -159,6 +160,22 @@ export class CatalaTestCaseDocument
     return this._parseResults;
   }
 
+  /** When the working copy was saved, if one exists beside a test that reads:
+   *  the page offers it. */
+  public get workingCopySaved(): string | null {
+    return this._workingCopySaved;
+  }
+
+  private async statWorkingCopy(): Promise<void> {
+    this._workingCopySaved =
+      this._parseResults.kind === 'Results'
+        ? await vscode.workspace.fs.stat(this.workingCopyUri).then(
+            (s) => new Date(s.mtime).toISOString(),
+            () => null
+          )
+        : null;
+  }
+
   /** Apply anything still in the batching window. */
   public flushPendingEdits(): void {
     this._editManager.sync();
@@ -218,6 +235,7 @@ export class CatalaTestCaseDocument
       parseContents(diskContent, this._uri, this._language)
     );
     this._rebuilt = rebuiltFrom(this._parseResults);
+    await this.statWorkingCopy();
 
     this._onDidChangeDocument.fire({
       document: this,
@@ -333,17 +351,13 @@ export class CatalaTestCaseDocument
     return vscode.Uri.file(this.uri.fsPath + workingCopyExt);
   }
 
-  private async deleteWorkingCopy(
-    options: { useTrash?: boolean } = {}
-  ): Promise<void> {
+  private async deleteWorkingCopy(): Promise<void> {
     try {
-      await vscode.workspace.fs.delete(this.workingCopyUri, options);
+      await vscode.workspace.fs.delete(this.workingCopyUri);
     } catch (err) {
       // FileNotFound is normal; a stale .repair outliving a Replace is not.
       if (err instanceof vscode.FileSystemError && err.code === 'FileNotFound')
         return;
-      // No trash on some remotes: a plain delete then.
-      if (options.useTrash) return this.deleteWorkingCopy();
       logger.log(
         `could not delete the working copy ${this.workingCopyUri.fsPath}: ${String(err)}`
       );
@@ -374,10 +388,42 @@ export class CatalaTestCaseDocument
     this._onDidChangeDocument.fire({ document: this });
   }
 
-  /** Delete the working copy, retarget included, and reparse. */
+  /** Repair the test from its working copy, though the original reads. Not
+   *  undoable, like Replace. */
+  async openWorkingCopy(): Promise<void> {
+    if (this._parseResults.kind !== 'Results') {
+      throw new Error('Only a test that reads opens its working copy.');
+    }
+    const source = new TextDecoder('utf-8').decode(
+      await CatalaTestCaseDocument.readFile(this.uri)
+    );
+    const results = recoverBrokenTest(this.uri.fsPath, source);
+    if (results?.kind !== 'BrokenTest') {
+      throw new Error(
+        results?.kind === 'ParseError'
+          ? results.value
+          : 'The working copy could not be rebuilt.'
+      );
+    }
+    this.cancelPendingEdits();
+    this._sourceText = source;
+    this._parseResults = stampParseResultsUids(results);
+    this._rebuilt = rebuiltFrom(this._parseResults);
+    this._workingCopySaved = null;
+    this._onDidChangeDocument.fire({ document: this });
+  }
+
+  /** Delete the working copy, retarget included. A broken test is reparsed;
+   *  a test that reads keeps its unsaved edits. */
   async discardWorkingCopy(): Promise<void> {
+    if (this._parseResults.kind === 'Results') {
+      await this.deleteWorkingCopy();
+      this._workingCopySaved = null;
+      this._onDidChangeDocument.fire({ document: this });
+      return;
+    }
     if (this._parseResults.kind !== 'BrokenTest') {
-      throw new Error('Only a broken test has a working copy to discard.');
+      throw new Error('There is no working copy to discard.');
     }
     // A pending batched edit would fire after the revert.
     this.cancelPendingEdits();
@@ -406,12 +452,15 @@ export class CatalaTestCaseDocument
     this._onDidChange.fire({
       document: this,
       label: 'edit',
+      // Inert once the working copy was opened.
       undo: (): void => {
+        if (this._parseResults.kind === 'BrokenTest') return;
         this.cancelPendingEdits();
         this._parseResults = lastRev;
         this._onDidChangeDocument.fire({ document: this });
       },
       redo: (): void => {
+        if (this._parseResults.kind === 'BrokenTest') return;
         this.cancelPendingEdits();
         this._parseResults = thisRev;
         this._onDidChangeDocument.fire({ document: this });

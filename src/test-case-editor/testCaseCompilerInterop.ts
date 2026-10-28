@@ -61,7 +61,7 @@ function execBinary(
 }
 
 /** All the reasoning is in OCaml; this only asks and parses. */
-function recoverBrokenTest(
+export function recoverBrokenTest(
   bufferPath: string,
   content: string,
   scope?: string

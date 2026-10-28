@@ -107,7 +107,7 @@ export default function ScopeInputEditor({
       const message = readDownMessage(event.data);
       switch (message.kind) {
         case 'Update':
-          setState(parseResultsToUiState(message.value));
+          setState(parseResultsToUiState(message.value.results));
           break;
         case 'TestRunResults': {
           setTestRunState((_prev) => {

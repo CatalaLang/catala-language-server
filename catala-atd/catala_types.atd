@@ -329,11 +329,18 @@ type up_message = [
   | RetargetRequest of string (* rebuild against this scope: "Scope" or "Module.Scope" *)
   | ReplaceOriginalRequest (* write the working copy over the original *)
   | DiscardWorkingCopyRequest (* delete the working copy, start over *)
+  | OpenWorkingCopyRequest (* repair the test from its working copy *)
   | RetryOpenRequest (* read the file again *)
 ]
 
+type update = {
+  results: parse_results;
+  (* When a working copy exists beside a test that reads: ISO 8601. *)
+  working_copy_saved: string nullable;
+}
+
 type down_message = [
-  | Update of parse_results
+  | Update of update
   | TestRunResults of test_run_results_msg
   | ConfirmResult of confirm_result
 ]
