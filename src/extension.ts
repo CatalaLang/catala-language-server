@@ -28,6 +28,10 @@ import { initTests } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints, rescanProjects } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
+import {
+  catalaFoldingRanges,
+  codeBlockRanges,
+} from './extension/catalaFolding';
 import path from 'path';
 
 // `icon` are codicon id, the (id without the `codicon-` prefix).
@@ -615,6 +619,34 @@ export async function activate(
 
   // Always register the custom editor provider
   context.subscriptions.push(TestCaseEditorProvider.register(context));
+
+  context.subscriptions.push(
+    vscode.languages.registerFoldingRangeProvider(
+      ['catala_en', 'catala_fr', 'catala_pl'].map((language) => ({ language })),
+      {
+        provideFoldingRanges(document) {
+          const lines = document.getText().split(/\r?\n/);
+          return catalaFoldingRanges(lines).map(
+            (r) => new vscode.FoldingRange(r.start, r.end)
+          );
+        },
+      }
+    ),
+    // Blocks only: foldAll would also fold every indentation range inside them,
+    // and opening a block by hand would show it still collapsed.
+    vscode.commands.registerCommand('catala.foldCodeBlocks', () => {
+      const document = vscode.window.activeTextEditor?.document;
+      if (!document) return;
+      const lines = document.getText().split(/\r?\n/);
+      return vscode.commands.executeCommand('editor.fold', {
+        levels: 1,
+        selectionLines: codeBlockRanges(lines).map((r) => r.start),
+      });
+    }),
+    vscode.commands.registerCommand('catala.unfoldCodeBlocks', () =>
+      vscode.commands.executeCommand('editor.unfoldAll')
+    )
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
