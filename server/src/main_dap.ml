@@ -124,12 +124,15 @@ let use_state f =
 type dcalc_expr = DE.dcalc_expr
 
 type env_tree =
-  | Node of
-      int
-      * string
-      * dcalc_expr
-      * [ `Named of env_tree list | `Indexed of env_tree list ]
-  | Leaf of string * dcalc_expr
+  | Node of {
+      name : string;
+      value : dcalc_expr;
+      id : int;
+      children : env_tree_child;
+    }
+  | Leaf of { name : string; value : dcalc_expr }
+
+and env_tree_child = Named of env_tree list | Indexed of env_tree list
 
 let ( (current_env : env_tree list ref),
       (current_env_lookup : (int -> env_tree) ref) ) =
@@ -179,12 +182,12 @@ let update_env env =
     | (_, (EAbs _, _)) :: t ->
       (* Skip lambdas *)
       loop acc t
-    | (s, e) :: t ->
-      begin match children s e with
+    | (name, value) :: t ->
+      begin match children name value with
       | None ->
         let id = !cpt in
         incr cpt;
-        let v = Leaf (s, e) in
+        let v = Leaf { name; value } in
         m := M.add id v !m;
         loop (v :: acc) t
       | Some (_, []) -> assert false
@@ -193,15 +196,21 @@ let update_env env =
         incr cpt;
         let children = loop [] children in
         let children =
-          match k with `I -> `Indexed children | `N -> `Named children
+          match k with `I -> Indexed children | `N -> Named children
         in
-        let v = Node (id, s, e, children) in
+        let v = Node { id; name; value; children } in
         m := M.add id v !m;
         loop (v :: acc) t
       end
   in
   let env : (string * dcalc_expr) list =
-    Var.Map.bindings env |> List.map (fun (v, (e, _)) -> Bindlib.name_of v, e)
+    (* [Var.Map] iterates in decreasing variable uid order. Fresh variables are
+       created as binders are entered during evaluation, so sorting by
+       increasing uid lists variables in execution order. *)
+    Var.Map.bindings env
+    |> List.sort (fun (v1, _) (v2, _) ->
+        Int.compare (Bindlib.uid_of v1) (Bindlib.uid_of v2))
+    |> List.map (fun (v, (e, _)) -> Bindlib.name_of v, e)
   in
   current_env := loop [] env;
   current_env_lookup := fun i -> M.find i !m
@@ -223,9 +232,11 @@ let rec pp_expr lang fmt (e : dcalc_expr) =
 let env_to_variable lang (t : env_tree) : Patched_variable.t =
   let name, e, variables_reference, named_variables, indexed_variables =
     match t with
-    | Leaf (name, e) -> name, e, 0, None, None
-    | Node (i, name, e, `Indexed l) -> name, e, i, None, Some (List.length l)
-    | Node (i, name, e, `Named l) -> name, e, i, Some (List.length l), None
+    | Leaf { name; value } -> name, value, 0, None, None
+    | Node { id; name; value; children = Indexed l } ->
+      name, value, id, None, Some (List.length l)
+    | Node { id; name; value; children = Named l } ->
+      name, value, id, Some (List.length l), None
   in
   let ty = DE.get_typ e in
   {
@@ -632,7 +643,7 @@ let set_handlers rpc =
         else
           match !current_env_lookup variables_reference with
           | Leaf _ as e -> [e]
-          | Node (_, _, _, (`Indexed children | `Named children)) -> children
+          | Node { children = Indexed children | Named children; _ } -> children
       in
       let variables = List.map (env_to_variable lang) variables in
       Lwt.return { Patched_variables_command.Result.variables });
