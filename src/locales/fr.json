@@ -34,6 +34,7 @@
   "editor.unset": "Non défini",
   "editor.invalid": "Invalide",
   "editor.invalidDate": "Date invalide",
+  "editor.copied": "Copié",
   "durationEditor.years": "Années :",
   "durationEditor.months": "Mois :",
   "durationEditor.days": "Jours :",
