@@ -40,6 +40,23 @@
   max-width: var(--field-width);
 }
 
+.date-editor-wrapper {
+  position: relative;
+}
+.hint {
+  position: absolute;
+  top: 50%;
+  right: var(--spacing4);
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  pointer-events: none;
+}
+/* Clear of the calendar button. */
+.date-editor-wrapper .hint {
+  right: 28px;
+}
+
 /* Complex editors (struct, enum, array) get no max-width constraint */
 /* This allows nested content like arrays in enum payloads to use full available width */
 .value-editor.struct-editor,

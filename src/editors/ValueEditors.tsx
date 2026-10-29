@@ -29,6 +29,7 @@ import { useNestingDepth, NestingDepthIncrementer } from './NestingDepth';
 import { findMatchingDiff } from '../diff/highlight';
 import { isAtomicRuntime } from '../diff/diff';
 import { confirm } from '../messaging/confirm';
+import { Hint } from './Hint';
 
 // Helper to create a RuntimeValue from a RuntimeValueRaw, preserving attrs
 export function createRuntimeValue(
@@ -432,15 +433,59 @@ function DateEditor(props: DateEditorProps): ReactElement {
       props.onValueChange(makeUnset(runtimeValue));
       return;
     }
-    if (newDate) {
+    commitDate(newDate);
+  };
+
+  const commitDate = (date: ReturnType<typeof parseDate>): void => {
+    if (date) {
       setIsInvalid(false);
-      const newValueRaw: RuntimeValueRaw = { kind: 'Date', value: newDate };
+      const newValueRaw: RuntimeValueRaw = { kind: 'Date', value: date };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     } else {
       setIsInvalid(true);
       props.onValueChange(makeUnset(runtimeValue));
     }
   };
+
+  /* The native input copies and pastes one segment (day, month or year) at a
+     time; testers copy whole dates between periods. */
+  const [copies, setCopies] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const handleCopy = (event: ClipboardEvent): void => {
+    if (internalValue === '' || isInvalid) return;
+    event.preventDefault();
+    event.clipboardData?.setData('text/plain', internalValue);
+    setCopies((n) => n + 1);
+  };
+  const handlePaste = (event: ClipboardEvent): void => {
+    const field = input.current;
+    const text = event.clipboardData?.getData('text/plain').trim() ?? '';
+    // A lone number cannot go to a segment: the field keeps its value.
+    if (field === null || /^\d{1,4}$/.test(text)) return;
+    event.preventDefault();
+    // The input validates: anything but a real yyyy-mm-dd date empties it.
+    field.value = text;
+    const valid = field.value !== '';
+    setInternalValue(valid ? text : '');
+    commitDate(valid ? parseDate(text) : null);
+  };
+  /* With nothing selected, as in a date input, the copy and paste that VS Code
+     replays in the webview go to the document, not to the focused input. */
+  useEffect(() => {
+    const ifFocused =
+      (handle: (event: ClipboardEvent) => void) =>
+      (event: ClipboardEvent): void => {
+        if (document.activeElement === input.current) handle(event);
+      };
+    const onCopy = ifFocused(handleCopy);
+    const onPaste = ifFocused(handlePaste);
+    document.addEventListener('copy', onCopy);
+    document.addEventListener('paste', onPaste);
+    return (): void => {
+      document.removeEventListener('copy', onCopy);
+      document.removeEventListener('paste', onPaste);
+    };
+  });
 
   const handleBlur = (event: React.FocusEvent<HTMLInputElement>): void => {
     if (internalValue === '') {
@@ -464,9 +509,15 @@ function DateEditor(props: DateEditorProps): ReactElement {
         value={internalValue}
         onChange={handleChange}
         onBlur={handleBlur}
+        ref={input}
         disabled={props.editable === false}
         max="9999-12-31" /* catala date literals are coded on 4 digits */
       />
+      {copies > 0 && (
+        <Hint key={copies}>
+          <FormattedMessage id="editor.copied" />
+        </Hint>
+      )}
     </div>
   );
 }
