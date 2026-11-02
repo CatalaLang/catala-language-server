@@ -171,48 +171,40 @@ let enum_name_of_path (p : Surface.Ast.path) =
    each literal wrote only some constructors (and Absent no payload), and every
    element is rendered with this type, so it must know all of them. [None] if
    they are different kinds of value. *)
-let rec merge_shape (a : O.typ) (b : O.typ) : O.typ option =
-  let ( let* ) = Option.bind in
+let merge_shape (a : O.typ) (b : O.typ) : O.typ option =
+  let exception Mismatch in
   let union merge xs ys =
     List.fold_left
       (fun acc (n, y) ->
-        let* acc = acc in
         match List.assoc_opt n acc with
-        | None -> Some (acc @ [n, y])
+        | None -> acc @ [n, y]
         | Some x ->
-          let* m = merge x y in
-          Some (List.map (fun (k, v) -> k, if k = n then m else v) acc))
-      (Some xs) ys
+          List.map (fun (k, v) -> k, if k = n then merge x y else v) acc)
+      xs ys
   in
-  match a, b with
-  | O.TUnset, t | t, O.TUnset -> Some t
-  | O.TEnum x, O.TEnum y when x.O.enum_name = y.O.enum_name ->
-    let payload p q =
-      match p, q with
-      | None, None -> Some None
-      | Some p, Some q -> Option.map Option.some (merge_shape p q)
-      | _ -> None
-    in
-    let* constructors = union payload x.O.constructors y.O.constructors in
-    Some (O.TEnum { x with O.constructors })
-  | O.TStruct x, O.TStruct y when x.O.struct_name = y.O.struct_name ->
-    let* fields = union merge_shape x.O.fields y.O.fields in
-    Some (O.TStruct { x with O.fields })
-  | O.TArray x, O.TArray y ->
-    Option.map (fun t -> O.TArray t) (merge_shape x y)
-  | O.TOption x, O.TOption y ->
-    Option.map (fun t -> O.TOption t) (merge_shape x y)
-  | O.TTuple xs, O.TTuple ys when List.length xs = List.length ys ->
-    let* ts =
-      List.fold_right2
-        (fun x y acc ->
-          let* acc = acc in
-          let* t = merge_shape x y in
-          Some (t :: acc))
-        xs ys (Some [])
-    in
-    Some (O.TTuple ts)
-  | _ -> if a = b then Some a else None
+  let rec merge a b =
+    match a, b with
+    | O.TUnset, t | t, O.TUnset -> t
+    | O.TEnum x, O.TEnum y when x.O.enum_name = y.O.enum_name ->
+      O.TEnum
+        {
+          x with
+          O.constructors = union payload x.O.constructors y.O.constructors;
+        }
+    | O.TStruct x, O.TStruct y when x.O.struct_name = y.O.struct_name ->
+      O.TStruct { x with O.fields = union merge x.O.fields y.O.fields }
+    | O.TArray x, O.TArray y -> O.TArray (merge x y)
+    | O.TOption x, O.TOption y -> O.TOption (merge x y)
+    | O.TTuple xs, O.TTuple ys when List.length xs = List.length ys ->
+      O.TTuple (List.map2 merge xs ys)
+    | _ -> if a = b then a else raise Mismatch
+  and payload p q =
+    match p, q with
+    | None, None -> None
+    | Some p, Some q -> Some (merge p q)
+    | _ -> raise Mismatch
+  in
+  try Some (merge a b) with Mismatch -> None
 
 let read_partial_test_one
     (scope_decl : Surface.Ast.scope_decl)
