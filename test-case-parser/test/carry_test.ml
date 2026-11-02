@@ -628,8 +628,32 @@ let check_carries_across_option () =
       (Printf.sprintf "unwrapped: %s, nested = %s" (show_outcome outcome)
          (show_nested nested))
 
+(* Every row of a list is rendered with the list's one element type: a row
+   whose constructor or present option the first row lacked showed blank. *)
+let check_list_type_covers_every_row () =
+  let row kind amt = O.TStruct { struct_name = "M.Row"; fields = ["kind", kind; "amt", amt] } in
+  let first = row (TEnum (colour ["Red", None])) (TOption TUnset) in
+  let second =
+    row (TEnum (colour ["Green", Some O.TInt])) (TOption TMoney)
+  in
+  let expected =
+    row
+      (TEnum (colour ["Red", None; "Green", Some O.TInt]))
+      (TOption TMoney)
+  in
+  (match R.merge_shape first second with
+  | Some t when t = expected -> ()
+  | Some t -> failwith ("merged to " ^ Model.typ_name t)
+  | None -> failwith "two rows of one record type did not merge");
+  match R.merge_shape (TEnum (colour ["Red", None])) (TEnum (colour ["Red", Some O.TInt])) with
+  | None -> ()
+  | Some _ -> failwith "one constructor with and without a payload merged"
+
 let () =
   let open Tezt.Test in
+  register ~__FILE__ ~title:"partial read: a list's type covers every row"
+    ~tags:["unit"; "partial"] (fun () ->
+      Lwt.return @@ check_list_type_covers_every_row ());
   register ~__FILE__ ~title:"carry_value: shapes below the top level"
     ~tags:["unit"; "carry"] (fun () -> Lwt.return @@ check_nested_shapes ());
   register ~__FILE__
