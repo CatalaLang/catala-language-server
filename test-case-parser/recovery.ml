@@ -167,17 +167,52 @@ let enum_name_of_path (p : Surface.Ast.path) =
   | [] -> unknown_enum_name
   | p -> String.concat "." (List.map Mark.remove p)
 
-(* Same kind of value, by name for records and enums: elements of one list
-   describe one type, however few constructors or fields each literal wrote. *)
-let rec same_shape (a : O.typ) (b : O.typ) =
+(* The one type two elements of a list describe, by name for records and enums:
+   each literal wrote only some constructors (and Absent no payload), and every
+   element is rendered with this type, so it must know all of them. [None] if
+   they are different kinds of value. *)
+let rec merge_shape (a : O.typ) (b : O.typ) : O.typ option =
+  let ( let* ) = Option.bind in
+  let union merge xs ys =
+    List.fold_left
+      (fun acc (n, y) ->
+        let* acc = acc in
+        match List.assoc_opt n acc with
+        | None -> Some (acc @ [n, y])
+        | Some x ->
+          let* m = merge x y in
+          Some (List.map (fun (k, v) -> k, if k = n then m else v) acc))
+      (Some xs) ys
+  in
   match a, b with
-  | O.TUnset, _ | _, O.TUnset -> true
-  | O.TEnum x, O.TEnum y -> x.O.enum_name = y.O.enum_name
-  | O.TStruct x, O.TStruct y -> x.O.struct_name = y.O.struct_name
-  | O.TArray x, O.TArray y | O.TOption x, O.TOption y -> same_shape x y
-  | O.TTuple xs, O.TTuple ys ->
-    List.length xs = List.length ys && List.for_all2 same_shape xs ys
-  | _ -> a = b
+  | O.TUnset, t | t, O.TUnset -> Some t
+  | O.TEnum x, O.TEnum y when x.O.enum_name = y.O.enum_name ->
+    let payload p q =
+      match p, q with
+      | None, None -> Some None
+      | Some p, Some q -> Option.map Option.some (merge_shape p q)
+      | _ -> None
+    in
+    let* constructors = union payload x.O.constructors y.O.constructors in
+    Some (O.TEnum { x with O.constructors })
+  | O.TStruct x, O.TStruct y when x.O.struct_name = y.O.struct_name ->
+    let* fields = union merge_shape x.O.fields y.O.fields in
+    Some (O.TStruct { x with O.fields })
+  | O.TArray x, O.TArray y ->
+    Option.map (fun t -> O.TArray t) (merge_shape x y)
+  | O.TOption x, O.TOption y ->
+    Option.map (fun t -> O.TOption t) (merge_shape x y)
+  | O.TTuple xs, O.TTuple ys when List.length xs = List.length ys ->
+    let* ts =
+      List.fold_right2
+        (fun x y acc ->
+          let* acc = acc in
+          let* t = merge_shape x y in
+          Some (t :: acc))
+        xs ys (Some [])
+    in
+    Some (O.TTuple ts)
+  | _ -> if a = b then Some a else None
 
 let read_partial_test_one
     (scope_decl : Surface.Ast.scope_decl)
@@ -256,10 +291,14 @@ let read_partial_test_one
                 | Ok v -> v)
               l
           in
-          let ty, _ = List.hd l in
-          if not (List.for_all (fun (t, _) -> same_shape t ty) l) then
-            raise (Err "a list mixing element types");
-          Ok (ty, List.map snd l)
+          let ty =
+            List.fold_left
+              (fun acc (t, _) -> Option.bind acc (fun a -> merge_shape a t))
+              (Some O.TUnset) l
+          in
+          match ty with
+          | None -> raise (Err "a list mixing element types")
+          | Some ty -> Ok (ty, List.map snd l)
         with Err s -> Error s
       in
       ok O.(TArray ty) O.(Array (Array.of_list l))
