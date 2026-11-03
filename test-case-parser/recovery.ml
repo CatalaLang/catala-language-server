@@ -944,7 +944,11 @@ let rebuild_broken_test
   (match surface_scopes_by_ownership (Driver.Passes.surface options) with
   | _ :: _, (_ :: _ as unowned) -> error_mixed_ownership unowned
   | _ -> ());
-  match read_partial_tests options with
+  let partial = read_partial_tests options in
+  (* A syntax error in the test is queued, not raised: left there, the module
+     build below reports it as its own. *)
+  Message.report_delayed_errors_if_any ();
+  match partial with
   | Error e -> Format.ksprintf failwith "Error: %s" e
   | Ok (recovered, errors) -> (
     List.iter (fun e -> Message.warning "partial read: %s" e) errors;

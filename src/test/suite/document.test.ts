@@ -403,6 +403,25 @@ suite('Broken test document', function () {
     assert.strictEqual(doc.parseResults.kind, 'Results');
   });
 
+  test('a test file catala refuses is fixed in the text', async () => {
+    const dir = project('nothing');
+    const file = path.join(dir, 'test_optionals.catala_en');
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, 'utf8').replace('scope', 'scop')
+    );
+
+    const doc = await CatalaTestCaseDocument.create(
+      vscode.Uri.file(file),
+      undefined
+    );
+    const results = doc.parseResults;
+    assert.ok(results.kind === 'CannotOpen', `got ${results.kind}`);
+    assert.strictEqual(results.value.cause.kind, 'TestFileInvalid');
+    assert.notStrictEqual(results.value.message, '');
+    assert.ok(!fs.existsSync(file + '.repair'), 'nothing written');
+  });
+
   test('a saved repair reopens in the repair view, even when it all fits', async () => {
     const dir = renamedModuleProject();
     const file = path.join(dir, 'test_base.catala_en');
