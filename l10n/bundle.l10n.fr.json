@@ -37,5 +37,8 @@
   "Yes": "Oui",
   "No": "Non",
   "Open Catala book": "Ouvrir le manuel de Catala",
-  "Open the Catala GitHub repository": "Ouvrir le répertoire GitHub de Catala"
+  "Open the Catala GitHub repository": "Ouvrir le répertoire GitHub de Catala",
+  "Create test file": "Créer un fichier de test",
+  "Invalid test file name": "Nom de fichier de test invalide",
+  "The test file name must contain the word \"test\".": "Le nom du fichier de test doit contenir le mot « test »."
 }
