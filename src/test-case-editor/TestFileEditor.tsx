@@ -427,7 +427,9 @@ export function CannotOpenPage({
         <button
           className="test-editor-open-text"
           onClick={() =>
-            vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
+            vscode.postMessage(
+              writeUpMessage({ kind: 'OpenInTextEditor', value: null })
+            )
           }
         >
           <span className="codicon codicon-edit"></span>
