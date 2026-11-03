@@ -155,7 +155,6 @@ export default function TestEditor(props: Props): ReactElement {
               <textarea
                 value={props.test.description}
                 onChange={onDescriptionChange}
-                onBlur={onDescriptionChange}
                 placeholder={intl.formatMessage({
                   id: 'testEditor.descriptionPlaceholder',
                 })}
