@@ -400,7 +400,8 @@ function getAllTestsToRun(
   ctrl: vscode.TestController,
   request: vscode.TestRunRequest
 ): readonly vscode.TestItem[] {
-  if (request.include == undefined || request.include.length == 0) {
+  // No list at all ("Run All"): every test. An empty list: none of them.
+  if (request.include == undefined) {
     const all_tests: vscode.TestItem[] = new Array();
     ctrl.items.forEach((i) => getAllTests(all_tests, i));
     return all_tests;
@@ -523,7 +524,7 @@ function makeRunHandler(
   ctrl: vscode.TestController,
   test_map: TestMap,
   resultController: ResultController,
-  cwd: string,
+  cwd: string | undefined,
   focus: boolean
 ): RunHandler {
   const runHandler = async (
@@ -531,6 +532,11 @@ function makeRunHandler(
     cancellation: vscode.CancellationToken,
     with_coverage?: boolean
   ): Promise<void> => {
+    // An empty list asks for no test: without a path, clerk would test the
+    // whole project.
+    if (cwd == undefined || request.include?.length === 0) {
+      return;
+    }
     const run: vscode.TestRun = ctrl.createTestRun(request);
     const testFiles =
       request.include
@@ -636,7 +642,9 @@ export async function initTests(
     test_scopes_map.forEach(({ path, scopes }) =>
       populateTestItems(ctrl, test_map, path, scopes)
     );
-    cwd = getCwd(test_scopes_map?.[0]?.path);
+    if (test_scopes_map.length > 0) {
+      cwd = getCwd(test_scopes_map[0].path);
+    }
   };
 
   populateTestController(entrypoints);
@@ -660,7 +668,7 @@ export async function initTests(
     ctrl,
     test_map,
     resultController,
-    cwd!,
+    cwd,
     true
   );
 
