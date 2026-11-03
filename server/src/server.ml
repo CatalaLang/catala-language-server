@@ -87,9 +87,11 @@ let check_ignore (uri : Doc_id.t) f t =
         @@ fun sstate ->
         match Projects.lookup_project uri sstate.projects with
         | None ->
+          Format.eprintf "%s@." __LOC__;
           (* No project associated: allow it in case it's an orphan file *)
           Lwt.return_true
         | Some project ->
+          Format.eprintf "%s@." __LOC__;
           Lwt.return
             (File.Set.mem (File.dirname file) project.project_include_dirs)
       in

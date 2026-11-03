@@ -21,9 +21,10 @@ open Utils
 open Server_types
 
 let to_catala_format_lang : Global.backend_lang -> string = function
-  | `En -> "catala_en"
-  | `Fr -> "catala_fr"
-  | `Pl -> "catala_pl"
+  | English.T -> "catala_en"
+  | French.T -> "catala_fr"
+  | Polish.T -> "catala_pl"
+  | _ -> assert false
 
 let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
     TextEdit.t list option Lwt.t =
@@ -34,7 +35,7 @@ let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
   in
   let doc_path = (doc_id :> File.t) in
   let*? language =
-    match Scan.get_lang (doc_id :> string) with
+    match Languages.file_lang (doc_id :> string) with
     | None ->
       let* () =
         send_notification ~type_:MessageType.Warning ~notify_back
@@ -42,7 +43,7 @@ let try_format_document ~notify_back ~doc_content (doc_id : Doc_id.t) :
            file extension is valid."
       in
       Lwt.return_none
-    | Some lang -> Lwt.return_some (to_catala_format_lang lang)
+    | Some (lang, _) -> Lwt.return_some (to_catala_format_lang lang)
   in
   Lwt.catch
     (fun () ->

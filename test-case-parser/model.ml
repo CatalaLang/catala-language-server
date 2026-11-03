@@ -85,7 +85,11 @@ let get_lang_strings =
          ręcznie.";
     }
   in
-  function `Fr -> fr_strings | `En -> en_strings | `Pl -> pl_strings
+  function
+  | French.T -> fr_strings
+  | English.T -> en_strings
+  | Polish.T -> pl_strings
+  | _ -> assert false
 
 (* Runtime names, as an ordinary read produces them and the editor's option form
    expects them. The surface keyword is the writer's business. *)
@@ -626,7 +630,11 @@ let get_value_strings =
       absent = "Nieobecny";
     }
   in
-  function `Fr -> fr_strings | `En -> en_strings | `Pl -> pl_strings
+  function
+  | French.T -> fr_strings
+  | English.T -> en_strings
+  | Polish.T -> pl_strings
+  | _ -> assert false
 
 (* Sorted: reading reverses attributes, so following the list would flip them on
    every save. *)

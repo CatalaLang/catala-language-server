@@ -20,69 +20,115 @@ open Shared_ast
 open Format
 
 let locale_s locale =
-  match locale with `En -> "en" | `Fr -> "fr" | `Pl -> "pl"
+  match locale with
+  | English.T -> "en"
+  | French.T -> "fr"
+  | Polish.T -> "pl"
+  | _ -> assert false
 
 let not_exposed_s = function
-  | `En -> "not exposed"
-  | `Fr -> "non exposé"
-  | `Pl -> "nie odsłonięta"
+  | English.T -> "not exposed"
+  | French.T -> "non exposé"
+  | Polish.T -> "nie odsłonięta"
+  | _ -> assert false
 
 let _for_all = function
-  | `En -> "anything of type"
-  | `Fr -> "n'importe quel de type"
-  | `Pl -> "cokolwiek z rodzaju"
+  | English.T -> "anything of type"
+  | French.T -> "n'importe quel de type"
+  | Polish.T -> "cokolwiek z rodzaju"
+  | _ -> assert false
 
-let list_of = function `En -> "list of" | `Fr -> "liste de" | `Pl -> "lista"
-let default = function `En -> "default" | `Fr -> "défaut" | `Pl -> "default"
-let enum = function `En -> "enum" | `Fr -> "énum" | `Pl -> "enum"
-let struct_s = function `Pl -> "struktura" | _ -> "structure"
+let list_of = function
+  | English.T -> "list of"
+  | French.T -> "liste de"
+  | Polish.T -> "lista"
+  | _ -> assert false
+
+let default = function
+  | English.T -> "default"
+  | French.T -> "défaut"
+  | Polish.T -> "default"
+  | _ -> assert false
+
+let enum = function
+  | English.T -> "enum"
+  | French.T -> "énum"
+  | Polish.T -> "enum"
+  | _ -> assert false
+
+let struct_s = function Polish.T -> "struktura" | _ -> "structure"
 
 let struct_header = function
-  | `En -> struct_s `En
-  | `Fr -> struct_s `Fr
-  | `Pl -> struct_s `Pl
+  | English.T -> struct_s English.T
+  | French.T -> struct_s French.T
+  | Polish.T -> struct_s Polish.T
+  | _ -> assert false
 
-let struct_data = function `En -> "data" | `Fr -> "donnée" | `Pl -> "dane"
-let content = function `En -> "content" | `Fr -> "contenu" | `Pl -> "typu"
+let struct_data = function
+  | English.T -> "data"
+  | French.T -> "donnée"
+  | Polish.T -> "dane"
+  | _ -> assert false
+
+let content = function
+  | English.T -> "content"
+  | French.T -> "contenu"
+  | Polish.T -> "typu"
+  | _ -> assert false
 
 let depends_on = function
-  | `En -> "depends on"
-  | `Fr -> "dépend de"
-  | `Pl -> "zależy od"
+  | English.T -> "depends on"
+  | French.T -> "dépend de"
+  | Polish.T -> "zależy od"
+  | _ -> assert false
 
 let enum_s = function
-  | `En -> "enumeration"
-  | `Fr -> "énumération"
-  | `Pl -> "enumeracja"
+  | English.T -> "enumeration"
+  | French.T -> "énumération"
+  | Polish.T -> "enumeracja"
+  | _ -> assert false
 
 let enum_header = function
-  | `En -> enum_s `En
-  | `Fr -> enum_s `Fr
-  | `Pl -> enum_s `Pl
+  | English.T -> enum_s English.T
+  | French.T -> enum_s French.T
+  | Polish.T -> enum_s Polish.T
+  | _ -> assert false
 
 let scope_s = function
-  | `En -> "scope"
-  | `Fr -> "champ d'application"
-  | `Pl -> "zakres"
+  | English.T -> "scope"
+  | French.T -> "champ d'application"
+  | Polish.T -> "zakres"
+  | _ -> assert false
 
 let topdef_s = function
-  | `En -> "declaration"
-  | `Fr -> "déclaration"
-  | `Pl -> "deklaracja"
+  | English.T -> "declaration"
+  | French.T -> "déclaration"
+  | Polish.T -> "deklaracja"
+  | _ -> assert false
 
 let external_type_s = function
-  | `En -> "external type"
-  | `Fr -> "type externe"
-  | `Pl -> "typ zewnętrzny"
+  | English.T -> "external type"
+  | French.T -> "type externe"
+  | Polish.T -> "typ zewnętrzny"
+  | _ -> assert false
 
-let alias_s = function `En -> "as" | `Fr -> "en tant que" | `Pl -> "jako"
+let alias_s = function
+  | English.T -> "as"
+  | French.T -> "en tant que"
+  | Polish.T -> "jako"
+  | _ -> assert false
 
 let option_s = function
-  | `En -> "optional of"
-  | `Fr -> "optionnel de"
-  | `Pl -> "opcjonalny"
+  | English.T -> "optional of"
+  | French.T -> "optionnel de"
+  | Polish.T -> "opcjonalny"
+  | _ -> assert false
 
-let using_s = function `En -> "Using" | `Fr -> "Usage de" | `Pl -> "Using"
+let using_s = function
+  | English.T -> "Using"
+  | French.T -> "Usage de"
+  | Polish.T -> "Using"
+  | _ -> assert false
 
 let pp_lit locale fmt l =
   let en, fr, pl =
@@ -96,9 +142,14 @@ let pp_lit locale fmt l =
     | TDate -> "date", "date", "czas"
     | TPos -> "position", "position", "pozycja"
   in
-  fprintf fmt "%s" (match locale with `En -> en | `Fr -> fr | `Pl -> pl)
+  fprintf fmt "%s"
+    (match locale with
+    | English.T -> en
+    | French.T -> fr
+    | Polish.T -> pl
+    | _ -> assert false)
 
-let pp_typ locale fmt (ty : typ) =
+let pp_typ (locale : Languages.code) fmt (ty : typ) =
   let untuplify = function [(TTuple tys, _)] -> tys | x -> x in
   let rec pp_typ fmt ty =
     match Mark.remove ty with
@@ -253,14 +304,16 @@ let data_type
 
 let svar_input_s_opt locale =
   let context_s = function
-    | `En -> "context"
-    | `Fr -> "contexte"
-    | `Pl -> "kontekst"
+    | English.T -> "context"
+    | French.T -> "contexte"
+    | Polish.T -> "kontekst"
+    | _ -> assert false
   in
   let input_s = function
-    | `En -> "input"
-    | `Fr -> "entrée"
-    | `Pl -> "wejście"
+    | English.T -> "input"
+    | French.T -> "entrée"
+    | Polish.T -> "wejście"
+    | _ -> assert false
   in
   function
   | Catala_runtime.NoInput -> None
@@ -269,9 +322,10 @@ let svar_input_s_opt locale =
 
 let svar_output_s_opt locale b =
   let output_s = function
-    | `En -> "output"
-    | `Fr -> "résultat"
-    | `Pl -> "wyjście"
+    | English.T -> "output"
+    | French.T -> "résultat"
+    | Polish.T -> "wyjście"
+    | _ -> assert false
   in
   if b then Some (output_s locale) else None
 
@@ -283,11 +337,16 @@ let svar_io_s locale (var_io : Desugared.Ast.io) =
   | None, None -> None (* internal *)
 
 let svar_internal_s = function
-  | `En -> "output"
-  | `Fr -> "résultat"
-  | `Pl -> "wyjście"
+  | English.T -> "output"
+  | French.T -> "résultat"
+  | Polish.T -> "wyjście"
+  | _ -> assert false
 
-let svar_state_s = function `En -> "state" | `Fr -> "état" | `Pl -> "stan"
+let svar_state_s = function
+  | English.T -> "state"
+  | French.T -> "état"
+  | Polish.T -> "stan"
+  | _ -> assert false
 
 let pp_scope_var
     ?(skip_internals = true)

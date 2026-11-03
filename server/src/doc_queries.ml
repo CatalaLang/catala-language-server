@@ -220,9 +220,10 @@ let get_hover_type ?(markdown = false) f p =
         |> Uri.pct_encode ~component:`Query_key
       in
       let show_def_tree_s = function
-        | `En -> "Show definition tree"
-        | `Fr -> "Afficher l'arbre de définitions"
-        | `Pl -> "Pokaż drzewo definicji"
+        | English.T -> "Show definition tree"
+        | French.T -> "Afficher l'arbre de définitions"
+        | Polish.T -> "Pokaż drzewo definicji"
+        | _ -> assert false
       in
       Some
         (Printf.sprintf "\n\n[%s](command:catala.showExceptions?%s)"
