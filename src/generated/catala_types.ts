@@ -151,6 +151,12 @@ export type ParseResults =
 | { kind: 'BrokenTest'; value: Recovery }
 | { kind: 'CannotOpen'; value: CannotOpen }
 
+export type ReadFailure =
+| { kind: 'TestSyntax' }
+| { kind: 'OutsideTest' }
+| { kind: 'InTest' }
+| { kind: 'Unlocated' }
+
 export type CannotOpen = {
   cause: CannotOpenCause;
   message: string;
@@ -161,7 +167,7 @@ export type CannotOpenCause =
 | { kind: 'ModuleWontBuild' }
 | { kind: 'ToolProblem' }
 | { kind: 'TestFileInvalid' }
-| { kind: 'EmptyTestList' }
+| { kind: 'EmptyTestListMismatch' }
 
 export type Recovery = {
   tests: RecoveredTest[];
@@ -862,6 +868,35 @@ export function readParseResults(x: any, context: any = x): ParseResults {
   }
 }
 
+export function writeReadFailure(x: ReadFailure, context: any = x): any {
+  switch (x.kind) {
+    case 'TestSyntax':
+      return 'TestSyntax'
+    case 'OutsideTest':
+      return 'OutsideTest'
+    case 'InTest':
+      return 'InTest'
+    case 'Unlocated':
+      return 'Unlocated'
+  }
+}
+
+export function readReadFailure(x: any, context: any = x): ReadFailure {
+  switch (x) {
+    case 'TestSyntax':
+      return { kind: 'TestSyntax' }
+    case 'OutsideTest':
+      return { kind: 'OutsideTest' }
+    case 'InTest':
+      return { kind: 'InTest' }
+    case 'Unlocated':
+      return { kind: 'Unlocated' }
+    default:
+      _atd_bad_json('ReadFailure', x, context)
+      throw new Error('impossible')
+  }
+}
+
 export function writeCannotOpen(x: CannotOpen, context: any = x): any {
   return {
     'cause': _atd_write_required_field('CannotOpen', 'cause', writeCannotOpenCause, x.cause, x),
@@ -886,8 +921,8 @@ export function writeCannotOpenCause(x: CannotOpenCause, context: any = x): any 
       return 'ToolProblem'
     case 'TestFileInvalid':
       return 'TestFileInvalid'
-    case 'EmptyTestList':
-      return 'EmptyTestList'
+    case 'EmptyTestListMismatch':
+      return 'EmptyTestListMismatch'
   }
 }
 
@@ -899,8 +934,8 @@ export function readCannotOpenCause(x: any, context: any = x): CannotOpenCause {
       return { kind: 'ToolProblem' }
     case 'TestFileInvalid':
       return { kind: 'TestFileInvalid' }
-    case 'EmptyTestList':
-      return { kind: 'EmptyTestList' }
+    case 'EmptyTestListMismatch':
+      return { kind: 'EmptyTestListMismatch' }
     default:
       _atd_bad_json('CannotOpenCause', x, context)
       throw new Error('impossible')

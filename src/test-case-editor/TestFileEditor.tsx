@@ -384,7 +384,7 @@ const causeText: Record<CannotOpenCause['kind'], string> = {
   ModuleWontBuild: 'testFile.cannotOpenModuleWontBuild',
   ToolProblem: 'testFile.cannotOpenToolProblem',
   TestFileInvalid: 'testFile.cannotOpenTestFileInvalid',
-  EmptyTestList: 'testFile.cannotOpenEmptyTestList',
+  EmptyTestListMismatch: 'testFile.cannotOpenEmptyTestListMismatch',
 };
 
 /** Neither the editor nor the repair view. Writes nothing. */

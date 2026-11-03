@@ -486,7 +486,40 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
 let import_catala_tests (prg, naming_ctx) =
   List.map (get_catala_test (prg, naming_ctx)) (get_test_scopes prg)
 
-let read_test include_dirs (options : Global.options) buffer_path =
+(* The first rule that holds wins: a syntax error is the file's whatever
+   follows, and a module that does not build drags its tests down with it. *)
+let read_failure ~test_file ~misfit (errors : Message.lsp_error list) :
+    O.read_failure =
+  let errors =
+    List.filter
+      (fun (e : Message.lsp_error) ->
+        match e.kind with
+        | Lexing | Parsing | Typing | Generic -> true
+        | Warning | AssertFailure -> false)
+      errors
+  in
+  let in_test (e : Message.lsp_error) =
+    match e.pos with
+    | Some p -> String.equal (Pos.get_file p) test_file
+    | None -> false
+  in
+  let syntax (e : Message.lsp_error) =
+    match e.kind with Lexing | Parsing -> true | _ -> false
+  in
+  if List.exists (fun e -> in_test e && syntax e) errors then O.TestSyntax
+  else if
+    List.exists
+      (fun (e : Message.lsp_error) -> e.pos <> None && not (in_test e))
+      errors
+  then O.OutsideTest
+  else if misfit || List.exists in_test errors then O.InTest
+  else O.Unlocated
+
+let read_test_unguarded
+    ~misfit
+    include_dirs
+    (options : Global.options)
+    buffer_path =
   let path_to_build, include_dirs =
     if include_dirs = [] then lookup_include_dirs ?buffer_path options
     else ".", include_dirs
@@ -500,6 +533,7 @@ let read_test include_dirs (options : Global.options) buffer_path =
   match check_tests_fit tests with
   | Ok () -> write_stdout J.write_test_list tests
   | Error problems ->
+    misfit := true;
     Message.error
       "this test no longer fits the scope it targets:@\n\
        @[<v 2>  %a@]@\n\
@@ -508,6 +542,19 @@ let read_test include_dirs (options : Global.options) buffer_path =
       (Format.pp_print_list ~pp_sep:Format.pp_print_cut (fun ppf s ->
            Format.pp_print_string ppf s))
       problems
+
+let read_test include_dirs (options : Global.options) buffer_path =
+  let errors = ref [] in
+  Message.register_lsp_error_notifier (fun e -> errors := e :: !errors);
+  let misfit = ref false in
+  try read_test_unguarded ~misfit include_dirs options buffer_path
+  with (Message.CompilerError _ | Message.CompilerErrors _) as e ->
+    let bt = Printexc.get_raw_backtrace () in
+    write_stdout J.write_read_failure
+      (read_failure
+         ~test_file:(Global.input_src_file options.Global.input_src)
+         ~misfit:!misfit (List.rev !errors));
+    Printexc.raise_with_backtrace e bt
 
 (* [working_copy_ext] hides the language, hence [~lang]. *)
 let read_tests_of_file ~(lang : Global.backend_lang) (file : string) :

@@ -8,7 +8,7 @@
   "testFile.cannotOpenModuleWontBuild": "A module this test uses does not build, or cannot be found from the folder catala ran from. The test itself needs no repair.",
   "testFile.cannotOpenToolProblem": "The test could not be read, though nothing in it seems to be at fault: this is probably a problem with the tools.",
   "testFile.cannotOpenTestFileInvalid": "Catala cannot read this file as a test. Fix it in the text editor, then retry.",
-  "testFile.cannotOpenEmptyTestList": "The test file contains content, but it doesn't match the expected test case format. Please edit the file manually in the text editor to fix the format.",
+  "testFile.cannotOpenEmptyTestListMismatch": "The test file contains content, but it doesn't match the expected test case format. Please edit the file manually in the text editor to fix the format.",
   "testFile.cannotOpenRanFrom": "Catala ran from {dir}. If the project's clerk.toml is elsewhere, its modules may not be found from there.",
   "testFile.cannotOpenRetry": "Retry",
   "testFile.workingCopy": "An unfinished repair of this test exists (saved on {date}).",

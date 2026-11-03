@@ -405,14 +405,15 @@ export class CatalaTestCaseDocument
     const source = new TextDecoder('utf-8').decode(
       await CatalaTestCaseDocument.readFile(this.uri)
     );
-    const results = recoverBrokenTest(this.uri.fsPath, source);
-    if (results?.kind !== 'BrokenTest') {
+    const rebuilt = recoverBrokenTest(this.uri.fsPath, source);
+    if (rebuilt.kind !== 'recovered') {
       throw new Error(
-        results?.kind === 'CannotOpen'
-          ? results.value.message
+        rebuilt.kind === 'refused'
+          ? rebuilt.message
           : 'The working copy could not be rebuilt.'
       );
     }
+    const results: ParseResults = { kind: 'BrokenTest', value: rebuilt.view };
     this.cancelPendingEdits();
     this._sourceText = source;
     this._parseResults = stampParseResultsUids(results);
