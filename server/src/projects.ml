@@ -465,6 +465,7 @@ let retrieve_include_dirs clerk_config =
   let include_dirs =
     Scan.include_dirs ~config
     |> List.map File.clean_path
+    |> List.map File.make_absolute
     |> List.map Global.raw_file
   in
   Log.debug (fun m ->
