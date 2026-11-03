@@ -147,8 +147,6 @@ export type Diff = {
 }
 
 export type ParseResults =
-| { kind: 'ParseError'; value: string }
-| { kind: 'EmptyTestListMismatch' }
 | { kind: 'Results'; value: TestList }
 | { kind: 'BrokenTest'; value: Recovery }
 | { kind: 'CannotOpen'; value: CannotOpen }
@@ -162,6 +160,8 @@ export type CannotOpen = {
 export type CannotOpenCause =
 | { kind: 'ModuleWontBuild' }
 | { kind: 'ToolProblem' }
+| { kind: 'TestFileInvalid' }
+| { kind: 'EmptyTestList' }
 
 export type Recovery = {
   tests: RecoveredTest[];
@@ -838,10 +838,6 @@ export function readDiff(x: any, context: any = x): Diff {
 
 export function writeParseResults(x: ParseResults, context: any = x): any {
   switch (x.kind) {
-    case 'ParseError':
-      return ['ParseError', _atd_write_string(x.value, x)]
-    case 'EmptyTestListMismatch':
-      return 'EmptyTestListMismatch'
     case 'Results':
       return ['Results', writeTestList(x.value, x)]
     case 'BrokenTest':
@@ -852,30 +848,17 @@ export function writeParseResults(x: ParseResults, context: any = x): any {
 }
 
 export function readParseResults(x: any, context: any = x): ParseResults {
-  if (typeof x === 'string') {
-    switch (x) {
-      case 'EmptyTestListMismatch':
-        return { kind: 'EmptyTestListMismatch' }
-      default:
-        _atd_bad_json('ParseResults', x, context)
-        throw new Error('impossible')
-    }
-  }
-  else {
-    _atd_check_json_tuple(2, x, context)
-    switch (x[0]) {
-      case 'ParseError':
-        return { kind: 'ParseError', value: _atd_read_string(x[1], x) }
-      case 'Results':
-        return { kind: 'Results', value: readTestList(x[1], x) }
-      case 'BrokenTest':
-        return { kind: 'BrokenTest', value: readRecovery(x[1], x) }
-      case 'CannotOpen':
-        return { kind: 'CannotOpen', value: readCannotOpen(x[1], x) }
-      default:
-        _atd_bad_json('ParseResults', x, context)
-        throw new Error('impossible')
-    }
+  _atd_check_json_tuple(2, x, context)
+  switch (x[0]) {
+    case 'Results':
+      return { kind: 'Results', value: readTestList(x[1], x) }
+    case 'BrokenTest':
+      return { kind: 'BrokenTest', value: readRecovery(x[1], x) }
+    case 'CannotOpen':
+      return { kind: 'CannotOpen', value: readCannotOpen(x[1], x) }
+    default:
+      _atd_bad_json('ParseResults', x, context)
+      throw new Error('impossible')
   }
 }
 
@@ -901,6 +884,10 @@ export function writeCannotOpenCause(x: CannotOpenCause, context: any = x): any 
       return 'ModuleWontBuild'
     case 'ToolProblem':
       return 'ToolProblem'
+    case 'TestFileInvalid':
+      return 'TestFileInvalid'
+    case 'EmptyTestList':
+      return 'EmptyTestList'
   }
 }
 
@@ -910,6 +897,10 @@ export function readCannotOpenCause(x: any, context: any = x): CannotOpenCause {
       return { kind: 'ModuleWontBuild' }
     case 'ToolProblem':
       return { kind: 'ToolProblem' }
+    case 'TestFileInvalid':
+      return { kind: 'TestFileInvalid' }
+    case 'EmptyTestList':
+      return { kind: 'EmptyTestList' }
     default:
       _atd_bad_json('CannotOpenCause', x, context)
       throw new Error('impossible')

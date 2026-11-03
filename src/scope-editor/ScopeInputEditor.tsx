@@ -190,10 +190,6 @@ function ParsingErrorWarning({
 
 function parseResultsToUiState(tests: ParseResults): UIState {
   switch (tests.kind) {
-    case 'ParseError':
-      return { state: 'error', message: tests.value };
-    case 'EmptyTestListMismatch':
-      throw new Error('Empty test list in a scope input editor');
     case 'BrokenTest':
       // A scope input editor edits ONE live scope, so there is no broken
       // reading of it: recovery belongs to the test file editor.

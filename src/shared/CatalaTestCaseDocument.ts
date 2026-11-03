@@ -408,8 +408,8 @@ export class CatalaTestCaseDocument
     const results = recoverBrokenTest(this.uri.fsPath, source);
     if (results?.kind !== 'BrokenTest') {
       throw new Error(
-        results?.kind === 'ParseError'
-          ? results.value
+        results?.kind === 'CannotOpen'
+          ? results.value.message
           : 'The working copy could not be rebuilt.'
       );
     }
