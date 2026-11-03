@@ -124,11 +124,61 @@ type test = {
   title: string;
 }
 
+(* A test as displayed in the 'debug all tests' panel: the test itself
+   (GUI or plain), along with the run metadata that is not intrinsic to
+   the test (which file it lives in and its last run result). *)
+type test_debugger = {
+  index: int;
+  filename: string;
+  test: test_entrypoint;
+  ?success: bool option;
+  ?date: string option;
+}
+
 type test_run = {
   test: test;
   assert_failures: bool;
   diffs: diff list;
 }
+
+type file_test = {
+  file: string;
+  tests: string;
+}
+
+type scope_test_result = {
+  scope_name: string;
+  success: bool;
+  errors: string list;
+  time: float;
+}
+
+type inline_test = {
+  cmd: string;
+  success: bool;
+}
+
+type file_tests = {
+  scopes: scope_test_result list;
+  inline_tests <json name="inline-tests"> : inline_test list;
+}
+
+type file_test_result = {
+  file: string;
+  tests: file_tests;
+}
+
+type coverage = {
+  scopes: string list;
+  locations: string list;
+}
+
+type test_result = {
+  test_results <json name="test-results"> : file_test_result list;
+  coverage: coverage;
+}
+
+type test_debugger_list = test_debugger list
 
 type test_list = test list
 
@@ -328,7 +378,7 @@ type confirm_result = {
 type up_message = [
   | Ready
   | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
-  | OpenInTextEditor
+  | OpenInTextEditor of string option (* filename *)
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request
   | OpenTestScopePicker
@@ -349,28 +399,56 @@ type update = {
   original_reads: bool;
 }
 
+type test_scope_result = {
+  entry: test_entrypoint;
+  scope_success: scope_success;
+  index: int;
+  order: bool
+}
+
 type down_message = [
   | Update of update
   | TestRunResults of test_run_results_msg
   | ConfirmResult of confirm_result
 ]
 
+(* Messages of the 'debug all tests' panel (TestMacroController) *)
+type tests_up_message = [
+  | Ready
+  | SpecificTestRequest of int list
+  | OpenInTextEditor of string option (* filename *)
+  | OpenInTestEditor of string (* filename *)
+  | OpenTestScopePicker
+]
+
+type tests_down_message = [
+  | AllTests of test_debugger_list
+  | TestScopeResult of test_scope_result
+]
+
+type scope_success = {
+  success: bool;
+  date: string;
+}
+
 (* List entrypoints *)
 
 type gui_entrypoint = {
-   scope : string;
+   scope_tested : string;
+   scope: string;
    ?title: string option;
    ?description : string option;
-}
-
-type fonc_test_entrypoint = {
-   scope : string;
 }
 
 type test_entrypoint = [
   | GUI of gui_entrypoint
   | Test of fonc_test_entrypoint
 ]
+
+
+type fonc_test_entrypoint = {
+   scope : string;
+}
 
 type no_input_scope_entrypoint = {
   scope: string;

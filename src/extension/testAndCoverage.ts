@@ -136,7 +136,8 @@ export class ResultController {
   }
 }
 
-class TestMap {
+/** @lintignore */
+export class TestMap {
   private map: Map<string, vscode.TestItem>;
   constructor() {
     this.map = new Map();
@@ -362,7 +363,7 @@ function populateTestHierarchy(
   }
 }
 
-function populateTestItems(
+export function populateTestItems(
   ctrl: vscode.TestController,
   test_map: TestMap,
   path: string,
@@ -479,7 +480,7 @@ function fold_tree(
   return acc;
 }
 
-function testEntrypointsToTestScopeMap(
+export function testEntrypointsToTestScopeMap(
   entrypoints: Array<CatalaEntrypoint>
 ): TestScopeMap {
   let map: Map<string, TestScope[]> = new Map();
@@ -719,8 +720,7 @@ type RunTestArgs =
   | { kind: 'all' }
   | { kind: 'scope'; tests: { filename: vscode.Uri; scope: string }[] };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function runTestVscode(
+export async function runTestVscode(
   cwd: string,
   testMap: TestMap,
   testController: vscode.TestController,
