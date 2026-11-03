@@ -38,7 +38,7 @@ describe('CannotOpenPage', () => {
   });
 
   it('an empty test list has no message to show', () => {
-    page({ cause: { kind: 'EmptyTestList' }, message: '' });
+    page({ cause: { kind: 'EmptyTestListMismatch' }, message: '' });
     screen.getByText(/expected test case format/);
     expect(document.querySelector('pre')).toBeNull();
   });

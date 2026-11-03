@@ -159,9 +159,16 @@ type parse_results = [
   | CannotOpen of cannot_open
 ]
 
+type read_failure = [
+  | TestSyntax (* the test file does not parse *)
+  | OutsideTest (* an error in another file: a module does not build *)
+  | InTest (* an error in the test, or it no longer fits its scope: the rebuild tells *)
+  | Unlocated
+] <ocaml repr="classic">
+
 type cannot_open = {
   cause: cannot_open_cause;
-  message: string; (* catala's, as is; empty for EmptyTestList *)
+  message: string; (* catala's, as is; empty for EmptyTestListMismatch *)
   (* The folder catala ran from, when it may be at fault. *)
   ?ran_from: string option;
 }
@@ -169,8 +176,8 @@ type cannot_open = {
 type cannot_open_cause = [
   | ModuleWontBuild
   | ToolProblem
-  | TestFileInvalid (* catala refuses the file itself: fixed in the text *)
-  | EmptyTestList (* the file is not blank, yet holds no test *)
+  | TestFileInvalid (* the test file itself is wrong: fix it in the text editor *)
+  | EmptyTestListMismatch (* the file is not blank, yet holds no test *)
 ] <ocaml repr="classic">
 
 type recovery = {

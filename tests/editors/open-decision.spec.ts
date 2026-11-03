@@ -1,14 +1,20 @@
-/** When `read` fails: repair view or error page. One row per decision. */
+/** Opening a test: editor, repair view or error page. One row per decision. */
 import { describe, it, expect } from 'vitest';
 import type {
   BrokenNote,
+  CannotOpenCause,
   CarryOutcome,
+  ParseResults,
+  ReadFailure,
   Recovery,
   Test,
 } from '../../src/generated/catala_types';
 import {
   decideOnReadFailure,
+  decideOpen,
   type OpenDecision,
+  type ReadAnswer,
+  type RebuildAnswer,
 } from '../../src/test-case-editor/openDecision';
 
 function test(): Test {
@@ -143,5 +149,102 @@ describe('decideOnReadFailure', () => {
     expect(decideOnReadFailure(readError, recovery, hasDraft)).toEqual(
       expected
     );
+  });
+});
+
+const failed = (where?: ReadFailure): ReadAnswer => ({
+  kind: 'failed',
+  where,
+  message: readError,
+});
+const page = (
+  cause: CannotOpenCause['kind'],
+  message: string,
+  ranFrom?: string
+): ParseResults => ({
+  kind: 'CannotOpen',
+  value: { cause: { kind: cause }, message, ran_from: ranFrom },
+});
+const drifted = view([], ['Fits', 'Unwrap']);
+
+// The rebuild compiles the module again: `null` says it must not run.
+const routes: [
+  string,
+  ReadAnswer,
+  boolean,
+  RebuildAnswer | null,
+  ParseResults,
+][] = [
+  [
+    'a blank file reads as no test: editor',
+    { kind: 'read', tests: [] },
+    true,
+    null,
+    { kind: 'Results', value: [] },
+  ],
+  [
+    'content but no test: error page',
+    { kind: 'read', tests: [] },
+    false,
+    null,
+    page('EmptyTestListMismatch', ''),
+  ],
+  [
+    "read's output does not parse: error page",
+    { kind: 'unreadable', message: 'JSON parse error' },
+    false,
+    null,
+    page('ToolProblem', 'JSON parse error'),
+  ],
+  [
+    'the test does not parse: error page',
+    failed({ kind: 'TestSyntax' }),
+    false,
+    null,
+    page('TestFileInvalid', readError),
+  ],
+  [
+    'an error outside the test: error page',
+    failed({ kind: 'OutsideTest' }),
+    false,
+    null,
+    page('ModuleWontBuild', readError, '/work'),
+  ],
+  [
+    'rebuild refuses the file: error page, with its refusal',
+    failed({ kind: 'InTest' }),
+    false,
+    { kind: 'refused', message: 'a list mixing element types' },
+    page('TestFileInvalid', 'a list mixing element types'),
+  ],
+  [
+    'rebuild says nothing: error page, with read error',
+    failed({ kind: 'InTest' }),
+    false,
+    { kind: 'silent' },
+    page('TestFileInvalid', readError, '/work'),
+  ],
+  [
+    'drift, from a plugin that does not say where: repair',
+    failed(),
+    false,
+    { kind: 'recovered', view: drifted },
+    { kind: 'BrokenTest', value: drifted },
+  ],
+];
+
+describe('decideOpen', () => {
+  it.each(routes)('%s', (_, read, blank, rebuilt, expected) => {
+    const decided = decideOpen({
+      read,
+      rebuild: () => {
+        if (rebuilt === null) throw new Error('rebuild ran');
+        return rebuilt;
+      },
+      hasDraft: () => false,
+      blank,
+      ranFrom: '/work',
+    });
+    expect(decided).toEqual(expected);
   });
 });

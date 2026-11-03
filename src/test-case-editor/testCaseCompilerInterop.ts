@@ -1,11 +1,12 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
-  CannotOpenCause,
+  ReadFailure,
   ScopeDefList,
   TestGenerateResults,
   TestInputs,
 } from '../generated/catala_types';
 import {
+  readReadFailure,
   readRecovery,
   readScopeDefList,
   readTestList,
@@ -17,14 +18,20 @@ import {
   type TestRunResults,
 } from '../generated/catala_types';
 import { logger } from '../extension/logger';
-import { decideOnReadFailure } from './openDecision';
+import {
+  decideOpen,
+  type ReadAnswer,
+  type RebuildAnswer,
+} from './openDecision';
 import * as fs from 'fs';
 import * as path from 'path';
 import { window } from 'vscode';
 import { catalaPath, clerkPath, getCwd, shellArg } from '../shared/util_client';
 
 type ExecOptions = { input?: string; cwd?: string };
-type ExecResult = { ok: true; output: string } | { ok: false; stderr: string };
+type ExecResult =
+  | { ok: true; output: string }
+  | { ok: false; output: string; stderr: string };
 
 function execBinary(
   bin: string,
@@ -49,9 +56,10 @@ function execBinary(
       }),
     };
   } catch (error) {
-    const stderr = (error as SpawnSyncReturns<Buffer | string>).stderr;
+    const { stdout, stderr } = error as SpawnSyncReturns<Buffer | string>;
     return {
       ok: false,
+      output: stdout ? stdout.toString() : '',
       stderr: stderr
         ? stderr.toString()
         : error instanceof Error
@@ -61,23 +69,12 @@ function execBinary(
   }
 }
 
-function cannotOpen(
-  cause: CannotOpenCause['kind'],
-  message: string,
-  ranFrom?: string
-): ParseResults {
-  return {
-    kind: 'CannotOpen',
-    value: { cause: { kind: cause }, message, ran_from: ranFrom },
-  };
-}
-
 /** All the reasoning is in OCaml; this only asks and parses. */
 export function recoverBrokenTest(
   bufferPath: string,
   content: string,
   scope?: string
-): ParseResults | null {
+): RebuildAnswer {
   const cwd = getCwd(bufferPath);
   const result = execBinary(
     catalaPath,
@@ -93,18 +90,18 @@ export function recoverBrokenTest(
   );
   if (!result.ok) {
     logger.log(`rebuild could not recover: ${result.stderr}`);
-    // The refusal is more specific than the compiler's first error.
     return result.stderr.trim() === ''
-      ? null
-      : cannotOpen('TestFileInvalid', result.stderr);
+      ? { kind: 'silent' }
+      : { kind: 'refused', message: result.stderr };
   }
   try {
     const view = readRecovery(JSON.parse(result.output));
-    if (view.tests.length === 0) return null;
-    return { kind: 'BrokenTest', value: view };
+    return view.tests.length === 0
+      ? { kind: 'silent' }
+      : { kind: 'recovered', view };
   } catch (error) {
     logger.log(`rebuild returned unreadable JSON: ${String(error)}`);
-    return null;
+    return { kind: 'silent' };
   }
 }
 
@@ -115,13 +112,14 @@ export function retargetBrokenTest(
   scope: string
 ): Extract<ParseResults, { kind: 'BrokenTest' }> | string {
   const results = recoverBrokenTest(bufferPath, content, scope);
-  if (results === null) return `Could not rebuild against ${scope}.`;
-  if (results.kind !== 'BrokenTest') {
-    return results.kind === 'CannotOpen'
-      ? results.value.message
-      : `Could not rebuild against ${scope}.`;
+  switch (results.kind) {
+    case 'recovered':
+      return { kind: 'BrokenTest', value: results.view };
+    case 'refused':
+      return results.message;
+    case 'silent':
+      return `Could not rebuild against ${scope}.`;
   }
-  return results;
 }
 
 /** A run that did not happen: raised to the window like the ordinary path. */
@@ -190,45 +188,45 @@ export function parseTestFile(
     ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
     { input: content, ...(cwd && { cwd }) }
   );
-  if (!execResult.ok) {
-    const recovered = recoverBrokenTest(bufferPath, content);
-    if (recovered === null) {
-      return cannotOpen('TestFileInvalid', execResult.stderr, cwd);
+  return decideOpen({
+    read: readAnswer(execResult),
+    rebuild: () => recoverBrokenTest(bufferPath, content),
+    hasDraft: (view) =>
+      fs.existsSync(path.join(path.dirname(bufferPath), view.working_copy)),
+    blank: content.trim() === '',
+    ranFrom: cwd,
+  });
+}
+
+function readAnswer(result: ExecResult): ReadAnswer {
+  if (!result.ok) {
+    let where: ReadFailure | undefined;
+    try {
+      where = readReadFailure(JSON.parse(result.output));
+    } catch {
+      where = undefined;
     }
-    if (recovered.kind !== 'BrokenTest') return recovered;
-    const draft = path.join(
-      path.dirname(bufferPath),
-      recovered.value.working_copy
-    );
-    const decision = decideOnReadFailure(
-      execResult.stderr,
-      recovered.value,
-      fs.existsSync(draft)
-    );
-    if (decision.kind === 'repair') return recovered;
-    return cannotOpen(decision.cause.kind, decision.message, cwd);
+    return { kind: 'failed', where, message: result.stderr };
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(execResult.output);
+    parsed = JSON.parse(result.output);
   } catch (error) {
     logger.log(`JSON parse error in parseTestFile: ${error}`);
-    return cannotOpen('ToolProblem', `JSON parse error: ${String(error)}`);
+    return {
+      kind: 'unreadable',
+      message: `JSON parse error: ${String(error)}`,
+    };
   }
-  let testList: TestList;
   try {
-    testList = readTestList(parsed);
+    return { kind: 'read', tests: readTestList(parsed) };
   } catch (error) {
     logger.log(`ATD read error in parseTestFile: ${error}`);
-    return cannotOpen(
-      'ToolProblem',
-      `Schema error (catala LSP / extension version mismatch?): ${String(error)}`
-    );
+    return {
+      kind: 'unreadable',
+      message: `Schema error (catala LSP / extension version mismatch?): ${String(error)}`,
+    };
   }
-  if (content.trim() !== '' && testList.length === 0) {
-    return cannotOpen('EmptyTestList', '');
-  }
-  return { kind: 'Results', value: testList };
 }
 
 export function atdToCatala(tests: TestList, lang: string): string {

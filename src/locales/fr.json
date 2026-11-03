@@ -8,7 +8,7 @@
   "testFile.cannotOpenModuleWontBuild": "Un module utilisé par ce test ne compile pas, ou est introuvable depuis le dossier où catala a été lancé. Le test lui-même n'a rien à réparer.",
   "testFile.cannotOpenToolProblem": "Le test n'a pas pu être lu, alors que rien en lui ne semble en cause : le problème vient probablement des outils.",
   "testFile.cannotOpenTestFileInvalid": "Catala ne peut pas lire ce fichier comme un test. Corrigez-le dans l'éditeur de texte, puis réessayez.",
-  "testFile.cannotOpenEmptyTestList": "Le fichier de test contient du contenu, mais il ne correspond pas au format attendu des cas de test. Veuillez modifier le fichier manuellement dans l'éditeur de texte pour corriger le format.",
+  "testFile.cannotOpenEmptyTestListMismatch": "Le fichier de test contient du contenu, mais il ne correspond pas au format attendu des cas de test. Veuillez modifier le fichier manuellement dans l'éditeur de texte pour corriger le format.",
   "testFile.cannotOpenRanFrom": "Catala a été lancé depuis {dir}. Si le clerk.toml du projet est ailleurs, ses modules peuvent être introuvables depuis ce dossier.",
   "testFile.cannotOpenRetry": "Réessayer",
   "testFile.workingCopy": "Une réparation inachevée de ce test existe (enregistrée le {date}).",
