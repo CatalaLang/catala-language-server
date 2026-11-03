@@ -134,7 +134,8 @@ export class ResultController {
   }
 }
 
-class TestMap {
+/** @lintignore */
+export class TestMap {
   private map: Map<string, vscode.TestItem>;
   constructor() {
     this.map = new Map();
@@ -513,7 +514,8 @@ type RunHandler = (
   with_coverage?: boolean
 ) => Promise<void>;
 
-function makeRunHandler(
+/** @lintignore */
+export function makeRunHandler(
   ctrl: vscode.TestController,
   test_map: TestMap,
   resultController: ResultController,

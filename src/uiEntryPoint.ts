@@ -19,3 +19,11 @@ export function renderInputScopeUi(language: string, scopename: string): void {
   root.render(createElement(InputApp, { language, vscode, scopename }));
   vscode.postMessage(writeUpMessage({ kind: 'Ready' }));
 }
+
+// Placeholder, to be replaced by the actual macro tests view
+export function renderMacroTestsUi(language: string): void {
+  const vscode = acquireVsCodeApi();
+  const root = createRoot(document.getElementById('root') as HTMLElement);
+  root.render(createElement('div', null, `Macro tests view (${language})`));
+  vscode.postMessage(writeUpMessage({ kind: 'Ready' }));
+}
