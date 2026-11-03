@@ -489,30 +489,13 @@ export async function activate(
       documentSelector: [
         {
           scheme: 'file',
-          language: 'catala_en',
-          pattern: '**/*.catala_en{,.md}',
-        },
-        {
-          scheme: 'file',
-          language: 'catala_fr',
-          pattern: '**/*.catala_fr{,.md}',
-        },
-        {
-          scheme: 'file',
-          language: 'catala_pl',
-          pattern: '**/*.catala_pl{,.md}',
+          pattern: '**/*.catala_[a-z][a-z]{,.md}',
         },
       ],
       synchronize: {
         fileEvents: [
           vscode.workspace.createFileSystemWatcher(
-            '**/*.{catala_en,catala_en.md}'
-          ),
-          vscode.workspace.createFileSystemWatcher(
-            '**/*.{catala_fr,catala_fr.md}'
-          ),
-          vscode.workspace.createFileSystemWatcher(
-            '**/*.{catala_pl,catala_pl.md}'
+            '**/*.catala_[a-z][a-z]{,.md}'
           ),
         ],
       },

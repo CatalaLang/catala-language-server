@@ -156,39 +156,39 @@
       "editor/context": [
         {
           "command": "catala.showExceptionsAtCursor",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "when": "editorLangId =~ /catala_(en|fr|pl)/",
           "group": "navigation@1"
         }
       ],
       "editor/title": [
         {
           "command": "catala.rescanProjects",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "when": "editorLangId =~ /catala_(en|fr|pl)/",
           "group": "navigation@10"
         },
         {
           "command": "catala.run",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "when": "editorLangId =~ /catala_(en|fr|pl)/",
           "group": "navigation@11"
         },
         {
           "command": "catala.debug",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "when": "editorLangId =~ /catala_(en|fr|pl)/",
           "group": "navigation@12"
         },
         {
           "command": "catala.foldCodeBlocks",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "when": "editorLangId =~ /catala_(en|fr|pl)/",
           "group": "navigation@13"
         },
         {
           "command": "catala.unfoldCodeBlocks",
-          "when": "editorLangId == catala_fr || editorLangId == catala_en || editorLangId == catala_pl",
+          "when": "editorLangId =~ /catala_(en|fr|pl)/",
           "group": "navigation@14"
         },
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && (editorLangId == catala_en || editorLangId == catala_fr || editorLangId == catala_pl) && resourceFilename =~ /.*test.*\\.catala_(en|fr|pl)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && editorLangId =~ /catala_(en|fr|pl)/ && resourceFilename =~ /.*test.*\\.catala_(en|fr|pl)$/",
           "group": "navigation@2"
         }
       ]
@@ -455,9 +455,7 @@
   },
   "activationEvents": [
     "workspaceContains:**/clerk.toml",
-    "workspaceContains:**/*.catala_en",
-    "workspaceContains:**/*.catala_fr",
-    "workspaceContains:**/*.catala_pl"
+    "workspaceContains:**/*.catala_{en,fr,pl}{,.md}"
   ],
   "scripts": {
     "vscode:prepublish": "npm run package",
