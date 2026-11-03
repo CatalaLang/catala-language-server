@@ -4,4 +4,4 @@ build/
 server/_build
 server/vendors
 package-lock.json
-
+package.json
