@@ -124,11 +124,29 @@ type test = {
   title: string;
 }
 
+(* A test as displayed in the 'view catala tests' panel: the test itself
+   (GUI or plain), along with the run metadata that is not intrinsic to
+   the test (which file it lives in and its last run result). *)
+type test_debugger = {
+  index: int;
+  (* Identifies the test across reloads: [<file path>:<scope>], the id of the
+     test's item in VS Code's Test Explorer (`TestId` in testAndCoverage.ts),
+     which also keys its stored result. Unlike [index], it does not change when
+     tests are added, removed or reordered. *)
+  test_id: string;
+  filename: string;
+  test: test_entrypoint;
+  ?success: bool option;
+  ?date: string option;
+}
+
 type test_run = {
   test: test;
   assert_failures: bool;
   diffs: diff list;
 }
+
+type test_debugger_list = test_debugger list
 
 type test_list = test list
 
@@ -328,7 +346,7 @@ type confirm_result = {
 type up_message = [
   | Ready
   | GuiEdit of (test_list * bool) (* bool: 'edit may be batched' *)
-  | OpenInTextEditor
+  | OpenInTextEditor of string option (* filename *)
   | TestRunRequest of test_run_request
   | TestGenerateRequest of test_generate_request
   | OpenTestScopePicker
@@ -353,6 +371,13 @@ type webview_settings = {
   locale: string; (* resolved: en | fr | pl *)
 }
 
+type test_scope_result = {
+  entry: test_entrypoint;
+  scope_success: scope_success;
+  test_id: string; (* see [test_debugger] *)
+  order: bool
+}
+
 type down_message = [
   | Update of update
   | TestRunResults of test_run_results_msg
@@ -360,22 +385,43 @@ type down_message = [
   | Settings of webview_settings
 ]
 
+(* Messages of the 'view catala tests' panel (TestMacroController) *)
+type tests_up_message = [
+  | Ready
+  | SpecificTestRequest of string list (* test ids; empty: every test *)
+  | OpenInTextEditor of string option (* filename *)
+  | OpenInTestEditor of string (* filename *)
+  | OpenTestScopePicker
+]
+
+type tests_down_message = [
+  | AllTests of test_debugger_list
+  | TestScopeResult of test_scope_result
+]
+
+type scope_success = {
+  success: bool;
+  date: string;
+}
+
 (* List entrypoints *)
 
 type gui_entrypoint = {
-   scope : string;
+   scope_tested : string;
+   scope: string;
    ?title: string option;
    ?description : string option;
-}
-
-type fonc_test_entrypoint = {
-   scope : string;
 }
 
 type test_entrypoint = [
   | GUI of gui_entrypoint
   | Test of fonc_test_entrypoint
 ]
+
+
+type fonc_test_entrypoint = {
+   scope : string;
+}
 
 type no_input_scope_entrypoint = {
   scope: string;
