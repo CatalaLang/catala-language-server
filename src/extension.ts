@@ -24,7 +24,7 @@ import {
   tryBinaryPath,
 } from './shared/util_client';
 import type { RunArgs } from './shared/util_client';
-import { initTests } from './extension/testAndCoverage';
+import { initTests, ResultController } from './extension/testAndCoverage';
 import type { CatalaEntrypoint } from './extension/lspRequests';
 import { listEntrypoints, rescanProjects } from './extension/lspRequests';
 import { ScopeInputController } from './scope-editor/ScopeInputController';
@@ -493,12 +493,16 @@ export async function activate(
     )
   );
 
+  const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
+
   const lsp_path = resolveBinaryPath(
     'catala-lsp',
     context,
     'main_lsp.exe',
     getConfig('lspServerPath')
   );
+
+  let resultController = new ResultController(context.workspaceState);
   if (lsp_path) {
     const run: Executable = {
       command: lsp_path,
@@ -544,7 +548,18 @@ export async function activate(
       serverOptions,
       clientOptions
     );
-    await Promise.all([client.start(), initTests(context, client)]);
+
+    await client.start();
+
+    let entrypoints = await listEntrypoints(
+      client,
+      [{ kind: 'GUI' }, { kind: 'Test' }],
+      undefined,
+      false,
+      true
+    ).finally(() => ctrl.items.replace([]));
+
+    await initTests(entrypoints, context, client, ctrl, resultController);
   }
 
   vscode.commands.registerCommand(
