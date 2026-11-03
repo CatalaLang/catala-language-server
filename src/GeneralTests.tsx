@@ -12,8 +12,10 @@ import { type WebviewApi } from 'vscode-webview';
 
 import type { TestDebugger } from './generated/catala_types';
 import { readDownMessage, writeUpMessage } from './generated/catala_types';
-import { Box, Checkbox, FormControlLabel, Grid } from '@mui/material';
-import { VscodeTextfield } from '@vscode-elements/react-elements';
+import {
+  VscodeCheckbox,
+  VscodeTextfield,
+} from '@vscode-elements/react-elements';
 import { assertUnreachable } from './shared/util';
 import { setVsCodeApi } from './shared/webviewApi';
 
@@ -273,7 +275,7 @@ function OpenTextEditor({
 function TestItem({ vscode, test, onRun }: TestItemArg): ReactElement {
   const intl = useIntl();
   return (
-    <Box className="test-item">
+    <div className="test-item">
       <div className="test-item-header">
         <b
           className="test-title"
@@ -331,7 +333,7 @@ function TestItem({ vscode, test, onRun }: TestItemArg): ReactElement {
         )}
         <RunIcon className="run-icon" onRun={() => onRun(test.index)} />
       </div>
-    </Box>
+    </div>
   );
 }
 
@@ -622,10 +624,10 @@ function CardGrid({
       gridTests.set(scopeFiltered, scopeTested);
     }
     return (
-      <Grid container spacing={4}>
+      <div className="scope-grid">
         {Array.from(gridTests.entries()).map(([scope, tests]) => (
-          <>
-            <Grid size={3}>
+          <Fragment key={scope}>
+            <div>
               <h2 style={{ overflowWrap: 'anywhere' }}>{scope}</h2>
               <h3>
                 <FormattedMessage
@@ -634,31 +636,27 @@ function CardGrid({
                   values={{ count: tests.length }}
                 />
               </h3>
-            </Grid>
-            <Grid container size={9} spacing={2} columns={3}>
+            </div>
+            <div className="scope-cards">
               {tests.map((elt, index) => (
-                <Grid key={index} size={1}>
-                  <div style={{ fontSize: '8px', height: '100%' }}>
-                    <TestItem vscode={vscode} test={elt} onRun={onRun} />
-                  </div>
-                </Grid>
+                <div key={index} style={{ fontSize: '8px', height: '100%' }}>
+                  <TestItem vscode={vscode} test={elt} onRun={onRun} />
+                </div>
               ))}
-            </Grid>
-          </>
+            </div>
+          </Fragment>
         ))}
-      </Grid>
+      </div>
     );
   } else {
     return (
-      <Grid container spacing={4} columns={{ xs: 1, sm: 3, md: 4 }}>
+      <div className="card-grid">
         {tests.map((elt, index) => (
-          <Grid key={index} size={1}>
-            <div style={{ fontSize: '8px', height: '100%' }}>
-              <TestItem vscode={vscode} test={elt} onRun={onRun} />
-            </div>
-          </Grid>
+          <div key={index} style={{ fontSize: '8px', height: '100%' }}>
+            <TestItem vscode={vscode} test={elt} onRun={onRun} />
+          </div>
         ))}
-      </Grid>
+      </div>
     );
   }
 }
@@ -818,9 +816,7 @@ function ScopeFilter({
   let filteredScope = scopesFromTests(tests ?? []);
   return (
     <div className="pins">
-      <Box
-        sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, textAlign: 'center' }}
-      >
+      <div className="scope-pins">
         {filteredScope.length == 0 ? (
           <span className="no-scope">
             <FormattedMessage
@@ -857,7 +853,7 @@ function ScopeFilter({
             </span>
           ))
         )}
-      </Box>
+      </div>
     </div>
   );
 }
@@ -912,25 +908,17 @@ function Filter({
       ) : (
         <>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={filterGui}
-                  onChange={(event) => setFilterGui(event.target.checked)}
-                  sx={{
-                    color: 'gray',
-                    '&.Mui-checked': { color: 'lightgray' },
-                  }}
-                />
+            <VscodeCheckbox
+              checked={filterGui}
+              onChange={(event) =>
+                setFilterGui((event.target as HTMLInputElement).checked)
               }
-              label={
-                <FormattedMessage
-                  id="generalTests.guiOnly"
-                  defaultMessage="Tests GUI uniquement"
-                />
-              }
-              sx={{ '.MuiFormControlLabel-label': { color: 'gray' } }}
-            />
+            >
+              <FormattedMessage
+                id="generalTests.guiOnly"
+                defaultMessage="Tests GUI uniquement"
+              />
+            </VscodeCheckbox>
           </div>
           <ScopeFilter
             tests={filteredTests}

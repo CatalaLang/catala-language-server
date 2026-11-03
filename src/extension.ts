@@ -509,7 +509,7 @@ export async function activate(
 
   const language = vscode.env.language;
 
-  let resultController = new ResultController(context.workspaceState, language);
+  let resultController = new ResultController(context.workspaceState);
   if (lsp_path) {
     const run: Executable = {
       command: lsp_path,

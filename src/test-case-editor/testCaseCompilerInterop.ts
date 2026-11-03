@@ -1,7 +1,6 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
   ScopeDefList,
-  ScopeTestResult,
   TestGenerateResults,
   TestInputs,
 } from '../generated/catala_types';
@@ -219,12 +218,6 @@ export function atdToCatala(tests: TestList, lang: string): string {
   }
   return result.output;
 }
-
-// Outcome of running a scope test: either a successful `ScopeTestResult`,
-// or a failure carrying an error message.
-export type ScopeRunResult =
-  | { kind: 'Success'; value: ScopeTestResult }
-  | { kind: 'Failed'; value: string };
 
 export function runTestScope(
   filename: string,

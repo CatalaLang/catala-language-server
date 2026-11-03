@@ -307,3 +307,41 @@
 .vscode-button:hover {
   background-color: var(--vscode-button-hoverBackground);
 }
+
+/* Card layouts: a scope heading beside its cards, or cards alone. */
+.scope-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+  gap: 32px;
+}
+
+.scope-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+}
+
+@media (min-width: 600px) {
+  .card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.scope-pins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  text-align: center;
+}

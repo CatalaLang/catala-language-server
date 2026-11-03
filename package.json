@@ -489,22 +489,18 @@
     "knip:exports": "knip --include exports --no-progress"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
     "@floating-ui/react": "^0.27.19",
-    "@mui/material": "^9.1.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/vscode-webview": "^1.57.5",
-    "@vscode/codicons": "^0.0.40",
     "@vscode-elements/elements": "^2.5.1",
     "@vscode-elements/react-elements": "^2.4.0",
+    "@vscode/codicons": "^0.0.40",
     "command-exists": "^1.2.9",
     "p-queue": "^6.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-intl": "^7.1.9",
-    "react-loading-indicators": "^1.0.1",
     "vscode-languageclient": "^8.0.2"
   },
   "overrides": {
