@@ -9,6 +9,7 @@ import {
   type PathSegment,
   type Diff,
   type CannotOpen,
+  type CannotOpenCause,
   readDownMessage,
   writeUpMessage,
 } from '../generated/catala_types';
@@ -41,9 +42,7 @@ import { replaceLosses } from './testCaseUtils';
 
 type UIState =
   | { state: 'initializing' }
-  | { state: 'error'; message: string }
   | { state: 'cannotOpen'; value: CannotOpen }
-  | { state: 'emptyTestListMismatch' }
   | { state: 'brokenTest'; view: Recovery; originalReads: boolean }
   | { state: 'success'; tests: TestList; workingCopySaved: string | null };
 
@@ -269,14 +268,8 @@ export default function TestFileEditor({
   }, []);
 
   switch (state.state) {
-    case 'error': {
-      return <ParsingErrorWarning message={state.message} vscode={vscode} />;
-    }
     case 'cannotOpen': {
       return <CannotOpenPage value={state.value} vscode={vscode} />;
-    }
-    case 'emptyTestListMismatch': {
-      return <EmptyTestListMismatchWarning vscode={vscode} />;
     }
     case 'brokenTest': {
       return (
@@ -387,33 +380,14 @@ export default function TestFileEditor({
   }
 }
 
-function ParsingErrorWarning({
-  message,
-  vscode,
-}: {
-  message: string;
-  vscode: WebviewApi<unknown>;
-}): ReactElement {
-  return (
-    <div role="alert" className="test-editor-error">
-      <h2>
-        <FormattedMessage id="testFile.errorTitle" />
-      </h2>
-      <pre className="test-editor-error-message">{message}</pre>
-      <button
-        className="test-editor-open-text"
-        onClick={() =>
-          vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
-        }
-      >
-        <span className="codicon codicon-edit"></span>
-        <FormattedMessage id="testFile.openTextEditor" />
-      </button>
-    </div>
-  );
-}
+const causeText: Record<CannotOpenCause['kind'], string> = {
+  ModuleWontBuild: 'testFile.cannotOpenModuleWontBuild',
+  ToolProblem: 'testFile.cannotOpenToolProblem',
+  TestFileInvalid: 'testFile.cannotOpenTestFileInvalid',
+  EmptyTestList: 'testFile.cannotOpenEmptyTestList',
+};
 
-/** `read` failed, and the test is not what needs fixing. Writes nothing. */
+/** Neither the editor nor the repair view. Writes nothing. */
 export function CannotOpenPage({
   value,
   vscode,
@@ -427,13 +401,11 @@ export function CannotOpenPage({
         <FormattedMessage id="testFile.cannotOpenTitle" />
       </h2>
       <p>
-        {value.cause.kind === 'ModuleWontBuild' ? (
-          <FormattedMessage id="testFile.cannotOpenModuleWontBuild" />
-        ) : (
-          <FormattedMessage id="testFile.cannotOpenToolProblem" />
-        )}
+        <FormattedMessage id={causeText[value.cause.kind]} />
       </p>
-      <pre className="test-editor-error-message">{value.message}</pre>
+      {value.message !== '' && (
+        <pre className="test-editor-error-message">{value.message}</pre>
+      )}
       {value.ran_from !== undefined && (
         <p>
           <FormattedMessage
@@ -512,45 +484,12 @@ function WorkingCopyBanner({
   );
 }
 
-function EmptyTestListMismatchWarning({
-  vscode,
-}: {
-  vscode: WebviewApi<unknown>;
-}): ReactElement {
-  return (
-    <div className="test-editor-warning">
-      <h2>
-        <FormattedMessage id="testFile.formatIssueTitle" />
-      </h2>
-      <p>
-        <FormattedMessage id="testFile.formatIssueText" />
-      </p>
-      <p>
-        <FormattedMessage id="testFile.formatIssueFix" />
-      </p>
-      <div className="test-editor-warning-actions">
-        <button
-          className="test-editor-open-text"
-          onClick={() =>
-            vscode.postMessage(writeUpMessage({ kind: 'OpenInTextEditor' }))
-          }
-        >
-          <span className="codicon codicon-edit"></span>
-          Open in Text Editor
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function updateToUiState({
   results: tests,
   working_copy_saved,
   original_reads,
 }: Update): UIState {
   switch (tests.kind) {
-    case 'ParseError':
-      return { state: 'error', message: tests.value };
     case 'BrokenTest':
       return {
         state: 'brokenTest',
@@ -559,8 +498,6 @@ function updateToUiState({
       };
     case 'CannotOpen':
       return { state: 'cannotOpen', value: tests.value };
-    case 'EmptyTestListMismatch':
-      return { state: 'emptyTestListMismatch' };
     case 'Results':
       return {
         state: 'success',

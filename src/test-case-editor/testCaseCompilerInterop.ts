@@ -1,5 +1,6 @@
 import { execFileSync, type SpawnSyncReturns } from 'child_process';
 import type {
+  CannotOpenCause,
   ScopeDefList,
   TestGenerateResults,
   TestInputs,
@@ -60,6 +61,17 @@ function execBinary(
   }
 }
 
+function cannotOpen(
+  cause: CannotOpenCause['kind'],
+  message: string,
+  ranFrom?: string
+): ParseResults {
+  return {
+    kind: 'CannotOpen',
+    value: { cause: { kind: cause }, message, ran_from: ranFrom },
+  };
+}
+
 /** All the reasoning is in OCaml; this only asks and parses. */
 export function recoverBrokenTest(
   bufferPath: string,
@@ -84,7 +96,7 @@ export function recoverBrokenTest(
     // The refusal is more specific than the compiler's first error.
     return result.stderr.trim() === ''
       ? null
-      : { kind: 'ParseError', value: result.stderr };
+      : cannotOpen('TestFileInvalid', result.stderr);
   }
   try {
     const view = readRecovery(JSON.parse(result.output));
@@ -105,8 +117,8 @@ export function retargetBrokenTest(
   const results = recoverBrokenTest(bufferPath, content, scope);
   if (results === null) return `Could not rebuild against ${scope}.`;
   if (results.kind !== 'BrokenTest') {
-    return results.kind === 'ParseError'
-      ? results.value
+    return results.kind === 'CannotOpen'
+      ? results.value.message
       : `Could not rebuild against ${scope}.`;
   }
   return results;
@@ -181,7 +193,7 @@ export function parseTestFile(
   if (!execResult.ok) {
     const recovered = recoverBrokenTest(bufferPath, content);
     if (recovered === null) {
-      return { kind: 'ParseError', value: execResult.stderr };
+      return cannotOpen('TestFileInvalid', execResult.stderr, cwd);
     }
     if (recovered.kind !== 'BrokenTest') return recovered;
     const draft = path.join(
@@ -194,34 +206,27 @@ export function parseTestFile(
       fs.existsSync(draft)
     );
     if (decision.kind === 'repair') return recovered;
-    return {
-      kind: 'CannotOpen',
-      value: {
-        cause: decision.cause,
-        message: decision.message,
-        ran_from: cwd,
-      },
-    };
+    return cannotOpen(decision.cause.kind, decision.message, cwd);
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(execResult.output);
   } catch (error) {
     logger.log(`JSON parse error in parseTestFile: ${error}`);
-    return { kind: 'ParseError', value: `JSON parse error: ${String(error)}` };
+    return cannotOpen('ToolProblem', `JSON parse error: ${String(error)}`);
   }
   let testList: TestList;
   try {
     testList = readTestList(parsed);
   } catch (error) {
     logger.log(`ATD read error in parseTestFile: ${error}`);
-    return {
-      kind: 'ParseError',
-      value: `Schema error (catala LSP / extension version mismatch?): ${String(error)}`,
-    };
+    return cannotOpen(
+      'ToolProblem',
+      `Schema error (catala LSP / extension version mismatch?): ${String(error)}`
+    );
   }
   if (content.trim() !== '' && testList.length === 0) {
-    return { kind: 'EmptyTestListMismatch' };
+    return cannotOpen('EmptyTestList', '');
   }
   return { kind: 'Results', value: testList };
 }

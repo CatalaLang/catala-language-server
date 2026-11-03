@@ -36,4 +36,10 @@ describe('CannotOpenPage', () => {
     fireEvent.click(screen.getByText('Retry'));
     expect(sent(post)).toEqual([{ kind: 'RetryOpenRequest' }]);
   });
+
+  it('an empty test list has no message to show', () => {
+    page({ cause: { kind: 'EmptyTestList' }, message: '' });
+    screen.getByText(/expected test case format/);
+    expect(document.querySelector('pre')).toBeNull();
+  });
 });
