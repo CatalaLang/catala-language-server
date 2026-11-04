@@ -1,0 +1,399 @@
+{
+  "name": "catala",
+  "displayName": "Catala",
+  "description": "A VSCode extension and LSP server for the Catala language",
+  "version": "1.3.1",
+  "publisher": "catalalang",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CatalaLang/catala-language-server/"
+  },
+  "icon": "logo.png",
+  "categories": [
+    "Programming Languages"
+  ],
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "main": "./dist/extension.js",
+  "l10n": "./l10n",
+  "contributes": {
+    "snippets": [
+      {
+        "language": "catala_en",
+        "path": "./snippets/catala_en.json"
+      },
+      {
+        "language": "catala_fr",
+        "path": "./snippets/catala_fr.json"
+      }
+    ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "catala-exceptions-panel",
+          "title": "%view.catala.exceptionsView.name%",
+          "icon": "logo.png"
+        }
+      ],
+      "activitybar": [
+        {
+          "id": "catala",
+          "title": "Catala",
+          "icon": "./logo_alt.svg"
+        }
+      ]
+    },
+    "views": {
+      "catala": [
+        {
+          "id": "catala.switches",
+          "name": "%view.catala.switches.title%",
+          "icon": "$(info)"
+        },
+        {
+          "id": "catala.help",
+          "name": "%view.catala.help.title%",
+          "icon": ""
+        }
+      ],
+      "catala-exceptions-panel": [
+        {
+          "type": "webview",
+          "id": "catala.exceptionsView",
+          "name": "%view.catala.exceptionsView.name%",
+          "icon": ""
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "catala.selectScope",
+        "title": "Select scope"
+      },
+      {
+        "command": "catala.foldCodeBlocks",
+        "title": "%command.catala.foldCodeBlocks.title%",
+        "icon": "$(fold)",
+        "category": "%category.catala%"
+      },
+      {
+        "command": "catala.unfoldCodeBlocks",
+        "title": "%command.catala.unfoldCodeBlocks.title%",
+        "icon": "$(unfold)",
+        "category": "%category.catala%"
+      },
+      {
+        "command": "catala.run",
+        "title": "Run a scope",
+        "category": "%category.catala%",
+        "icon": "$(play)"
+      },
+      {
+        "command": "catala.debug",
+        "title": "Debug a scope",
+        "category": "%category.catala%",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "catala.openWithTestEditor",
+        "title": "%command.catala.openWithTestEditor.title%",
+        "category": "%category.catala%",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "catala.openInputEditor",
+        "title": "Scope Input Editor"
+      },
+      {
+        "command": "catala.showExceptions",
+        "title": "%command.catala.showExceptions.title%"
+      },
+      {
+        "command": "catala.rescanProjects",
+        "title": "%command.catala.rescanProjects.title%",
+        "category": "%category.catala%",
+        "icon": "$(issue-reopened)"
+      },
+      {
+        "command": "catala.showExceptionsAtCursor",
+        "title": "%command.catala.showExceptionsAtCursor.title%",
+        "category": "%category.catala%"
+      },
+      {
+        "command": "catala.refreshSwitches",
+        "category": "%category.catala%",
+        "title": "Refresh Switches",
+        "icon": "$(sync-compact)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "catala.showExceptions",
+          "when": "false"
+        },
+        {
+          "command": "catala.refreshSwitches",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "catala.refreshSwitches",
+          "when": "view == catala.switches",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "catala.openWithTestEditor",
+          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(%%CATALA_LANGS_OR_PATT_REG%%)$/",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "catala.showExceptionsAtCursor",
+          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "catala.rescanProjects",
+          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "group": "navigation@10"
+        },
+        {
+          "command": "catala.run",
+          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "group": "navigation@11"
+        },
+        {
+          "command": "catala.debug",
+          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "group": "navigation@12"
+        },
+        {
+          "command": "catala.foldCodeBlocks",
+          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "group": "navigation@13"
+        },
+        {
+          "command": "catala.unfoldCodeBlocks",
+          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "group": "navigation@14"
+        },
+        {
+          "command": "catala.openWithTestEditor",
+          "when": "config.catala.enableCustomTestCaseEditor && editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/ && resourceFilename =~ /.*test.*\\.catala_(%%CATALA_LANGS_OR_PATT_REG%%)$/",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "breakpoints": %%CATALA_LANGS_BREAKPOINTS%%,
+    "debuggers": [
+      {
+        "type": "catala-debugger",
+        "label": "Catala Debug",
+        "languages": %%CATALA_LANGS_ID_LIST%%,
+        "variables": {
+          "SpecifyScope": "catala.selectScope"
+        },
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "scope"
+            ],
+            "properties": {
+              "args": {
+                "type": "object",
+                "description": "Catala Debug arguments",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "description": "Path of a Catala program.",
+                    "default": ""
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "Scope name in the Catala program.",
+                    "default": ""
+                  }
+                },
+                "additionalProperties": false
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch.",
+                "default": true
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "catala-debugger",
+            "request": "launch",
+            "name": "Catala Debug",
+            "args": "${command:catala.selectScope}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Catala Debug: Launch",
+            "description": "New configuration for debugging a Catala program",
+            "body": {
+              "type": "catala-debugger",
+              "name": "Catala debug (Launch)",
+              "request": "launch",
+              "args": "^\"\\${command:SpecifyScope}\""
+            },
+            "trace": true
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Catala",
+      "properties": {
+        "catala.enableCustomTestCaseEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the custom test case editor for Catala test files"
+        },
+        "catala-lsp.trace.server": {
+          "description": "Controls the logging output of the language server. Valid settings are `off`, `messages`, or `verbose`.",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "compact",
+            "verbose"
+          ],
+          "default": "messages"
+        },
+        "catala-lsp.enableProjectScan": {
+          "description": "Controls whether the LSP server should actively scan through the project to detect dependency breakage. This may be ressource-intensive on large projects. Switching this parameter requires a reload of VSCode to become effective.",
+          "type": "boolean",
+          "default": "true"
+        },
+        "catala.lspServerPath": {
+          "type": "string",
+          "default": null,
+          "description": "Custom path to the `catala-lsp` executable"
+        },
+        "catala.catalaFormatPath": {
+          "type": "string",
+          "default": null,
+          "description": "Custom path to the `catala-format` executable"
+        },
+        "catala.catalaPath": {
+          "type": "string",
+          "default": null,
+          "description": "Custom path to the `catala` executable"
+        },
+        "catala.clerkPath": {
+          "type": "string",
+          "default": null,
+          "description": "Custom path to the `clerk` executable"
+        }
+      }
+    },
+    "customEditors": [
+      {
+        "viewType": "catala.testCaseEditor",
+        "displayName": "%customEditor.testCaseEditor.displayName%",
+        "selector": [
+          {
+            "filenamePattern": "*test*.catala_{%%CATALA_LANGS_OR_PATT_GLOB%%}{,.md}"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "comments": {
+      "lineComment": "#"
+    },
+    %%CATALA_LANGS_DEF_AND_GRAMMAR%%
+  },
+  "activationEvents": [
+    "workspaceContains:**/clerk.toml",
+    "workspaceContains:**/*.catala_{%%CATALA_LANGS_OR_PATT_GLOB%%}{,.md}"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "opam exec -- dune build @lsp; webpack --mode development",
+    "test": "tsc && vscode-test",
+    "test:e2e": "tsc && extest setup-and-run \"dist/e2e/*.js\" --storage .extest --locale en",
+    "webview:test": "node node_modules/vitest/vitest.mjs run",
+    "webview:test:watch": "node node_modules/vitest/vitest.mjs",
+    "format": "prettier --write .",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "watch": "webpack --mode development --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "prepare": "husky",
+    "atd:generate_ts": "cd src/generated && atdts ../../catala-atd/catala_types.atd",
+    "check:css": "node purgecss-check.js",
+    "check:i18n": "node lint_scripts/i18n-check.js",
+    "knip": "knip",
+    "knip:exports": "knip --include exports --no-progress"
+  },
+  "dependencies": {
+    "@floating-ui/react": "^0.27.19",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/vscode-webview": "^1.57.5",
+    "@vscode/codicons": "^0.0.36",
+    "command-exists": "^1.2.9",
+    "p-queue": "^6.6.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-intl": "^7.1.9",
+    "vscode-languageclient": "^8.0.2"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/command-exists": "^1.2.3",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^22.19.1",
+    "@types/vscode": "^1.86.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^4.0.0",
+    "css-loader": "^7.1.2",
+    "eslint": "^9.14.0",
+    "glob": "^11.0.3",
+    "husky": "^9.0.11",
+    "jsdom": "^25.0.1",
+    "knip": "^6.40.0",
+    "lint-staged": "^17.6.0",
+    "prettier": "3.3.3",
+    "purgecss": "^7.0.2",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.10",
+    "vscode-extension-tester": "^8.27.0",
+    "webpack": "^5.94.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx,md,json}": "npm run format",
+    "src/**/*.{js,ts,jsx,tsx}": [
+      "npm run lint:fix",
+      "bash -c 'npx tsc --noEmit'"
+    ],
+    "src/styles/*.css": "node lint_scripts/purgecss-check.js",
+    "src/locales/*.json": "node lint_scripts/i18n-check.js",
+    "l10n/**/*.json": "node lint_scripts/i18n-check.js",
+    "src/**/*.{ts,tsx}": "node lint_scripts/i18n-check.js"
+  }
+}
