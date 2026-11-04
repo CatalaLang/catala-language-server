@@ -48,12 +48,18 @@ steps:
       - dune runtest
       - dune install
       - npm run compile
+      # To be able to exec from glibc-based distrib (required for vscode) below
+      # (it may be better to have a full glibc-based pipeline...)
+      - cp /usr/lib/libgmp.so.10 /lib/ld-musl-x86_64.so.1 _opam/lib/
 
   - name: Run tests
     depends_on: Build project
     image: node:26-trixie
     commands:
+      # Requirements of vscode
       - apt update && apt install --yes xvfb libnspr4 libnss3 libgtk-3-0 libasound2 ninja-build && apt clean
+      - export PATH="$${PWD}/_opam/bin:$${PATH}"
+      - export LD_LIBRARY_PATH="$${PWD}/_opam/lib:$${LD_LIBRARY_PATH}"
       - npm run webview:test
       - xvfb-run -a npm run test
       - (cd tests/round_trip && ./round_trip.sh)
