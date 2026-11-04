@@ -51,24 +51,18 @@ steps:
 
   - name: Run tests
     depends_on: Build project
-    image: ubuntu:24.04
+    image: node:26-trixie
     commands:
-      - sudo apk add xvfb-run
+      - apt update && apt install --yes xvfb libnspr4 libnss3 libgtk-3-0 libasound2 ninja-build && apt clean
       - npm run webview:test
       - xvfb-run -a npm run test
       - (cd tests/round_trip && ./round_trip.sh)
       - (cd tests/regressions && ./enum_path_test.sh)
       - (cd tests/regressions && ./output_module_deps_test.sh)
-
-  - name: Run end-to-end tests
-    depends_on: Build project
-    image: ubuntu:24.04
-    commands:
-      - sudo apk add xvfb-run
       - xvfb-run -a npm run test:e2e
 
   - name: Upload failure screenshots
-    depends_on: Run end-to-end tests
+    depends_on: Run tests
     when:
       - status: [ failure ]
         event: [ pull_request ]
