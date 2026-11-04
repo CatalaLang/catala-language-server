@@ -149,7 +149,7 @@
       "explorer/context": [
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(%%CATALA_LANGS_OR_PATT_REG%%)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*[tT][eE][sS][tT].*\\.catala_(%%CATALA_LANGS_OR_PATT_REG%%)$/",
           "group": "navigation@2"
         }
       ],
@@ -188,7 +188,7 @@
         },
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/ && resourceFilename =~ /.*test.*\\.catala_(%%CATALA_LANGS_OR_PATT_REG%%)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/ && resourceFilename =~ /.*[tT][eE][sS][tT].*\\.catala_(%%CATALA_LANGS_OR_PATT_REG%%)$/",
           "group": "navigation@2"
         }
       ]
@@ -309,7 +309,7 @@
         "displayName": "%customEditor.testCaseEditor.displayName%",
         "selector": [
           {
-            "filenamePattern": "*test*.catala_{%%CATALA_LANGS_OR_PATT_GLOB%%}{,.md}"
+            "filenamePattern": "*{t,T}{e,E}{s,S}{t,T}*.catala_{%%CATALA_LANGS_OR_PATT_GLOB%%}{,.md}"
           }
         ],
         "priority": "option"

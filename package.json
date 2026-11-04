@@ -149,7 +149,7 @@
       "explorer/context": [
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*test.*\\.catala_(en|fr|pl)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*[tT][eE][sS][tT].*\\.catala_(en|fr|pl)$/",
           "group": "navigation@2"
         }
       ],
@@ -188,7 +188,7 @@
         },
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && editorLangId =~ /catala_(en|fr|pl)/ && resourceFilename =~ /.*test.*\\.catala_(en|fr|pl)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && editorLangId =~ /catala_(en|fr|pl)/ && resourceFilename =~ /.*[tT][eE][sS][tT].*\\.catala_(en|fr|pl)$/",
           "group": "navigation@2"
         }
       ]
@@ -309,7 +309,7 @@
         "displayName": "%customEditor.testCaseEditor.displayName%",
         "selector": [
           {
-            "filenamePattern": "*test*.catala_{en,fr,pl}{,.md}"
+            "filenamePattern": "*{t,T}{e,E}{s,S}{t,T}*.catala_{en,fr,pl}{,.md}"
           }
         ],
         "priority": "option"
