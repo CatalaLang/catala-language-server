@@ -383,7 +383,8 @@
     "vitest": "^4.0.10",
     "vscode-extension-tester": "^8.27.0",
     "webpack": "^5.94.0",
-    "webpack-cli": "^5.1.4"
+    "webpack-cli": "^5.1.4",
+    "js-yaml": "^5.5.0"
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx,md,json}": "npm run format",
