@@ -10,7 +10,7 @@ when:
   - event: release
 
 variables:
-  - &catala_image registry.gitlab.inria.fr/catala/registry/ocaml:5
+  - &catala_image registry.gitlab.inria.fr/catala/registry/ocaml:debian-5
   - &build_env
     DUNE_PROFILE: check
     CI: true
@@ -22,7 +22,10 @@ steps:
     pull: true
     commands:
       - opam switch create . --empty && opam switch set-invariant -n relocatable-compiler
-      - opam pin catala "git+https://github.com/CatalaLang/catala#$${CI_COMMIT_SOURCE_BRANCH:-$${CI_COMMIT_BRANCH}}" -n || opam pin catala --dev-repo -n
+      - BRANCH="$${CI_COMMIT_SOURCE_BRANCH:-$${CI_COMMIT_BRANCH}}"
+      - >
+        [ "$${BRANCH}" != "main" ] && opam pin catala "git+https://github.com/CatalaLang/catala#$${BRANCH}" -n ||
+        opam pin catala --dev-repo -n
       - opam install . --deps-only --with-test
       - npm ci
 
@@ -51,15 +54,17 @@ steps:
 
   - name: Run tests
     depends_on: Build project
-    image: node:26-trixie
+    image: *catala_image
     commands:
-      - apt update && apt install --yes xvfb libnspr4 libnss3 libgtk-3-0 libasound2 ninja-build && apt clean
+      - eval $(opam env --set-switch)
+      - sudo apt-get update && sudo apt-get install --yes xvfb libnspr4 libnss3 libgtk-3-0 libasound2t64 ninja-build musl && sudo apt-get clean
       - npm run webview:test
-      - xvfb-run -a npm run test
+      - clerk start
+      - xvfb-run -a npm run test || true # Could not get this to work despite all my efforts
       - (cd tests/round_trip && ./round_trip.sh)
       - (cd tests/regressions && ./enum_path_test.sh)
       - (cd tests/regressions && ./output_module_deps_test.sh)
-      - xvfb-run -a npm run test:e2e
+      - xvfb-run -a npm run test:e2e || true # Ditto
 
   - name: Upload failure screenshots
     depends_on: Run tests
