@@ -129,25 +129,31 @@ export class ScopeInputController {
         }
         case 'OpenInTextEditor':
           throw new Error(
-            `Trying to open text editor while in input scope mode`
+            `Trying to open text editor in the "Run with..." editor`
           );
         case 'OpenTestScopePicker':
-          throw new Error(`Trying to select scope while in input scope mode`);
+          throw new Error(`Trying to select scope in the "Run with..." editor`);
         case 'TestGenerateRequest':
-          throw new Error(`Trying to generate scope while in input scope mode`);
+          throw new Error(
+            `Trying to generate scope in the "Run with..." editor`
+          );
         case 'RetargetRequest':
           throw new Error(
-            `Trying to retarget a test while in input scope mode`
+            `Trying to retarget a test in the "Run with..." editor`
           );
         case 'ReplaceOriginalRequest':
         case 'DiscardWorkingCopyRequest':
           throw new Error(
-            `Trying to finish a rebuild while in input scope mode`
+            `Trying to finish a rebuild in the "Run with..." editor`
           );
         case 'OpenWorkingCopyRequest':
-          throw new Error(`Trying to open a repair while in input scope mode`);
+          throw new Error(
+            `Trying to open a repair in the "Run with..." editor`
+          );
         case 'RetryOpenRequest':
-          throw new Error(`Trying to reopen a test while in input scope mode`);
+          throw new Error(
+            `Trying to reopen a test in the "Run with..." editor`
+          );
         default:
           assertUnreachable(typed_msg);
       }
