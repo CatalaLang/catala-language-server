@@ -1,0 +1,73 @@
+scopeName: source.catala_%%code%%
+fileTypes:
+  - catala_%%code%%
+  - catala_%%code%%.md
+patterns:
+  - include: '#main'
+  - include: 'text.html.markdown'
+repository:
+  main:
+    patterns:
+      - match: (>)\s*(%%module_def%%)\s+(\p{Lu}(\p{L}|\p{N}|[_'])*)\s+(%%external%%)
+        captures:
+          '1':
+            name: keyword.operator
+          '2':
+            name: keyword.other
+          '3':
+            name: entity.name.class
+          '4':
+            name: keyword.other
+
+      - match: (>)\s*(%%module_def%%|%%module_use%%)\s+(\p{Lu}(\p{L}|\p{N}|[_'])*)
+        captures:
+          '1':
+            name: keyword.operator
+          '2':
+            name: keyword.other
+          '3':
+            name: entity.name.class
+
+      - match: (>)\s*(%%module_use%%)\s+(\p{Lu}(\p{L}|\p{N}|[_'])*)\s+(%%module_alias%%)\s+(\p{Lu}(\p{L}|\p{N}|[_'])*)
+        captures:
+          '1':
+            name: keyword.operator
+          '2':
+            name: keyword.other
+          '3':
+            name: entity.name.class
+          '4':
+            name: keyword.other
+          '5':
+            name: entity.name.class
+
+      - match: (>)\s+(%%law_include%%:)\s+(.*)$
+        captures:
+          '1':
+            name: keyword.operator
+          '2':
+            name: keyword.other
+          '3':
+            name: markup.raw
+
+      - begin: (```catala-metadata\p{Cc}*)$
+        beginCaptures:
+          '1':
+            name: comment.block.documentation
+        patterns:
+          - include: 'code.catala_%%code%%'
+        end: (```)
+        endCaptures:
+          '1':
+            name: comment.block.documentation
+
+      - begin: (```catala\p{Cc}*)$
+        beginCaptures:
+          '1':
+            name: comment.block
+        patterns:
+          - include: 'code.catala_%%code%%'
+        end: (```)
+        endCaptures:
+          '1':
+            name: comment.block
