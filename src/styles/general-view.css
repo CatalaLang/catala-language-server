@@ -202,6 +202,7 @@
   flex-direction: row;
   gap: 1.5em;
   background-color: var(--vscode-list-hoverBackground);
+  flex-wrap: wrap;
   align-items: center;
   padding: 0.8em;
 }
@@ -223,7 +224,8 @@
   margin-left: auto;
   align-self: center;
   zoom: 1.4;
-  min-width: 240px;
+  flex: 0 1 320px;
+  min-width: 160px;
 }
 
 .no-tests {
@@ -281,7 +283,9 @@
 }
 
 .box-filter .pins {
-  /* display: flex; */
+  /* overflow-y lets it shrink to nothing: keep room for a few scopes */
+  flex: 1 1 16em;
+  min-width: 12em;
   height: 14em;
   padding: 2em 0em 2em 0em;
   /* border-box : le padding est compris dans les 14em → la box-filter ne grandit pas */

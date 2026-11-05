@@ -925,22 +925,20 @@ function Filter({
             filterScope={filterScope}
             setFilterScope={setFilterScope}
           />
-          <div style={{ marginLeft: 'auto' }}>
-            <VscodeTextfield
-              className="search-bar"
-              value={filter}
-              placeholder={intl.formatMessage({
-                id: 'generalTests.searchPlaceholder',
-                defaultMessage: 'Rechercher un test…',
-              })}
-              onInput={(e) => {
-                const value = (e.target as HTMLInputElement).value;
-                setFilter(value);
-              }}
-            >
-              <span className="codicon codicon-search" slot="content-before" />
-            </VscodeTextfield>
-          </div>
+          <VscodeTextfield
+            className="search-bar"
+            value={filter}
+            placeholder={intl.formatMessage({
+              id: 'generalTests.searchPlaceholder',
+              defaultMessage: 'Rechercher un test…',
+            })}
+            onInput={(e) => {
+              const value = (e.target as HTMLInputElement).value;
+              setFilter(value);
+            }}
+          >
+            <span className="codicon codicon-search" slot="content-before" />
+          </VscodeTextfield>
         </>
       )}
     </div>
