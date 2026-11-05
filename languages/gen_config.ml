@@ -40,26 +40,20 @@ let languages =
        @[<h>\"extensions\": [ \".catala_%s\", \".catala_%s.md\" ],@]@\n\
        \"configuration\": \"./language-configuration.json\" },@]@\n\
        @[<v 2>{ \"id\": \"catala_code_%s\",@\n\
-       \"configuration\": \"./language-configuration.json\" }@],@\n\
-       @[<v 2>{ \"id\": \"catala_type_%s\",@\n\
        \"configuration\": \"./language-configuration.json\" }@]"
       lang.code
       (String.capitalize_ascii lang.name)
-      lang.code lang.code lang.code lang.code
+      lang.code lang.code lang.code
   in
   let pp_grammar fmt lang =
     fprintf fmt
       "@[<v 2>{ \"language\": \"catala_%s\",@\n\
        \"scopeName\": \"source.catala_%s\",@\n\
-       \"path\": \"./syntaxes/%s.xml\" },@]@\n\
+       \"path\": \"./syntaxes/catala_source_%s.tmLanguage.json\" },@]@\n\
        @[<v 2>{ \"language\": \"catala_code_%s\",@\n\
-       \"scopeName\": \"source.catala_code_%s\",@\n\
-       \"path\": \"./syntaxes/code_%s.xml\" },@]@\n\
-       @[<v 2>{ \"language\": \"catala_type_%s\",@\n\
-       \"scopeName\": \"source.catala_type_%s\",@\n\
-       \"path\": \"./syntaxes/types_%s.xml\" }@]"
-      lang.code lang.code lang.code lang.code lang.code lang.code lang.code
-      lang.code lang.code
+       \"scopeName\": \"code.catala_%s\",@\n\
+       \"path\": \"./syntaxes/catala_code_%s.tmLanguage.json\" }@]"
+      lang.code lang.code lang.code lang.code lang.code lang.code
   in
   let pp_configuration_defaults fmt lang =
     fprintf fmt

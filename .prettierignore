@@ -1,7 +1,9 @@
 .vscode/
 src/generated
-build/
+_build
+_targets
 server/_build
 server/vendors
 package-lock.json
 package.json
+syntaxes
