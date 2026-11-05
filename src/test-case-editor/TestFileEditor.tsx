@@ -462,7 +462,6 @@ function WorkingCopyBanner({
         />
       </p>
       <button
-        className="test-editor-open-text"
         onClick={() =>
           vscode.postMessage(writeUpMessage({ kind: 'OpenWorkingCopyRequest' }))
         }
@@ -470,7 +469,6 @@ function WorkingCopyBanner({
         <FormattedMessage id="testFile.workingCopyOpen" />
       </button>
       <button
-        className="test-editor-open-text"
         onClick={async (): Promise<void> => {
           if (!(await confirm('DiscardWorkingCopy'))) return;
           vscode.postMessage(
