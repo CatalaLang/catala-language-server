@@ -197,21 +197,36 @@
 /* Filter */
 
 .box-filter {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  gap: 1.5em;
-  background-color: var(--vscode-list-hoverBackground);
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title title'
+    'search gui'
+    'pins pins';
+  gap: 0.8em 1.5em;
   align-items: center;
+  background-color: var(--vscode-list-hoverBackground);
   padding: 0.8em;
 }
 
+@media (max-width: 500px) {
+  .box-filter {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'title' 'search' 'gui' 'pins';
+  }
+}
+
 .filter-title {
+  grid-area: title;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.8em;
+}
+
+.filter-title h2 {
+  margin: 0;
 }
 
 .reset-filters {
@@ -221,11 +236,12 @@
 }
 
 .search-bar {
-  margin-left: auto;
-  align-self: center;
-  zoom: 1.4;
-  flex: 0 1 320px;
-  min-width: 160px;
+  grid-area: search;
+  width: 100%;
+}
+
+.gui-only {
+  grid-area: gui;
 }
 
 .no-tests {
@@ -283,13 +299,8 @@
 }
 
 .box-filter .pins {
-  /* overflow-y lets it shrink to nothing: keep room for a few scopes */
-  flex: 1 1 16em;
-  min-width: 12em;
-  height: 14em;
-  padding: 2em 0em 2em 0em;
-  /* border-box : le padding est compris dans les 14em → la box-filter ne grandit pas */
-  box-sizing: border-box;
+  grid-area: pins;
+  max-height: 9em;
   overflow-y: auto;
 }
 

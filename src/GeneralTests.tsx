@@ -907,7 +907,7 @@ function Filter({
         <Loading size="small" />
       ) : (
         <>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="gui-only">
             <VscodeCheckbox
               checked={filterGui}
               onChange={(event) =>
