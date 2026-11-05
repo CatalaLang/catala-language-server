@@ -368,7 +368,28 @@
   margin-bottom: var(--spacing12);
   padding: var(--spacing8) var(--spacing12);
   border-radius: var(--spacing4);
-  border-left: 3px solid var(--vscode-focusBorder);
+  background: var(--vscode-inputValidation-warningBackground);
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  border-left-width: 3px;
+  color: var(
+    --vscode-inputValidation-warningForeground,
+    var(--vscode-foreground)
+  );
+}
+.working-copy-banner > .codicon {
+  color: var(--vscode-editorWarning-foreground);
+}
+.working-copy-banner button {
+  padding: var(--spacing4) var(--spacing12);
+  border-radius: var(--spacing4);
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: bold;
+}
+.working-copy-banner button:hover {
+  background: var(--vscode-toolbar-hoverBackground);
 }
 .working-copy-banner p {
   margin: 0;
@@ -524,7 +545,6 @@
 }
 
 .vscode-dark .broken-banner,
-.vscode-dark .working-copy-banner,
 .vscode-dark .broken-test,
 .vscode-dark .broken-notes {
   background: var(--level-2-background-dark);
@@ -540,7 +560,6 @@
   color: var(--stormgray500);
 }
 .vscode-light .broken-banner,
-.vscode-light .working-copy-banner,
 .vscode-light .broken-test,
 .vscode-light .broken-notes {
   background: var(--level-2-background);
