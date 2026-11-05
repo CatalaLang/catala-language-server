@@ -20,7 +20,12 @@ import {
   firstUnsetPath,
 } from '../editors/unsetValidation';
 import { confirm } from '../messaging/confirm';
-import { RevealContext, type Reveal } from '../editors/reveal';
+import {
+  LinkedViewsContext,
+  RevealContext,
+  useLinkedViewsState,
+  type Reveal,
+} from '../editors/reveal';
 import { rebuiltOf } from './testCaseUtils';
 import TestInputsEditor from './TestInputsEditor';
 import TestOutputsEditor from './TestOutputsEditor';
@@ -512,6 +517,8 @@ function TestPanes({
   const carryHookIn = markHook(carried(nestedIn), CarryMark);
   const carryHookOut = markHook(carried(nestedOut), CarryMark);
   const [reveal, setReveal] = useState<Reveal | undefined>(undefined);
+  const linkedInputs = useLinkedViewsState();
+  const linkedOutputs = useLinkedViewsState();
   const jumpToFirstUnset = (): void => {
     const path = rebuilt === undefined ? undefined : firstUnsetPath(rebuilt);
     if (path) setReveal((r) => ({ path, nonce: (r?.nonce ?? 0) + 1 }));
@@ -555,26 +562,30 @@ function TestPanes({
             <>
               {/* The ordinary editors, read-only: same layout as the right
                   pane, so the two sides stay comparable. */}
-              <TestInputsEditor
-                test_inputs={authored.test_inputs}
-                tested_scope={authored.tested_scope}
-                onTestInputsChange={(): void => {}}
-                readOnly
-                labelExtra={fateFrom(marksIn)}
-                editorHook={fateHookIn}
-              />
+              <LinkedViewsContext.Provider value={linkedInputs}>
+                <TestInputsEditor
+                  test_inputs={authored.test_inputs}
+                  tested_scope={authored.tested_scope}
+                  onTestInputsChange={(): void => {}}
+                  readOnly
+                  labelExtra={fateFrom(marksIn)}
+                  editorHook={fateHookIn}
+                />
+              </LinkedViewsContext.Provider>
               {authored.test_outputs.size > 0 && (
                 <>
                   <h5 className="broken-subhead">
                     <FormattedMessage id="broken.expected" />
                   </h5>
-                  <TestOutputsEditor
-                    test={authored}
-                    onTestChange={(): void => {}}
-                    readOnly
-                    labelExtra={fateFrom(marksOut)}
-                    editorHook={fateHookOut}
-                  />
+                  <LinkedViewsContext.Provider value={linkedOutputs}>
+                    <TestOutputsEditor
+                      test={authored}
+                      onTestChange={(): void => {}}
+                      readOnly
+                      labelExtra={fateFrom(marksOut)}
+                      editorHook={fateHookOut}
+                    />
+                  </LinkedViewsContext.Provider>
                 </>
               )}
             </>
@@ -607,27 +618,31 @@ function TestPanes({
                       </span>
                     </div>
                   )}
-                <TestInputsEditor
-                  test_inputs={rebuilt.test_inputs}
-                  tested_scope={rebuilt.tested_scope}
-                  onTestInputsChange={(inputs): void =>
-                    onChange({ ...rebuilt, test_inputs: inputs })
-                  }
-                  labelExtra={markFrom(marksIn, hintsIn)}
-                  editorHook={carryHookIn}
-                />
+                <LinkedViewsContext.Provider value={linkedInputs}>
+                  <TestInputsEditor
+                    test_inputs={rebuilt.test_inputs}
+                    tested_scope={rebuilt.tested_scope}
+                    onTestInputsChange={(inputs): void =>
+                      onChange({ ...rebuilt, test_inputs: inputs })
+                    }
+                    labelExtra={markFrom(marksIn, hintsIn)}
+                    editorHook={carryHookIn}
+                  />
+                </LinkedViewsContext.Provider>
                 {rebuilt.tested_scope.outputs.size > 0 && (
                   <>
                     <h5 className="broken-subhead">
                       <FormattedMessage id="broken.expected" />
                     </h5>
-                    <TestOutputsEditor
-                      test={rebuilt}
-                      onTestChange={onChange}
-                      diffs={runDiffs}
-                      labelExtra={markFrom(marksOut)}
-                      editorHook={carryHookOut}
-                    />
+                    <LinkedViewsContext.Provider value={linkedOutputs}>
+                      <TestOutputsEditor
+                        test={rebuilt}
+                        onTestChange={onChange}
+                        diffs={runDiffs}
+                        labelExtra={markFrom(marksOut)}
+                        editorHook={carryHookOut}
+                      />
+                    </LinkedViewsContext.Provider>
                   </>
                 )}
               </>
