@@ -614,17 +614,26 @@ let add_scope_definitions
       List.fold_left
         (fun vars item ->
           match Mark.remove item with
-          | Surface.Ast.ScopeUse s_use ->
+          | Surface.Ast.ScopeUse s_use -> (
             let pos =
               Mark.get s_use.scope_use_name
               |> fun p -> Pos.overwrite_law_info p []
             in
-            let scope_uid =
-              Desugared.Name_resolution.get_scope tctx.ctx s_use.scope_use_name
+            (* On a partial result, the header may name a scope that name
+               resolution dropped. *)
+            let sjump_opt =
+              match
+                Ident.Map.find_opt
+                  (Mark.remove s_use.scope_use_name)
+                  tctx.ctx.local.typedefs
+              with
+              | Some (TScope (scope_uid, _)) ->
+                ScopeName.Map.find_opt scope_uid tctx.scope_lookup
+              | _ -> None
             in
-            let sjump = ScopeName.Map.find scope_uid tctx.scope_lookup in
-            let var = Scope_def sjump in
-            PMap.add pos var vars
+            match sjump_opt with
+            | None -> vars
+            | Some sjump -> PMap.add pos (Scope_def sjump) vars)
           | AbstractTypeDecl _ | ScopeDecl _ | StructDecl _ | EnumDecl _
           | Topdef _ ->
             vars)
