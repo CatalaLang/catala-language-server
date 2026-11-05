@@ -1,0 +1,53 @@
+scopeName: code.catala_%%code%%
+patterns:
+  - include: '#code'
+repository:
+  code:
+    patterns:
+      - match: \s*(\#\[[^"\]]*)("[^"]*")?([^\]]*\])
+        captures:
+          '1':
+            name: entity.other.attribute-name
+          '2':
+            name: string.quoted.double
+          '3':
+            name: entity.other.attribute-name
+
+      - match: \s*\#.*$
+        name: comment.line
+
+      - match: \b(%%all%%|%%and_then%%|%%assertion%%|%%combine%%|%%condition%%|%%consequence%%|%%content%%|%%context%%|%%data%%|%%declaration%%|%%defined_as%%|%%definition%%|%%depends%%|%%enum%%|%%exception%%|%%filled%%|%%initially%%|%%input%%|%%internal%%|%%is%%|%%label%%|%%list%%|%%map_each%%|%%maximum%%|%%minimum%%|%%option%%|%%or_if_list_empty%%|%%decreasing%%|%%increasing%%|%%order_decreasing%%|%%order_increasing%%|%%output%%|%%rule%%|%%scope%%|%%sort%%|%%state%%|%%struct%%|%%sum%%|%%to%%|%%type%%|%%under_condition%%|%%wildcard%%|%%with_v%%|%%we_have%%|%%let%%|%%in%%|%%exists%%|%%for%%|%%of%%|%%among%%|%%contains%%)\b
+        name: keyword.other
+
+      - match: \b(%%if%%|%%then%%|%%else%%|%%match%%|%%with%%|%%but_replace%%|%%such%%|%%that%%)\b
+        name: keyword.control
+
+      - match: (\|[0-9]+\-[0-9]+\-[0-9]+\|)
+        name: constant.numeric
+
+      - match: \b(%%true%%|%%false%%|%%absent%%|%%present%%)\b
+        name: constant.language
+
+      - match: \b(\-?[0-9]+(,[0-9]*|))\b
+        name: constant.numeric
+
+      - match: (\-\-|\;|\.|\,|\:|\(|\)|\[|\]|\{|\})
+        name: punctuation
+
+      - match: (\+|\-|\*|/|>|>=|<=|<|=|!=|%)
+        name: keyword.operator
+
+      - match: (%%and%%|%%not%%|%%xor%%|%%or%%|%%year%%|%%month%%|%%day%%|%%money_unit%%)
+        name: keyword.operator.locales
+
+      - match: \b(%%boolean%%|%%date%%|%%decimal%%|%%duration%%|%%integer%%|%%money%%|%%position%%)\b
+        name: entity.name.type
+
+      - match: \b(%%cardinal%%|%%round%%)\b
+        name: entity.name.function
+
+      - match: \b(\p{Ll}(\p{L}|\p{N}|[_'])*)\b
+        name: variable.parameter
+
+      - match: \b(\p{Lu}(\p{L}|\p{N}|[_'])*)\b
+        name: entity.name.class
