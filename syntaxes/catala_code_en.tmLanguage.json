@@ -1,0 +1,80 @@
+{
+  "scopeName": "code.catala_en",
+  "patterns": [
+    {
+      "include": "#code"
+    }
+  ],
+  "repository": {
+    "code": {
+      "patterns": [
+        {
+          "match": "\\s*(\\#\\[[^\"\\]]*)(\"[^\"]*\")?([^\\]]*\\])",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name"
+            },
+            "2": {
+              "name": "string.quoted.double"
+            },
+            "3": {
+              "name": "entity.other.attribute-name"
+            }
+          }
+        },
+        {
+          "match": "\\s*\\#.*$",
+          "name": "comment.line"
+        },
+        {
+          "match": "\\b(all|and\\s+then|assertion|combine|condition|consequence|content|context|data|declaration|equals|definition|depends\\s+on|enumeration|exception|fulfilled|initially|input|internal|is|label|list\\s+of|map\\s+each|maximum|minimum|optional\\s+of|or\\s+if\\s+list\\s+empty|down|up|in\\s+decreasing\\s+order|in\\s+increasing\\s+order|output|rule|scope|sort|state|structure|sum|to|type|under\\s+condition|anything|with|we\\s+have|let|in|exists|for|of|among|contains)\\b",
+          "name": "keyword.other"
+        },
+        {
+          "match": "\\b(if|then|else|match|with\\s+pattern|but\\s+replace|such|that)\\b",
+          "name": "keyword.control"
+        },
+        {
+          "match": "(\\|[0-9]+\\-[0-9]+\\-[0-9]+\\|)",
+          "name": "constant.numeric"
+        },
+        {
+          "match": "\\b(true|false|Absent|Present)\\b",
+          "name": "constant.language"
+        },
+        {
+          "match": "\\b(\\-?[0-9]+(,[0-9]*|))\\b",
+          "name": "constant.numeric"
+        },
+        {
+          "match": "(\\-\\-|\\;|\\.|\\,|\\:|\\(|\\)|\\[|\\]|\\{|\\})",
+          "name": "punctuation"
+        },
+        {
+          "match": "(\\+|\\-|\\*|/|>|>=|<=|<|=|!=|%)",
+          "name": "keyword.operator"
+        },
+        {
+          "match": "(and|not|xor|or|year|month|day|$)",
+          "name": "keyword.operator.locales"
+        },
+        {
+          "match": "\\b(boolean|date|decimal|duration|integer|money|code_location)\\b",
+          "name": "entity.name.type"
+        },
+        {
+          "match": "\\b(number|round)\\b",
+          "name": "entity.name.function"
+        },
+        {
+          "match": "\\b(\\p{Ll}(\\p{L}|\\p{N}|[_'])*)\\b",
+          "name": "variable.parameter"
+        },
+        {
+          "match": "\\b(\\p{Lu}(\\p{L}|\\p{N}|[_'])*)\\b",
+          "name": "entity.name.class"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "scopeName": "code.catala_fr",
+  "patterns": [
+    {
+      "include": "#code"
+    }
+  ],
+  "repository": {
+    "code": {
+      "patterns": [
+        {
+          "match": "\\s*(\\#\\[[^\"\\]]*)(\"[^\"]*\")?([^\\]]*\\])",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name"
+            },
+            "2": {
+              "name": "string.quoted.double"
+            },
+            "3": {
+              "name": "entity.other.attribute-name"
+            }
+          }
+        },
+        {
+          "match": "\\s*\\#.*$",
+          "name": "comment.line"
+        },
+        {
+          "match": "\\b(tout|puis|assertion|combine|condition|conséquence|contenu|contexte|donnée|déclaration|égal\\s+à|définition|dépend\\s+de|énumération|exception|rempli|initialement|entrée|interne|est|étiquette|liste\\s+de|transforme\\s+chaque|maximum|minimum|optionnel\\s+de|ou\\s+si\\s+liste\\s+vide|inférieur|supérieur|par\\s+ordre\\s+décroissant|par\\s+ordre\\s+croissant|résultat|règle|champ\\s+d'application|trie|état|structure|somme|en|type|sous\\s+condition|n'importe\\s+quel|avec|on\\s+a|soit|dans|existe|pour|de|parmi|contient)\\b",
+          "name": "keyword.other"
+        },
+        {
+          "match": "\\b(si|alors|sinon|selon|sous\\s+forme|mais\\s+en\\s+remplaçant|tel|que)\\b",
+          "name": "keyword.control"
+        },
+        {
+          "match": "(\\|[0-9]+\\-[0-9]+\\-[0-9]+\\|)",
+          "name": "constant.numeric"
+        },
+        {
+          "match": "\\b(vrai|faux|Absent|Présent)\\b",
+          "name": "constant.language"
+        },
+        {
+          "match": "\\b(\\-?[0-9]+(,[0-9]*|))\\b",
+          "name": "constant.numeric"
+        },
+        {
+          "match": "(\\-\\-|\\;|\\.|\\,|\\:|\\(|\\)|\\[|\\]|\\{|\\})",
+          "name": "punctuation"
+        },
+        {
+          "match": "(\\+|\\-|\\*|/|>|>=|<=|<|=|!=|%)",
+          "name": "keyword.operator"
+        },
+        {
+          "match": "(et|non|ou\\s+bien|ou|an|mois|jour|€)",
+          "name": "keyword.operator.locales"
+        },
+        {
+          "match": "\\b(booléen|date|décimal|durée|entier|argent|position_source)\\b",
+          "name": "entity.name.type"
+        },
+        {
+          "match": "\\b(nombre|arrondi)\\b",
+          "name": "entity.name.function"
+        },
+        {
+          "match": "\\b(\\p{Ll}(\\p{L}|\\p{N}|[_'])*)\\b",
+          "name": "variable.parameter"
+        },
+        {
+          "match": "\\b(\\p{Lu}(\\p{L}|\\p{N}|[_'])*)\\b",
+          "name": "entity.name.class"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "scopeName": "source.catala_fr",
+  "fileTypes": [
+    "catala_fr",
+    "catala_fr.md"
+  ],
+  "patterns": [
+    {
+      "include": "#main"
+    },
+    {
+      "include": "text.html.markdown"
+    }
+  ],
+  "repository": {
+    "main": {
+      "patterns": [
+        {
+          "match": "(>)\\s*(Module)\\s+(\\p{Lu}(\\p{L}|\\p{N}|[_'])*)\\s+(externe)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator"
+            },
+            "2": {
+              "name": "keyword.other"
+            },
+            "3": {
+              "name": "entity.name.class"
+            },
+            "4": {
+              "name": "keyword.other"
+            }
+          }
+        },
+        {
+          "match": "(>)\\s*(Module|Usage\\s+de)\\s+(\\p{Lu}(\\p{L}|\\p{N}|[_'])*)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator"
+            },
+            "2": {
+              "name": "keyword.other"
+            },
+            "3": {
+              "name": "entity.name.class"
+            }
+          }
+        },
+        {
+          "match": "(>)\\s*(Usage\\s+de)\\s+(\\p{Lu}(\\p{L}|\\p{N}|[_'])*)\\s+(en\\s+tant\\s+que)\\s+(\\p{Lu}(\\p{L}|\\p{N}|[_'])*)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator"
+            },
+            "2": {
+              "name": "keyword.other"
+            },
+            "3": {
+              "name": "entity.name.class"
+            },
+            "4": {
+              "name": "keyword.other"
+            },
+            "5": {
+              "name": "entity.name.class"
+            }
+          }
+        },
+        {
+          "match": "(>)\\s+(Inclusion:)\\s+(.*)$",
+          "captures": {
+            "1": {
+              "name": "keyword.operator"
+            },
+            "2": {
+              "name": "keyword.other"
+            },
+            "3": {
+              "name": "markup.raw"
+            }
+          }
+        },
+        {
+          "begin": "(```catala-metadata\\p{Cc}*)$",
+          "beginCaptures": {
+            "1": {
+              "name": "comment.block.documentation"
+            }
+          },
+          "patterns": [
+            {
+              "include": "code.catala_fr"
+            }
+          ],
+          "end": "(```)",
+          "endCaptures": {
+            "1": {
+              "name": "comment.block.documentation"
+            }
+          }
+        },
+        {
+          "begin": "(```catala\\p{Cc}*)$",
+          "beginCaptures": {
+            "1": {
+              "name": "comment.block"
+            }
+          },
+          "patterns": [
+            {
+              "include": "code.catala_fr"
+            }
+          ],
+          "end": "(```)",
+          "endCaptures": {
+            "1": {
+              "name": "comment.block"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
