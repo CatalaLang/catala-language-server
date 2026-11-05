@@ -7,7 +7,7 @@ import {
 } from 'react';
 import type { PathSegment, Typ } from '../generated/catala_types';
 import { wrapIdentifier } from './Identifier';
-import { pathStartsWith, useReveal } from './reveal';
+import { pathStartsWith, useLinkedView, useReveal } from './reveal';
 import { useIntl } from 'react-intl';
 import { CountBadge } from './badges';
 
@@ -153,6 +153,14 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
   const [activeTab, setActiveTab] = useState(
     tabs.length > 0 ? tabs[0].key : ''
   );
+  const shareTab = useLinkedView(props.currentPath, (choice) => {
+    if (choice.kind === 'tab' && arrayItems.some((i) => i.key === choice.tab))
+      setActiveTab(choice.tab);
+  });
+  const openTab = (key: string): void => {
+    setActiveTab(key);
+    shareTab({ kind: 'tab', tab: key });
+  };
 
   const reveal = useReveal();
   const revealed = useRef<number | undefined>(undefined);
@@ -231,7 +239,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
                 onDrop={() => preview && storeTabOrder(orderKey, preview)}
                 onDragEnd={endDrag}
                 className={`tab ${activeTab === item.key ? 'active' : ''}`}
-                onClick={() => setActiveTab(item.key)}
+                onClick={() => openTab(item.key)}
               >
                 <TabHeader item={item} />
               </button>
