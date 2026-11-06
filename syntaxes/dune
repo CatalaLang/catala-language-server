@@ -1,21 +1,20 @@
+(include dune.inc)
+
 (executable
- (name gen_syntaxes)
- (flags (:standard -warn-error +a))
- (libraries catala.languages catala.catala_utils re)
+ (name gen_stanzas)
+ (libraries catala.languages)
 )
 
 (rule
  (mode promote)
- (alias generate-syntaxes)
- (targets
-   catala_source_en.tmLanguage.json
-   catala_code_en.tmLanguage.json
-   catala_source_fr.tmLanguage.json
-   catala_code_fr.tmLanguage.json
-   catala_source_pl.tmLanguage.json
-   catala_code_pl.tmLanguage.json
- )
- (deps catala_source.tmLanguage.template catala_code.tmLanguage.template)
+ (targets dune.inc)
  (action
-  (run %{exe:./gen_syntaxes.exe}))
+  (with-stdout-to
+    dune.inc
+   (run %{exe:./gen_stanzas.exe}))))
+
+(executable
+ (name gen_syntaxes)
+ (flags (:standard -warn-error +a))
+ (libraries catala.languages catala.catala_utils re)
 )
