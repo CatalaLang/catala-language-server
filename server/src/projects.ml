@@ -242,6 +242,9 @@ module Projects = Set.Make (struct
   let compare p1 p2 = String.compare p1.project_dir p2.project_dir
 end)
 
+let update_project project projects =
+  Projects.add project (Projects.remove project projects)
+
 type projects = Projects.t
 type t = projects
 type error_handler = Doc_id.t * Linol_lwt.Range.t * Diagnostic.t -> unit
@@ -577,7 +580,7 @@ let find_file_in_project doc_id (project : project) =
 
 let reload_project ~on_error project projects =
   let project = project_of_dir ~on_error project.project_dir in
-  project, Projects.add project projects
+  project, update_project project projects
 
 exception Project_not_found
 
@@ -593,7 +596,7 @@ let find_or_populate_project ~on_error (doc_id : Doc_id.t) projects =
             doc_id);
       raise Project_not_found
     | Some file ->
-      file, new_project, `Changed (Projects.add new_project projects)
+      file, new_project, `Changed (update_project new_project projects)
   in
   match lookup_project doc_id projects with
   | Some project -> (
@@ -752,7 +755,7 @@ let update_project_file
                ~pp_sep:(fun fmt () -> fprintf fmt ",@ ")
                Doc_id.format)
             (Doc_id.Set.elements possibly_affected_files));
-      let projects = Projects.add project projects in
+      let projects = update_project project projects in
       { projects; project; possibly_affected_files }
 
 let is_an_included_file doc_id project =
@@ -836,7 +839,7 @@ let remove_project_file ~on_error doc_id project projects =
         m "Possibly affected files: %a"
           (pp_print_list ~pp_sep:pp_print_space Doc_id.format)
           (Doc_id.Set.elements possibly_affected_files));
-    let projects = Projects.add project projects in
+    let projects = update_project project projects in
     { projects; project; possibly_affected_files }
 
 type test_kind =
