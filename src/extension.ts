@@ -33,6 +33,7 @@ import {
   codeBlockRanges,
 } from './extension/catalaFolding';
 import path from 'path';
+import { SettingsStore } from './extension/settingsStore';
 
 // `icon` are codicon id, the (id without the `codicon-` prefix).
 // `new vscode.ThemeIcon('github')`
@@ -421,6 +422,15 @@ async function debugScope(args?: RunArgs): Promise<void> {
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
+  const settingsStore = new SettingsStore(context);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('catala.openSettings', () =>
+      vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        '@ext:catalalang.catala'
+      )
+    )
+  );
   vscode.debug.registerDebugAdapterDescriptorFactory('catala-debugger', {
     createDebugAdapterDescriptor(_session) {
       const dap_path = resolveBinaryPath('catala-dap', context, 'main_dap.exe');
@@ -579,6 +589,10 @@ export async function activate(
   });
 
   context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('catala.settings', new tree_view([]))
+  );
+
+  context.subscriptions.push(
     // note: we need to provide the same name here as we added in the package.json file
     vscode.window.registerTreeDataProvider('catala.switches', switchTree)
   );
@@ -618,7 +632,9 @@ export async function activate(
   );
 
   // Always register the custom editor provider
-  context.subscriptions.push(TestCaseEditorProvider.register(context));
+  context.subscriptions.push(
+    TestCaseEditorProvider.register(context, settingsStore)
+  );
 
   context.subscriptions.push(
     vscode.languages.registerFoldingRangeProvider(
@@ -670,7 +686,7 @@ export async function activate(
           if (y == undefined) return;
           x = y;
         }
-        const inputWebView = new ScopeInputController();
+        const inputWebView = new ScopeInputController(settingsStore);
         inputWebView.createWebview(context, x.uri, x.scope);
       }
     )

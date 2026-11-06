@@ -16,6 +16,8 @@ import {
   generate,
   serializeInputs,
 } from '../test-case-editor/testCaseCompilerInterop';
+import type { SettingsSource } from '../extension/settingsStore';
+import { resolveLanguage } from '../shared/settings';
 
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
@@ -25,6 +27,9 @@ export class ScopeInputController {
   panel: vscode.WebviewPanel;
   scope: string;
   test: Test;
+  private following: vscode.Disposable = new vscode.Disposable(() => {});
+
+  constructor(private readonly settings: SettingsSource) {}
 
   // We want to restrict shell -> webview messages to instances
   // of DownMessage
@@ -49,12 +54,15 @@ export class ScopeInputController {
     );
     this.scope = scope;
 
-    this.panel.webview.html = this.getHtmlForWebview();
+    this.panel.webview.html = this.getHtmlForWebview(file);
+    this.panel.onDidDispose(() => this.following.dispose());
 
     this.panel.webview.onDidReceiveMessage(async (message: unknown) => {
       const typed_msg = readUpMessage(message);
       switch (typed_msg.kind) {
         case 'Ready': {
+          this.following.dispose();
+          this.following = this.settings.follow(this.panel.webview, file);
           const generatedTest: TestGenerateResults = generate(
             scope,
             file,
@@ -160,12 +168,16 @@ export class ScopeInputController {
     });
   }
 
-  getHtmlForWebview(): string {
+  getHtmlForWebview(file: string): string {
     const scriptUri = this.panel.webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'ui.js')
     );
 
-    const language = vscode.env.language;
+    const language = resolveLanguage(
+      this.settings.get(),
+      file,
+      vscode.env.language
+    );
 
     return `
             <!DOCTYPE html>
