@@ -19,6 +19,7 @@ import { resolveConfirmResult } from '../messaging/confirm';
 import { setVsCodeApi } from '../shared/webviewApi';
 import type { WebviewApi } from 'vscode-webview';
 import { assertUnreachable } from '../shared/util';
+import { isSettingsMessage } from '../shared/settings';
 import ScopeOutputs from './ScopeOutputs';
 import {
   hasUnsetInTest,
@@ -104,6 +105,9 @@ export default function ScopeInputEditor({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
+      if (isSettingsMessage(event.data)) {
+        return;
+      }
       const message = readDownMessage(event.data);
       switch (message.kind) {
         case 'Update':
