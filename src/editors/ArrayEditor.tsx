@@ -24,6 +24,7 @@ import {
 } from '../diff/arrayPresence';
 import { confirm } from '../messaging/confirm';
 import { TableArrayEditor } from './TableArrayEditor';
+import { useLinkedView } from './reveal';
 import { getTypeDisplayName } from './typeNameUtils';
 import {
   tryCreateTableSchema,
@@ -171,6 +172,13 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
 
   // Allow user to toggle between table and tree view
   const [forceTreeView, setForceTreeView] = useState(false);
+  const shareView = useLinkedView(currentPath, (choice) => {
+    if (choice.kind === 'cards') setForceTreeView(choice.cards);
+  });
+  const showCards = (cards: boolean): void => {
+    setForceTreeView(cards);
+    shareView({ kind: 'cards', cards });
+  };
 
   // State for drag and drop (must be before early return to satisfy hooks rules)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -189,7 +197,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
         editable={editable}
         onDiffResolved={props.onDiffResolved}
         onInvalidateDiffs={props.onInvalidateDiffs}
-        onSwitchToTreeView={() => setForceTreeView(true)}
+        onSwitchToTreeView={() => showCards(true)}
       />
     );
   }
@@ -247,7 +255,7 @@ export function ArrayEditor(props: ArrayEditorProps): ReactElement {
         <div className="table-view-toggle">
           <button
             className="table-control-btn"
-            onClick={() => setForceTreeView(false)}
+            onClick={() => showCards(false)}
             title={intl.formatMessage({
               id: 'arrayEditor.switchToTableView',
               defaultMessage: 'Switch to table view',
