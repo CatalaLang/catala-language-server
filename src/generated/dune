@@ -1,0 +1,7 @@
+(rule
+ (mode promote)
+ (action
+  (with-stdout-to
+    languages.ts
+   (run %{exe:../../languages/gen_ts.exe})
+)))
