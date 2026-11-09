@@ -610,7 +610,7 @@ let add_scope_definitions
     (surface : Surface.Ast.program)
     (pmap : PMap.acc) =
   let rec process vars_acc = function
-    | Surface.Ast.CodeBlock (cb, _, _) ->
+    | Surface.Ast.CodeBlock { code; _ } ->
       List.fold_left
         (fun vars item ->
           match Mark.remove item with
@@ -637,7 +637,7 @@ let add_scope_definitions
           | AbstractTypeDecl _ | ScopeDecl _ | StructDecl _ | EnumDecl _
           | Topdef _ ->
             vars)
-        vars_acc cb
+        vars_acc code
     | LawHeading (_, ls) -> List.fold_left process vars_acc ls
     | LawInclude _ | ModuleDef _ | ModuleUse _ | LawText _ -> vars_acc
   in
@@ -707,7 +707,7 @@ let populate_modules
   let acc =
     match surface.program_module with
     | None -> acc
-    | Some { module_name; module_external = _ } -> (
+    | Some { module_name; module_is_external = _ } -> (
       try
         let name = String.to_ascii (Mark.remove module_name) in
         let mname = C.find name convert_map in
