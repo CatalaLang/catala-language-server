@@ -24,6 +24,7 @@ import {
 } from '../test-case-editor/testCaseCompilerInterop';
 import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
+import { catalaLangs } from '../generated/languages';
 
 export function parseContents(
   content: Uint8Array,
@@ -463,7 +464,11 @@ export class TestCaseEditorProvider
             if (picked === browseItem) {
               const fileUri = await vscode.window.showOpenDialog({
                 filters: {
-                  'Catala Files': ['catala_fr', 'catala_en', 'catala_pl'],
+                  'Catala Files': catalaLangs
+                    .map((lang) => 'catala_' + lang.code)
+                    .concat(
+                      catalaLangs.map((lang) => 'catala_' + lang.code + '.md')
+                    ),
                 },
               });
               if (!fileUri?.[0]) break;

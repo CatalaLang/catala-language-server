@@ -33,6 +33,7 @@ import {
   codeBlockRanges,
 } from './extension/catalaFolding';
 import path from 'path';
+import { catalaLangs } from './generated/languages';
 
 // `icon` are codicon id, the (id without the `codicon-` prefix).
 // `new vscode.ThemeIcon('github')`
@@ -605,7 +606,7 @@ export async function activate(
 
   context.subscriptions.push(
     vscode.languages.registerFoldingRangeProvider(
-      ['catala_en', 'catala_fr', 'catala_pl'].map((language) => ({ language })),
+      catalaLangs.map((l) => ({ language: l.config_id })),
       {
         provideFoldingRanges(document) {
           const lines = document.getText().split(/\r?\n/);
