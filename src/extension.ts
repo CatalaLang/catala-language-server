@@ -658,8 +658,10 @@ export async function activate(
     )
   );
 
-  // Always register the custom editor provider
-  context.subscriptions.push(TestCaseEditorProvider.register(context));
+  // Always register the custom editor providers
+  context.subscriptions.push(
+    TestCaseEditorProvider.register(context, resultController)
+  );
 
   context.subscriptions.push(
     vscode.languages.registerFoldingRangeProvider(
