@@ -46,6 +46,8 @@ function execBinary(
       output: execFileSync(bin, useShell ? args.map(shellArg) : args, {
         encoding: 'utf8',
         shell: useShell,
+        // The 1 MiB default overflows (ENOBUFS) on large tests and outputs.
+        maxBuffer: 1024 * 1024 * 1024,
         // A resolved clerk reaches the plugin; a bare name would only shadow
         // the plugin's own lookup beside catala.
         env: {
