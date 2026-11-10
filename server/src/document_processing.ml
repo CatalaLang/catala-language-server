@@ -247,7 +247,7 @@ let surface_to_scopelang
       options.Global.input_src
   in
   match surface.Surface.Ast.program_module with
-  | Some { module_external = true; _ } ->
+  | Some { module_is_external = true; _ } ->
     (* If the module is external, we skip it as the translation from desugared
        would trigger an error *)
     Log.debug (fun m -> m "skipping external module interface");

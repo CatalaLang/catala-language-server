@@ -394,10 +394,12 @@ let pp_module
       | LawHeading (_, ls) :: t ->
         loop ls;
         loop t
-      | CodeBlock (cb, _, vis) :: t ->
+      | CodeBlock { code; is_metadata; _ } :: t ->
         fprintf fmt "@[<v>%a@]"
           (pp_print_list ~pp_sep:pp_print_space pp_code_block)
-          (List.map (fun item -> item, if vis then Public else Private) cb);
+          (List.map
+             (fun item -> item, if is_metadata then Public else Private)
+             code);
         loop t
     in
     loop ls

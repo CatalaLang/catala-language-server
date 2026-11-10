@@ -262,7 +262,7 @@ let list_scopes ~tests_only file : Shared_ast.ScopeName.t list =
   let open Surface.Ast in
   let prg = Surface.Parser_driver.parse_top_level_file (Global.FileName file) in
   let rec loop acc = function
-    | CodeBlock (code_block, _, _) ->
+    | CodeBlock { code; _ } ->
       List.fold_left
         (fun acc -> function
           | ScopeDecl sdecl ->
@@ -292,7 +292,7 @@ let list_scopes ~tests_only file : Shared_ast.ScopeName.t list =
             else acc
           | _ -> acc)
         acc
-        (List.map Mark.remove code_block)
+        (List.map Mark.remove code)
     | LawHeading (_, ls) -> List.fold_left loop acc ls
     | _ -> acc
   in

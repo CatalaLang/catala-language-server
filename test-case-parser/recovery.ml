@@ -102,7 +102,7 @@ let translate_literal l pos =
 let surface_code_items (prg : Surface.Ast.program) =
   let open Surface.Ast in
   let rec items = function
-    | CodeBlock (cb, _, _) -> cb
+    | CodeBlock { code; _ } -> code
     | LawHeading (_, sub) -> List.concat_map items sub
     | _ -> []
   in
