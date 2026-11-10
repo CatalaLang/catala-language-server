@@ -1,0 +1,13 @@
+{
+  // Config used to emit the files run directly by Node / VS Code
+  // (vscode-test, extest). The root tsconfig.json uses "Bundler" resolution,
+  // which is fine for webpack-bundled code but emits ESM that Node cannot load
+  // from the extension host (no `vscode` module in ESM, extensionless imports).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16"
+  },
+  "files": ["src/extension.ts"],
+  "include": ["src/test/**/*", "src/e2e/**/*"]
+}
