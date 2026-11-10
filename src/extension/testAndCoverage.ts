@@ -16,6 +16,7 @@ import type {
   TestOutputs,
   TestRunResults,
 } from '../generated/catala_types';
+import { logger } from './logger';
 
 type ClerkLocation = {
   file: string;
@@ -296,7 +297,8 @@ async function processGUITest(
   run: vscode.TestRun,
   test: vscode.TestItem,
   file: string,
-  scope: string
+  scope: string,
+  focus: boolean
 ): Promise<void> {
   try {
     const uri = vscode.Uri.file(file);
@@ -308,7 +310,9 @@ async function processGUITest(
       if (hasFailures) {
         // Prefer focusing the custom editor and displaying diffs there
         // TODO: SHOULD WE?
-        await focusDiffInCustomEditor(uri, scope, res);
+        if (focus) {
+          await focusDiffInCustomEditor(uri, scope, res);
+        }
       } else {
         // Update GUI editor if open to clear stale diffs on success
         await updateOpenCustomEditorWithResults(uri, scope, res);
@@ -517,7 +521,8 @@ function makeRunHandler(
   ctrl: vscode.TestController,
   test_map: TestMap,
   resultController: ResultController,
-  cwd: string
+  cwd: string,
+  focus: boolean
 ): RunHandler {
   const runHandler = async (
     request: vscode.TestRunRequest,
@@ -566,7 +571,8 @@ function makeRunHandler(
                 run,
                 test_item,
                 file,
-                scope_test_result.scope_name
+                scope_test_result.scope_name,
+                focus
               );
               test_gui_threads.push(gui_thread);
             } else {
@@ -647,7 +653,13 @@ export async function initTests(
   ctrl.refreshHandler = async (_token): Promise<void> =>
     await updateTestScopes();
 
-  const testRunHandler = makeRunHandler(ctrl, test_map, resultController, cwd!);
+  const testRunHandler = makeRunHandler(
+    ctrl,
+    test_map,
+    resultController,
+    cwd!,
+    true
+  );
 
   ctrl.createRunProfile(
     'Run tests',
@@ -699,4 +711,44 @@ export async function initTests(
   );
 
   return testRunHandler;
+}
+
+type RunTestArgs =
+  | { kind: 'all' }
+  | { kind: 'scope'; tests: { filename: vscode.Uri; scope: string }[] };
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function runTestVscode(
+  cwd: string,
+  testMap: TestMap,
+  testController: vscode.TestController,
+  resultController: ResultController,
+  args: RunTestArgs
+): Promise<void> {
+  let runTest = makeRunHandler(
+    testController,
+    testMap,
+    resultController,
+    cwd,
+    false
+  );
+  let request: vscode.TestRunRequest;
+  if (args.kind == 'all') {
+    let items = [...testController.items].map(([, item]) => item);
+    request = new vscode.TestRunRequest(items);
+  } else {
+    let testItems = [];
+    for (let test of args.tests) {
+      const testItem = testMap.get(new TestId(test.filename, test.scope));
+      if (testItem == undefined) {
+        logger.log(
+          `Test ${test.scope} not found in ${test.filename.fsPath}, skipped`
+        );
+        continue;
+      }
+      testItems.push(testItem);
+    }
+    request = new vscode.TestRunRequest(testItems);
+  }
+  await runTest(request, new vscode.CancellationTokenSource().token, false);
 }

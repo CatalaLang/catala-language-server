@@ -26,6 +26,7 @@ import { renameIfNeeded } from '../test-case-editor/testCaseUtils';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
 import type { SettingsSource } from './settingsStore';
 import { resolveLanguage } from '../shared/settings';
+import type { ResultController } from './testAndCoverage';
 
 export function parseContents(
   content: Uint8Array,
@@ -52,9 +53,11 @@ export class TestCaseEditorProvider
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly settings: SettingsSource
+    private readonly settings: SettingsSource,
+    private resultController: ResultController
   ) {
     this.testQueue = new PQueue({ concurrency: 1 });
+    this.resultController = resultController;
   }
 
   async saveCustomDocument(
@@ -128,9 +131,14 @@ export class TestCaseEditorProvider
 
   public static register(
     context: vscode.ExtensionContext,
-    settings: SettingsSource
+    settings: SettingsSource,
+    resultController: ResultController
   ): vscode.Disposable {
-    const provider = new TestCaseEditorProvider(context, settings);
+    const provider = new TestCaseEditorProvider(
+      context,
+      settings,
+      resultController
+    );
     logger.log(`Registering ${TestCaseEditorProvider.viewType}`);
     const providerRegistration = vscode.window.registerCustomEditorProvider(
       TestCaseEditorProvider.viewType,
@@ -312,9 +320,9 @@ export class TestCaseEditorProvider
               return;
             }
           }
-          const results = await this.testQueue.add(() =>
-            runTest(document.uri.fsPath, scope)
-          ); // assumes that the document is local (fsPath)
+          const results = await this.testQueue.add(async () => {
+            return runTest(document.uri.fsPath, scope);
+          });
 
           postMessageToWebView({
             kind: 'TestRunResults',
