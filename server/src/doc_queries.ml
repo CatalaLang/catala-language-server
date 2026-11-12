@@ -186,7 +186,7 @@ let get_hover_type ?(markdown = false) f p =
     try Jump_table.Ord_lookup.max_elt lookup_s with _ -> assert false
   in
   if markdown then
-    let md = Type_printing.typ_to_markdown prg f.locale kind in
+    let md = Type_printing.typ_to_markdown prg f.lang kind in
     let definition_tree_link =
       let open Jump_table in
       let*? l = PMap.lookup p jt.pos_map in
@@ -220,13 +220,13 @@ let get_hover_type ?(markdown = false) f p =
         |> Uri.pct_encode ~component:`Query_key
       in
       let show_def_tree_s = function
-        | `En -> "Show definition tree"
-        | `Fr -> "Afficher l'arbre de définitions"
-        | `Pl -> "Pokaż drzewo definicji"
+        | French.T, _ -> "Afficher l'arbre de définitions"
+        | Polish.T, _ -> "Pokaż drzewo definicji"
+        | English.T, _ | _ -> "Show definition tree"
       in
       Some
         (Printf.sprintf "\n\n[%s](command:catala.showExceptions?%s)"
-           (show_def_tree_s f.locale) args_json)
+           (show_def_tree_s f.lang) args_json)
     in
     let value =
       md.Linol_lwt.MarkupContent.value
@@ -240,7 +240,7 @@ let get_hover_type ?(markdown = false) f p =
                  ~kind:Linol_lwt.MarkupKind.Markdown ~value))
          ())
   else
-    let md = Type_printing.typ_to_raw_string prg f.locale kind in
+    let md = Type_printing.typ_to_raw_string prg f.lang kind in
     Some (Linol_lwt.Hover.create ~range ~contents:(`MarkedString md) ())
 
 let lookup_type_declaration f p =
