@@ -18,6 +18,7 @@ open Server_types
 open Lwt.Syntax
 open Shared_ast
 open Catala_utils
+open Languages
 
 type valid_result = {
   surface : Surface.Ast.program;
@@ -38,7 +39,7 @@ type buffer_state = Saved | Modified of { contents : string }
 
 type document_state = {
   document_id : Doc_id.t;
-  locale : Global.backend_lang;
+  lang : code * lang;
   buffer_state : buffer_state;
   project : Projects.project;
   project_file : Projects.project_file;
@@ -48,10 +49,16 @@ type document_state = {
 }
 
 let make_document buffer_state (document_id : Doc_id.t) project project_file =
-  let locale = Catala_utils.Cli.file_lang (document_id :> File.t) in
+  let lang =
+    match Languages.file_lang (document_id :> File.t) with
+    | None ->
+      Log.err (fun m -> m "Cannot infer language from document uri");
+      English.T, English.language
+    | Some l -> l
+  in
   {
     document_id;
-    locale;
+    lang;
     buffer_state;
     project;
     project_file;
