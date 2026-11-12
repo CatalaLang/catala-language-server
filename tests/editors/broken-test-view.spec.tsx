@@ -3,8 +3,8 @@
  * must be inert and complete: it is the only copy of what the tester wrote.
  */
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import type {
   CarryRecord,
@@ -935,5 +935,81 @@ describe('regression: authored-tab-mark', () => {
       const gone = tabs.find((t) => t.textContent?.includes('gone'))!;
       expect(gone.querySelector('.fate-dropped')).not.toBeNull();
     });
+  });
+});
+
+describe('jumping to the first unset value', () => {
+  const ints: Typ = { kind: 'TArray', value: { kind: 'TInt' } };
+  const list = (...items: (number | null)[]): TestIo =>
+    io(ints, {
+      value: arrayVal(
+        items.map((n) => (n === null ? rv({ kind: 'Unset' }) : intVal(n)))
+      ),
+    });
+
+  function pair(original: TestIo): Recovery {
+    const base = authored();
+    const inputs = (pets: TestIo): Map<string, TestIo> =>
+      new Map<string, TestIo>([
+        ['kids', list(3)],
+        ['pets', pets],
+      ]);
+    return {
+      tests: [
+        {
+          authored: { ...base, test_inputs: inputs(original) },
+          rebuilt: { ...base, test_inputs: inputs(list(null)) },
+          outcomes: [],
+        },
+      ],
+      notes: [],
+      working_copy: 'x.repair',
+    };
+  }
+
+  const scrolled: Element[] = [];
+  Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+    scrolled.push(this);
+  });
+  afterEach(() => {
+    scrolled.length = 0;
+    vi.useRealTimers();
+  });
+
+  const jump = (container: HTMLElement): void => {
+    vi.useFakeTimers();
+    fireEvent.click(container.querySelector('.readiness-unfilled')!);
+    act(() => {
+      vi.runAllTimers();
+    });
+  };
+  const authoredPane = (container: HTMLElement): Element =>
+    container.querySelector('.broken-pane-authored')!;
+  const activeTab = (pane: Element): string | null | undefined =>
+    pane.querySelector('.tab.active .tab-name')?.textContent;
+  const scrolledIn = (pane: Element): Element[] =>
+    scrolled.filter((e) => pane.contains(e));
+  const anchorAfter = (e: Element): string | undefined =>
+    (e.nextElementSibling as HTMLElement | null)?.dataset.path;
+
+  it('opens the same tab in the original and scrolls it to the same value', () => {
+    const container = renderView(pair(list(5)));
+    const pane = authoredPane(container);
+    expect(activeTab(pane)).toBe('kids');
+    jump(container);
+    expect(activeTab(pane)).toBe('pets');
+    const inOriginal = scrolledIn(pane);
+    expect(inOriginal).toHaveLength(1);
+    expect(anchorAfter(inOriginal[0])).toBe('StructField:pets/ListIndex:0');
+  });
+
+  it('scrolls the original to the closest parent when the value is missing', () => {
+    const container = renderView(pair(list()));
+    const pane = authoredPane(container);
+    jump(container);
+    expect(activeTab(pane)).toBe('pets');
+    const inOriginal = scrolledIn(pane);
+    expect(inOriginal).toHaveLength(1);
+    expect(anchorAfter(inOriginal[0])).toBe('StructField:pets');
   });
 });

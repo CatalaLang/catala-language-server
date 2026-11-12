@@ -98,6 +98,36 @@ function markHook(
   };
 }
 
+function anchorHook(side: CarrySide['kind'], hook: Hook | undefined): Hook {
+  return (editor, path) => (
+    <>
+      {hook === undefined ? editor : hook(editor, path)}
+      <span hidden data-side={side} data-path={pathKey(path)} />
+    </>
+  );
+}
+
+function scrollToClosestAnchor(
+  container: HTMLElement | null,
+  side: CarrySide['kind'],
+  path: PathSegment[]
+): void {
+  if (container === null) return;
+  const anchors = Array.from(
+    container.querySelectorAll<HTMLElement>(`[data-side="${side}"]`)
+  );
+  for (let length = path.length; length > 0; length--) {
+    const key = pathKey(path.slice(0, length));
+    const target = anchors.find(
+      (a) => a.dataset.path === key
+    )?.previousElementSibling;
+    if (target && target.closest('.hidden') === null) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+  }
+}
+
 /** One side's outcomes by field name. */
 function marksFor(
   carried: CarryRecord[],
@@ -498,6 +528,7 @@ function TestPanes({
     runState?.results?.kind === 'Ok' ? runState.results.value.diffs : [];
   const scope = meta?.tested_scope;
   const rebuiltPaneRef = useRef<HTMLDivElement>(null);
+  const authoredPaneRef = useRef<HTMLDivElement>(null);
   const markFrom =
     (marks: Map<string, CarryOutcome>, hints?: Map<string, string[]>) =>
     (name: string): React.JSX.Element | null => {
@@ -520,8 +551,19 @@ function TestPanes({
   const linkedInputs = useLinkedViewsState();
   const linkedOutputs = useLinkedViewsState();
   const jumpToFirstUnset = (): void => {
-    const path = rebuilt === undefined ? undefined : firstUnsetPath(rebuilt);
-    if (path) setReveal((r) => ({ path, nonce: (r?.nonce ?? 0) + 1 }));
+    if (rebuilt === undefined) return;
+    const path = firstUnsetPath(rebuilt);
+    if (path) {
+      setReveal((r) => ({ path, nonce: (r?.nonce ?? 0) + 1 }));
+      const side =
+        firstUnsetPath({ ...rebuilt, test_outputs: new Map() }) === undefined
+          ? 'Out'
+          : 'In';
+      setTimeout(
+        () => scrollToClosestAnchor(authoredPaneRef.current, side, path),
+        50
+      );
+    }
     scrollToFirstInvalidOrUnset(rebuiltPaneRef.current ?? document, 50);
   };
   // An unset value fails the run with an interpreter error: ask first.
@@ -553,7 +595,7 @@ function TestPanes({
         className="broken-panes"
         style={{ ['--broken-split']: `${split}%` } as React.CSSProperties}
       >
-        <div className="broken-pane broken-pane-authored">
+        <div className="broken-pane broken-pane-authored" ref={authoredPaneRef}>
           {authored === undefined ? (
             <p className="broken-empty">
               <FormattedMessage id="broken.nothingRecovered" />
@@ -569,7 +611,7 @@ function TestPanes({
                   onTestInputsChange={(): void => {}}
                   readOnly
                   labelExtra={fateFrom(marksIn)}
-                  editorHook={fateHookIn}
+                  editorHook={anchorHook('In', fateHookIn)}
                 />
               </LinkedViewsContext.Provider>
               {authored.test_outputs.size > 0 && (
@@ -583,7 +625,7 @@ function TestPanes({
                       onTestChange={(): void => {}}
                       readOnly
                       labelExtra={fateFrom(marksOut)}
-                      editorHook={fateHookOut}
+                      editorHook={anchorHook('Out', fateHookOut)}
                     />
                   </LinkedViewsContext.Provider>
                 </>
