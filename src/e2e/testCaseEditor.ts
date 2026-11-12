@@ -26,7 +26,7 @@ describe('Test case editor, as displayed', function () {
     for (const f of ['clerk.toml', 'items.catala_en', 'test_items.catala_en']) {
       fs.copyFileSync(path.join(fixtures, f), path.join(dir, f));
     }
-    execSync('clerk start', { cwd: dir, stdio: 'ignore' });
+    execSync('clerk start', { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
   });
 
   it('shows the test of the opened file', async () => {
