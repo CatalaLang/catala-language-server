@@ -50,9 +50,9 @@ let fr_map = String.Map.of_list (List.combine fr_aliases fr_names)
 (** The module an alias stands for, e.g. [Date_fr] ↦ [Date]. *)
 let target (lang : Global.backend_lang) alias =
   String.Map.find_opt alias
-    (match lang with `Fr -> fr_map | `En | `Pl -> en_map)
+    (match lang with French.T -> fr_map | English.T | _ -> en_map)
 
 (** Names and aliases that need no [> Using] line. *)
 let implicit : Global.backend_lang -> string list = function
-  | `Fr -> fr_names @ fr_aliases
-  | `En | `Pl -> en_names @ en_aliases
+  | French.T -> fr_names @ fr_aliases
+  | English.T | _ -> en_names @ en_aliases
