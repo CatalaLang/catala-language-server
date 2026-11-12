@@ -13,7 +13,6 @@
    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
    License for the specific language governing permissions and limitations under
    the License. *)
-(****************************************************************)
 
 open Server_state
 open Catala_utils
@@ -22,6 +21,7 @@ open Shared_ast
 open Linol_lwt
 open Surface
 open Server_types
+open Locale
 
 let _lookup_suggestions doc_id diagnostics range =
   let*? rmap = Doc_id.Map.find_opt doc_id diagnostics in
@@ -54,10 +54,10 @@ let[@ocaml.warning "-32"] pp_token =
 let lex_line (doc : document_state) ~content (pos : Position.t) =
   let lexbuf = Sedlexing.Utf8.from_string content in
   let lexer =
-    match doc.locale with
-    | `En -> Lexer_en.lexer
-    | `Fr -> Lexer_fr.lexer
-    | `Pl -> Lexer_pl.lexer
+    let (module Lexer : Lexer_common.LocalisedLexer) =
+      List.assoc (fst doc.lang) (Lexer_common.lexers ())
+    in
+    Lexer.lexer
   in
   let real_lpos = pos.line + 1 in
   let line_tokens =
@@ -202,7 +202,7 @@ module Kind = struct
         Shared_ast.Print.typ ty
     | Keyword { lexeme; _ } -> Format.fprintf ppf "Keyword(%s)" lexeme
 
-  let make_doc locale k =
+  let make_doc ((_, lang) as l) k =
     let extract_doc get_info x =
       let*? doc =
         get_info x
@@ -221,54 +221,45 @@ module Kind = struct
       | ModuleUsage _ -> None, None (* TODO: print module content *)
       | StdlibModule _ -> None, None (* TODO: print module content *)
       | Struct { name; fields } ->
-        ( Some (Type_printing.struct_code ~markdown:true locale (name, fields)),
+        ( Some (Type_printing.struct_code ~markdown:true l (name, fields)),
           extract_doc StructName.get_info name )
       | Enum { name; constrs } ->
-        ( Some (Type_printing.enum_code ~markdown:true locale (name, constrs)),
+        ( Some (Type_printing.enum_code ~markdown:true l (name, constrs)),
           extract_doc EnumName.get_info name )
       | Constructor { constr; enum_name } ->
         ( Some
-            (asprintf "```catala_code_%s@\n%a.%s@\n```"
-               (Type_printing.locale_s locale)
+            (asprintf "```catala_code_%s@\n%a.%s@\n```" lang.code
                EnumName.format_shortpath enum_name
                (EnumConstructor.to_string constr)),
           extract_doc EnumConstructor.get_info constr )
       | Scope { name; decl } ->
-        ( Some (Type_printing.sig_type ~markdown:true locale name decl.scope_sig),
+        ( Some (Type_printing.sig_type ~markdown:true l name decl.scope_sig),
           extract_doc ScopeName.get_info name )
       | Topdef { name; ty } ->
         ( Some
-            (asprintf "```catala_code_%s@\n%s : %a@\n```"
-               (Type_printing.locale_s locale)
-               (TopdefName.base name)
-               (Type_printing.pp_typ locale)
-               ty),
+            (asprintf "```catala_code_%s@\n%s : %a@\n```" lang.code
+               (TopdefName.base name) (Type_printing.pp_typ l) ty),
           extract_doc TopdefName.get_info name )
       | ScopeVar { name; scope = _; states = None; ty } ->
         ( Some
-            (asprintf "```catala_code_%s@\n%a@]@\n```"
-               (Type_printing.locale_s locale)
-               (Type_printing.pp_scope_var ~skip_internals:false locale)
+            (asprintf "```catala_code_%s@\n%a@]@\n```" lang.code
+               (Type_printing.pp_scope_var ~skip_internals:false l)
                (name, ty)),
           extract_doc ScopeVar.get_info name )
       | ScopeVar { name; scope = _; states = Some states; ty } ->
         ( Some
-            (asprintf "```catala_code_%s@\n@[<v 2>%a@ %a@]@\n```"
-               (Type_printing.locale_s locale)
-               (Type_printing.pp_scope_var ~skip_internals:false locale)
+            (asprintf "```catala_code_%s@\n@[<v 2>%a@ %a@]@\n```" lang.code
+               (Type_printing.pp_scope_var ~skip_internals:false l)
                (name, ty)
                Format.(
                  pp_print_list ~pp_sep:pp_print_space (fun fmt state ->
-                     fprintf fmt "%s %s"
-                       (Type_printing.svar_state_s locale)
-                       state))
+                     fprintf fmt "%s %s" lang.keywords.state state))
                states),
           extract_doc ScopeVar.get_info name )
       | StructField { name; ty } ->
         ( Some
-            (asprintf "```catala_code_%s@\n%a@\n```"
-               (Type_printing.locale_s locale)
-               (Type_printing.pp_struct_field locale)
+            (asprintf "```catala_code_%s@\n%a@\n```" lang.code
+               (Type_printing.pp_struct_field l)
                (name, ty)),
           extract_doc StructField.get_info name )
       | Keyword _ -> None, None
@@ -633,12 +624,12 @@ let follow_ups ?prefix prg (kind : Kind.t) m =
   | ModuleUsage _, _ ->
     m
 
-let lookup_keywords ~prefix (prg : typed Scopelang.Ast.program) m =
+let lookup_keywords ~prefix lang m =
   let token_list =
-    match prg.program_lang with
-    | `En -> Lexer_en.token_list
-    | `Fr -> Lexer_fr.token_list
-    | `Pl -> Lexer_pl.token_list
+    let (module Lexer : Lexer_common.LocalisedLexer) =
+      List.assoc (fst lang) (Lexer_common.lexers ())
+    in
+    Lexer.token_list
   in
   List.map (fun (lexeme, token) -> Kind.Keyword { lexeme; token }) token_list
   |> Kind.Set.of_list
@@ -670,30 +661,30 @@ let single_uident prefix_tok prg =
   |> lookup_constructors ~prefix prg
   |> lookup_scopes ~prefix prg
 
-let single_lident ?(full = false) prefix_tok prg =
+let single_lident ?(full = false) prefix_tok lang prg =
   let prefix = tok_to_prefix full prefix_tok in
   CompletionMap.empty
   |> lookup_topdefs ~prefix prg
   |> lookup_scopevars ~prefix prg
-  |> lookup_keywords ~prefix prg
+  |> lookup_keywords ~prefix lang
 (* TODO: also inspect the AST *)
 
-let lident_dot_prefix lident ?prefix_tok prg =
-  let map = single_lident ~full:true (LIDENT lident) prg in
+let lident_dot_prefix lident ?prefix_tok lang prg =
+  let map = single_lident ~full:true (LIDENT lident) lang prg in
   let prefix = Option.map partial_prefix prefix_tok in
   String.Map.fold
     (fun _qual s m -> Kind.Set.fold (fun k m -> follow_ups ?prefix prg k m) s m)
     map CompletionMap.empty
 
-let directives ?prefix (prg : typed Scopelang.Ast.program) needs_space =
+let directives ?prefix (_, lang) needs_space =
   let using =
     Kind.Keyword
-      {
-        lexeme = Type_printing.using_s prg.program_lang;
-        token = Tokens.MODULE_USE;
-      }
+      { lexeme = lang.directives.module_use; token = Tokens.MODULE_USE }
   in
-  let def = Kind.Keyword { lexeme = "Module"; token = Tokens.MODULE_DEF } in
+  let def =
+    Kind.Keyword
+      { lexeme = lang.directives.module_def; token = Tokens.MODULE_DEF }
+  in
   let l =
     [using; def]
     |> fun l ->
@@ -708,7 +699,7 @@ let directives ?prefix (prg : typed Scopelang.Ast.program) needs_space =
   in
   update_all ?prefix CompletionMap.empty (Kind.Set.of_list l)
 
-let module_def ?prefix doc =
+let module_def ?prefix (_, lang) doc =
   let mod_name =
     File.basename (doc.document_id :> string)
     |> File.remove_extension
@@ -716,7 +707,9 @@ let module_def ?prefix doc =
   in
   if prefix = None then
     CompletionMap.singleton mod_name
-      Kind.(Set.singleton (ModuleUsage ("Module " ^ mod_name)))
+      Kind.(
+        Set.singleton
+          (ModuleUsage (lang.directives.module_def ^ " " ^ mod_name)))
   else
     update_all ?prefix CompletionMap.empty
       Kind.(Set.singleton (ModuleUsage mod_name))
@@ -765,7 +758,9 @@ let lookup_completions (doc : document_state) ~doc_content pos =
       None
   in
   let prg = last_valid_result.prg in
-  let to_completions = to_completions prg.program_lang in
+  let langs = Languages.languages () in
+  let lang = List.find (fun (x, _) -> x = prg.program_lang) langs in
+  let to_completions = to_completions lang in
   let open Tokens in
   let r =
     match rev_tokens with
@@ -779,13 +774,13 @@ let lookup_completions (doc : document_state) ~doc_content pos =
       :: (_, MODULE_DEF, _)
       :: (_, BEGIN_DIRECTIVE, _)
       :: _ ->
-      module_def ~prefix:(partial_prefix tok) doc
-    | (_, MODULE_DEF, _) :: (_, BEGIN_DIRECTIVE, _) :: _ -> module_def doc
+      module_def ~prefix:(partial_prefix tok) lang doc
+    | (_, MODULE_DEF, _) :: (_, BEGIN_DIRECTIVE, _) :: _ -> module_def lang doc
     | (_, ((UIDENT _ | DIRECTIVE_ARG _) as tok), _)
       :: (_, BEGIN_DIRECTIVE, _)
       :: _ ->
-      directives ~prefix:(partial_prefix tok) prg false
-    | (_, BEGIN_DIRECTIVE, _) :: _ -> directives prg on_token
+      directives ~prefix:(partial_prefix tok) lang false
+    | (_, BEGIN_DIRECTIVE, _) :: _ -> directives lang on_token
     | (_, (UIDENT _s as tok), _) :: (_, OF, _) :: (_, OUTPUT, _) :: _ ->
       lookup_scopes prg ~prefix:(partial_prefix tok) CompletionMap.empty
     | (_, OF, _) :: (_, OUTPUT, _) :: _ -> lookup_scopes prg CompletionMap.empty
@@ -795,14 +790,16 @@ let lookup_completions (doc : document_state) ~doc_content pos =
       :: _ ->
       uident_dot_prefix qualif ~prefix_tok:tok prg
     | (_, DOT, _) :: (_, UIDENT qualif, _) :: _ -> uident_dot_prefix qualif prg
-    | (_, DOT, _) :: (_, LIDENT qualif, _) :: _ -> lident_dot_prefix qualif prg
+    | (_, DOT, _) :: (_, LIDENT qualif, _) :: _ ->
+      lident_dot_prefix qualif lang prg
     | (_, (LIDENT _ as prefix_tok), _)
       :: (_, DOT, _)
       :: (_, LIDENT qualif, _)
       :: _ ->
-      lident_dot_prefix ~prefix_tok qualif prg
+      lident_dot_prefix ~prefix_tok qualif lang prg
     | (_, (UIDENT _s as tok), _) :: _ -> single_uident tok prg
-    | (_, (LIDENT _s as tok), _) :: _ when on_token -> single_lident tok prg
+    | (_, (LIDENT _s as tok), _) :: _ when on_token ->
+      single_lident tok lang prg
     | _ -> CompletionMap.empty
   in
   let completions = to_completions r in

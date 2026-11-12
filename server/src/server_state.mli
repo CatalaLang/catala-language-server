@@ -17,6 +17,7 @@
 open Shared_ast
 open Catala_utils
 open Server_types
+open Languages
 
 type valid_result = {
   surface : Surface.Ast.program;
@@ -41,7 +42,7 @@ type buffer_state = Saved | Modified of { contents : string }
 
 type document_state = {
   document_id : Doc_id.t;
-  locale : Global.backend_lang;
+  lang : code * lang;
   buffer_state : buffer_state;
   project : Projects.project;
   project_file : Projects.project_file;
