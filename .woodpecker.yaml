@@ -55,16 +55,19 @@ steps:
   - name: Run tests
     depends_on: Build project
     image: *catala_image
+    environment:
+      # Otherwise VS Code takes PATH from a login shell, whose /etc/profile drops the opam switch
+      VSCODE_CLI: 1
     commands:
       - eval $(opam env --set-switch)
       - sudo apt-get update && sudo apt-get install --yes xvfb libnspr4 libnss3 libgtk-3-0 libasound2t64 ninja-build musl && sudo apt-get clean
       - npm run webview:test
       - clerk start
-      - xvfb-run -a npm run test || true # Could not get this to work despite all my efforts
+      - xvfb-run -a npm run test
       - (cd tests/round_trip && ./round_trip.sh)
       - (cd tests/regressions && ./enum_path_test.sh)
       - (cd tests/regressions && ./output_module_deps_test.sh)
-      - xvfb-run -a npm run test:e2e || true # Ditto
+      - xvfb-run -a npm run test:e2e
 
   - name: Upload failure screenshots
     depends_on: Run tests
