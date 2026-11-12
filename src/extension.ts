@@ -33,6 +33,7 @@ import {
   codeBlockRanges,
 } from './extension/catalaFolding';
 import path from 'path';
+import { catalaLangs } from './generated/languages';
 
 // `icon` are codicon id, the (id without the `codicon-` prefix).
 // `new vscode.ThemeIcon('github')`
@@ -489,30 +490,13 @@ export async function activate(
       documentSelector: [
         {
           scheme: 'file',
-          language: 'catala_en',
-          pattern: '**/*.catala_en{,.md}',
-        },
-        {
-          scheme: 'file',
-          language: 'catala_fr',
-          pattern: '**/*.catala_fr{,.md}',
-        },
-        {
-          scheme: 'file',
-          language: 'catala_pl',
-          pattern: '**/*.catala_pl{,.md}',
+          pattern: '**/*.catala_[a-z][a-z]{,.md}',
         },
       ],
       synchronize: {
         fileEvents: [
           vscode.workspace.createFileSystemWatcher(
-            '**/*.{catala_en,catala_en.md}'
-          ),
-          vscode.workspace.createFileSystemWatcher(
-            '**/*.{catala_fr,catala_fr.md}'
-          ),
-          vscode.workspace.createFileSystemWatcher(
-            '**/*.{catala_pl,catala_pl.md}'
+            '**/*.catala_[a-z][a-z]{,.md}'
           ),
         ],
       },
@@ -622,7 +606,7 @@ export async function activate(
 
   context.subscriptions.push(
     vscode.languages.registerFoldingRangeProvider(
-      ['catala_en', 'catala_fr', 'catala_pl'].map((language) => ({ language })),
+      catalaLangs.map((l) => ({ language: l.config_id })),
       {
         provideFoldingRanges(document) {
           const lines = document.getText().split(/\r?\n/);

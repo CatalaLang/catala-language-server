@@ -1,0 +1,11 @@
+(executable
+ (name gen_config)
+ (modules gen_config)
+ (libraries catala.languages catala.catala_utils str)
+)
+
+(executable
+ (name gen_ts)
+ (modules gen_ts)
+ (libraries catala.languages)
+)

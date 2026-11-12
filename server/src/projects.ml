@@ -465,6 +465,7 @@ let retrieve_include_dirs clerk_config =
   let include_dirs =
     Scan.include_dirs ~config
     |> List.map File.clean_path
+    |> List.map File.make_absolute
     |> List.map Global.raw_file
   in
   Log.debug (fun m ->
@@ -712,7 +713,7 @@ let update_project_file
     let new_item =
       Scan.catala_file
         (doc_id :> string)
-        (Option.get (Scan.get_lang (doc_id :> string)))
+        (Option.get (Languages.file_lang (doc_id :> string)) |> fst)
     in
     if eq_item prev_item new_item then
       let possibly_affected_files =

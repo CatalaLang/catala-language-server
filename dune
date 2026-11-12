@@ -1,3 +1,5 @@
+(vendored_dirs vendors)
+
 (env
  ; don't stop building because of warnings
  (dev
@@ -19,3 +21,11 @@
     +a-4-29-40-41-42-44-45-48-58-59-60-63-64-65-66-67-68-69-70
     -warn-error
     -a))))
+
+(rule
+ (mode promote)
+ (action
+  (progn
+   (with-stdout-to
+    package.json
+    (run %{exe:languages/gen_config.exe} %{dep:package.json.in})))))

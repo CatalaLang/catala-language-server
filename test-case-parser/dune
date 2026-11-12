@@ -2,6 +2,7 @@
  (name testcase_lib)
  (modules project model commands recovery)
  (libraries
+  catala.languages
   catala.driver
   catala.clerk_lib
   catala_types_atd
