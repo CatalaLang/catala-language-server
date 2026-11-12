@@ -78,7 +78,7 @@ steps:
     failure: ignore
     image: docker.io/woodpeckerci/plugin-surge-preview
     settings:
-      path: .extest/screenshots
+      path: ./.extest/screenshots
       surge_token:
         from_secret: surge
       forge_type: github
