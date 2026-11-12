@@ -178,7 +178,7 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
       next?.kind === 'StructField' &&
       arrayItems.some((i) => i.key === next.value)
     )
-      setActiveTab(next.value);
+      openTab(next.value);
   }, [reveal, props.currentPath, arrayItems]);
 
   return (
