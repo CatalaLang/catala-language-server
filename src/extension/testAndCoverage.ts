@@ -16,6 +16,8 @@ import type {
   TestOutputs,
   TestRunResults,
 } from '../generated/catala_types';
+import path from 'path';
+import { logger } from './logger';
 
 type ClerkLocation = {
   file: string;
@@ -26,7 +28,9 @@ type ClerkScopeTestResult = {
   scope_name: string;
   success: boolean;
   errors: Array<{
-    location: ClerkLocation;
+    // Absent when the failure does not come from clerk, e.g. one synthesized
+    // by `ResultController.record`. Already read behind a guard.
+    location?: ClerkLocation;
     message: string;
   }>;
   time: number;
@@ -82,19 +86,85 @@ type TestScope = {
   range: vscode.Range;
 };
 
-type TestScopeMap = Array<{
+export type TestScopeMap = Array<{
   path: string;
   scopes: TestScope[];
 }>;
 
-class TestId {
+export class TestId {
   id: string;
   constructor(file: vscode.Uri, scope_name?: string) {
     this.id = scope_name ? `${file.path}:${scope_name}` : `${file.path}`;
   }
 }
 
-class TestMap {
+// Persists the last clerk test run in the workspace state so the General
+// Tests view can recover it after a window reload.
+// NB: the stored value goes through JSON serialization, so any `vscode.Range`
+// it contains is rehydrated as a plain object (not a `vscode.Range` instance).
+// Current consumers only read `file`/`scope_name`/`success`, so this is fine.
+const LAST_TEST_RESULT_KEY = 'catala.lastTestResult';
+
+type ResultType = ClerkScopeTestResult & { date: string };
+
+export class ResultController {
+  constructor(
+    private readonly storage: vscode.Memento,
+    private readonly language: string
+  ) {}
+
+  getResult(testId: TestId): ResultType | undefined {
+    let result: ResultType | undefined = this.storage.get(
+      `${LAST_TEST_RESULT_KEY}:${testId.id}`
+    );
+    return result;
+  }
+
+  /**
+   * Records the outcome of a single scope, for the runs that do not go through
+   * clerk: `testcase run` reports diffs and assertion failures where `refresh`
+   * expects clerk's per-scope results. A cancelled run is ignored — it says
+   * nothing about the test, and overwriting the last known result with a
+   * fabricated failure would be worse than keeping it.
+   */
+  record(testId: TestId, scope_name: string, results: TestRunResults): void {
+    if (results.kind === 'Cancelled') return;
+    const failures =
+      results.kind === 'Ok'
+        ? results.value.assert_failures || results.value.diffs.length > 0
+        : true;
+    this.storage.update(`${LAST_TEST_RESULT_KEY}:${testId.id}`, {
+      scope_name,
+      success: !failures,
+      errors: results.kind === 'Error' ? [{ message: results.value }] : [],
+      time: 0,
+      date: new Date().toISOString(),
+    } satisfies ResultType);
+  }
+
+  refresh(result: ClerkTestRunResult): void {
+    this.language;
+    // Fire-and-forget: `update` returns a Thenable we don't need to await.
+    for (const res of result.results['test-results']) {
+      for (const scope_result of res.tests.scopes) {
+        let testId = new TestId(
+          vscode.Uri.file(res.file),
+          scope_result.scope_name
+        );
+        let resultScope: ResultType = {
+          ...scope_result,
+          date: new Date().toISOString(),
+        };
+        void this.storage.update(
+          `${LAST_TEST_RESULT_KEY}:${testId.id}`,
+          resultScope
+        );
+      }
+    }
+  }
+}
+
+export class TestMap {
   private map: Map<string, vscode.TestItem>;
   constructor() {
     this.map = new Map();
@@ -256,7 +326,8 @@ async function processGUITest(
   run: vscode.TestRun,
   test: vscode.TestItem,
   file: string,
-  scope: string
+  scope: string,
+  focus: boolean
 ): Promise<void> {
   try {
     const uri = vscode.Uri.file(file);
@@ -268,7 +339,9 @@ async function processGUITest(
       if (hasFailures) {
         // Prefer focusing the custom editor and displaying diffs there
         // TODO: SHOULD WE?
-        await focusDiffInCustomEditor(uri, scope, res);
+        if (focus) {
+          await focusDiffInCustomEditor(uri, scope, res);
+        }
       } else {
         // Update GUI editor if open to clear stale diffs on success
         await updateOpenCustomEditorWithResults(uri, scope, res);
@@ -317,7 +390,7 @@ function populateTestHierarchy(
   }
 }
 
-function populateTestItems(
+export function populateTestItems(
   ctrl: vscode.TestController,
   test_map: TestMap,
   path: string,
@@ -354,7 +427,8 @@ function getAllTestsToRun(
   ctrl: vscode.TestController,
   request: vscode.TestRunRequest
 ): readonly vscode.TestItem[] {
-  if (request.include == undefined || request.include.length == 0) {
+  // No list at all ("Run All"): every test. An empty list: none of them.
+  if (request.include == undefined) {
     const all_tests: vscode.TestItem[] = new Array();
     ctrl.items.forEach((i) => getAllTests(all_tests, i));
     return all_tests;
@@ -434,7 +508,7 @@ function fold_tree(
   return acc;
 }
 
-function testEntrypointsToTestScopeMap(
+export function testEntrypointsToTestScopeMap(
   entrypoints: Array<CatalaEntrypoint>
 ): TestScopeMap {
   let map: Map<string, TestScope[]> = new Map();
@@ -467,45 +541,29 @@ function testEntrypointsToTestScopeMap(
   });
 }
 
-export async function initTests(
-  context: vscode.ExtensionContext,
-  client: LanguageClient
-): Promise<void> {
-  const ctrl = vscode.tests.createTestController('catalaTests', 'Catala Tests');
-  context.subscriptions.push(ctrl);
-  let cwd: string | undefined;
-  let test_map: TestMap = new TestMap();
-  // Placeholder to display something while tests are retrieved
-  ctrl.items.add(ctrl.createTestItem('loading', 'Loading tests...'));
+type RunHandler = (
+  request: vscode.TestRunRequest,
+  cancellation: vscode.CancellationToken,
+  with_coverage?: boolean
+) => Promise<void>;
 
-  const updateTestScopes: () => Promise<void> = async () => {
-    const entrypoints = await listEntrypoints(
-      client,
-      [{ kind: 'GUI' }, { kind: 'Test' }],
-      undefined,
-      false,
-      true
-    ).finally(() => ctrl.items.replace([]));
-
-    const test_scopes_map: TestScopeMap =
-      testEntrypointsToTestScopeMap(entrypoints);
-    test_map.clear();
-    test_scopes_map.forEach(({ path, scopes }) =>
-      populateTestItems(ctrl, test_map, path, scopes)
-    );
-    cwd = getCwd(test_scopes_map?.[0]?.path);
-  };
-
-  updateTestScopes();
-
-  ctrl.refreshHandler = async (_token): Promise<void> =>
-    await updateTestScopes();
-
-  const testRunHandler = async (
+function makeRunHandler(
+  ctrl: vscode.TestController,
+  test_map: TestMap,
+  resultController: ResultController,
+  cwd: string | undefined,
+  focus: boolean
+): RunHandler {
+  const runHandler = async (
     request: vscode.TestRunRequest,
     cancellation: vscode.CancellationToken,
     with_coverage?: boolean
   ): Promise<void> => {
+    // An empty list asks for no test: without a path, clerk would test the
+    // whole project.
+    if (cwd == undefined || request.include?.length === 0) {
+      return;
+    }
     const run: vscode.TestRun = ctrl.createTestRun(request);
     const testFiles =
       request.include
@@ -517,7 +575,7 @@ export async function initTests(
     testsToRun.forEach((test) => run.started(test));
     try {
       const thread: Promise<ClerkTestRunResult | Error> = clerkRunTest(
-        cwd!,
+        cwd,
         testFiles,
         cancellation,
         with_coverage
@@ -525,6 +583,7 @@ export async function initTests(
       cancellation.onCancellationRequested((_) => run.end());
       const clerk_test_result = await thread;
       if (clerk_test_result instanceof Error) throw clerk_test_result;
+      resultController.refresh(clerk_test_result);
       const { results, code, err_msg } = clerk_test_result;
       if (code != 0 && err_msg != '')
         console.error(`Clerk exit code: ${code}, Output:\n{err_msg}`);
@@ -547,7 +606,8 @@ export async function initTests(
                 run,
                 test_item,
                 file,
-                scope_test_result.scope_name
+                scope_test_result.scope_name,
+                focus
               );
               test_gui_threads.push(gui_thread);
             } else {
@@ -579,6 +639,60 @@ export async function initTests(
     }
     run.end();
   };
+  return runHandler;
+}
+
+// Signature of the test run handler exposed by `initTests` so other parts
+// (e.g. the General Tests macro controller) can trigger runs directly instead
+// of going through a VS Code command.
+export type TestRunHandler = (
+  request: vscode.TestRunRequest,
+  cancellation: vscode.CancellationToken,
+  with_coverage?: boolean
+) => Promise<void>;
+
+export async function initTests(
+  context: vscode.ExtensionContext,
+  client: LanguageClient,
+  ctrl: vscode.TestController,
+  resultController: ResultController
+): Promise<TestRunHandler> {
+  context.subscriptions.push(ctrl);
+  let cwd: string | undefined;
+  let test_map: TestMap = new TestMap();
+
+  const updateTestScopes = async (): Promise<void> => {
+    let entrypoints = await listEntrypoints(
+      client,
+      [{ kind: 'GUI' }, { kind: 'Test' }],
+      undefined,
+      false,
+      true
+    ).finally(() => ctrl.items.replace([]));
+
+    const test_scopes_map: TestScopeMap =
+      testEntrypointsToTestScopeMap(entrypoints);
+    test_map.clear();
+    test_scopes_map.forEach(({ path, scopes }) =>
+      populateTestItems(ctrl, test_map, path, scopes)
+    );
+    if (test_scopes_map.length > 0) {
+      cwd = getCwd(test_scopes_map[0].path);
+    }
+  };
+
+  updateTestScopes();
+
+  ctrl.refreshHandler = async (_token): Promise<void> =>
+    await updateTestScopes();
+
+  const testRunHandler = makeRunHandler(
+    ctrl,
+    test_map,
+    resultController,
+    cwd,
+    true
+  );
 
   ctrl.createRunProfile(
     'Run tests',
@@ -628,4 +742,62 @@ export async function initTests(
       }
     )
   );
+
+  return testRunHandler;
+}
+
+type RunTestArgs =
+  | { kind: 'all' }
+  | { kind: 'scope'; tests: { filename: vscode.Uri; scope: string }[] };
+
+export async function runTestVscode(
+  cwd: string,
+  testMap: TestMap,
+  testController: vscode.TestController,
+  resultController: ResultController,
+  args: RunTestArgs
+): Promise<void> {
+  let runTest = makeRunHandler(
+    testController,
+    testMap,
+    resultController,
+    cwd,
+    false
+  );
+  let request: vscode.TestRunRequest;
+  if (args.kind == 'all') {
+    let items = [...testController.items].map(([, item]) => item);
+    request = new vscode.TestRunRequest(items);
+  } else {
+    let testItems = [];
+    for (let test of args.tests) {
+      const relFilename = path.relative(cwd, test.filename.fsPath);
+      // Split on both separators: `path.relative` uses the platform
+      // separator (`\` on Windows, `/` elsewhere).
+      let dirs = relFilename.split(/[/\\]/);
+      let root = cwd;
+      let items = testController.items;
+      for (const dir of dirs) {
+        root = path.join(root, dir);
+        let testId = new TestId(vscode.Uri.file(root));
+        let testItem = items.get(testId.id);
+        if (testItem != undefined) {
+          items = testItem.children;
+        } else {
+          logger.log(`Item undefined for: ${testId.id}`);
+        }
+      }
+      let testId = new TestId(test.filename, test.scope);
+      let testItem = items.get(testId.id);
+      if (testItem == undefined) {
+        logger.log(
+          `Test ${test.scope} not found in ${test.filename.fsPath}, skipped`
+        );
+        continue;
+      }
+      testItems.push(testItem);
+    }
+    request = new vscode.TestRunRequest(testItems);
+  }
+  await runTest(request, new vscode.CancellationTokenSource().token, false);
 }

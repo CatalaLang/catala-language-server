@@ -19,6 +19,7 @@ vitest.config.mts
 src/*[!.css]
 syntaxes/*.iro
 
+_opam/
 catala-atd/
 lint_scripts/
 tests/
