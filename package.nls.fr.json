@@ -1,5 +1,8 @@
 {
   "command.catala.openWithTestEditor.title": "Ouvrir avec l'éditeur de tests Catala",
+  "view.catala.settings.title": "Préférences",
+  "view.catala.settings.welcome": "[Ouvrir les préférences Catala](command:catala.openSettings)",
+  "command.catala.openSettings.title": "Ouvrir les préférences Catala",
   "command.catala.showExceptions.title": "Afficher l'arbre de définitions",
   "command.catala.rescanProjects.title": "Scanne tous les fichiers des projets",
   "command.catala.showExceptionsAtCursor.title": "Afficher l'arbre de définitions",
