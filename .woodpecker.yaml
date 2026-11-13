@@ -1,0 +1,87 @@
+labels:
+  platform: linux/amd64
+
+when:
+  - event: push
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+  - event: pull_request
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+  - event: manual
+  - event: release
+
+variables:
+  - &catala_image registry.gitlab.inria.fr/catala/registry/ocaml:debian-5
+  - &build_env
+    DUNE_PROFILE: check
+    CI: true
+
+steps:
+  - name: Build dependencies
+    image: *catala_image
+    environment: *build_env
+    pull: true
+    commands:
+      - opam switch create . --empty && opam switch set-invariant -n relocatable-compiler
+      - BRANCH="$${CI_COMMIT_SOURCE_BRANCH:-$${CI_COMMIT_BRANCH}}"
+      - >
+        [ "$${BRANCH}" != "main" ] && opam pin catala "git+https://github.com/CatalaLang/catala#$${BRANCH}" -n ||
+        opam pin catala --dev-repo -n
+      - opam install . --deps-only --with-test
+      - npm ci
+
+  - name: Lint
+    depends_on: Build dependencies
+    image: *catala_image
+    commands:
+      - npm run lint
+
+  - name: Check unused CSS
+    depends_on: Build dependencies
+    image: *catala_image
+    commands:
+      - node lint_scripts/purgecss-check.js
+
+  - name: Build project
+    depends_on: Build dependencies
+    image: *catala_image
+    environment: *build_env
+    commands:
+      - eval $(opam env)
+      - dune build
+      - dune runtest
+      - dune install
+      - npm run compile
+
+  - name: Run tests
+    depends_on: Build project
+    image: *catala_image
+    environment:
+      # Otherwise VS Code takes PATH from a login shell, whose /etc/profile drops the opam switch
+      VSCODE_CLI: 1
+    commands:
+      - eval $(opam env --set-switch)
+      - sudo apt-get update && sudo apt-get install --yes xvfb libnspr4 libnss3 libgtk-3-0 libasound2t64 ninja-build musl && sudo apt-get clean
+      - npm run webview:test
+      - clerk start
+      - xvfb-run -a npm run test
+      - (cd tests/round_trip && ./round_trip.sh)
+      - (cd tests/regressions && ./enum_path_test.sh)
+      - (cd tests/regressions && ./output_module_deps_test.sh)
+      - xvfb-run -a npm run test:e2e
+
+  - name: Upload failure screenshots
+    depends_on: Run tests
+    when:
+      - status: [ failure ]
+        event: [ pull_request ]
+      - event: [ pull_request_closed ]
+    failure: ignore
+    image: docker.io/woodpeckerci/plugin-surge-preview
+    settings:
+      path: ./.extest/screenshots
+      surge_token:
+        from_secret: surge
+      forge_type: github
+      forge_url: https://github.com
+      forge_repo_token:
+        from_secret: github-issues
