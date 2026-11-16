@@ -134,7 +134,7 @@
       },
       {
         "command": "catala.openSettings",
-        "category": "catala",
+        "category": "%category.catala%",
         "title": "%command.catala.openSettings.title%",
         "icon": "$(gear)"
       }
@@ -334,21 +334,15 @@
         "catala.language": {
           "type": "string",
           "enum": [
-            "default",
-            "en",
-            "fr",
-            "pl",
-            "file"
+            "file",
+            "vscode"
           ],
           "enumDescriptions": [
-            "Let each editor pick, as it did before there was a setting",
-            "English, whatever is being edited",
-            "French, whatever is being edited",
-            "Polish, whatever is being edited",
-            "The language of the file itself, from its .catala_xx suffix"
+            "The language of the test file, from its .catala_xx suffix",
+            "VS Code's display language"
           ],
-          "default": "default",
-          "description": "Language the Catala editors present values in"
+          "default": "file",
+          "description": "Language of the test editors (labels and value formats). The rest of VS Code keeps its own language."
         }
       }
     },

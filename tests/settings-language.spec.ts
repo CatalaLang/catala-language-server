@@ -1,19 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { fileLanguage, resolveLanguage } from '../src/shared/settings';
+import {
+  fileLanguage,
+  readSettings,
+  resolveLanguage,
+} from '../src/shared/settings';
 import type { LanguageSetting } from '../src/shared/settings';
 
 const at = (language: LanguageSetting, file?: string, locale = 'de') =>
   resolveLanguage({ language }, file, locale);
 
 describe('resolveLanguage', () => {
-  it('default follows the locale', () => {
-    expect(at('default', 'x.catala_fr', 'en')).toBe('en');
-    expect(at('default', 'x.catala_fr', 'fr-FR')).toBe('fr');
+  it('without a setting, takes the language of the file', () => {
+    expect(resolveLanguage(readSettings({}), 'x.catala_fr', 'en')).toBe('fr');
+    expect(resolveLanguage(readSettings(undefined), 'x.catala_en', 'fr')).toBe(
+      'en'
+    );
   });
 
-  it('en and fr win over everything', () => {
-    expect(at('en', 'x.catala_fr', 'fr')).toBe('en');
-    expect(at('fr', 'x.catala_en', 'en')).toBe('fr');
+  it('vscode follows the locale', () => {
+    expect(at('vscode', 'x.catala_fr', 'en')).toBe('en');
+    expect(at('vscode', 'x.catala_en', 'fr-FR')).toBe('fr');
+  });
+
+  it('reads unknown values as the default', () => {
+    expect(readSettings({ language: 'fr' })).toEqual({ language: 'file' });
   });
 
   it('file takes the language of the file', () => {
