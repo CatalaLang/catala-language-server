@@ -1,22 +1,24 @@
-export type LanguageSetting = 'default' | 'en' | 'fr' | 'pl' | 'file';
+import enMessages from '../locales/en.json';
+import frMessages from '../locales/fr.json';
+import plMessages from '../locales/pl.json';
 
-const LANGUAGE_SETTINGS: readonly LanguageSetting[] = [
-  'default',
-  'en',
-  'fr',
-  'pl',
-  'file',
-];
+export const allMessages: Record<string, Record<string, string>> = {
+  en: enMessages,
+  fr: frMessages,
+  pl: plMessages,
+};
+
+export type LanguageSetting = 'file' | 'vscode';
+
+const LANGUAGE_SETTINGS: readonly LanguageSetting[] = ['file', 'vscode'];
 
 export type CatalaSettings = {
   language: LanguageSetting;
 };
 
 const defaultSettings: CatalaSettings = {
-  language: 'default',
+  language: 'file',
 };
-
-const SUPPORTED_LANGUAGES = ['en', 'fr', 'pl'];
 
 function primarySubtag(locale: string): string {
   return locale.split(/[-_]/)[0].toLowerCase();
@@ -25,7 +27,7 @@ function primarySubtag(locale: string): string {
 export function fileLanguage(file: string | undefined): string | undefined {
   const match = file?.match(/\.catala_([a-z]+)(?:\.md)?$/i);
   const language = match?.[1].toLowerCase();
-  return language !== undefined && SUPPORTED_LANGUAGES.includes(language)
+  return language !== undefined && language in allMessages
     ? language
     : undefined;
 }
@@ -36,13 +38,9 @@ export function resolveLanguage(
   locale: string
 ): string {
   switch (settings.language) {
-    case 'en':
-    case 'fr':
-    case 'pl':
-      return settings.language;
     case 'file':
       return fileLanguage(file) ?? primarySubtag(locale);
-    case 'default':
+    case 'vscode':
       return primarySubtag(locale);
   }
 }

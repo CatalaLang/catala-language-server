@@ -10,15 +10,7 @@ import {
   type WebviewSettings,
   readDownMessage,
 } from '../generated/catala_types';
-import frMessages from '../locales/fr.json';
-import enMessages from '../locales/en.json';
-import plMessages from '../locales/pl.json';
-
-const allMessages: Record<string, Record<string, string>> = {
-  fr: frMessages,
-  en: enMessages,
-  pl: plMessages,
-};
+import { allMessages } from './settings';
 
 const SettingsContext = createContext<WebviewSettings>({ locale: 'en' });
 
