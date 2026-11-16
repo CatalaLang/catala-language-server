@@ -149,46 +149,46 @@
       "explorer/context": [
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*[tT][eE][sS][tT].*\\.catala_(%%CATALA_LANGS_OR_PATT_REG%%)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && resourceFilename =~ /.*[tT][eE][sS][tT].*\\.catala_[a-z]+$/",
           "group": "navigation@2"
         }
       ],
       "editor/context": [
         {
           "command": "catala.showExceptionsAtCursor",
-          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "when": "editorLangId =~ /^catala_[a-z]+$/",
           "group": "navigation@1"
         }
       ],
       "editor/title": [
         {
           "command": "catala.rescanProjects",
-          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "when": "editorLangId =~ /^catala_[a-z]+$/",
           "group": "navigation@10"
         },
         {
           "command": "catala.run",
-          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "when": "editorLangId =~ /^catala_[a-z]+$/",
           "group": "navigation@11"
         },
         {
           "command": "catala.debug",
-          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "when": "editorLangId =~ /^catala_[a-z]+$/",
           "group": "navigation@12"
         },
         {
           "command": "catala.foldCodeBlocks",
-          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "when": "editorLangId =~ /^catala_[a-z]+$/",
           "group": "navigation@13"
         },
         {
           "command": "catala.unfoldCodeBlocks",
-          "when": "editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/",
+          "when": "editorLangId =~ /^catala_[a-z]+$/",
           "group": "navigation@14"
         },
         {
           "command": "catala.openWithTestEditor",
-          "when": "config.catala.enableCustomTestCaseEditor && editorLangId =~ /catala_(%%CATALA_LANGS_OR_PATT_REG%%)/ && resourceFilename =~ /.*[tT][eE][sS][tT].*\\.catala_(%%CATALA_LANGS_OR_PATT_REG%%)$/",
+          "when": "config.catala.enableCustomTestCaseEditor && editorLangId =~ /^catala_[a-z]+$/ && resourceFilename =~ /.*[tT][eE][sS][tT].*\\.catala_[a-z]+$/",
           "group": "navigation@2"
         }
       ]
@@ -309,7 +309,7 @@
         "displayName": "%customEditor.testCaseEditor.displayName%",
         "selector": [
           {
-            "filenamePattern": "*{t,T}{e,E}{s,S}{t,T}*.catala_{%%CATALA_LANGS_OR_PATT_GLOB%%}{,.md}"
+            "filenamePattern": "*{t,T}{e,E}{s,S}{t,T}*.catala_*"
           }
         ],
         "priority": "option"
@@ -322,7 +322,7 @@
   },
   "activationEvents": [
     "workspaceContains:**/clerk.toml",
-    "workspaceContains:**/*.catala_{%%CATALA_LANGS_OR_PATT_GLOB%%}{,.md}"
+    "workspaceContains:**/*.catala_*"
   ],
   "scripts": {
     "vscode:prepublish": "npm run package",
