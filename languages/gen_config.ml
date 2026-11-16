@@ -59,6 +59,16 @@ let breakpoints =
 
 let ids = List.map (fun (code, _) -> str (id code)) langs
 
+(* Snippets are written by hand, per language: an entry for each file. *)
+let snippets =
+  List.filter_map
+    (fun (code, _) ->
+      let path = Printf.sprintf "snippets/catala_%s.json" code in
+      if Sys.file_exists path then
+        Some (`Assoc [ "language", str (id code); "path", str ("./" ^ path) ])
+      else None)
+    langs
+
 let set k v l = List.map (fun (k', v') -> if k' = k then k, v else k', v') l
 
 let update_debuggers = function
@@ -96,6 +106,7 @@ let update_contributes = function
            | "languages" -> k, `List languages
            | "grammars" -> k, `List grammars
            | "breakpoints" -> k, `List breakpoints
+           | "snippets" -> k, `List snippets
            | "debuggers" -> k, update_debuggers v
            | "configurationDefaults" -> k, update_defaults v
            | _ -> k, v)
