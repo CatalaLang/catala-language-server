@@ -316,10 +316,15 @@ export type Update = {
   original_reads: boolean;
 }
 
+export type WebviewSettings = {
+  locale: string;
+}
+
 export type DownMessage =
 | { kind: 'Update'; value: Update }
 | { kind: 'TestRunResults'; value: TestRunResultsMsg }
 | { kind: 'ConfirmResult'; value: ConfirmResult }
+| { kind: 'Settings'; value: WebviewSettings }
 
 export type GuiEntrypoint = {
   scope: string;
@@ -1485,6 +1490,18 @@ export function readUpdate(x: any, context: any = x): Update {
   };
 }
 
+export function writeWebviewSettings(x: WebviewSettings, context: any = x): any {
+  return {
+    'locale': _atd_write_required_field('WebviewSettings', 'locale', _atd_write_string, x.locale, x),
+  };
+}
+
+export function readWebviewSettings(x: any, context: any = x): WebviewSettings {
+  return {
+    locale: _atd_read_required_field('WebviewSettings', 'locale', _atd_read_string, x['locale'], x),
+  };
+}
+
 export function writeDownMessage(x: DownMessage, context: any = x): any {
   switch (x.kind) {
     case 'Update':
@@ -1493,6 +1510,8 @@ export function writeDownMessage(x: DownMessage, context: any = x): any {
       return ['TestRunResults', writeTestRunResultsMsg(x.value, x)]
     case 'ConfirmResult':
       return ['ConfirmResult', writeConfirmResult(x.value, x)]
+    case 'Settings':
+      return ['Settings', writeWebviewSettings(x.value, x)]
   }
 }
 
@@ -1505,6 +1524,8 @@ export function readDownMessage(x: any, context: any = x): DownMessage {
       return { kind: 'TestRunResults', value: readTestRunResultsMsg(x[1], x) }
     case 'ConfirmResult':
       return { kind: 'ConfirmResult', value: readConfirmResult(x[1], x) }
+    case 'Settings':
+      return { kind: 'Settings', value: readWebviewSettings(x[1], x) }
     default:
       _atd_bad_json('DownMessage', x, context)
       throw new Error('impossible')

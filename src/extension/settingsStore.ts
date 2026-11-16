@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import type { CatalaSettings, SettingsMessage } from '../shared/settings';
+import { writeDownMessage } from '../generated/catala_types';
+import type { CatalaSettings } from '../shared/settings';
 import { readSettings, resolveLanguage } from '../shared/settings';
 
 const SECTION = 'catala';
@@ -42,12 +43,13 @@ export class SettingsStore implements SettingsSource {
     webview: vscode.Webview,
     file: string | undefined
   ): Promise<void> {
-    const settings = this.get();
-    const message: SettingsMessage = {
-      kind: 'catalaSettings',
-      value: settings,
-      locale: resolveLanguage(settings, file, vscode.env.language),
-    };
-    await webview.postMessage(message);
+    await webview.postMessage(
+      writeDownMessage({
+        kind: 'Settings',
+        value: {
+          locale: resolveLanguage(this.get(), file, vscode.env.language),
+        },
+      })
+    );
   }
 }
