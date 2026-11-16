@@ -193,12 +193,26 @@
         }
       ]
     },
-    "breakpoints": [ { "language": "catala_en" }, { "language": "catala_fr" }, { "language": "catala_pl" } ],
+    "breakpoints": [
+      {
+        "language": "catala_en"
+      },
+      {
+        "language": "catala_fr"
+      },
+      {
+        "language": "catala_pl"
+      }
+    ],
     "debuggers": [
       {
         "type": "catala-debugger",
         "label": "Catala Debug",
-        "languages": [ "catala_en", "catala_fr", "catala_pl" ],
+        "languages": [
+          "catala_en",
+          "catala_fr",
+          "catala_pl"
+        ],
         "variables": {
           "SpecifyScope": "catala.selectScope"
         },
@@ -319,55 +333,97 @@
       "lineComment": "#"
     },
     "languages": [
-      { "id": "catala_en",
-        "aliases": [ "Catala (English)" ],
-        "extensions": [ ".catala_en", ".catala_en.md" ],
-        "configuration": "./language-configuration.json" },
-      { "id": "catala_code_en",
-        "configuration": "./language-configuration.json" },
-      { "id": "catala_fr",
-        "aliases": [ "Catala (French)" ],
-        "extensions": [ ".catala_fr", ".catala_fr.md" ],
-        "configuration": "./language-configuration.json" },
-      { "id": "catala_code_fr",
-        "configuration": "./language-configuration.json" },
-      { "id": "catala_pl",
-        "aliases": [ "Catala (Polish)" ],
-        "extensions": [ ".catala_pl", ".catala_pl.md" ],
-        "configuration": "./language-configuration.json" },
-      { "id": "catala_code_pl",
-        "configuration": "./language-configuration.json" }
+      {
+        "id": "catala_en",
+        "aliases": [
+          "Catala (English)"
+        ],
+        "extensions": [
+          ".catala_en",
+          ".catala_en.md"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_code_en",
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_fr",
+        "aliases": [
+          "Catala (French)"
+        ],
+        "extensions": [
+          ".catala_fr",
+          ".catala_fr.md"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_code_fr",
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_pl",
+        "aliases": [
+          "Catala (Polish)"
+        ],
+        "extensions": [
+          ".catala_pl",
+          ".catala_pl.md"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "catala_code_pl",
+        "configuration": "./language-configuration.json"
+      }
     ],
     "grammars": [
-      { "language": "catala_en",
+      {
+        "language": "catala_en",
         "scopeName": "source.catala_en",
-        "path": "./syntaxes/catala_source_en.tmLanguage.json" },
-      { "language": "catala_code_en",
+        "path": "./syntaxes/catala_source_en.tmLanguage.json"
+      },
+      {
+        "language": "catala_code_en",
         "scopeName": "code.catala_en",
-        "path": "./syntaxes/catala_code_en.tmLanguage.json" },
-      { "language": "catala_fr",
+        "path": "./syntaxes/catala_code_en.tmLanguage.json"
+      },
+      {
+        "language": "catala_fr",
         "scopeName": "source.catala_fr",
-        "path": "./syntaxes/catala_source_fr.tmLanguage.json" },
-      { "language": "catala_code_fr",
+        "path": "./syntaxes/catala_source_fr.tmLanguage.json"
+      },
+      {
+        "language": "catala_code_fr",
         "scopeName": "code.catala_fr",
-        "path": "./syntaxes/catala_code_fr.tmLanguage.json" },
-      { "language": "catala_pl",
+        "path": "./syntaxes/catala_code_fr.tmLanguage.json"
+      },
+      {
+        "language": "catala_pl",
         "scopeName": "source.catala_pl",
-        "path": "./syntaxes/catala_source_pl.tmLanguage.json" },
-      { "language": "catala_code_pl",
+        "path": "./syntaxes/catala_source_pl.tmLanguage.json"
+      },
+      {
+        "language": "catala_code_pl",
         "scopeName": "code.catala_pl",
-        "path": "./syntaxes/catala_code_pl.tmLanguage.json" }
+        "path": "./syntaxes/catala_code_pl.tmLanguage.json"
+      }
     ],
     "configurationDefaults": {
       "[catala_en]": {
         "editor.tabSize": 2,
-        "editor.insertSpaces": true },
+        "editor.insertSpaces": true
+      },
       "[catala_fr]": {
         "editor.tabSize": 2,
-        "editor.insertSpaces": true },
+        "editor.insertSpaces": true
+      },
       "[catala_pl]": {
         "editor.tabSize": 2,
-        "editor.insertSpaces": true }
+        "editor.insertSpaces": true
+      }
     }
   },
   "activationEvents": [

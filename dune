@@ -22,10 +22,14 @@
     -warn-error
     -a))))
 
+; package.json is the source; only its per-language keys are generated.
+; Out of date: `dune build @runtest` fails with the diff, `dune promote` fixes it.
 (rule
- (mode promote)
+ (with-stdout-to
+  package.json.gen
+  (run %{exe:languages/gen_config.exe} %{dep:package.json})))
+
+(rule
+ (alias runtest)
  (action
-  (progn
-   (with-stdout-to
-    package.json
-    (run %{exe:languages/gen_config.exe} %{dep:package.json.in})))))
+  (diff package.json package.json.gen)))

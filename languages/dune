@@ -1,11 +1,9 @@
 (executable
  (name gen_config)
  (modules gen_config)
- (libraries catala.languages catala.catala_utils str)
-)
+ (libraries catala.languages yojson))
 
 (executable
  (name gen_ts)
  (modules gen_ts)
- (libraries catala.languages)
-)
+ (libraries catala.languages))

@@ -14,81 +14,119 @@
    implied. See the License for the specific language governing
    permissions and limitations under the License. *)
 
-open Catala_utils
-open Format
-open Locale
+(* Rewrites the per-language keys of package.json; everything else is kept
+   as is. The output follows JSON.stringify(_, null, 2), npm's layout, so npm
+   and this generator never fight over the formatting. *)
 
-let langs = Languages.languages () |> List.map snd
-let pp_comma_spaced fmt () = fprintf fmt ",@ "
-let pp_string_id fmt lang = fprintf fmt {|"catala_%s"|} lang.code
+let langs =
+  List.map
+    (fun (_, l) -> l.Locale.code, String.capitalize_ascii l.Locale.name)
+    (Languages.languages ())
+let str s = `String s
+let id code = "catala_" ^ code
 
-let id_list =
-  asprintf "@[<h>[ %a ]@]"
-    (pp_print_list ~pp_sep:pp_comma_spaced pp_string_id)
+let languages =
+  List.concat_map
+    (fun (code, name) ->
+      [ `Assoc
+          [ "id", str (id code);
+            "aliases", `List [ str (Printf.sprintf "Catala (%s)" name) ];
+            "extensions",
+            `List [ str (".catala_" ^ code); str (".catala_" ^ code ^ ".md") ];
+            "configuration", str "./language-configuration.json" ];
+        `Assoc
+          [ "id", str ("catala_code_" ^ code);
+            "configuration", str "./language-configuration.json" ] ])
+    langs
+
+let grammars =
+  List.concat_map
+    (fun (code, _) ->
+      [ `Assoc
+          [ "language", str (id code);
+            "scopeName", str ("source.catala_" ^ code);
+            "path",
+            str (Printf.sprintf "./syntaxes/catala_source_%s.tmLanguage.json" code) ];
+        `Assoc
+          [ "language", str ("catala_code_" ^ code);
+            "scopeName", str ("code.catala_" ^ code);
+            "path",
+            str (Printf.sprintf "./syntaxes/catala_code_%s.tmLanguage.json" code) ] ])
     langs
 
 let breakpoints =
-  let pp_language fmt lang =
-    fprintf fmt {|{ "language": %a }|} pp_string_id lang
-  in
-  asprintf "@[<h>[ %a ]@]"
-    (pp_print_list ~pp_sep:pp_comma_spaced pp_language)
-    langs
+  List.map (fun (code, _) -> `Assoc [ "language", str (id code) ]) langs
 
-let languages =
-  let pp_language fmt lang =
-    fprintf fmt
-      "@[<v 2>{ \"id\": \"catala_%s\",@\n\
-       \"aliases\": [ \"Catala (%s)\" ],@\n\
-       @[<h>\"extensions\": [ \".catala_%s\", \".catala_%s.md\" ],@]@\n\
-       \"configuration\": \"./language-configuration.json\" },@]@\n\
-       @[<v 2>{ \"id\": \"catala_code_%s\",@\n\
-       \"configuration\": \"./language-configuration.json\" }@]"
-      lang.code
-      (String.capitalize_ascii lang.name)
-      lang.code lang.code lang.code
-  in
-  let pp_grammar fmt lang =
-    fprintf fmt
-      "@[<v 2>{ \"language\": \"catala_%s\",@\n\
-       \"scopeName\": \"source.catala_%s\",@\n\
-       \"path\": \"./syntaxes/catala_source_%s.tmLanguage.json\" },@]@\n\
-       @[<v 2>{ \"language\": \"catala_code_%s\",@\n\
-       \"scopeName\": \"code.catala_%s\",@\n\
-       \"path\": \"./syntaxes/catala_code_%s.tmLanguage.json\" }@]"
-      lang.code lang.code lang.code lang.code lang.code lang.code
-  in
-  let pp_configuration_defaults fmt lang =
-    fprintf fmt
-      "@[<v 2>\"[catala_%s]\": {@\n\
-       \"editor.tabSize\": 2,@ \"editor.insertSpaces\": true }@]"
-      lang.code
-  in
-  let indent = "    " in
-  asprintf
-    "@[<v 6>\"languages\": [@ %a@]@\n\
-     %s],@\n\
-     @[<v 6>%s\"grammars\": [@ %a@]@\n\
-     %s],@\n\
-     @[<v 6>%s\"configurationDefaults\": {@ %a@]@\n\
-     %s}"
-    (pp_print_list ~pp_sep:pp_comma_spaced pp_language)
-    langs indent indent
-    (pp_print_list ~pp_sep:pp_comma_spaced pp_grammar)
-    langs indent indent
-    (pp_print_list ~pp_sep:pp_comma_spaced pp_configuration_defaults)
-    langs indent
+let ids = List.map (fun (code, _) -> str (id code)) langs
 
-let to_replace =
-  [
-    {|%%CATALA_LANGS_ID_LIST%%|}, id_list;
-    {|%%CATALA_LANGS_BREAKPOINTS%%|}, breakpoints;
-    {|%%CATALA_LANGS_DEF_AND_GRAMMAR%%|}, languages;
-  ]
+let set k v l = List.map (fun (k', v') -> if k' = k then k, v else k', v') l
+
+let update_debuggers = function
+  | `List ds ->
+    `List
+      (List.map
+         (function
+           | `Assoc d when List.mem_assoc "languages" d ->
+             `Assoc (set "languages" (`List ids) d)
+           | d -> d)
+         ds)
+  | j -> j
+
+(* Per-language entries ("[catala_xx]") are regenerated in place of the old
+   ones; other defaults keep their position. *)
+let update_defaults = function
+  | `Assoc kvs ->
+    let is_lang k = String.length k > 8 && String.sub k 0 8 = "[catala_" in
+    let rec go = function
+      | [] -> []
+      | (k, v) :: rest when is_lang k ->
+        let rest = List.filter (fun (k, _) -> not (is_lang k)) rest in
+        List.map (fun (code, _) -> "[" ^ id code ^ "]", v) langs @ go rest
+      | kv :: rest -> kv :: go rest
+    in
+    `Assoc (go kvs)
+  | j -> j
+
+let update_contributes = function
+  | `Assoc c ->
+    `Assoc
+      (List.map
+         (fun (k, v) ->
+           match k with
+           | "languages" -> k, `List languages
+           | "grammars" -> k, `List grammars
+           | "breakpoints" -> k, `List breakpoints
+           | "debuggers" -> k, update_debuggers v
+           | "configurationDefaults" -> k, update_defaults v
+           | _ -> k, v)
+         c)
+  | j -> j
+
+let rec pp ind b (j : Yojson.Safe.t) =
+  let nl i = Buffer.add_char b '\n'; Buffer.add_string b (String.make (2 * i) ' ') in
+  let seq o c items f =
+    if items = [] then (Buffer.add_char b o; Buffer.add_char b c)
+    else begin
+      Buffer.add_char b o;
+      List.iteri (fun n x -> if n > 0 then Buffer.add_char b ','; nl (ind + 1); f x) items;
+      nl ind; Buffer.add_char b c
+    end
+  in
+  match j with
+  | `Assoc kvs ->
+    seq '{' '}' kvs (fun (k, v) ->
+        Buffer.add_string b (Yojson.Safe.to_string (`String k));
+        Buffer.add_string b ": "; pp (ind + 1) b v)
+  | `List l -> seq '[' ']' l (pp (ind + 1) b)
+  | j -> Buffer.add_string b (Yojson.Safe.to_string j)
 
 let () =
-  let in_file = File.contents Sys.argv.(1) in
-  List.fold_left
-    (fun file (re, content) -> Str.global_replace (Str.regexp re) content file)
-    in_file to_replace
-  |> print_string
+  let j =
+    match Yojson.Safe.from_file Sys.argv.(1) with
+    | `Assoc top -> `Assoc (List.map (fun (k, v) -> if k = "contributes" then k, update_contributes v else k, v) top)
+    | j -> j
+  in
+  let b = Buffer.create 65536 in
+  pp 0 b j;
+  Buffer.add_char b '\n';
+  print_string (Buffer.contents b)
