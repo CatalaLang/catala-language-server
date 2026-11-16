@@ -349,10 +349,15 @@ type update = {
   original_reads: bool;
 }
 
+type webview_settings = {
+  locale: string; (* resolved: en | fr | pl *)
+}
+
 type down_message = [
   | Update of update
   | TestRunResults of test_run_results_msg
   | ConfirmResult of confirm_result
+  | Settings of webview_settings
 ]
 
 (* List entrypoints *)

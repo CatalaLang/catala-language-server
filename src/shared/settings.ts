@@ -12,23 +12,9 @@ export type CatalaSettings = {
   language: LanguageSetting;
 };
 
-export const defaultSettings: CatalaSettings = {
+const defaultSettings: CatalaSettings = {
   language: 'default',
 };
-
-export type SettingsMessage = {
-  kind: 'catalaSettings';
-  value: CatalaSettings;
-  locale: string;
-};
-
-export function isSettingsMessage(data: unknown): data is SettingsMessage {
-  return (
-    data !== null &&
-    typeof data === 'object' &&
-    (data as { kind?: unknown }).kind === 'catalaSettings'
-  );
-}
 
 const SUPPORTED_LANGUAGES = ['en', 'fr', 'pl'];
 

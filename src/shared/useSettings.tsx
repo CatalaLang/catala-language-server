@@ -6,8 +6,10 @@ import {
   useState,
 } from 'react';
 import { IntlProvider } from 'react-intl';
-import type { CatalaSettings } from './settings';
-import { defaultSettings, isSettingsMessage } from './settings';
+import {
+  type WebviewSettings,
+  readDownMessage,
+} from '../generated/catala_types';
 import frMessages from '../locales/fr.json';
 import enMessages from '../locales/en.json';
 import plMessages from '../locales/pl.json';
@@ -18,7 +20,7 @@ const allMessages: Record<string, Record<string, string>> = {
   pl: plMessages,
 };
 
-const SettingsContext = createContext<CatalaSettings>(defaultSettings);
+const SettingsContext = createContext<WebviewSettings>({ locale: 'en' });
 
 export function CatalaSettingsProvider({
   language,
@@ -27,19 +29,20 @@ export function CatalaSettingsProvider({
   language: string;
   children: ReactNode;
 }): ReactElement {
-  const [settings, setSettings] = useState<CatalaSettings>(defaultSettings);
-  const [locale, setLocale] = useState(language);
+  const [settings, setSettings] = useState<WebviewSettings>({
+    locale: language,
+  });
   useEffect(() => {
     const handleMessage = (event: MessageEvent): void => {
-      if (isSettingsMessage(event.data)) {
-        setSettings(event.data.value);
-        setLocale(event.data.locale);
+      const message = readDownMessage(event.data);
+      if (message.kind === 'Settings') {
+        setSettings(message.value);
       }
     };
     window.addEventListener('message', handleMessage);
     return (): void => window.removeEventListener('message', handleMessage);
   }, []);
-  const resolved = locale in allMessages ? locale : 'en';
+  const resolved = settings.locale in allMessages ? settings.locale : 'en';
   return (
     <SettingsContext.Provider value={settings}>
       <IntlProvider
