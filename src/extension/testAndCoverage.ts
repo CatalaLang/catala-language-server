@@ -680,9 +680,12 @@ function makeRunHandler(
       });
       // Await GUI tests processing
       await Promise.all(test_gui_threads);
-    } catch (e) {
-      testsToRun.forEach((test) => run.errored(test, e));
-      console.error('Error while processing test results: ', e);
+    } catch (error) {
+      const msg = new vscode.TestMessage(
+        error instanceof Error ? error.message : String(error)
+      );
+      testsToRun.forEach((test) => run.errored(test, msg));
+      console.error('Error while processing test results: ', msg);
       vscode.window.showErrorMessage(
         'Unexpected error while executing tests. Check the console logs for more details...'
       );

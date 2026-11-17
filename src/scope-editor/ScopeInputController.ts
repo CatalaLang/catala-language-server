@@ -23,10 +23,10 @@ import { resolveLanguage } from '../shared/settings';
 // sets up the UI, provide initial data and exchanges messages with the
 // web view whose entry point is in `uiEntryPoint.ts`
 export class ScopeInputController {
-  context: vscode.ExtensionContext;
-  panel: vscode.WebviewPanel;
-  scope: string;
-  test: Test;
+  context!: vscode.ExtensionContext;
+  panel!: vscode.WebviewPanel;
+  scope!: string;
+  test!: Test;
   private following: vscode.Disposable = new vscode.Disposable(() => {});
 
   constructor(private readonly settings: SettingsSource) {}
