@@ -1,0 +1,20 @@
+(include dune.inc)
+
+(executable
+ (name gen_stanzas)
+ (libraries catala.languages)
+)
+
+(rule
+ (mode promote)
+ (targets dune.inc)
+ (action
+  (with-stdout-to
+    dune.inc
+   (run %{exe:./gen_stanzas.exe}))))
+
+(executable
+ (name gen_syntaxes)
+ (flags (:standard -warn-error +a))
+ (libraries catala.languages catala.catala_utils re)
+)

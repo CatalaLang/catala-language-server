@@ -1,0 +1,80 @@
+{
+  "scopeName": "code.catala_pl",
+  "patterns": [
+    {
+      "include": "#code"
+    }
+  ],
+  "repository": {
+    "code": {
+      "patterns": [
+        {
+          "match": "\\s*(\\#\\[[^\"\\]]*)(\"[^\"]*\")?([^\\]]*\\])",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name"
+            },
+            "2": {
+              "name": "string.quoted.double"
+            },
+            "3": {
+              "name": "entity.other.attribute-name"
+            }
+          }
+        },
+        {
+          "match": "\\s*\\#.*$",
+          "name": "comment.line"
+        },
+        {
+          "match": "\\b(wszystkie|and\\s+then|asercja|połączyć|warunek|konsekwencja|typu|kontekst|dane|deklaracja|wynosi|definicja|zależy\\s+od|enumeracja|wyjątek|spełnione|początkowo|wejście|wewnętrzny|jest|etykieta|lista|plan\\s+każdy|maksimum|minimum|opcjonalny|lub\\s+jeżeli\\s+lista\\s+pusta|dół|górę|by\\s+decreasing\\s+order|by\\s+increasing\\s+order|wyjście|zasada|zakres|sort|stan|struktura|suma|do|rodzaj|pod\\s+warunkiem|cokolwiek|wraz\\s+z|mamy|niech|w|istnieje|dla|z|wśród|zawiera)\\b",
+          "name": "keyword.other"
+        },
+        {
+          "match": "\\b(jeżeli|wtedy|inaczej|pasuje|ze\\s+wzorem|ale\\s+zastąpić|takie\\s+że|to)\\b",
+          "name": "keyword.control"
+        },
+        {
+          "match": "(\\|[0-9]+\\-[0-9]+\\-[0-9]+\\|)",
+          "name": "constant.numeric"
+        },
+        {
+          "match": "\\b(prawda|fałsz|Nieobecny|Obecny)\\b",
+          "name": "constant.language"
+        },
+        {
+          "match": "\\b(\\-?[0-9]+(,[0-9]*|))\\b",
+          "name": "constant.numeric"
+        },
+        {
+          "match": "(\\-\\-|\\;|\\.|\\,|\\:|\\(|\\)|\\[|\\]|\\{|\\})",
+          "name": "punctuation"
+        },
+        {
+          "match": "(\\+|\\-|\\*|/|>|>=|<=|<|=|!=|%)",
+          "name": "keyword.operator"
+        },
+        {
+          "match": "(i|nie|albo|lub|rok|miesiąc|dzień|PLN)",
+          "name": "keyword.operator.locales"
+        },
+        {
+          "match": "\\b(zerojedynkowy|czas|dziesiętny|czastrwania|całkowita|pieniądze|code_location)\\b",
+          "name": "entity.name.type"
+        },
+        {
+          "match": "\\b(liczba|zaokrąglony)\\b",
+          "name": "entity.name.function"
+        },
+        {
+          "match": "\\b(\\p{Ll}(\\p{L}|\\p{N}|[_'])*)\\b",
+          "name": "variable.parameter"
+        },
+        {
+          "match": "\\b(\\p{Lu}(\\p{L}|\\p{N}|[_'])*)\\b",
+          "name": "entity.name.class"
+        }
+      ]
+    }
+  }
+}

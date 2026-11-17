@@ -155,9 +155,10 @@ let scan_catala_files (dir : string) : Scan.item list =
     let items =
       File.scan_tree
         (fun f ->
-          match Scan.get_lang f with
+          match Languages.file_lang f with
           | None -> None
-          | Some lang -> ( try Some (Scan.catala_file f lang) with _ -> None))
+          | Some (lang, _) -> (
+            try Some (Scan.catala_file f lang) with _ -> None))
         dir
       |> Seq.concat_map (fun (_, _, items) -> List.to_seq items)
       |> List.of_seq

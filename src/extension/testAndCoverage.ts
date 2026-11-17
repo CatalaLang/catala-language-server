@@ -493,7 +493,8 @@ export async function initTests(
     test_scopes_map.forEach(({ path, scopes }) =>
       populateTestItems(ctrl, test_map, path, scopes)
     );
-    cwd = getCwd(test_scopes_map?.[0]?.path);
+    if (test_scopes_map && test_scopes_map.length > 0)
+      cwd = getCwd(test_scopes_map?.[0]?.path);
   };
 
   updateTestScopes();
@@ -571,11 +572,13 @@ export async function initTests(
       // Await GUI tests processing
       await Promise.all(test_gui_threads);
     } catch (e) {
-      testsToRun.forEach((test) => run.errored(test, e));
-      console.error('Error while processing test results: ', e);
-      vscode.window.showErrorMessage(
-        'Unexpected error while executing tests. Check the console logs for more details...'
-      );
+      if (e instanceof Error) {
+        testsToRun.forEach((test) => run.errored(test, e));
+        console.error('Error while processing test results: ', e);
+        vscode.window.showErrorMessage(
+          'Unexpected error while executing tests. Check the console logs for more details...'
+        );
+      }
     }
     run.end();
   };
