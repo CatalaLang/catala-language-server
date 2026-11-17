@@ -650,7 +650,8 @@ function makeRunHandler(
             if (
               !with_coverage &&
               test_item.tags[0] === gui_test_tag &&
-              scope_test_result.scope_name
+              scope_test_result.scope_name &&
+              !scope_test_result.success
             ) {
               const gui_thread: Promise<void> = processGUITest(
                 run,
