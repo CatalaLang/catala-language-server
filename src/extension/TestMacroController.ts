@@ -291,7 +291,7 @@ export class TestMacroController {
             }
             return;
           }
-          let catalaSource = atdToCatala(result, document.language);
+          let catalaSource = await atdToCatala(result, document.language);
           await vscode.workspace.fs.writeFile(
             uri,
             Buffer.from(catalaSource, 'utf-8')

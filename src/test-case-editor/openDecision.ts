@@ -45,7 +45,7 @@ export type RebuildAnswer =
   | { kind: 'refused'; message: string }
   | { kind: 'silent' };
 
-export function decideOpen({
+export async function decideOpen({
   read,
   rebuild,
   hasDraft,
@@ -54,11 +54,11 @@ export function decideOpen({
 }: {
   read: ReadAnswer;
   // Only run when the decision needs it: it compiles the module again.
-  rebuild: () => RebuildAnswer;
+  rebuild: () => Promise<RebuildAnswer>;
   hasDraft: (view: Recovery) => boolean;
   blank: boolean;
   ranFrom?: string;
-}): ParseResults {
+}): Promise<ParseResults> {
   const cannotOpen = (
     cause: CannotOpenCause['kind'],
     message: string,
@@ -89,7 +89,7 @@ export function decideOpen({
       // In the test, or unknown: only the rebuild tells drift from an error.
       break;
   }
-  const rebuilt = rebuild();
+  const rebuilt = await rebuild();
   switch (rebuilt.kind) {
     // More specific than `read`'s first error.
     case 'refused':
