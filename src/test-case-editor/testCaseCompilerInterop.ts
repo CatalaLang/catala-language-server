@@ -1,4 +1,4 @@
-import { execFileSync, type SpawnSyncReturns } from 'child_process';
+import { spawn, type SpawnSyncReturns } from 'child_process';
 import type {
   ReadFailure,
   ScopeDefList,
@@ -33,21 +33,17 @@ type ExecResult =
   | { ok: true; output: string }
   | { ok: false; output: string; stderr: string };
 
-function execBinary(
+async function spawnBinary(
   bin: string,
   args: string[],
   opts: ExecOptions = {}
-): ExecResult {
+): Promise<ExecResult> {
   logger.log(`Running ${bin} ${args.join(' ')}`);
-  try {
-    const useShell = process.platform === 'win32';
-    return {
-      ok: true,
-      output: execFileSync(bin, useShell ? args.map(shellArg) : args, {
-        encoding: 'utf8',
+  const useShell = process.platform === 'win32';
+  let th: Promise<ExecResult> = new Promise((resolve) => {
+    try {
+      const proc = spawn(bin, useShell ? args.map(shellArg) : args, {
         shell: useShell,
-        // The 1 MiB default overflows (ENOBUFS) on large tests and outputs.
-        maxBuffer: 1024 * 1024 * 1024,
         // A resolved clerk reaches the plugin; a bare name would only shadow
         // the plugin's own lookup beside catala.
         env: {
@@ -55,30 +51,65 @@ function execBinary(
           ...(path.isAbsolute(clerkPath) && { CATALA_CLERK_PATH: clerkPath }),
         },
         ...opts,
-      }),
-    };
-  } catch (error) {
-    const { stdout, stderr } = error as SpawnSyncReturns<Buffer | string>;
-    return {
-      ok: false,
-      output: stdout ? stdout.toString() : '',
-      stderr: stderr
-        ? stderr.toString()
-        : error instanceof Error
-          ? error.message
-          : String(error),
-    };
-  }
+      });
+      proc.stdout.setEncoding('utf-8');
+      proc.stderr.setEncoding('utf-8');
+      if (opts.input) {
+        proc.stdin.setDefaultEncoding('utf-8');
+        proc.stdin.write(opts.input);
+        proc.stdin.end();
+      }
+      let output = '';
+      proc.stdout.on('data', (data) => {
+        output += data;
+      });
+      let stderr = '';
+      proc.stderr.on('data', (data) => {
+        stderr += data;
+      });
+      proc.on('error', (err) => {
+        resolve({
+          ok: false,
+          output: output,
+          stderr:
+            stderr != ''
+              ? stderr
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      });
+      proc.on('close', (code: number | null) => {
+        resolve({
+          ok: code == 0,
+          output: output,
+          stderr: stderr,
+        });
+      });
+    } catch (error) {
+      const { stdout, stderr } = error as SpawnSyncReturns<Buffer | string>;
+      resolve({
+        ok: false,
+        output: stdout ? stdout.toString() : '',
+        stderr: stderr
+          ? stderr.toString()
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  });
+  return th;
 }
 
 /** All the reasoning is in OCaml; this only asks and parses. */
-export function recoverBrokenTest(
+export async function recoverBrokenTest(
   bufferPath: string,
   content: string,
   scope?: string
-): RebuildAnswer {
+): Promise<RebuildAnswer> {
   const cwd = getCwd(bufferPath);
-  const result = execBinary(
+  const result = await spawnBinary(
     catalaPath,
     [
       'testcase',
@@ -108,12 +139,12 @@ export function recoverBrokenTest(
 }
 
 /** Rebuild against a scope the tester chose; the refusal's text on failure. */
-export function retargetBrokenTest(
+export async function retargetBrokenTest(
   bufferPath: string,
   content: string,
   scope: string
-): Extract<ParseResults, { kind: 'BrokenTest' }> | string {
-  const results = recoverBrokenTest(bufferPath, content, scope);
+): Promise<Extract<ParseResults, { kind: 'BrokenTest' }> | string> {
+  const results = await recoverBrokenTest(bufferPath, content, scope);
   switch (results.kind) {
     case 'recovered':
       return { kind: 'BrokenTest', value: results.view };
@@ -132,21 +163,21 @@ function runFailed(message: string): TestRunResults {
 }
 
 /** From stdin: running must not imply saving the working copy. */
-export function runRebuiltTest(
+export async function runRebuiltTest(
   tests: TestList,
   testingScope: string,
   lang: string,
   bufferPath: string
-): TestRunResults {
+): Promise<TestRunResults> {
   const cwd = getCwd(bufferPath);
   // A failure to run, not an exception: thrown, it escapes the message handler.
   let source: string;
   try {
-    source = atdToCatala(tests, lang);
+    source = await atdToCatala(tests, lang);
   } catch (error) {
     return runFailed(String(error));
   }
-  const result = execBinary(
+  const result = await spawnBinary(
     catalaPath,
     // --buffer-path locates the project for a test fed on stdin.
     [
@@ -179,13 +210,13 @@ export function runRebuiltTest(
   }
 }
 
-export function parseTestFile(
+export async function parseTestFile(
   content: string,
   lang: string,
   bufferPath: string
-): ParseResults {
+): Promise<ParseResults> {
   const cwd = getCwd(bufferPath);
-  const execResult = execBinary(
+  const execResult = await spawnBinary(
     catalaPath,
     ['testcase', 'read', '-l', lang, '--buffer-path', bufferPath, '-'],
     { input: content, ...(cwd && { cwd }) }
@@ -231,10 +262,17 @@ function readAnswer(result: ExecResult): ReadAnswer {
   }
 }
 
-export function atdToCatala(tests: TestList, lang: string): string {
-  const result = execBinary(catalaPath, ['testcase', 'write', '-l', lang], {
-    input: JSON.stringify(writeTestList(tests)),
-  });
+export async function atdToCatala(
+  tests: TestList,
+  lang: string
+): Promise<string> {
+  const result = await spawnBinary(
+    catalaPath,
+    ['testcase', 'write', '-l', lang],
+    {
+      input: JSON.stringify(writeTestList(tests)),
+    }
+  );
   if (!result.ok) {
     logger.log(`Error in atdToCatala: ${result.stderr}`);
     throw new Error(result.stderr);
@@ -242,11 +280,11 @@ export function atdToCatala(tests: TestList, lang: string): string {
   return result.output;
 }
 
-export function runTestScope(
+export async function runTestScope(
   filename: string,
   testScope: string,
   inputs?: TestInputs
-): TestRunResults {
+): Promise<TestRunResults> {
   /*
    * Notes:
    * - security: fileName should be provided by the editor, so it should be
@@ -275,7 +313,7 @@ export function runTestScope(
   const cwd = getCwd(filename);
   // Here we *do* want to fail on asserts, as we catch failures through
   // the `register_lsp_error_notifier` hook.
-  const execResult = execBinary(catalaPath, args, {
+  const execResult = await spawnBinary(catalaPath, args, {
     ...(cwd && { cwd }),
     ...(inputJson !== undefined && { input: inputJson }),
   });
@@ -315,8 +353,10 @@ export function runTestScope(
   }
 }
 
-export function getAvailableScopes(filename: string): ScopeDefList {
-  const execResult = execBinary(catalaPath, [
+export async function getAvailableScopes(
+  filename: string
+): Promise<ScopeDefList> {
+  const execResult = await spawnBinary(catalaPath, [
     'testcase',
     'list-scopes',
     filename,
@@ -342,12 +382,12 @@ export function getAvailableScopes(filename: string): ScopeDefList {
   }
 }
 
-export function generate(
+export async function generate(
   scope: string,
   filename: string,
   default_values?: boolean,
   force_module?: boolean
-): TestGenerateResults {
+): Promise<TestGenerateResults> {
   const args = [
     'testcase',
     'generate',
@@ -358,7 +398,9 @@ export function generate(
     ...(force_module ? ['--enforce-module'] : []),
   ];
   const cwd = getCwd(filename);
-  const execResult = execBinary(catalaPath, args, { ...(cwd && { cwd }) });
+  const execResult = await spawnBinary(catalaPath, args, {
+    ...(cwd && { cwd }),
+  });
   if (!execResult.ok) return { kind: 'Error', value: execResult.stderr };
   let parsed: unknown;
   try {
@@ -378,12 +420,12 @@ export function generate(
   }
 }
 
-export function serializeInputs(
+export async function serializeInputs(
   inputs: TestInputs
-): { kind: 'Ok'; json: JSON } | { kind: 'Error'; message: string } {
+): Promise<{ kind: 'Ok'; json: JSON } | { kind: 'Error'; message: string }> {
   // JSON over stdin (--input=-): the Windows shell mangles it as an inline arg.
   const args = ['testcase', 'serialize-inputs', '--input=-'];
-  const execResult = execBinary(catalaPath, args, {
+  const execResult = await spawnBinary(catalaPath, args, {
     input: JSON.stringify(writeTestInputs(inputs)),
   });
   if (!execResult.ok) {

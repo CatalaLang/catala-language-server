@@ -99,6 +99,10 @@ export class CatalaTestCaseDocument
       typeof backupId === 'string' ? vscode.Uri.parse(backupId) : uri;
     const fileData = await CatalaTestCaseDocument.readFile(dataFile);
     const document = new CatalaTestCaseDocument(uri, fileData);
+    document._parseResults = stampParseResultsUids(
+      await parseContents(fileData, document._uri, document._language)
+    );
+    document._rebuilt = rebuiltFrom(document._parseResults);
     await document.statWorkingCopy();
     return document;
   }
@@ -215,7 +219,7 @@ export class CatalaTestCaseDocument
         // flag (a restored session, say) can never be cleared.
         return;
       }
-      const source = atdToCatala(this._rebuilt, this.language);
+      const source = await atdToCatala(this._rebuilt, this.language);
       if (cancellation.isCancellationRequested) return;
       await vscode.workspace.fs.writeFile(
         this.workingCopyUri,
@@ -226,7 +230,10 @@ export class CatalaTestCaseDocument
     if (this._parseResults.kind !== 'Results') {
       throw new Error('Invalid testcase file, cannot save');
     }
-    const catalaSource = atdToCatala(this._parseResults.value, this.language);
+    const catalaSource = await atdToCatala(
+      this._parseResults.value,
+      this.language
+    );
     const writeData = Buffer.from(catalaSource, 'utf-8');
     if (cancellation.isCancellationRequested) {
       return;
@@ -238,7 +245,7 @@ export class CatalaTestCaseDocument
     const diskContent = await CatalaTestCaseDocument.readFile(this.uri);
     this._sourceText = new TextDecoder('utf-8').decode(diskContent);
     this._parseResults = stampParseResultsUids(
-      parseContents(diskContent, this._uri, this._language)
+      await parseContents(diskContent, this._uri, this._language)
     );
     this._rebuilt = rebuiltFrom(this._parseResults);
     this._originalReads = false;
@@ -384,7 +391,7 @@ export class CatalaTestCaseDocument
         'Nothing to replace the original with: this test could not be rebuilt against its scope.'
       );
     }
-    const source = atdToCatala(rebuilt, this.language);
+    const source = await atdToCatala(rebuilt, this.language);
     await vscode.workspace.fs.writeFile(this.uri, Buffer.from(source, 'utf-8'));
     await this.deleteWorkingCopy();
     this._parseResults = stampParseResultsUids({
@@ -405,7 +412,7 @@ export class CatalaTestCaseDocument
     const source = new TextDecoder('utf-8').decode(
       await CatalaTestCaseDocument.readFile(this.uri)
     );
-    const rebuilt = recoverBrokenTest(this.uri.fsPath, source);
+    const rebuilt = await recoverBrokenTest(this.uri.fsPath, source);
     if (rebuilt.kind !== 'recovered') {
       throw new Error(
         rebuilt.kind === 'refused'
@@ -484,14 +491,10 @@ export class CatalaTestCaseDocument
     this._uri = uri;
     this._language = getLanguageFromUri(this._uri);
     this._sourceText = new TextDecoder('utf-8').decode(initialContent);
-
-    this._parseResults = stampParseResultsUids(
-      parseContents(initialContent, this._uri, this._language)
-    );
-    this._rebuilt = rebuiltFrom(this._parseResults);
-
     this._editManager = new EditManager(this, (t) => this._setContents(t));
     this._rebuildManager = new EditManager(this, (t) => this._commitRebuilt(t));
+    // Fake value: the real value is set in 'create'
+    this._parseResults = { kind: 'Results', value: [] };
   }
 }
 

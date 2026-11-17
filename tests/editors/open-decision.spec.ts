@@ -233,11 +233,11 @@ const routes: [
   ],
 ];
 
-describe('decideOpen', () => {
-  it.each(routes)('%s', (_, read, blank, rebuilt, expected) => {
-    const decided = decideOpen({
+describe('decideOpen', async () => {
+  it.each(routes)('%s', async (_, read, blank, rebuilt, expected) => {
+    const decided = await decideOpen({
       read,
-      rebuild: () => {
+      rebuild: async () => {
         if (rebuilt === null) throw new Error('rebuild ran');
         return rebuilt;
       },
