@@ -30,13 +30,13 @@ import { resolveLanguage } from '../shared/settings';
 import type { ResultController } from './testAndCoverage';
 import { TestId } from './testAndCoverage';
 
-export function parseContents(
+export async function parseContents(
   content: Uint8Array,
   uri: vscode.Uri,
   language: string
-): ParseResults {
+): Promise<ParseResults> {
   const documentText = new TextDecoder('utf-8').decode(content);
-  return parseTestFile(documentText, language, uri.fsPath);
+  return await parseTestFile(documentText, language, uri.fsPath);
 }
 
 export async function testScopePicker(
@@ -107,7 +107,7 @@ export async function testScopePicker(
 
     if (!filename || !scopeUnderTest) return [];
 
-    const results = generate(scopeUnderTest, filename, false, true);
+    const results = await generate(scopeUnderTest, filename, false, true);
     if (results.kind === 'Results') {
       const newTest = results.value;
 
@@ -349,7 +349,7 @@ export class TestCaseEditorProvider
                 results:
                   rebuilt === undefined || rebuilt.length === 0
                     ? { kind: 'Error', value: 'Nothing to run yet.' }
-                    : runRebuiltTest(
+                    : await runRebuiltTest(
                         rebuilt,
                         typed_msg.value.scope,
                         document.language,
@@ -455,7 +455,12 @@ export class TestCaseEditorProvider
         }
         case 'TestGenerateRequest': {
           const { scope_under_test, filename } = typed_msg.value;
-          const results = generate(scope_under_test, filename, false, true);
+          const results = await generate(
+            scope_under_test,
+            filename,
+            false,
+            true
+          );
           if (results.kind === 'Results') {
             const newTest = results.value;
 
@@ -477,7 +482,7 @@ export class TestCaseEditorProvider
           break;
         }
         case 'RetargetRequest': {
-          const results = retargetBrokenTest(
+          const results = await retargetBrokenTest(
             document.uri.fsPath,
             document.sourceText,
             typed_msg.value

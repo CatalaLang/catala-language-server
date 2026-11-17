@@ -63,7 +63,7 @@ export class ScopeInputController {
         case 'Ready': {
           this.following.dispose();
           this.following = this.settings.follow(this.panel.webview, file);
-          const generatedTest: TestGenerateResults = generate(
+          const generatedTest: TestGenerateResults = await generate(
             scope,
             file,
             true,
@@ -96,7 +96,7 @@ export class ScopeInputController {
         }
         case 'TestRunRequest': {
           if (typed_msg.value.in_shell) {
-            const result = serializeInputs(this.test.test_inputs);
+            const result = await serializeInputs(this.test.test_inputs);
             if (result.kind == 'Ok')
               vscode.commands.executeCommand('catala.runScope', {
                 uri: file,
@@ -108,7 +108,7 @@ export class ScopeInputController {
                 `Error on test scope run with inputs: ${result.message}`
               );
           } else if (typed_msg.value.debug) {
-            const result = serializeInputs(this.test.test_inputs);
+            const result = await serializeInputs(this.test.test_inputs);
             if (result.kind == 'Error') throw new Error(result.message);
             vscode.commands.executeCommand('catala.debugScope', {
               uri: file,
@@ -116,7 +116,7 @@ export class ScopeInputController {
               inputs: result.json,
             });
           } else {
-            const results: TestRunResults = runTestScope(
+            const results: TestRunResults = await runTestScope(
               file,
               scope,
               this.test.test_inputs

@@ -429,7 +429,7 @@ suite('Broken test document', function () {
 
     // Pick the renamed module's scope, save the draft, close.
     const doc = await CatalaTestCaseDocument.create(uri, undefined);
-    const picked = retargetBrokenTest(
+    const picked = await retargetBrokenTest(
       file,
       doc.sourceText,
       'BenefitPlan.Compute'
