@@ -161,12 +161,14 @@ export class TestMacroController {
           // pointer that just clicked it.
           const reorder = ids.length != 1;
           if (ids.length == 0) {
-            await runTestVscode(catalog, testController, resultController, {
-              kind: 'all',
+            await this.testQueue.add(async () => {
+              await runTestVscode(catalog, testController, resultController, {
+                kind: 'all',
+              });
+              for (const test of this.tests) {
+                this.postResult(test, reorder, resultController);
+              }
             });
-            for (const test of this.tests) {
-              this.postResult(test, reorder, resultController);
-            }
           } else {
             // Looked up by id, not position: the list may have been reloaded
             // since the panel sent the request. A test that is gone is
