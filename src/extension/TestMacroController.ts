@@ -71,26 +71,14 @@ export class TestMacroController {
           vscode.Uri.file(filename),
           e.entrypoint.value.value.scope
         );
-        let res = resultController.getResult(testId);
-        if (res != undefined) {
-          let testEntrypoint = {
-            test_id: testId.id,
-            filename: filename,
-            relative_filename: relativeFilename(filename),
-            test: e.entrypoint.value,
-            success: res.success,
-            date: res.date,
-          };
-          this.tests.push(testEntrypoint);
-        } else {
-          let testEntrypoint = {
-            test_id: testId.id,
-            filename: filename,
-            relative_filename: relativeFilename(filename),
-            test: e.entrypoint.value,
-          };
-          this.tests.push(testEntrypoint);
-        }
+        const res = resultController.getResult(testId);
+        this.tests.push({
+          test_id: testId.id,
+          filename: filename,
+          relative_filename: relativeFilename(filename),
+          test: e.entrypoint.value,
+          last_run: res && { success: res.success, date: res.date },
+        });
       } else {
         throw new Error(`Unexpected test from ${path}`);
       }

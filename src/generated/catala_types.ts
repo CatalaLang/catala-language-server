@@ -129,8 +129,7 @@ export type TestDebugger = {
   filename: string;
   relative_filename?: string;
   test: TestEntrypoint;
-  success?: boolean;
-  date?: string;
+  last_run?: ScopeSuccess;
 }
 
 export type TestRun = {
@@ -805,8 +804,7 @@ export function writeTestDebugger(x: TestDebugger, context: any = x): any {
     'filename': _atd_write_required_field('TestDebugger', 'filename', _atd_write_string, x.filename, x),
     'relative_filename': _atd_write_optional_field(_atd_write_string, x.relative_filename, x),
     'test': _atd_write_required_field('TestDebugger', 'test', writeTestEntrypoint, x.test, x),
-    'success': _atd_write_optional_field(_atd_write_bool, x.success, x),
-    'date': _atd_write_optional_field(_atd_write_string, x.date, x),
+    'last_run': _atd_write_optional_field(writeScopeSuccess, x.last_run, x),
   };
 }
 
@@ -816,8 +814,7 @@ export function readTestDebugger(x: any, context: any = x): TestDebugger {
     filename: _atd_read_required_field('TestDebugger', 'filename', _atd_read_string, x['filename'], x),
     relative_filename: _atd_read_optional_field(_atd_read_string, x['relative_filename'], x),
     test: _atd_read_required_field('TestDebugger', 'test', readTestEntrypoint, x['test'], x),
-    success: _atd_read_optional_field(_atd_read_bool, x['success'], x),
-    date: _atd_read_optional_field(_atd_read_string, x['date'], x),
+    last_run: _atd_read_optional_field(readScopeSuccess, x['last_run'], x),
   };
 }
 
