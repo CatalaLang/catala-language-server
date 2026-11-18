@@ -128,11 +128,9 @@ type test = {
    (GUI or plain), along with the run metadata that is not intrinsic to
    the test (which file it lives in and its last run result). *)
 type test_debugger = {
-  index: int;
   (* Identifies the test across reloads: [<file path>:<scope>], the id of the
      test's item in VS Code's Test Explorer (`TestId` in testAndCoverage.ts),
-     which also keys its stored result. Unlike [index], it does not change when
-     tests are added, removed or reordered. *)
+     which also keys its stored result. *)
   test_id: string;
   filename: string;
   (* [filename] made relative to the workspace folder it belongs to, for

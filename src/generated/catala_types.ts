@@ -125,7 +125,6 @@ export type Test = {
 }
 
 export type TestDebugger = {
-  index: number /*int*/;
   test_id: string;
   filename: string;
   relative_filename?: string;
@@ -807,7 +806,6 @@ export function readTest(x: any, context: any = x): Test {
 
 export function writeTestDebugger(x: TestDebugger, context: any = x): any {
   return {
-    'index': _atd_write_required_field('TestDebugger', 'index', _atd_write_int, x.index, x),
     'test_id': _atd_write_required_field('TestDebugger', 'test_id', _atd_write_string, x.test_id, x),
     'filename': _atd_write_required_field('TestDebugger', 'filename', _atd_write_string, x.filename, x),
     'relative_filename': _atd_write_optional_field(_atd_write_string, x.relative_filename, x),
@@ -819,7 +817,6 @@ export function writeTestDebugger(x: TestDebugger, context: any = x): any {
 
 export function readTestDebugger(x: any, context: any = x): TestDebugger {
   return {
-    index: _atd_read_required_field('TestDebugger', 'index', _atd_read_int, x['index'], x),
     test_id: _atd_read_required_field('TestDebugger', 'test_id', _atd_read_string, x['test_id'], x),
     filename: _atd_read_required_field('TestDebugger', 'filename', _atd_read_string, x['filename'], x),
     relative_filename: _atd_read_optional_field(_atd_read_string, x['relative_filename'], x),
