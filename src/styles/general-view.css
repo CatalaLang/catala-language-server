@@ -13,11 +13,14 @@
 
 .test-item .test-item-header {
   display: flex;
+  flex-wrap: wrap;
 }
 
 .test-item .test-item-header .test-file {
   font-size: 2em;
   margin-left: auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .test-item .test-item-header .test-title {
