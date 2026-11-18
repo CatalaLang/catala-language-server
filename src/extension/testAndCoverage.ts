@@ -692,20 +692,12 @@ function makeRunHandler(
   return runHandler;
 }
 
-// Signature of the test run handler exposed by `initTests` so other parts
-// can trigger runs directly instead of going through a VS Code command.
-export type TestRunHandler = (
-  request: vscode.TestRunRequest,
-  cancellation: vscode.CancellationToken,
-  with_coverage?: boolean
-) => Promise<void>;
-
 export async function initTests(
   context: vscode.ExtensionContext,
   client: LanguageClient,
   ctrl: vscode.TestController,
   resultController: ResultController
-): Promise<TestRunHandler> {
+): Promise<void> {
   context.subscriptions.push(ctrl);
   let cwd: string | undefined;
   let test_map: TestMap = new TestMap();
@@ -794,8 +786,6 @@ export async function initTests(
       }
     )
   );
-
-  return testRunHandler;
 }
 
 type RunTestArgs =
