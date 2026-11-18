@@ -989,42 +989,43 @@ let list_file_entrypoints doc_id prg module_scopes : entrypoint list =
     (fun scopename sdecl acc ->
       let pos = Mark.get sdecl in
       let { scope_decl_name = _; scope_sig; _ } = Mark.remove sdecl in
-      if Pos.has_attr pos TestUI then
-        let tested_scope =
-          let testing_scope = ScopeName.Map.find scopename module_scopes in
-          let _, tested_scope =
-            let count =
-              ScopeVar.Map.cardinal testing_scope.Desugared.Ast.scope_sub_scopes
-            in
-            if count <> 1 then
-              invalid_arg
-                (Format.asprintf
-                   "@{<b>%a@}: testing scopes are expected to have one, and \
-                    only one subscope, this has %d"
-                   ScopeName.format scopename count)
-            else ScopeVar.Map.choose testing_scope.scope_sub_scopes
+      if Pos.has_attr pos TestUI then (
+        let testing_scope = ScopeName.Map.find scopename module_scopes in
+        match
+          ScopeVar.Map.bindings testing_scope.Desugared.Ast.scope_sub_scopes
+        with
+        | [(_, tested_scope)] ->
+          let title =
+            Pos.get_attr pos (function
+              | TestTitle s -> if s = "" then None else Some s
+              | _ -> None)
           in
-          tested_scope
-        in
-        let title =
-          Pos.get_attr pos (function
-            | TestTitle s -> if s = "" then None else Some s
-            | _ -> None)
-        in
-        let description =
-          Pos.get_attr pos (function
-            | TestDescription s -> if s = "" then None else Some s
-            | _ -> None)
-        in
-        {
-          path;
-          pos;
-          kind =
-            Test
-              (GUI
-                 { tested_scope; testing_scope = scopename; title; description });
-        }
-        :: acc
+          let description =
+            Pos.get_attr pos (function
+              | TestDescription s -> if s = "" then None else Some s
+              | _ -> None)
+          in
+          {
+            path;
+            pos;
+            kind =
+              Test
+                (GUI
+                   {
+                     tested_scope;
+                     testing_scope = scopename;
+                     title;
+                     description;
+                   });
+          }
+          :: acc
+        | subs ->
+          Log.warn (fun m ->
+              m
+                "%a: not listed, a GUI test needs exactly one sub-scope (it \
+                 has %d)"
+                ScopeName.format scopename (List.length subs));
+          acc)
       else if Pos.has_attr pos Test then
         { path; pos; kind = Test (Scope scopename) } :: acc
       else
