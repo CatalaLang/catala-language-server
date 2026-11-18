@@ -47,18 +47,21 @@ function TestItem({ vscode, test, onRun }: TestItemArg): ReactElement {
       </span>
       <SeparationLine />
       <div className="footer">
-        <TestStateIcon loading={test.loading} success={test.success} />
+        <TestStateIcon
+          loading={test.loading}
+          success={test.last_run?.success}
+        />
         <span
           title={intl.formatMessage({
             id: 'generalTests.header.lastTestDate',
             defaultMessage: 'Date du dernier test',
           })}
         >
-          {test.date !== undefined ? (
+          {test.last_run !== undefined ? (
             <FormattedMessage
               id="generalTests.testedOn"
               defaultMessage="Testé le {date}"
-              values={{ date: <TestDate date={test.date} /> }}
+              values={{ date: <TestDate date={test.last_run.date} /> }}
             />
           ) : (
             <FormattedMessage
