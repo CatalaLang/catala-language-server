@@ -23,7 +23,6 @@ export function guiTest({
   date?: string;
 }): TestDebugger {
   return {
-    index: 0,
     test_id: testId(file, scope),
     filename: file,
     test: {
@@ -48,7 +47,6 @@ export function plainTest({
   date?: string;
 }): TestDebugger {
   return {
-    index: 0,
     test_id: testId(file, scope),
     filename: file,
     test: { kind: 'Test', value: { scope } },

@@ -80,7 +80,6 @@ export class TestMacroController {
         let res = resultController.getResult(testId);
         if (res != undefined) {
           let testEntrypoint = {
-            index,
             test_id: testId.id,
             filename: filename,
             relative_filename: relativeFilename(filename),
@@ -91,7 +90,6 @@ export class TestMacroController {
           this.tests.push(testEntrypoint);
         } else {
           let testEntrypoint = {
-            index,
             test_id: testId.id,
             filename: filename,
             relative_filename: relativeFilename(filename),
