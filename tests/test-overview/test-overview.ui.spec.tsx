@@ -87,7 +87,7 @@ const listed = (tests: ListedTest[]): void =>
 function result(
   test: ListedTest,
   success: boolean,
-  order = false
+  reorder = false
 ): TestsDownMessage {
   return {
     kind: 'TestScopeResult',
@@ -95,7 +95,7 @@ function result(
       entry: test.test,
       scope_success: { success, date: '2026-11-03T14:32:00.000Z' },
       test_id: test.test_id,
-      order,
+      reorder,
     },
   };
 }

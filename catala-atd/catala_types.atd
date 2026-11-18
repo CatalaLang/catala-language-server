@@ -380,7 +380,7 @@ type test_scope_result = {
   entry: test_entrypoint;
   scope_success: scope_success;
   test_id: string; (* see [listed_test] *)
-  order: bool
+  reorder: bool; (* failures first again, once this result is in *)
 }
 
 type down_message = [

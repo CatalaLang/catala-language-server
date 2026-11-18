@@ -330,7 +330,7 @@ export type TestScopeResult = {
   entry: TestEntrypoint;
   scope_success: ScopeSuccess;
   test_id: string;
-  order: boolean;
+  reorder: boolean;
 }
 
 export type DownMessage =
@@ -1552,7 +1552,7 @@ export function writeTestScopeResult(x: TestScopeResult, context: any = x): any 
     'entry': _atd_write_required_field('TestScopeResult', 'entry', writeTestEntrypoint, x.entry, x),
     'scope_success': _atd_write_required_field('TestScopeResult', 'scope_success', writeScopeSuccess, x.scope_success, x),
     'test_id': _atd_write_required_field('TestScopeResult', 'test_id', _atd_write_string, x.test_id, x),
-    'order': _atd_write_required_field('TestScopeResult', 'order', _atd_write_bool, x.order, x),
+    'reorder': _atd_write_required_field('TestScopeResult', 'reorder', _atd_write_bool, x.reorder, x),
   };
 }
 
@@ -1561,7 +1561,7 @@ export function readTestScopeResult(x: any, context: any = x): TestScopeResult {
     entry: _atd_read_required_field('TestScopeResult', 'entry', readTestEntrypoint, x['entry'], x),
     scope_success: _atd_read_required_field('TestScopeResult', 'scope_success', readScopeSuccess, x['scope_success'], x),
     test_id: _atd_read_required_field('TestScopeResult', 'test_id', _atd_read_string, x['test_id'], x),
-    order: _atd_read_required_field('TestScopeResult', 'order', _atd_read_bool, x['order'], x),
+    reorder: _atd_read_required_field('TestScopeResult', 'reorder', _atd_read_bool, x['reorder'], x),
   };
 }
 

@@ -160,7 +160,7 @@ export class TestMacroController {
           // once — the whole list (`[]`) or a filtered selection. A single
           // test must leave the order alone, or the list moves under the
           // pointer that just clicked it.
-          const order = ids.length != 1;
+          const reorder = ids.length != 1;
           if (ids.length == 0) {
             await runTestVscode(
               cwd!,
@@ -183,7 +183,7 @@ export class TestMacroController {
                     entry: testElt.test,
                     scope_success: res,
                     test_id: testElt.test_id,
-                    order,
+                    reorder,
                   },
                 });
               } else {
@@ -194,7 +194,7 @@ export class TestMacroController {
                     entry: testElt.test,
                     scope_success: { success: false, date },
                     test_id: testElt.test_id,
-                    order,
+                    reorder,
                   },
                 });
               }
@@ -246,7 +246,7 @@ export class TestMacroController {
                       entry: test.test,
                       scope_success: res,
                       test_id: test.test_id,
-                      order,
+                      reorder,
                     },
                   });
                 } else {
@@ -257,7 +257,7 @@ export class TestMacroController {
                       entry: test.test,
                       scope_success: { success: false, date },
                       test_id: test.test_id,
-                      order,
+                      reorder,
                     },
                   });
                 }
