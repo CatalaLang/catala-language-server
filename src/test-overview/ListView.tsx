@@ -291,7 +291,12 @@ export function TestList({
       })}
       {not_gui.length > 0 ? (
         <>
-          <h1>Autres Tests</h1>
+          <h1>
+            <FormattedMessage
+              id="generalTests.otherTests"
+              defaultMessage="Other tests"
+            />
+          </h1>
           <table className="test-list">
             <HeaderLine gui={false} />
             <tbody>
