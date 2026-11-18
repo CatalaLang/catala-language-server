@@ -383,10 +383,25 @@ let process
   in
   let options = Catala_utils.Global.enforce_options ~input_src () in
   let l = ref [] in
-  let get_errors () = !l in
+  (* Usually doubled by an error with a position (a module that fails to load
+     is also reported at its use); alone, they are the only trace of the
+     failure, so they go at the start of the file. *)
+  let unplaced = ref [] in
+  let get_errors () =
+    match !l with
+    | [] ->
+      List.map
+        (fun e ->
+          {
+            e with
+            Message.pos = Some (Pos.from_info (doc_id :> string) 1 1 1 1);
+          })
+        !unplaced
+    | l -> l
+  in
   let on_error e =
     match e with
-    | { Message.kind = Generic; pos = None; _ } -> ()
+    | { Message.kind = Generic; pos = None; _ } -> unplaced := e :: !unplaced
     | _ -> l := e :: !l
   in
   let () = Catala_utils.Message.register_lsp_error_notifier on_error in
