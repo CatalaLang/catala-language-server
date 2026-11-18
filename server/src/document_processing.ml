@@ -220,6 +220,35 @@ let hash_local_context (ctx : Desugared.Name_resolution.context) : Hash.t =
   % local_var_typs
   % list Ident.hash module_ids
 
+(* The stdlib directory is listed with the other module candidates, and every
+   file uses the stdlib implicitly unless it is disabled ([project_stdlib =
+   None]): build it before listing. *)
+let ensure_stdlib (project : Projects.project) =
+  let root_dir, clerk_config =
+    match project.project_kind with
+    | Clerk { clerk_root_dir; clerk_config } -> clerk_root_dir, clerk_config
+    | No_clerk -> project.project_dir, Clerk_config.default_config
+  in
+  let missing =
+    match project.project_stdlib with
+    | Some dir -> not (File.exists (dir :> string))
+    | None -> false
+  in
+  if missing then begin
+    let args =
+      [
+        "start";
+        "--build-dir";
+        File.(root_dir / clerk_config.global.build_dir);
+        "--target-dir";
+        File.(root_dir / clerk_config.global.target_dir);
+      ]
+    in
+    Log.debug (fun m ->
+        m "Stdlib not found - calling `clerk %s`" (String.concat " " args));
+    ignore (File.process_out "clerk" args)
+  end
+
 let surface_to_scopelang
     ?resolve_included_file
     ?module_candidates
@@ -253,52 +282,20 @@ let surface_to_scopelang
     Log.debug (fun m -> m "skipping external module interface");
     Server_state.Skipped
   | _ -> (
-    let root_dir, clerk_config =
-      match project.project_kind with
-      | Clerk { clerk_root_dir; clerk_config } -> clerk_root_dir, clerk_config
-      | No_clerk -> project.project_dir, Clerk_config.default_config
-    in
     let includes = project.project_include_dirs in
-    let build_stdlib_path =
-      File.(root_dir / clerk_config.global.build_dir / "libcatala")
-    in
-    let stdlib = Some (Global.raw_file build_stdlib_path) in
+    let stdlib = project.project_stdlib in
     let module_candidates =
       match module_candidates with
       | None ->
+        ensure_stdlib project;
         let includes = File.Set.elements includes |> List.map Global.raw_file in
         Surface.Parser_driver.load_included_modules options ~includes ~stdlib
           ~load_module ()
       | Some c -> c
     in
     let mod_uses, modules =
-      let check k =
-        if File.exists build_stdlib_path then
-          Surface.Parser_driver.load_modules_with_candidates options ~stdlib
-            module_candidates surface
-        else k ()
-      in
-      check
-      @@ fun () ->
-      let cmd, args =
-        ( "clerk",
-          [
-            "start";
-            "--build-dir";
-            File.(root_dir / clerk_config.global.build_dir);
-            "--target-dir";
-            File.(root_dir / clerk_config.global.target_dir);
-          ] )
-      in
-      Log.debug (fun m ->
-          m "Stdlib not found - calling `clerk %s`" (String.concat " " args));
-      let _ = File.process_out cmd args in
-      check
-      @@ fun () ->
-      try
-        Surface.Parser_driver.load_modules_with_candidates options ~stdlib
-          module_candidates surface
-      with e ->
+      (match stdlib with
+      | Some dir when not (File.exists (dir :> string)) ->
         on_error
           {
             Message.kind = Generic;
@@ -309,8 +306,10 @@ let surface_to_scopelang
                    project");
             pos = Some (Pos.from_info (doc_id :> string) 1 1 1 1);
             suggestion = None;
-          };
-        raise e
+          }
+      | _ -> ());
+      Surface.Parser_driver.load_modules_with_candidates options ~stdlib
+        module_candidates surface
     in
     let ctx =
       Desugared.Name_resolution.form_context (surface, mod_uses) modules
