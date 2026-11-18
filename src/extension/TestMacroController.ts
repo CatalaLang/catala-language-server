@@ -91,7 +91,7 @@ export class TestMacroController {
           last_run: res && { success: res.success, date: res.date },
         });
       } else {
-        throw new Error(`Unexpected test from ${path}`);
+        throw new Error(`Unexpected test from ${filename}`);
       }
     }
     this.postMessageToWebView({ kind: 'AllTests', value: this.tests });
@@ -120,7 +120,7 @@ export class TestMacroController {
   ): void {
     const panel = vscode.window.createWebviewPanel(
       'viewAllTests',
-      'View Catala tests',
+      vscode.l10n.t('View Catala tests'),
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -128,7 +128,6 @@ export class TestMacroController {
       }
     );
     this.panel = panel;
-    panel.title = 'View Catala tests';
     panel.webview.html = this.getHtmlForWebview(panel, context);
 
     // Once the user closes the panel it is disposed for good: drop our
@@ -196,7 +195,6 @@ export class TestMacroController {
                 })),
               });
               for (const test of testToRun) {
-                logger.log(`Test to run: ${JSON.stringify(test)}`);
                 this.postResult(test, reorder, resultController);
               }
             });
@@ -314,7 +312,7 @@ export class TestMacroController {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Check all tests</title>
+                <title>Catala tests</title>
                 <style>
                     body {
                         padding: 100px;
