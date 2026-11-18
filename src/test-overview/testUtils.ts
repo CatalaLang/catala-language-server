@@ -1,21 +1,21 @@
-import type { TestDebugger } from '../generated/catala_types';
+import type { ListedTest } from '../generated/catala_types';
 import type { TestMacro, TestState } from './types';
 
 // The `gui` flag is now carried by the `test` union's constructor: a GUI
 // entry wraps a full `Test`, a plain entry wraps a `TestSum`. These helpers
 // read the fields that both variants share, plus the run metadata that lives
-// on the `TestDebugger` wrapper.
-export function isGui(test: TestDebugger): boolean {
+// on the `ListedTest` wrapper.
+export function isGui(test: ListedTest): boolean {
   return test.test.kind === 'GUI';
 }
 
-export function testTitle(test: TestDebugger): string {
+export function testTitle(test: ListedTest): string {
   return test.test.kind === 'GUI'
     ? (test.test.value.title ?? '')
     : test.test.value.scope;
 }
 
-export function testDescription(test: TestDebugger): string {
+export function testDescription(test: ListedTest): string {
   return test.test.kind == 'GUI'
     ? (test.test.value.description ?? '')
     : `Test of ${test.test.value.scope} in ${test.filename}`;
@@ -23,11 +23,11 @@ export function testDescription(test: TestDebugger): string {
 
 // The name of the file the test lives in, without its directories. Both
 // separators are looked for, since the path is whatever the host reported.
-export function testFileName(test: TestDebugger): string {
+export function testFileName(test: ListedTest): string {
   return test.filename.split(/[/\\]/).pop() ?? test.filename;
 }
 
-export function testingScope(test: TestDebugger): string {
+export function testingScope(test: ListedTest): string {
   return test.test.kind == 'GUI'
     ? test.test.value.scope_tested
     : test.test.value.scope;
@@ -51,7 +51,7 @@ export function testMacro(success?: boolean): TestState {
  * @returns true if the tests matches conditions depending on the filters
  */
 export function matchFilter(
-  test: TestDebugger,
+  test: ListedTest,
   filterRaw: string,
   filterScope: string[],
   filterGui: boolean

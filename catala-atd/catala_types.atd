@@ -127,7 +127,7 @@ type test = {
 (* A test as displayed in the 'view catala tests' panel: the test itself
    (GUI or plain), along with the run metadata that is not intrinsic to
    the test (which file it lives in and its last run result). *)
-type test_debugger = {
+type listed_test = {
   (* Identifies the test across reloads: [<file path>:<scope>], the id of the
      test's item in VS Code's Test Explorer (`TestId` in testAndCoverage.ts),
      which also keys its stored result. *)
@@ -155,7 +155,7 @@ type test_run = {
 
 
 
-type test_debugger_list = test_debugger list
+type listed_test_list = listed_test list
 
 type test_list = test list
 
@@ -379,7 +379,7 @@ type update = {
 type test_scope_result = {
   entry: test_entrypoint;
   scope_success: scope_success;
-  test_id: string; (* see [test_debugger] *)
+  test_id: string; (* see [listed_test] *)
   order: bool
 }
 
@@ -392,14 +392,14 @@ type down_message = [
 (* Messages of the 'view catala tests' panel (TestMacroController) *)
 type tests_up_message = [
   | Ready
-  | SpecificTestRequest of string list (* test ids; empty: every test *)
+  | RunTests of string list (* test ids; empty: every test *)
   | OpenInTextEditor of string option (* filename *)
   | OpenInTestEditor of string (* filename *)
   | OpenTestScopePicker
 ]
 
 type tests_down_message = [
-  | AllTests of test_debugger_list
+  | AllTests of listed_test_list
   | TestScopeResult of test_scope_result
 ]
 
