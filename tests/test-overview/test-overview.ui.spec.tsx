@@ -9,7 +9,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import type { WebviewApi } from 'vscode-webview';
 import type {
-  TestDebugger,
+  ListedTest,
   TestsDownMessage,
 } from '../../src/generated/catala_types';
 import {
@@ -81,11 +81,11 @@ function hostSends(message: TestsDownMessage): void {
   });
 }
 
-const listed = (tests: TestDebugger[]): void =>
+const listed = (tests: ListedTest[]): void =>
   hostSends({ kind: 'AllTests', value: tests });
 
 function result(
-  test: TestDebugger,
+  test: ListedTest,
   success: boolean,
   order = false
 ): TestsDownMessage {
@@ -205,7 +205,7 @@ describe('runs', () => {
       within(card('Early retirement')).getByTitle('Run the test')
     );
     expect(sent(post)).toEqual([
-      { kind: 'SpecificTestRequest', value: [pension.test_id] },
+      { kind: 'RunTests', value: [pension.test_id] },
     ]);
     within(card('Early retirement')).getByTitle('Test running…');
     within(card('Two children')).getByTitle('Test never run');
@@ -216,7 +216,7 @@ describe('runs', () => {
     listed([allowance, tax]);
     fireEvent.click(screen.getByText('Run tests'));
     expect(sent(post)).toEqual([
-      { kind: 'SpecificTestRequest', value: [allowance.test_id] },
+      { kind: 'RunTests', value: [allowance.test_id] },
     ]);
   });
 
@@ -225,7 +225,7 @@ describe('runs', () => {
     listed([allowance, tax]);
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByText('Run tests'));
-    expect(sent(post)).toEqual([{ kind: 'SpecificTestRequest', value: [] }]);
+    expect(sent(post)).toEqual([{ kind: 'RunTests', value: [] }]);
   });
 
   it('a result goes to the test of its id, wherever it stands', () => {

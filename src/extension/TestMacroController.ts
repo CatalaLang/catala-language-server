@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { TestDebugger } from '../generated/catala_types';
+import type { ListedTest } from '../generated/catala_types';
 import {
   readTestsUpMessage,
   writeTestsDownMessage,
@@ -49,7 +49,7 @@ export class TestMacroController {
   // Undefined until the panel is created, and reset to undefined when the
   // user closes it (a disposed panel can neither be revealed nor posted to).
   panel: vscode.WebviewPanel | undefined;
-  tests: TestDebugger[] = [];
+  tests: ListedTest[] = [];
   // Test items of the listed entrypoints, rebuilt on every 'Ready'.
   testMap: TestMap = new TestMap();
 
@@ -159,7 +159,7 @@ export class TestMacroController {
           this.handleCatalaEntrypoint(entrypoints, resultController);
           break;
         }
-        case 'SpecificTestRequest': {
+        case 'RunTests': {
           if (this.tests.length == 0) {
             break;
           }
