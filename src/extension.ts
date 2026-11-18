@@ -544,7 +544,7 @@ export async function activate(
 
     await client.start();
 
-    await initTests(context, client, ctrl, resultController);
+    const catalog = await initTests(context, client, ctrl, resultController);
 
     const macroTestsView = new TestMacroController();
     context.subscriptions.push(
@@ -555,10 +555,10 @@ export async function activate(
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
           macroTestsView.show(
-            client,
             context,
             resultController,
             ctrl,
+            catalog,
             columnToShowIn
           );
         }

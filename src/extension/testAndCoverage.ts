@@ -213,7 +213,7 @@ export class ResultController {
   }
 }
 
-export class TestMap {
+class TestMap {
   private map: Map<string, vscode.TestItem>;
   constructor() {
     this.map = new Map();
@@ -439,7 +439,7 @@ function populateTestHierarchy(
   }
 }
 
-export function populateTestItems(
+function populateTestItems(
   ctrl: vscode.TestController,
   test_map: TestMap,
   path: string,
@@ -557,7 +557,7 @@ function fold_tree(
   return acc;
 }
 
-export function testEntrypointsToTestScopeMap(
+function testEntrypointsToTestScopeMap(
   entrypoints: Array<CatalaEntrypoint>
 ): TestScopeMap {
   let map: Map<string, TestScope[]> = new Map();
@@ -692,18 +692,25 @@ function makeRunHandler(
   return runHandler;
 }
 
+/** The tests of the workspace, listed once for the Test Explorer and the panel. */
+export type TestCatalog = {
+  testMap: TestMap;
+  entrypoints: CatalaEntrypoint[];
+  cwd: string | undefined;
+  refresh: () => Promise<void>;
+};
+
 export async function initTests(
   context: vscode.ExtensionContext,
   client: LanguageClient,
   ctrl: vscode.TestController,
   resultController: ResultController
-): Promise<void> {
+): Promise<TestCatalog> {
   context.subscriptions.push(ctrl);
-  let cwd: string | undefined;
-  let test_map: TestMap = new TestMap();
+  const test_map: TestMap = new TestMap();
 
   const updateTestScopes = async (): Promise<void> => {
-    let entrypoints = await listEntrypoints(
+    const entrypoints = await listEntrypoints(
       client,
       [{ kind: 'GUI' }, { kind: 'Test' }],
       undefined,
@@ -717,12 +724,20 @@ export async function initTests(
     test_scopes_map.forEach(({ path, scopes }) =>
       populateTestItems(ctrl, test_map, path, scopes)
     );
+    catalog.entrypoints = entrypoints;
     if (test_scopes_map.length > 0) {
-      cwd = getCwd(test_scopes_map[0].path);
+      catalog.cwd = getCwd(test_scopes_map[0].path);
     }
     // The listing covers the whole workspace: the time to forget the results
     // of the tests that are gone.
     await resultController.prune(test_scopes_map);
+  };
+
+  const catalog: TestCatalog = {
+    testMap: test_map,
+    entrypoints: [],
+    cwd: undefined,
+    refresh: updateTestScopes,
   };
 
   updateTestScopes();
@@ -734,7 +749,7 @@ export async function initTests(
     ctrl,
     test_map,
     resultController,
-    () => cwd,
+    () => catalog.cwd,
     true
   );
 
@@ -786,6 +801,8 @@ export async function initTests(
       }
     )
   );
+
+  return catalog;
 }
 
 type RunTestArgs =
@@ -793,17 +810,17 @@ type RunTestArgs =
   | { kind: 'scope'; tests: { filename: vscode.Uri; scope: string }[] };
 
 export async function runTestVscode(
-  cwd: string,
-  testMap: TestMap,
+  catalog: TestCatalog,
   testController: vscode.TestController,
   resultController: ResultController,
   args: RunTestArgs
 ): Promise<void> {
+  const testMap = catalog.testMap;
   let runTest = makeRunHandler(
     testController,
     testMap,
     resultController,
-    () => cwd,
+    () => catalog.cwd,
     false
   );
   let request: vscode.TestRunRequest;
