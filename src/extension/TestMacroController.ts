@@ -65,6 +65,28 @@ export class TestMacroController {
     this.panel?.webview.postMessage(writeTestsDownMessage(message));
   }
 
+  // A test with no stored result after a run could not run: a failure.
+  private postResult(
+    test: ListedTest,
+    reorder: boolean,
+    resultController: ResultController
+  ): void {
+    const res = resultController.getResult(
+      new TestId(vscode.Uri.file(test.filename), test.test.value.scope)
+    );
+    this.postMessageToWebView({
+      kind: 'TestScopeResult',
+      value: {
+        entry: test.test,
+        scope_success: res
+          ? { success: res.success, date: res.date }
+          : { success: false, date: new Date().toISOString() },
+        test_id: test.test_id,
+        reorder,
+      },
+    });
+  }
+
   handleCatalaEntrypoint(
     entrypoints: CatalaEntrypoint[],
     resultController: ResultController
@@ -178,35 +200,8 @@ export class TestMacroController {
               resultController,
               { kind: 'all' }
             );
-            for (let index = 0; index < this.tests.length; index++) {
-              const testElt = this.tests[index];
-              let testId = new TestId(
-                vscode.Uri.file(testElt.filename),
-                testElt.test.value.scope
-              );
-              let res = resultController.getResult(testId);
-              if (res != undefined) {
-                this.postMessageToWebView({
-                  kind: 'TestScopeResult',
-                  value: {
-                    entry: testElt.test,
-                    scope_success: res,
-                    test_id: testElt.test_id,
-                    reorder,
-                  },
-                });
-              } else {
-                let date = new Date().toISOString();
-                this.postMessageToWebView({
-                  kind: 'TestScopeResult',
-                  value: {
-                    entry: testElt.test,
-                    scope_success: { success: false, date },
-                    test_id: testElt.test_id,
-                    reorder,
-                  },
-                });
-              }
+            for (const test of this.tests) {
+              this.postResult(test, reorder, resultController);
             }
           } else {
             // Looked up by id, not position: the list may have been reloaded
@@ -243,33 +238,7 @@ export class TestMacroController {
               );
               for (const test of testToRun) {
                 logger.log(`Test to run: ${JSON.stringify(test)}`);
-                let testId = new TestId(
-                  vscode.Uri.file(test.filename),
-                  test.test.value.scope
-                );
-                let res = resultController.getResult(testId);
-                if (res != undefined) {
-                  this.postMessageToWebView({
-                    kind: 'TestScopeResult',
-                    value: {
-                      entry: test.test,
-                      scope_success: res,
-                      test_id: test.test_id,
-                      reorder,
-                    },
-                  });
-                } else {
-                  let date = new Date().toISOString();
-                  this.postMessageToWebView({
-                    kind: 'TestScopeResult',
-                    value: {
-                      entry: test.test,
-                      scope_success: { success: false, date },
-                      test_id: test.test_id,
-                      reorder,
-                    },
-                  });
-                }
+                this.postResult(test, reorder, resultController);
               }
             });
           }
