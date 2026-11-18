@@ -600,7 +600,7 @@ function makeRunHandler(
   ctrl: vscode.TestController,
   test_map: TestMap,
   resultController: ResultController,
-  cwd: string | undefined,
+  currentCwd: () => string | undefined,
   focus: boolean
 ): RunHandler {
   const runHandler = async (
@@ -608,6 +608,7 @@ function makeRunHandler(
     cancellation: vscode.CancellationToken,
     with_coverage?: boolean
   ): Promise<void> => {
+    const cwd = currentCwd();
     // An empty list asks for no test: without a path, clerk would test the
     // whole project.
     if (cwd == undefined || request.include?.length === 0) {
@@ -741,7 +742,7 @@ export async function initTests(
     ctrl,
     test_map,
     resultController,
-    cwd,
+    () => cwd,
     true
   );
 
@@ -812,7 +813,7 @@ export async function runTestVscode(
     testController,
     testMap,
     resultController,
-    cwd,
+    () => cwd,
     false
   );
   let request: vscode.TestRunRequest;
