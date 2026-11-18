@@ -136,8 +136,14 @@ describe('listing', () => {
   it('puts the failed tests first', () => {
     panel();
     listed([
-      { ...allowance, success: true, date: '2026-11-03T14:32:00.000Z' },
-      { ...pension, success: false, date: '2026-11-03T14:32:00.000Z' },
+      {
+        ...allowance,
+        last_run: { success: true, date: '2026-11-03T14:32:00.000Z' },
+      },
+      {
+        ...pension,
+        last_run: { success: false, date: '2026-11-03T14:32:00.000Z' },
+      },
     ]);
     expect(cardTitles()).toEqual(['Early retirement', 'Two children']);
   });
@@ -146,7 +152,10 @@ describe('listing', () => {
     panel();
     listed([
       allowance,
-      { ...pension, success: true, date: '2026-11-03T14:32:00.000Z' },
+      {
+        ...pension,
+        last_run: { success: true, date: '2026-11-03T14:32:00.000Z' },
+      },
     ]);
     within(card('Two children')).getByText('Never run');
     within(card('Two children')).getByTitle('Test never run');
