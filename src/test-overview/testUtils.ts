@@ -44,8 +44,6 @@ export function testMacro(success?: boolean): TestState {
 /**
  * Function to verify if a test passes all the filters
  * @param test checks the filters on this test
- * @param index the index of the test so that the user
- * can also search on the index
  * @param filterBar the content of the search bar
  * @param filterScope the different Scopes that are filtered
  * @param filterGui tells if we want tests that are generated from the
@@ -62,8 +60,7 @@ export function matchFilter(
   let searchBarFilter =
     testTitle(test).toLowerCase().includes(filter) ||
     testDescription(test).toLowerCase().includes(filter) ||
-    testingScope(test).toLowerCase().includes(filter) ||
-    (test.index + 1).toString().includes(filter);
+    testingScope(test).toLowerCase().includes(filter);
   let scopeFilter =
     filterScope.length == 0
       ? true

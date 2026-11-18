@@ -53,6 +53,10 @@ describe('matchFilter', () => {
     expect(matchFilter(allowance, 'pension', [], false)).toBe(false);
   });
 
+  it('a number is looked for in the text, not in the position in the list', () => {
+    expect(matchFilter(allowance, '1', [], false)).toBe(false);
+  });
+
   it('selected scopes keep only their tests', () => {
     expect(matchFilter(allowance, '', ['Allowance'], false)).toBe(true);
     expect(matchFilter(tax, '', ['Allowance'], false)).toBe(false);
