@@ -5,24 +5,15 @@ import {
   writeTestsDownMessage,
   type TestsDownMessage,
 } from '../generated/catala_types';
-import { type LanguageClient } from 'vscode-languageclient/node';
 import type { CatalaEntrypoint } from './lspRequests';
-import { listEntrypoints } from './lspRequests';
 import { logger } from './logger';
 import { atdToCatala } from '../test-case-editor/testCaseCompilerInterop';
 import { testScopePicker } from './testCaseEditorProvider';
 import path from 'path';
 import { CatalaTestCaseDocument } from '../shared/CatalaTestCaseDocument';
 import PQueue from 'p-queue';
-import type { ResultController } from './testAndCoverage';
-import {
-  fileExists,
-  populateTestItems,
-  runTestVscode,
-  testEntrypointsToTestScopeMap,
-  TestId,
-  TestMap,
-} from './testAndCoverage';
+import type { ResultController, TestCatalog } from './testAndCoverage';
+import { fileExists, runTestVscode, TestId } from './testAndCoverage';
 import { getCwd } from '../shared/util_client';
 
 // Path of a test file relative to the workspace folder it belongs to, which is
@@ -48,8 +39,6 @@ export class TestMacroController {
   // user closes it (a disposed panel can neither be revealed nor posted to).
   panel: vscode.WebviewPanel | undefined;
   tests: ListedTest[] = [];
-  // Test items of the listed entrypoints, rebuilt on every 'Ready'.
-  testMap: TestMap = new TestMap();
 
   private testQueue: PQueue = new PQueue({ concurrency: 1 });
 
@@ -110,24 +99,24 @@ export class TestMacroController {
 
   // Reveal the panel if it is still alive, otherwise (re)create it.
   public show(
-    client: LanguageClient,
     context: vscode.ExtensionContext,
     resultController: ResultController,
     testController: vscode.TestController,
+    catalog: TestCatalog,
     columnToShowIn: vscode.ViewColumn | undefined
   ): void {
     if (this.panel != undefined) {
       this.panel.reveal(columnToShowIn);
       return;
     }
-    this.createWebView(client, context, resultController, testController);
+    this.createWebView(context, resultController, testController, catalog);
   }
 
   public createWebView(
-    client: LanguageClient,
     context: vscode.ExtensionContext,
     resultController: ResultController,
-    testController: vscode.TestController
+    testController: vscode.TestController,
+    catalog: TestCatalog
   ): void {
     const panel = vscode.window.createWebviewPanel(
       'viewAllTests',
@@ -157,26 +146,15 @@ export class TestMacroController {
       switch (typed_msg.kind) {
         case 'Ready': {
           this.tests = [];
-          const entrypoints = await listEntrypoints(
-            client,
-            [{ kind: 'GUI' }, { kind: 'Test' }],
-            undefined,
-            false,
-            true
-          );
-          this.testMap.clear();
-          testEntrypointsToTestScopeMap(entrypoints).forEach(
-            ({ path, scopes }) =>
-              populateTestItems(testController, this.testMap, path, scopes)
-          );
-          this.handleCatalaEntrypoint(entrypoints, resultController);
+          // The panel's reload is the Test Explorer's refresh: one listing.
+          await catalog.refresh();
+          this.handleCatalaEntrypoint(catalog.entrypoints, resultController);
           break;
         }
         case 'RunTests': {
           if (this.tests.length == 0) {
             break;
           }
-          const cwd = getCwd(this.tests[0].filename);
           let ids = typed_msg.value;
           // Reordering is worth it when a run refreshes several results at
           // once — the whole list (`[]`) or a filtered selection. A single
@@ -184,13 +162,9 @@ export class TestMacroController {
           // pointer that just clicked it.
           const reorder = ids.length != 1;
           if (ids.length == 0) {
-            await runTestVscode(
-              cwd!,
-              this.testMap,
-              testController,
-              resultController,
-              { kind: 'all' }
-            );
+            await runTestVscode(catalog, testController, resultController, {
+              kind: 'all',
+            });
             for (const test of this.tests) {
               this.postResult(test, reorder, resultController);
             }
@@ -214,19 +188,13 @@ export class TestMacroController {
             }
             await this.testQueue.add(async () => {
               // One run for all the tests, then their results one by one.
-              await runTestVscode(
-                cwd!,
-                this.testMap,
-                testController,
-                resultController,
-                {
-                  kind: 'scope',
-                  tests: testToRun.map((test) => ({
-                    filename: vscode.Uri.file(test.filename),
-                    scope: test.test.value.scope,
-                  })),
-                }
-              );
+              await runTestVscode(catalog, testController, resultController, {
+                kind: 'scope',
+                tests: testToRun.map((test) => ({
+                  filename: vscode.Uri.file(test.filename),
+                  scope: test.test.value.scope,
+                })),
+              });
               for (const test of testToRun) {
                 logger.log(`Test to run: ${JSON.stringify(test)}`);
                 this.postResult(test, reorder, resultController);
