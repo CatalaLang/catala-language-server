@@ -54,6 +54,10 @@ describe('matchFilter', () => {
     expect(matchFilter(allowance, 'pension', [], false)).toBe(false);
   });
 
+  it('the search box also looks into the file name', () => {
+    expect(matchFilter(allowance, 'test_allow', [], false)).toBe(true);
+  });
+
   it('a number is looked for in the text, not in the position in the list', () => {
     expect(matchFilter(allowance, '1', [], false)).toBe(false);
   });

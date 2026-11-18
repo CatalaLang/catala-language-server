@@ -59,7 +59,8 @@ export function matchFilter(
   let searchBarFilter =
     testTitle(test).toLowerCase().includes(filter) ||
     testDescription(test).toLowerCase().includes(filter) ||
-    testingScope(test).toLowerCase().includes(filter);
+    testingScope(test).toLowerCase().includes(filter) ||
+    (test.relative_filename ?? test.filename).toLowerCase().includes(filter);
   let scopeFilter =
     filterScope.length == 0
       ? true
