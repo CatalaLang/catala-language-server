@@ -78,7 +78,7 @@ export function noFilter(
 }
 
 export function hasFailure(tests: TestMacro[]): boolean {
-  return tests.some((test) => test.success !== undefined && !test.success);
+  return tests.some((test) => test.last_run?.success === false);
 }
 
 export function scopesFromTests(tests: TestMacro[]): string[] {

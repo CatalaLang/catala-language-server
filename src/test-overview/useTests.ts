@@ -45,7 +45,7 @@ export function useTests(vscode: WebviewApi<unknown>): Tests {
           let failures: TestMacro[] = [];
           for (let index = 0; index < tests.length; index++) {
             const test = tests[index];
-            if (test.success !== undefined && !test.success) {
+            if (test.last_run?.success === false) {
               failures.push(test);
             } else {
               tsTests.push(test);
@@ -74,14 +74,13 @@ export function useTests(vscode: WebviewApi<unknown>): Tests {
                 updatedTest = {
                   ...test,
                   test: entry,
-                  success: scope_success.success,
-                  date: scope_success.date,
+                  last_run: scope_success,
                   loading: false,
                 };
               }
-              // Explicitly `false`: a test that was never run has an undefined
-              // `success` and does not belong with the failures.
-              if (order && updatedTest.success === false) {
+              // Explicitly `false`: a test that was never run has no
+              // `last_run` and does not belong with the failures.
+              if (order && updatedTest.last_run?.success === false) {
                 failures.push(updatedTest);
               } else {
                 others.push(updatedTest);

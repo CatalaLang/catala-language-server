@@ -105,7 +105,23 @@ describe('test state', () => {
 
   it('hasFailure counts only the tests that ran and failed', () => {
     expect(hasFailure([allowance, tax])).toBe(false);
-    expect(hasFailure([allowance, { ...tax, success: true }])).toBe(false);
-    expect(hasFailure([allowance, { ...tax, success: false }])).toBe(true);
+    expect(
+      hasFailure([
+        allowance,
+        {
+          ...tax,
+          last_run: { success: true, date: '2026-11-03T14:32:00.000Z' },
+        },
+      ])
+    ).toBe(false);
+    expect(
+      hasFailure([
+        allowance,
+        {
+          ...tax,
+          last_run: { success: false, date: '2026-11-03T14:32:00.000Z' },
+        },
+      ])
+    ).toBe(true);
   });
 });

@@ -11,16 +11,12 @@ export function guiTest({
   tested,
   title,
   description,
-  success,
-  date,
 }: {
   file: string;
   scope: string;
   tested: string;
   title?: string;
   description?: string;
-  success?: boolean;
-  date?: string;
 }): TestDebugger {
   return {
     test_id: testId(file, scope),
@@ -29,8 +25,6 @@ export function guiTest({
       kind: 'GUI',
       value: { scope_tested: tested, scope, title, description },
     },
-    success,
-    date,
   };
 }
 
@@ -38,19 +32,13 @@ export function guiTest({
 export function plainTest({
   file,
   scope,
-  success,
-  date,
 }: {
   file: string;
   scope: string;
-  success?: boolean;
-  date?: string;
 }): TestDebugger {
   return {
     test_id: testId(file, scope),
     filename: file,
     test: { kind: 'Test', value: { scope } },
-    success,
-    date,
   };
 }

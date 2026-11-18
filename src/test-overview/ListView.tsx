@@ -147,8 +147,8 @@ function TestLine({ vscode, test, onRun }: TestItemArg): ReactElement {
         )}
       </td>
       <td>
-        {test.date !== undefined ? (
-          <TestDate date={test.date} />
+        {test.last_run !== undefined ? (
+          <TestDate date={test.last_run.date} />
         ) : (
           <FormattedMessage
             id="generalTests.neverRun"
@@ -157,7 +157,10 @@ function TestLine({ vscode, test, onRun }: TestItemArg): ReactElement {
         )}
       </td>
       <td>
-        <TestStateIcon loading={test.loading} success={test.success} />
+        <TestStateIcon
+          loading={test.loading}
+          success={test.last_run?.success}
+        />
       </td>
       <td>
         <RunIcon className="run-icon" onRun={() => onRun(test.test_id)} />
