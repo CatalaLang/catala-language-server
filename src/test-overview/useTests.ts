@@ -8,6 +8,7 @@ import {
 } from '../generated/catala_types';
 import { setVsCodeApi } from '../shared/webviewApi';
 import type { TestMacro } from './types';
+import { failuresFirst } from './testUtils';
 
 export type Tests = {
   // `undefined` until the host has sent the list of tests
@@ -40,53 +41,37 @@ export function useTests(vscode: WebviewApi<unknown>): Tests {
       switch (message.kind) {
         case 'AllTests': {
           setReload(false);
-          let tests = message.value;
-          let tsTests: TestMacro[] = [];
-          let failures: TestMacro[] = [];
-          for (let index = 0; index < tests.length; index++) {
-            const test = tests[index];
-            if (test.last_run?.success === false) {
-              failures.push(test);
-            } else {
-              tsTests.push(test);
-            }
-          }
-          failures.push(...tsTests);
-          setTests(failures);
+          setTests(failuresFirst(message.value));
           break;
         }
         case 'TestScopeResult': {
-          const { entry, scope_success, test_id: runId, order } = message.value;
+          const {
+            entry,
+            scope_success,
+            test_id: runId,
+            reorder,
+          } = message.value;
           setTests((oldTests) => {
             if (oldTests === undefined) {
               return oldTests;
             }
-            const failures: TestMacro[] = [];
-            const others: TestMacro[] = [];
-            for (const test of oldTests) {
-              let updatedTest: TestMacro = test;
+            const updated = oldTests.map((test): TestMacro => {
               if (test.test_id == runId) {
                 // Spread rather than rebuilt field by field: everything the
                 // run does not report is intrinsic to the test and must
                 // survive it — `relative_filename`, in particular, or the
                 // list view would fall back to the absolute path as soon as
                 // a test has run.
-                updatedTest = {
+                return {
                   ...test,
                   test: entry,
                   last_run: scope_success,
                   loading: false,
                 };
               }
-              // Explicitly `false`: a test that was never run has no
-              // `last_run` and does not belong with the failures.
-              if (order && updatedTest.last_run?.success === false) {
-                failures.push(updatedTest);
-              } else {
-                others.push(updatedTest);
-              }
-            }
-            return [...failures, ...others];
+              return test;
+            });
+            return reorder ? failuresFirst(updated) : updated;
           });
           break;
         }

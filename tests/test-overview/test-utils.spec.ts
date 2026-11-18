@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ListedTest } from '../../src/generated/catala_types';
 import {
+  failuresFirst,
   hasFailure,
   matchFilter,
   noFilter,
@@ -101,6 +102,23 @@ describe('test state', () => {
     expect(testMacro(undefined)).toBe('Unknown');
     expect(testMacro(true)).toBe('Success');
     expect(testMacro(false)).toBe('Failed');
+  });
+
+  it('failuresFirst moves the failed tests up and keeps the order of each part', () => {
+    const ran = (success: boolean) => ({
+      success,
+      date: '2026-11-03T14:32:00.000Z',
+    });
+    const a = { ...allowance, test_id: 'a' };
+    const b = { ...tax, test_id: 'b', last_run: ran(false) };
+    const c = { ...allowance, test_id: 'c', last_run: ran(true) };
+    const d = { ...tax, test_id: 'd', last_run: ran(false) };
+    expect(failuresFirst([a, b, c, d]).map((t) => t.test_id)).toEqual([
+      'b',
+      'd',
+      'a',
+      'c',
+    ]);
   });
 
   it('hasFailure counts only the tests that ran and failed', () => {
