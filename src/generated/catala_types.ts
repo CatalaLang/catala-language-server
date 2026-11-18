@@ -124,7 +124,7 @@ export type Test = {
   title: string;
 }
 
-export type TestDebugger = {
+export type ListedTest = {
   test_id: string;
   filename: string;
   relative_filename?: string;
@@ -138,7 +138,7 @@ export type TestRun = {
   diffs: Diff[];
 }
 
-export type TestDebuggerList = TestDebugger[]
+export type ListedTestList = ListedTest[]
 
 export type TestList = Test[]
 
@@ -345,13 +345,13 @@ export type DownMessage =
 
 export type TestsUpMessage =
 | { kind: 'Ready' }
-| { kind: 'SpecificTestRequest'; value: string[] }
+| { kind: 'RunTests'; value: string[] }
 | { kind: 'OpenInTextEditor'; value: Option<string> }
 | { kind: 'OpenInTestEditor'; value: string }
 | { kind: 'OpenTestScopePicker' }
 
 export type TestsDownMessage =
-| { kind: 'AllTests'; value: TestDebuggerList }
+| { kind: 'AllTests'; value: ListedTestList }
 | { kind: 'TestScopeResult'; value: TestScopeResult }
 
 export type ScopeSuccess = {
@@ -803,22 +803,22 @@ export function readTest(x: any, context: any = x): Test {
   };
 }
 
-export function writeTestDebugger(x: TestDebugger, context: any = x): any {
+export function writeListedTest(x: ListedTest, context: any = x): any {
   return {
-    'test_id': _atd_write_required_field('TestDebugger', 'test_id', _atd_write_string, x.test_id, x),
-    'filename': _atd_write_required_field('TestDebugger', 'filename', _atd_write_string, x.filename, x),
+    'test_id': _atd_write_required_field('ListedTest', 'test_id', _atd_write_string, x.test_id, x),
+    'filename': _atd_write_required_field('ListedTest', 'filename', _atd_write_string, x.filename, x),
     'relative_filename': _atd_write_optional_field(_atd_write_string, x.relative_filename, x),
-    'test': _atd_write_required_field('TestDebugger', 'test', writeTestEntrypoint, x.test, x),
+    'test': _atd_write_required_field('ListedTest', 'test', writeTestEntrypoint, x.test, x),
     'last_run': _atd_write_optional_field(writeScopeSuccess, x.last_run, x),
   };
 }
 
-export function readTestDebugger(x: any, context: any = x): TestDebugger {
+export function readListedTest(x: any, context: any = x): ListedTest {
   return {
-    test_id: _atd_read_required_field('TestDebugger', 'test_id', _atd_read_string, x['test_id'], x),
-    filename: _atd_read_required_field('TestDebugger', 'filename', _atd_read_string, x['filename'], x),
+    test_id: _atd_read_required_field('ListedTest', 'test_id', _atd_read_string, x['test_id'], x),
+    filename: _atd_read_required_field('ListedTest', 'filename', _atd_read_string, x['filename'], x),
     relative_filename: _atd_read_optional_field(_atd_read_string, x['relative_filename'], x),
-    test: _atd_read_required_field('TestDebugger', 'test', readTestEntrypoint, x['test'], x),
+    test: _atd_read_required_field('ListedTest', 'test', readTestEntrypoint, x['test'], x),
     last_run: _atd_read_optional_field(readScopeSuccess, x['last_run'], x),
   };
 }
@@ -839,12 +839,12 @@ export function readTestRun(x: any, context: any = x): TestRun {
   };
 }
 
-export function writeTestDebuggerList(x: TestDebuggerList, context: any = x): any {
-  return _atd_write_array(writeTestDebugger)(x, context);
+export function writeListedTestList(x: ListedTestList, context: any = x): any {
+  return _atd_write_array(writeListedTest)(x, context);
 }
 
-export function readTestDebuggerList(x: any, context: any = x): TestDebuggerList {
-  return _atd_read_array(readTestDebugger)(x, context);
+export function readListedTestList(x: any, context: any = x): ListedTestList {
+  return _atd_read_array(readListedTest)(x, context);
 }
 
 export function writeTestList(x: TestList, context: any = x): any {
@@ -1616,8 +1616,8 @@ export function writeTestsUpMessage(x: TestsUpMessage, context: any = x): any {
   switch (x.kind) {
     case 'Ready':
       return 'Ready'
-    case 'SpecificTestRequest':
-      return ['SpecificTestRequest', _atd_write_array(_atd_write_string)(x.value, x)]
+    case 'RunTests':
+      return ['RunTests', _atd_write_array(_atd_write_string)(x.value, x)]
     case 'OpenInTextEditor':
       return ['OpenInTextEditor', _atd_write_option(_atd_write_string)(x.value, x)]
     case 'OpenInTestEditor':
@@ -1642,8 +1642,8 @@ export function readTestsUpMessage(x: any, context: any = x): TestsUpMessage {
   else {
     _atd_check_json_tuple(2, x, context)
     switch (x[0]) {
-      case 'SpecificTestRequest':
-        return { kind: 'SpecificTestRequest', value: _atd_read_array(_atd_read_string)(x[1], x) }
+      case 'RunTests':
+        return { kind: 'RunTests', value: _atd_read_array(_atd_read_string)(x[1], x) }
       case 'OpenInTextEditor':
         return { kind: 'OpenInTextEditor', value: _atd_read_option(_atd_read_string)(x[1], x) }
       case 'OpenInTestEditor':
@@ -1658,7 +1658,7 @@ export function readTestsUpMessage(x: any, context: any = x): TestsUpMessage {
 export function writeTestsDownMessage(x: TestsDownMessage, context: any = x): any {
   switch (x.kind) {
     case 'AllTests':
-      return ['AllTests', writeTestDebuggerList(x.value, x)]
+      return ['AllTests', writeListedTestList(x.value, x)]
     case 'TestScopeResult':
       return ['TestScopeResult', writeTestScopeResult(x.value, x)]
   }
@@ -1668,7 +1668,7 @@ export function readTestsDownMessage(x: any, context: any = x): TestsDownMessage
   _atd_check_json_tuple(2, x, context)
   switch (x[0]) {
     case 'AllTests':
-      return { kind: 'AllTests', value: readTestDebuggerList(x[1], x) }
+      return { kind: 'AllTests', value: readListedTestList(x[1], x) }
     case 'TestScopeResult':
       return { kind: 'TestScopeResult', value: readTestScopeResult(x[1], x) }
     default:

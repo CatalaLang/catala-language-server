@@ -1,5 +1,5 @@
 /** Tests as the extension host lists them to the test overview panel. */
-import type { TestDebugger } from '../../src/generated/catala_types';
+import type { ListedTest } from '../../src/generated/catala_types';
 
 // The id the host gives a test: `TestId` in testAndCoverage.ts.
 const testId = (file: string, scope: string): string => `${file}:${scope}`;
@@ -17,7 +17,7 @@ export function guiTest({
   tested: string;
   title?: string;
   description?: string;
-}): TestDebugger {
+}): ListedTest {
   return {
     test_id: testId(file, scope),
     filename: file,
@@ -35,7 +35,7 @@ export function plainTest({
 }: {
   file: string;
   scope: string;
-}): TestDebugger {
+}): ListedTest {
   return {
     test_id: testId(file, scope),
     filename: file,

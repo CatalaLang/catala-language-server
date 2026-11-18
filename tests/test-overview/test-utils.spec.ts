@@ -1,6 +1,6 @@
 /** The pure part of the test overview panel: filters, scopes, states. */
 import { describe, it, expect } from 'vitest';
-import type { TestDebugger } from '../../src/generated/catala_types';
+import type { ListedTest } from '../../src/generated/catala_types';
 import {
   hasFailure,
   matchFilter,
@@ -14,14 +14,14 @@ import {
 } from '../../src/test-overview/testUtils';
 import { guiTest, plainTest } from './fixtures';
 
-const allowance: TestDebugger = guiTest({
+const allowance: ListedTest = guiTest({
   file: '/work/tests/test_allowance.catala_en',
   scope: 'TestAllowance',
   tested: 'Allowance',
   title: 'Two children',
   description: 'A household with two children',
 });
-const tax: TestDebugger = plainTest({
+const tax: ListedTest = plainTest({
   file: 'C:\\work\\tests\\test_tax.catala_en',
   scope: 'TestTax',
 });
