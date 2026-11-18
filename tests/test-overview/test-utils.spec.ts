@@ -36,7 +36,7 @@ describe('test fields', () => {
 
   it('a plain test has no title nor description: its scope stands in', () => {
     expect(testTitle(tax)).toBe('TestTax');
-    expect(testDescription(tax)).toContain('TestTax');
+    expect(testDescription(tax)).toBe('');
     expect(testingScope(tax)).toBe('TestTax');
   });
 
