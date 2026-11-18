@@ -113,7 +113,7 @@ export function useTests(vscode: WebviewApi<unknown>): Tests {
       )
     );
     vscode.postMessage(
-      writeTestsUpMessage({ kind: 'SpecificTestRequest', value: [testId] })
+      writeTestsUpMessage({ kind: 'RunTests', value: [testId] })
     );
   };
 
@@ -127,7 +127,7 @@ export function useTests(vscode: WebviewApi<unknown>): Tests {
         );
         vscode.postMessage(
           writeTestsUpMessage({
-            kind: 'SpecificTestRequest',
+            kind: 'RunTests',
             value: [],
           })
         );
@@ -141,7 +141,7 @@ export function useTests(vscode: WebviewApi<unknown>): Tests {
         });
         vscode.postMessage(
           writeTestsUpMessage({
-            kind: 'SpecificTestRequest',
+            kind: 'RunTests',
             value: ids,
           })
         );
