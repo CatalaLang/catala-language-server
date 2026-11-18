@@ -15,10 +15,9 @@ export function testTitle(test: ListedTest): string {
     : test.test.value.scope;
 }
 
+// A plain test has none: its title is its scope, and its file has a column.
 export function testDescription(test: ListedTest): string {
-  return test.test.kind == 'GUI'
-    ? (test.test.value.description ?? '')
-    : `Test of ${test.test.value.scope} in ${test.filename}`;
+  return test.test.kind == 'GUI' ? (test.test.value.description ?? '') : '';
 }
 
 // The name of the file the test lives in, without its directories. Both
