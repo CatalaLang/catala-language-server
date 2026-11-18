@@ -77,8 +77,19 @@ export function noFilter(
   return filter.trim() == '' && filterScope.length == 0 && filterGui == false;
 }
 
+// Explicitly `false`: a test that was never run has no `last_run` and does
+// not belong with the failures.
+function failed(test: TestMacro): boolean {
+  return test.last_run?.success === false;
+}
+
 export function hasFailure(tests: TestMacro[]): boolean {
-  return tests.some((test) => test.last_run?.success === false);
+  return tests.some(failed);
+}
+
+/** Failed tests first, each part in the order it came in. */
+export function failuresFirst(tests: TestMacro[]): TestMacro[] {
+  return [...tests.filter(failed), ...tests.filter((test) => !failed(test))];
 }
 
 export function scopesFromTests(tests: TestMacro[]): string[] {
