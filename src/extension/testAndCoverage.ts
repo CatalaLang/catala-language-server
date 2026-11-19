@@ -630,7 +630,10 @@ function makeRunHandler(
       const clerk_test_result = await thread;
       if (clerk_test_result instanceof Error) throw clerk_test_result;
       resultController.refresh(clerk_test_result);
-      const { results } = clerk_test_result;
+      const { results, code, err_msg } = clerk_test_result;
+      if (code != 0 && err_msg != '') {
+        logger.log(`clerk test exited with ${code}:\n${err_msg}`);
+      }
       // Opening an editor on its diffs is for a run of one test: a larger run
       // would open one tab per failure, each taking the focus.
       const single =
