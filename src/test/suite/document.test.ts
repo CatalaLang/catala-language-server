@@ -480,3 +480,62 @@ suite('Broken test document', function () {
     );
   });
 });
+
+suite('Test document changed on disk', function () {
+  this.timeout(60_000);
+
+  const original = vscode.window.showWarningMessage;
+  teardown(() => {
+    vscode.window.showWarningMessage = original;
+  });
+  /** The answer to the conflict prompt, and how many times it was asked. */
+  function answer(choice: string | undefined): { asked: number } {
+    const calls = { asked: 0 };
+    vscode.window.showWarningMessage = (async () => {
+      calls.asked++;
+      return choice;
+    }) as typeof vscode.window.showWarningMessage;
+    return calls;
+  }
+
+  async function openThenEditOutside(): Promise<{
+    doc: CatalaTestCaseDocument;
+    file: string;
+    outside: string;
+  }> {
+    const file = path.join(project('nothing'), 'test_optionals.catala_en');
+    const doc = await CatalaTestCaseDocument.create(
+      vscode.Uri.file(file),
+      undefined
+    );
+    assert.strictEqual(doc.parseResults.kind, 'Results');
+    const outside = fs.readFileSync(file, 'utf8') + '\nEdited outside.\n';
+    fs.writeFileSync(file, outside);
+    return { doc, file, outside };
+  }
+
+  test('a save does not overwrite it unless asked to', async () => {
+    const { doc, file, outside } = await openThenEditOutside();
+    const prompt = answer(undefined);
+    await assert.rejects(doc.save(token), /changed on disk/);
+    assert.strictEqual(prompt.asked, 1);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), outside);
+  });
+
+  test('Overwrite writes, and the next save does not ask again', async () => {
+    const { doc, file, outside } = await openThenEditOutside();
+    const prompt = answer('Overwrite');
+    await doc.save(token);
+    assert.notStrictEqual(fs.readFileSync(file, 'utf8'), outside);
+    await doc.save(token);
+    assert.strictEqual(prompt.asked, 1);
+  });
+
+  test('Reload takes the file as it is on disk', async () => {
+    const { doc, file, outside } = await openThenEditOutside();
+    answer('Reload from disk');
+    await doc.save(token);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), outside);
+    assert.strictEqual(doc.sourceText, outside);
+  });
+});
