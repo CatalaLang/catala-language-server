@@ -41,5 +41,10 @@
   "Create test file": "Créer un fichier de test",
   "Invalid test file name": "Nom de fichier de test invalide",
   "The test file name must contain the word \"test\".": "Le nom du fichier de test doit contenir le mot « test ».",
-  "View Catala tests": "Visualiser les tests Catala"
+  "View Catala tests": "Visualiser les tests Catala",
+  "{0} changed on disk since it was opened.": "{0} a été modifié sur le disque depuis son ouverture.",
+  "Overwrite replaces it with the test editor content; Reload from disk discards the changes made in the test editor.": "Écraser le remplace par le contenu de l'éditeur de tests ; Recharger depuis le disque abandonne les modifications faites dans l'éditeur de tests.",
+  "Overwrite": "Écraser",
+  "Reload from disk": "Recharger depuis le disque",
+  "Not saved: {0} changed on disk.": "Non enregistré : {0} a été modifié sur le disque."
 }
