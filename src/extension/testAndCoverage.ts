@@ -6,6 +6,7 @@ import type { CatalaEntrypoint } from './lspRequests';
 import { listEntrypoints } from './lspRequests';
 import {
   focusDiffInCustomEditor,
+  isOpenInCustomEditor,
   updateOpenCustomEditorWithResults,
 } from './testCaseEditorProvider';
 import { runTestScope } from '../test-case-editor/testCaseCompilerInterop';
@@ -649,7 +650,10 @@ function makeRunHandler(
               !with_coverage &&
               test_item.tags[0] === gui_test_tag &&
               scope_test_result.scope_name &&
-              !scope_test_result.success
+              // A passing test needs `testcase run` only to clear the diffs
+              // of its open editor.
+              (!scope_test_result.success ||
+                isOpenInCustomEditor(vscode.Uri.file(file)))
             ) {
               const gui_thread: Promise<void> = processGUITest(
                 run,

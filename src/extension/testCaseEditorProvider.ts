@@ -716,6 +716,10 @@ export class TestCaseEditorProvider
     }
   }
 
+  public static isOpen(uri: vscode.Uri): boolean {
+    return TestCaseEditorProvider.webviews.has(uri.toString());
+  }
+
   private static unregisterWebview(uri: vscode.Uri): void {
     TestCaseEditorProvider.webviews.delete(uri.toString());
   }
@@ -851,6 +855,10 @@ export async function focusDiffInCustomEditor(
   results: TestRunResults
 ): Promise<boolean> {
   return TestCaseEditorProvider.focusDiffInCustomEditor(uri, scope, results);
+}
+
+export function isOpenInCustomEditor(uri: vscode.Uri): boolean {
+  return TestCaseEditorProvider.isOpen(uri);
 }
 
 export async function updateOpenCustomEditorWithResults(
