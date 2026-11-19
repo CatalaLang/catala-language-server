@@ -85,6 +85,9 @@ export class CatalaTestCaseDocument
   private _workingCopySaved: string | null = null;
   private _originalReads = false;
   private _sourceText: string;
+  // What this document last read from or wrote to its file: a save checks it
+  // against the disk. Undefined when there was no file.
+  private _diskText: string | undefined;
   private _editManager: EditManager;
   private _rebuildManager: EditManager;
 
@@ -103,6 +106,7 @@ export class CatalaTestCaseDocument
       await parseContents(fileData, document._uri, document._language)
     );
     document._rebuilt = rebuiltFrom(document._parseResults);
+    document._diskText = await document.readDiskText();
     await document.statWorkingCopy();
     return document;
   }
@@ -234,16 +238,73 @@ export class CatalaTestCaseDocument
       this._parseResults.value,
       this.language
     );
-    const writeData = Buffer.from(catalaSource, 'utf-8');
     if (cancellation.isCancellationRequested) {
       return;
     }
-    await vscode.workspace.fs.writeFile(targetResource, writeData);
+    if (targetResource.toString() === this.uri.toString()) {
+      await this.writeOriginal(catalaSource, cancellation);
+    } else {
+      await vscode.workspace.fs.writeFile(
+        targetResource,
+        Buffer.from(catalaSource, 'utf-8')
+      );
+    }
+  }
+
+  private async readDiskText(): Promise<string | undefined> {
+    try {
+      return new TextDecoder('utf-8').decode(
+        await CatalaTestCaseDocument.readFile(this.uri)
+      );
+    } catch (err) {
+      if (err instanceof vscode.FileSystemError && err.code === 'FileNotFound')
+        return undefined;
+      throw err;
+    }
+  }
+
+  /**
+   * Writes the file, unless it changed on disk since this document last read
+   * or wrote it (another editor, git, a script): then the tester chooses.
+   * False when the file was reloaded instead of written.
+   */
+  private async writeOriginal(
+    source: string,
+    cancellation: vscode.CancellationToken
+  ): Promise<boolean> {
+    const onDisk = await this.readDiskText();
+    if (onDisk !== undefined && onDisk !== this._diskText) {
+      const file = vscode.workspace.asRelativePath(this.uri);
+      const overwrite = vscode.l10n.t('Overwrite');
+      const reload = vscode.l10n.t('Reload from disk');
+      const choice = await vscode.window.showWarningMessage(
+        vscode.l10n.t('{0} changed on disk since it was opened.', file),
+        {
+          modal: true,
+          detail: vscode.l10n.t(
+            'Overwrite replaces it with the test editor content; Reload from disk discards the changes made in the test editor.'
+          ),
+        },
+        overwrite,
+        reload
+      );
+      if (choice === reload) {
+        await this.revert(cancellation);
+        return false;
+      }
+      if (choice !== overwrite) {
+        throw new Error(vscode.l10n.t('Not saved: {0} changed on disk.', file));
+      }
+    }
+    await vscode.workspace.fs.writeFile(this.uri, Buffer.from(source, 'utf-8'));
+    this._diskText = source;
+    return true;
   }
 
   async revert(_cancellation: vscode.CancellationToken): Promise<void> {
     const diskContent = await CatalaTestCaseDocument.readFile(this.uri);
     this._sourceText = new TextDecoder('utf-8').decode(diskContent);
+    this._diskText = this._sourceText;
     this._parseResults = stampParseResultsUids(
       await parseContents(diskContent, this._uri, this._language)
     );
@@ -392,7 +453,8 @@ export class CatalaTestCaseDocument
       );
     }
     const source = await atdToCatala(rebuilt, this.language);
-    await vscode.workspace.fs.writeFile(this.uri, Buffer.from(source, 'utf-8'));
+    const token = new vscode.CancellationTokenSource().token;
+    if (!(await this.writeOriginal(source, token))) return;
     await this.deleteWorkingCopy();
     this._parseResults = stampParseResultsUids({
       kind: 'Results',
@@ -423,6 +485,7 @@ export class CatalaTestCaseDocument
     const results: ParseResults = { kind: 'BrokenTest', value: rebuilt.view };
     this.cancelPendingEdits();
     this._sourceText = source;
+    this._diskText = source;
     this._parseResults = stampParseResultsUids(results);
     this._rebuilt = rebuiltFrom(this._parseResults);
     this._workingCopySaved = null;
