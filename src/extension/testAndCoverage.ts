@@ -386,14 +386,9 @@ async function processGUITest(
       const out = res.value;
       const diffs = out.diffs ?? [];
       const hasFailures = out.assert_failures || diffs.length > 0;
-      if (hasFailures) {
-        // Prefer focusing the custom editor and displaying diffs there
-        // TODO: SHOULD WE?
-        if (focus) {
-          await focusDiffInCustomEditor(uri, scope, res);
-        }
+      if (hasFailures && focus) {
+        await focusDiffInCustomEditor(uri, scope, res);
       } else {
-        // Update GUI editor if open to clear stale diffs on success
         await updateOpenCustomEditorWithResults(uri, scope, res);
       }
     }
@@ -636,6 +631,11 @@ function makeRunHandler(
       if (clerk_test_result instanceof Error) throw clerk_test_result;
       resultController.refresh(clerk_test_result);
       const { results } = clerk_test_result;
+      // Opening an editor on its diffs is for a run of one test: a larger run
+      // would open one tab per failure, each taking the focus.
+      const single =
+        results['test-results'].flatMap(({ tests }) => tests.scopes).length ===
+        1;
       let test_gui_threads: Array<Promise<void>> = [];
       results['test-results'].forEach(({ file, tests }) => {
         tests.scopes.forEach((scope_test_result) => {
@@ -660,7 +660,7 @@ function makeRunHandler(
                 test_item,
                 file,
                 scope_test_result.scope_name,
-                focus
+                focus && single
               );
               test_gui_threads.push(gui_thread);
             } else {
