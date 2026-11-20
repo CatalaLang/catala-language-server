@@ -31,6 +31,28 @@ export function RunAllTests({
   );
 }
 
+/** Cancels the panel's running and waiting runs. */
+export function StopTests({
+  vscode,
+}: {
+  vscode: WebviewApi<unknown>;
+}): ReactElement {
+  return (
+    <span
+      onClick={(event) => {
+        event.preventDefault();
+        vscode.postMessage(writeTestsUpMessage({ kind: 'CancelRuns' }));
+      }}
+      className="vscode-button"
+    >
+      <FormattedMessage
+        id="generalTests.stopTests"
+        defaultMessage="Arrêter les tests"
+      />
+    </span>
+  );
+}
+
 /**
  * Component that open a new window to create a catala file and generates a test
  * in it.

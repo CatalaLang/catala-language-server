@@ -332,7 +332,7 @@ export type WebviewSettings = {
 
 export type TestScopeResult = {
   entry: TestEntrypoint;
-  scope_success: ScopeSuccess;
+  scope_success?: ScopeSuccess;
   test_id: string;
   reorder: boolean;
 }
@@ -346,6 +346,7 @@ export type DownMessage =
 export type TestsUpMessage =
 | { kind: 'Ready' }
 | { kind: 'RunTests'; value: string[] }
+| { kind: 'CancelRuns' }
 | { kind: 'OpenInTextEditor'; value: Option<string> }
 | { kind: 'OpenInTestEditor'; value: string }
 | { kind: 'OpenTestScopePicker' }
@@ -1567,7 +1568,7 @@ export function readWebviewSettings(x: any, context: any = x): WebviewSettings {
 export function writeTestScopeResult(x: TestScopeResult, context: any = x): any {
   return {
     'entry': _atd_write_required_field('TestScopeResult', 'entry', writeTestEntrypoint, x.entry, x),
-    'scope_success': _atd_write_required_field('TestScopeResult', 'scope_success', writeScopeSuccess, x.scope_success, x),
+    'scope_success': _atd_write_optional_field(writeScopeSuccess, x.scope_success, x),
     'test_id': _atd_write_required_field('TestScopeResult', 'test_id', _atd_write_string, x.test_id, x),
     'reorder': _atd_write_required_field('TestScopeResult', 'reorder', _atd_write_bool, x.reorder, x),
   };
@@ -1576,7 +1577,7 @@ export function writeTestScopeResult(x: TestScopeResult, context: any = x): any 
 export function readTestScopeResult(x: any, context: any = x): TestScopeResult {
   return {
     entry: _atd_read_required_field('TestScopeResult', 'entry', readTestEntrypoint, x['entry'], x),
-    scope_success: _atd_read_required_field('TestScopeResult', 'scope_success', readScopeSuccess, x['scope_success'], x),
+    scope_success: _atd_read_optional_field(readScopeSuccess, x['scope_success'], x),
     test_id: _atd_read_required_field('TestScopeResult', 'test_id', _atd_read_string, x['test_id'], x),
     reorder: _atd_read_required_field('TestScopeResult', 'reorder', _atd_read_bool, x['reorder'], x),
   };
@@ -1618,6 +1619,8 @@ export function writeTestsUpMessage(x: TestsUpMessage, context: any = x): any {
       return 'Ready'
     case 'RunTests':
       return ['RunTests', _atd_write_array(_atd_write_string)(x.value, x)]
+    case 'CancelRuns':
+      return 'CancelRuns'
     case 'OpenInTextEditor':
       return ['OpenInTextEditor', _atd_write_option(_atd_write_string)(x.value, x)]
     case 'OpenInTestEditor':
@@ -1632,6 +1635,8 @@ export function readTestsUpMessage(x: any, context: any = x): TestsUpMessage {
     switch (x) {
       case 'Ready':
         return { kind: 'Ready' }
+      case 'CancelRuns':
+        return { kind: 'CancelRuns' }
       case 'OpenTestScopePicker':
         return { kind: 'OpenTestScopePicker' }
       default:

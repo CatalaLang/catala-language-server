@@ -3,7 +3,7 @@ import { FormattedMessage, useIntl } from 'react-intl';
 
 import { type WebviewApi } from 'vscode-webview';
 
-import { AddNewTest, RunAllTests } from './buttons';
+import { AddNewTest, RunAllTests, StopTests } from './buttons';
 import { Filter } from './Filter';
 import { matchFilter, noFilter } from './testUtils';
 import { TestsGrid } from './TestsView';
@@ -24,6 +24,7 @@ export default function TestOverview({
   const [grid, setGrid] = useState<boolean>(true);
   const { tests, reload, onRun, runTests, refresh } = useTests(vscode);
 
+  const running = tests?.some((test) => test.loading === true) ?? false;
   const filteredTests = tests?.filter((test) =>
     matchFilter(test, filter, filterScope, filterGui)
   );
@@ -44,13 +45,19 @@ export default function TestOverview({
         />
         <div className="tests-button">
           <AddNewTest vscode={vscode} />
-          <RunAllTests
-            onRun={() =>
-              runTests(
-                noFilter(filter, filterScope, filterGui) ? 'all' : filteredTests
-              )
-            }
-          />{' '}
+          {running ? (
+            <StopTests vscode={vscode} />
+          ) : (
+            <RunAllTests
+              onRun={() =>
+                runTests(
+                  noFilter(filter, filterScope, filterGui)
+                    ? 'all'
+                    : filteredTests
+                )
+              }
+            />
+          )}{' '}
         </div>
       </div>
       <Filter

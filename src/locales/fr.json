@@ -127,6 +127,7 @@
   "broken.noteModuleNotFoundPick": "Quel champ d’application doit-il viser désormais ?",
   "broken.candidatePlaceholder": "Choisir un champ d’application…",
   "generalTests.runAllTests": "Lancer les tests",
+  "generalTests.stopTests": "Arrêter les tests",
   "generalTests.addTest": "Ajouter un test",
   "generalTests.testedOn": "Testé le {date}",
   "generalTests.neverRun": "Jamais lancé",

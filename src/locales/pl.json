@@ -127,6 +127,7 @@
   "broken.noteModuleNotFoundPick": "Which scope should it target now?",
   "broken.candidatePlaceholder": "Choose a scope…",
   "generalTests.runAllTests": "Uruchom testy",
+  "generalTests.stopTests": "Stop tests",
   "generalTests.addTest": "Dodaj test",
   "generalTests.testedOn": "Testowano {date}",
   "generalTests.neverRun": "Nigdy nie uruchomiono",

@@ -375,7 +375,7 @@ type webview_settings = {
 
 type test_scope_result = {
   entry: test_entrypoint;
-  scope_success: scope_success;
+  ?scope_success: scope_success option; (* absent: no result, run cancelled *)
   test_id: string; (* see [listed_test] *)
   reorder: bool; (* failures first again, once this result is in *)
 }
@@ -391,6 +391,7 @@ type down_message = [
 type tests_up_message = [
   | Ready
   | RunTests of string list (* test ids; empty: every test *)
+  | CancelRuns (* the running one and those waiting *)
   | OpenInTextEditor of string option (* filename *)
   | OpenInTestEditor of string (* filename *)
   | OpenTestScopePicker

@@ -47,6 +47,8 @@ export class TestOverviewController {
   constructor(private readonly settings: SettingsSource) {}
 
   private testQueue: PQueue = new PQueue({ concurrency: 1 });
+  // Replaced on each cancel: the runs queued before it hold the old token.
+  private cancellation = new vscode.CancellationTokenSource();
 
   // We want to restrict shell -> webview messages to instances
   // of TestsDownMessage
@@ -58,7 +60,8 @@ export class TestOverviewController {
   private postResult(
     test: ListedTest,
     reorder: boolean,
-    resultController: ResultController
+    resultController: ResultController,
+    cancelled: boolean
   ): void {
     const res = resultController.getResult(
       new TestId(vscode.Uri.file(test.filename), test.test.value.scope)
@@ -69,7 +72,9 @@ export class TestOverviewController {
         entry: test.test,
         scope_success: res
           ? { success: res.success, date: res.date }
-          : { success: false, date: new Date().toISOString() },
+          : cancelled
+            ? undefined
+            : { success: false, date: new Date().toISOString() },
         test_id: test.test_id,
         reorder,
       },
@@ -169,13 +174,25 @@ export class TestOverviewController {
           // test must leave the order alone, or the list moves under the
           // pointer that just clicked it.
           const reorder = ids.length != 1;
+          const token = this.cancellation.token;
           if (ids.length == 0) {
             await this.testQueue.add(async () => {
-              await runTestVscode(catalog, testController, resultController, {
-                kind: 'all',
-              });
+              if (!token.isCancellationRequested) {
+                await runTestVscode(
+                  catalog,
+                  testController,
+                  resultController,
+                  { kind: 'all' },
+                  token
+                );
+              }
               for (const test of this.tests) {
-                this.postResult(test, reorder, resultController);
+                this.postResult(
+                  test,
+                  reorder,
+                  resultController,
+                  token.isCancellationRequested
+                );
               }
             });
           } else {
@@ -198,18 +215,39 @@ export class TestOverviewController {
             }
             await this.testQueue.add(async () => {
               // One run for all the tests, then their results one by one.
-              await runTestVscode(catalog, testController, resultController, {
-                kind: 'scope',
-                tests: testToRun.map((test) => ({
-                  filename: vscode.Uri.file(test.filename),
-                  scope: test.test.value.scope,
-                })),
-              });
+              if (!token.isCancellationRequested) {
+                await runTestVscode(
+                  catalog,
+                  testController,
+                  resultController,
+                  {
+                    kind: 'scope',
+                    tests: testToRun.map((test) => ({
+                      filename: vscode.Uri.file(test.filename),
+                      scope: test.test.value.scope,
+                    })),
+                  },
+                  token
+                );
+              }
               for (const test of testToRun) {
-                this.postResult(test, reorder, resultController);
+                this.postResult(
+                  test,
+                  reorder,
+                  resultController,
+                  token.isCancellationRequested
+                );
               }
             });
           }
+          break;
+        }
+        case 'CancelRuns': {
+          // Cancelled runs post their tests' previous results: the panel
+          // stops showing them as running.
+          this.cancellation.cancel();
+          this.cancellation.dispose();
+          this.cancellation = new vscode.CancellationTokenSource();
           break;
         }
         case 'OpenInTestEditor': {
