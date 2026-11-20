@@ -45,43 +45,10 @@ let () =
   Logs.set_reporter err_std;
   ()
 
-type Catala_utils.Pos.attr += Nil
-
 let () =
   (* Dummy registration *)
   Driver.Plugin.register_subcommands "testcase" ~doc:"" ~man:[] [];
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
-    ~contexts:(function
-      | Desugared.Name_resolution.Expression _ -> true | _ -> false)
-    (fun ~pos:_ _ -> Some Nil);
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
-    ~contexts:(function
-      | Desugared.Name_resolution.ScopeDecl -> true | _ -> false)
-    (fun ~pos:_ _ -> Some Projects.TestUI);
-  (Driver.Plugin.register_attribute ~plugin:"testcase"
-     ~path:["test_description"] ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Projects.TestDescription s)
-  | _ -> failwith "unexpected test description");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
-     ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Projects.TestTitle s)
-  | _ -> failwith "unexpected test title");
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-    ~contexts:(function
-    | Desugared.Name_resolution.Expression _ -> true
-    | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (_s, _pos) -> None
-  | _ -> failwith "unexpected array item label"
+  Testcase_lib.Attributes.register ()
 
 let run () =
   Log.debug (fun m ->

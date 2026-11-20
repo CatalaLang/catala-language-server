@@ -100,10 +100,6 @@ val is_an_included_file : Doc_id.doc_id -> project -> bool
 val including_files : Doc_id.doc_id -> project -> Doc_id.doc_id list
 val included_files : Doc_id.doc_id -> project -> Doc_id.doc_id list
 
-type Catala_utils.Pos.attr += TestUI
-type Catala_utils.Pos.attr += TestDescription of string
-type Catala_utils.Pos.attr += TestTitle of string
-
 val list_entrypoints :
   get_prog:
     (Doc_id.doc_id ->

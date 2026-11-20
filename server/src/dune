@@ -35,7 +35,8 @@
   uri
   re
   catala_types_atd
-  stdlib_aliases)
+  stdlib_aliases
+  testcase_lib)
  (modules
   (:standard \ Main_lsp Main_dap))
  (preprocess

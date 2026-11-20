@@ -977,10 +977,6 @@ let entrypoint_to_json ?(no_variables = false) (decl_ctx, { path; pos; kind }) :
     entrypoint = entrypoint_kind kind;
   }
 
-type Catala_utils.Pos.attr += TestUI
-type Catala_utils.Pos.attr += TestDescription of string
-type Catala_utils.Pos.attr += TestTitle of string
-
 let list_file_entrypoints doc_id prg module_scopes : entrypoint list =
   let open Shared_ast in
   let open Scopelang.Ast in
@@ -989,22 +985,12 @@ let list_file_entrypoints doc_id prg module_scopes : entrypoint list =
     (fun scopename sdecl acc ->
       let pos = Mark.get sdecl in
       let { scope_decl_name = _; scope_sig; _ } = Mark.remove sdecl in
-      if Pos.has_attr pos TestUI then (
+      if Testcase_lib.Attributes.is_editor_test pos then (
         let testing_scope = ScopeName.Map.find scopename module_scopes in
-        match
-          ScopeVar.Map.bindings testing_scope.Desugared.Ast.scope_sub_scopes
-        with
-        | [(_, tested_scope)] ->
-          let title =
-            Pos.get_attr pos (function
-              | TestTitle s -> if s = "" then None else Some s
-              | _ -> None)
-          in
-          let description =
-            Pos.get_attr pos (function
-              | TestDescription s -> if s = "" then None else Some s
-              | _ -> None)
-          in
+        match Testcase_lib.Attributes.tested_scope testing_scope with
+        | Ok (_, tested_scope) ->
+          let title = Testcase_lib.Attributes.title pos in
+          let description = Testcase_lib.Attributes.description pos in
           {
             path;
             pos;
@@ -1019,12 +1005,12 @@ let list_file_entrypoints doc_id prg module_scopes : entrypoint list =
                    });
           }
           :: acc
-        | subs ->
+        | Error n ->
           Log.warn (fun m ->
               m
                 "%a: not listed, a GUI test needs exactly one sub-scope (it \
                  has %d)"
-                ScopeName.format scopename (List.length subs));
+                ScopeName.format scopename n);
           acc)
       else if Pos.has_attr pos Test then
         { path; pos; kind = Test (Scope scopename) } :: acc
