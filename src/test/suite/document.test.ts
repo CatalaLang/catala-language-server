@@ -48,7 +48,7 @@ function project(
       module.replace('> Module Optionals', '> Module Benefits')
     );
   }
-  execSync('clerk start', { cwd: dir, stdio: 'ignore' });
+  execSync('clerk start', { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
   return dir;
 }
 
@@ -66,7 +66,7 @@ function itemsProject(): string {
     path.join(dir, 'items.catala_en'),
     module.replace('data taxed content boolean', 'data exempt content boolean')
   );
-  execSync('clerk start', { cwd: dir, stdio: 'ignore' });
+  execSync('clerk start', { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
   return dir;
 }
 
@@ -115,7 +115,7 @@ function renamedModuleProject(): string {
       '',
     ].join('\n')
   );
-  execSync('clerk start', { cwd: dir, stdio: 'ignore' });
+  execSync('clerk start', { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
   return dir;
 }
 
