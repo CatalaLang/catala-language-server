@@ -209,20 +209,14 @@ and get_enum (lang : Global.backend_lang) (decl_ctx : decl_ctx) enum_name =
     in
     { O.enum_name; constructors; ctor_attrs }
 
-type Pos.attr += TestUi
-type Pos.attr += Uid of string
-type Pos.attr += TestDescription of string
-type Pos.attr += TestTitle of string
-type Pos.attr += ArrayItemLabel of string
-
 let rec get_value : type a.
     Global.backend_lang -> decl_ctx -> (a, 'm) gexpr -> O.runtime_value =
  fun lang decl_ctx e ->
   let pos = Expr.pos e in
   let attrs =
     Pos.get_attrs pos (function
-      | Uid s -> Some (O.Uid s)
-      | ArrayItemLabel s -> Some (O.ArrayItemLabel s)
+      | Attributes.Uid s -> Some (O.Uid s)
+      | Attributes.ArrayItemLabel s -> Some (O.ArrayItemLabel s)
       | _ -> None)
   in
   let value =

@@ -290,8 +290,7 @@ let invalid_testing_scope fmt =
 let get_test_scopes prg =
   prg.I.program_root.module_scopes
   |> ScopeName.Map.filter (fun scope_name _scope ->
-      Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
-      && Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi)
+      Attributes.is_editor_test (Mark.get (ScopeName.get_info scope_name)))
   |> ScopeName.Map.keys
 
 (* `#[test]` without `#[testcase.testui]`: hand-written, may hold anything. The
@@ -301,7 +300,10 @@ let unowned_test_scopes prg =
   prg.I.program_root.module_scopes
   |> ScopeName.Map.filter (fun scope_name _scope ->
       Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) Test
-      && not (Pos.has_attr (Mark.get (ScopeName.get_info scope_name)) TestUi))
+      && not
+           (Pos.has_attr
+              (Mark.get (ScopeName.get_info scope_name))
+              Attributes.TestUi))
   |> ScopeName.Map.keys
 
 (* Raw newlines in a pre-joined string escape the message box. *)
@@ -321,27 +323,16 @@ let get_catala_test (prg, naming_ctx) testing_scope_name =
     ScopeName.Map.find testing_scope_name prg.I.program_root.module_scopes
   in
   let info = Mark.get (ScopeName.get_info testing_scope_name) in
-  let get_single_attr ~default pos f =
-    match Pos.get_attrs pos f with [] -> default | x :: _ -> x
-  in
-  let description =
-    get_single_attr ~default:"" info (function
-      | TestDescription s -> Some s
-      | _ -> None)
-  in
-  let title =
-    get_single_attr ~default:"" info (function
-      | TestTitle s -> Some s
-      | _ -> None)
-  in
+  let description = Option.value ~default:"" (Attributes.description info) in
+  let title = Option.value ~default:"" (Attributes.title info) in
   let subscope_var, tested_scope =
-    let count = ScopeVar.Map.cardinal testing_scope.I.scope_sub_scopes in
-    if count <> 1 then
+    match Attributes.tested_scope testing_scope with
+    | Ok sub -> sub
+    | Error count ->
       invalid_testing_scope
         "@{<b>%a@}: testing scopes are expected to have one, and only one \
          subscope, this has %d"
         ScopeName.format testing_scope_name count
-    else ScopeVar.Map.choose testing_scope.scope_sub_scopes
   in
   let tested_id_var_map =
     Ident.Map.filter_map

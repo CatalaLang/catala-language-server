@@ -1,6 +1,7 @@
 (library
  (name testcase_lib)
- (modules project model commands recovery)
+ (public_name catala-lsp.testcase_lib)
+ (modules attributes project model commands recovery)
  (libraries
   catala.driver
   catala.clerk_lib

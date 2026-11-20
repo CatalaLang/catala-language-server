@@ -163,42 +163,6 @@ let register () =
       cmd_list_scopes;
       cmd_serialize_inputs;
     ];
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["uid"]
-     ~contexts:(function
-     | Desugared.Name_resolution.Expression _ -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Model.Uid s)
-  | _ -> failwith "unexpected UID value");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["testui"]
-     ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value -> match value with _ -> Some Model.TestUi);
-  (Driver.Plugin.register_attribute ~plugin:"testcase"
-     ~path:["test_description"] ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Model.TestDescription s)
-  | _ -> failwith "unexpected test description");
-  (Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["test_title"]
-     ~contexts:(function
-     | Desugared.Name_resolution.ScopeDecl -> true
-     | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Model.TestTitle s)
-  | _ -> failwith "unexpected test title");
-  Driver.Plugin.register_attribute ~plugin:"testcase" ~path:["array_item_label"]
-    ~contexts:(function
-    | Desugared.Name_resolution.Expression _ -> true
-    | _ -> false)
-  @@ fun ~pos:_ value ->
-  match value with
-  | Shared_ast.String (s, _pos) -> Some (Model.ArrayItemLabel s)
-  | _ -> failwith "unexpected array item label"
+  Attributes.register ()
 
 let () = register ()
