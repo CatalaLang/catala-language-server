@@ -1,5 +1,5 @@
 import type { ListedTest } from '../generated/catala_types';
-import type { TestMacro, TestState } from './types';
+import type { OverviewTest, TestState } from './types';
 
 // The `gui` flag is now carried by the `test` union's constructor: a GUI
 // entry wraps a full `Test`, a plain entry wraps a `TestSum`. These helpers
@@ -32,7 +32,7 @@ export function testingScope(test: ListedTest): string {
     : test.test.value.scope;
 }
 
-export function testMacro(success?: boolean): TestState {
+export function testState(success?: boolean): TestState {
   return success == true
     ? 'Success'
     : success == undefined
@@ -79,20 +79,20 @@ export function noFilter(
 
 // Explicitly `false`: a test that was never run has no `last_run` and does
 // not belong with the failures.
-function failed(test: TestMacro): boolean {
+function failed(test: OverviewTest): boolean {
   return test.last_run?.success === false;
 }
 
-export function hasFailure(tests: TestMacro[]): boolean {
+export function hasFailure(tests: OverviewTest[]): boolean {
   return tests.some(failed);
 }
 
 /** Failed tests first, each part in the order it came in. */
-export function failuresFirst(tests: TestMacro[]): TestMacro[] {
+export function failuresFirst(tests: OverviewTest[]): OverviewTest[] {
   return [...tests.filter(failed), ...tests.filter((test) => !failed(test))];
 }
 
-export function scopesFromTests(tests: TestMacro[]): string[] {
+export function scopesFromTests(tests: OverviewTest[]): string[] {
   let allScopes = tests?.map((test) => testingScope(test)).sort();
   let scopes = [];
   let prev = '';

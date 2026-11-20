@@ -10,7 +10,7 @@ import {
   testDescription,
   testFileName,
   testingScope,
-  testMacro,
+  testState,
   testTitle,
 } from '../../src/test-overview/testUtils';
 import { guiTest, plainTest } from './fixtures';
@@ -103,9 +103,9 @@ describe('scopesFromTests', () => {
 
 describe('test state', () => {
   it('a test never run is unknown, not failed', () => {
-    expect(testMacro(undefined)).toBe('Unknown');
-    expect(testMacro(true)).toBe('Success');
-    expect(testMacro(false)).toBe('Failed');
+    expect(testState(undefined)).toBe('Unknown');
+    expect(testState(true)).toBe('Success');
+    expect(testState(false)).toBe('Failed');
   });
 
   it('failuresFirst moves the failed tests up and keeps the order of each part', () => {

@@ -33,7 +33,7 @@ export function InputApp({ language, vscode, scopename }: Props): ReactElement {
   );
 }
 
-export function GeneralTestsUi({ language, vscode }: Props): ReactElement {
+export function TestOverviewUi({ language, vscode }: Props): ReactElement {
   return (
     <CatalaSettingsProvider language={language}>
       <TestOverview vscode={vscode} />

@@ -7,18 +7,18 @@ import {
   writeTestsUpMessage,
 } from '../generated/catala_types';
 import { setVsCodeApi } from '../shared/webviewApi';
-import type { TestMacro } from './types';
+import type { OverviewTest } from './types';
 import { failuresFirst } from './testUtils';
 
 export type Tests = {
   // `undefined` until the host has sent the list of tests
-  tests: TestMacro[] | undefined;
+  tests: OverviewTest[] | undefined;
   // A reload of the list of tests was asked for and has not come back yet
   reload: boolean;
   // Run a single test, by its `test_id`
   onRun: (testId: string) => void;
   // Run the given tests, or every test with 'all'
-  runTests: (selection: 'all' | TestMacro[] | undefined) => void;
+  runTests: (selection: 'all' | OverviewTest[] | undefined) => void;
   // Ask the host for the list of tests again
   refresh: () => void;
 };
@@ -28,7 +28,7 @@ export type Tests = {
  * list and the run results, and sends the run and reload requests.
  */
 export function useTests(vscode: WebviewApi<unknown>): Tests {
-  const [tests, setTests] = useState<TestMacro[] | undefined>(undefined);
+  const [tests, setTests] = useState<OverviewTest[] | undefined>(undefined);
   const [reload, setReload] = useState<boolean>(false);
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export function useTests(vscode: WebviewApi<unknown>): Tests {
             if (oldTests === undefined) {
               return oldTests;
             }
-            const updated = oldTests.map((test): TestMacro => {
+            const updated = oldTests.map((test): OverviewTest => {
               if (test.test_id == runId) {
                 // Spread rather than rebuilt field by field: everything the
                 // run does not report is intrinsic to the test and must
@@ -102,7 +102,7 @@ export function useTests(vscode: WebviewApi<unknown>): Tests {
     );
   };
 
-  const runTests = (selection: 'all' | TestMacro[] | undefined): void => {
+  const runTests = (selection: 'all' | OverviewTest[] | undefined): void => {
     if (tests) {
       if (selection === 'all') {
         setTests((oldTests) =>

@@ -35,7 +35,7 @@ import {
 } from './extension/catalaFolding';
 import path from 'path';
 import { SettingsStore } from './extension/settingsStore';
-import { TestMacroController } from './extension/TestMacroController';
+import { TestOverviewController } from './extension/TestOverviewController';
 
 // `icon` are codicon id, the (id without the `codicon-` prefix).
 // `new vscode.ThemeIcon('github')`
@@ -546,7 +546,7 @@ export async function activate(
 
     const catalog = await initTests(context, client, ctrl, resultController);
 
-    const macroTestsView = new TestMacroController(settingsStore);
+    const testOverview = new TestOverviewController(settingsStore);
     context.subscriptions.push(
       vscode.commands.registerCommand(
         'catala.allTestsWebview',
@@ -554,7 +554,7 @@ export async function activate(
           const columnToShowIn = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
-          macroTestsView.show(
+          testOverview.show(
             context,
             resultController,
             ctrl,

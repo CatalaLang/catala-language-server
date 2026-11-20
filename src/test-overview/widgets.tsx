@@ -2,7 +2,7 @@ import { type ReactElement } from 'react';
 import { useIntl } from 'react-intl';
 
 import { assertUnreachable } from '../shared/util';
-import { testMacro } from './testUtils';
+import { testState } from './testUtils';
 
 export function SeparationLine(): ReactElement {
   return <div className="separation-line" />;
@@ -30,7 +30,7 @@ export function TestDate({ date }: { date: string }): ReactElement {
 
 /**
  * Return the correct symbol depending on a state, usually the
- * given state comes from an object TestMacro.
+ * given state comes from an object OverviewTest.
  * The state is only conveyed by the shape and the color of the icon, so it is
  * also spelled out in a tooltip.
  */
@@ -42,7 +42,7 @@ export function TestStateIcon({
   success?: boolean;
 }): ReactElement {
   const intl = useIntl();
-  const state = loading === true ? 'Loading' : testMacro(success);
+  const state = loading === true ? 'Loading' : testState(success);
   switch (state) {
     case 'Success':
       return (

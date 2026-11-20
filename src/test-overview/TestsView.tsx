@@ -6,11 +6,11 @@ import { type WebviewApi } from 'vscode-webview';
 import { AddNewTest } from './buttons';
 import { CardGrid } from './CardView';
 import { TestList } from './ListView';
-import type { TestMacro } from './types';
+import type { OverviewTest } from './types';
 
 type TestGridArg = {
   vscode: WebviewApi<unknown>;
-  filtered: TestMacro[];
+  filtered: OverviewTest[];
   grid: boolean;
   filterScope: string[];
   onRun: (testId: string) => void;

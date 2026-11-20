@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { writeTestsUpMessage, writeUpMessage } from './generated/catala_types';
-import App, { GeneralTestsUi, InputApp } from './App';
+import App, { TestOverviewUi, InputApp } from './App';
 import './styles/index.css';
 import '../node_modules/@vscode/codicons/dist/codicon.css';
 
@@ -20,9 +20,9 @@ export function renderInputScopeUi(language: string, scopename: string): void {
   vscode.postMessage(writeUpMessage({ kind: 'Ready' }));
 }
 
-export function renderMacroTestsUi(language: string): void {
+export function renderTestOverview(language: string): void {
   const vscode = acquireVsCodeApi();
   const root = createRoot(document.getElementById('root') as HTMLElement);
-  root.render(createElement(GeneralTestsUi, { language, vscode }));
+  root.render(createElement(TestOverviewUi, { language, vscode }));
   vscode.postMessage(writeTestsUpMessage({ kind: 'Ready' }));
 }

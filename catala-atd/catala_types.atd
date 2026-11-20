@@ -387,7 +387,7 @@ type down_message = [
   | Settings of webview_settings
 ]
 
-(* Messages of the 'view catala tests' panel (TestMacroController) *)
+(* Messages of the 'view catala tests' panel (TestOverviewController) *)
 type tests_up_message = [
   | Ready
   | RunTests of string list (* test ids; empty: every test *)

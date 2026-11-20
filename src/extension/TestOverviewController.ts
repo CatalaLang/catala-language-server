@@ -36,7 +36,7 @@ function relativeFilename(filename: string): string | undefined {
 // This class contains the 'backend' part of the test case editor that
 // sets up the UI, provide initial data and exchanges messages with the
 // web view whose entry point is in `uiEntryPoint.ts`
-export class TestMacroController {
+export class TestOverviewController {
   // Undefined until the panel is created, and reset to undefined when the
   // user closes it (a disposed panel can neither be revealed nor posted to).
   panel: vscode.WebviewPanel | undefined;
@@ -339,7 +339,7 @@ export class TestMacroController {
             </body>
             <script src="${scriptUri}"></script>
             <script>
-              window.Ui.renderMacroTestsUi("${language}");
+              window.Ui.renderTestOverview("${language}");
             </script>
             </html>
         `;

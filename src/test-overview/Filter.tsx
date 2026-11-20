@@ -3,7 +3,7 @@ import { FormattedMessage, useIntl } from 'react-intl';
 
 import { VscodeTextfield } from '@vscode-elements/react-elements';
 import { matchFilter, scopesFromTests } from './testUtils';
-import type { TestMacro } from './types';
+import type { OverviewTest } from './types';
 import { Loading } from './widgets';
 
 /**
@@ -11,7 +11,7 @@ import { Loading } from './widgets';
  * wether the test is a Catala Test Case editor generated test
  */
 type FilterArg = {
-  tests: TestMacro[] | undefined;
+  tests: OverviewTest[] | undefined;
   filter: string;
   filterScope: string[];
   setFilterScope: React.Dispatch<React.SetStateAction<string[]>>;
@@ -21,7 +21,7 @@ type FilterArg = {
 };
 
 type ScopeFilterArg = {
-  tests: TestMacro[] | undefined;
+  tests: OverviewTest[] | undefined;
   filterScope: string[];
   setFilterScope: React.Dispatch<React.SetStateAction<string[]>>;
 };

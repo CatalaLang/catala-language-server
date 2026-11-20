@@ -9,7 +9,7 @@ import {
   testingScope,
   testTitle,
 } from './testUtils';
-import type { CardGridArg, TestItemArg, TestMacro } from './types';
+import type { CardGridArg, TestItemArg, OverviewTest } from './types';
 import { SeparationLine, TestDate, TestStateIcon } from './widgets';
 
 /**
@@ -87,7 +87,7 @@ export function CardGrid({
   filteredScope,
   onRun,
 }: CardGridArg): ReactElement {
-  let gridTests = new Map<string, TestMacro[]>();
+  let gridTests = new Map<string, OverviewTest[]>();
   if (filteredScope.length != 0) {
     for (let index = 0; index < tests.length; index++) {
       const elt = tests[index];

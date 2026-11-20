@@ -19,7 +19,7 @@ import {
   testingScope,
   testTitle,
 } from './testUtils';
-import type { CardGridArg, TestItemArg, TestMacro } from './types';
+import type { CardGridArg, TestItemArg, OverviewTest } from './types';
 import { TestDate, TestStateIcon } from './widgets';
 
 /**
@@ -40,7 +40,7 @@ function TestPath({
   test,
 }: {
   vscode: WebviewApi<unknown>;
-  test: TestMacro;
+  test: OverviewTest;
 }): ReactElement {
   const displayed = test.relative_filename ?? test.filename;
   // `+ 1` keeps the separator on the directory side, and yields 0 (hence an
@@ -235,9 +235,9 @@ export function TestList({
   tests,
   filteredScope,
 }: CardGridArg): ReactElement {
-  let map = new Map<string, TestMacro[]>();
-  let not_gui: TestMacro[] = [];
-  let gui: TestMacro[] = [];
+  let map = new Map<string, OverviewTest[]>();
+  let not_gui: OverviewTest[] = [];
+  let gui: OverviewTest[] = [];
   for (let index = 0; index < tests.length; index++) {
     const element = tests[index];
     if (element.test.kind == 'GUI') {
@@ -251,7 +251,7 @@ export function TestList({
     }
   }
 
-  let allTests: [string, TestMacro[]][] = [];
+  let allTests: [string, OverviewTest[]][] = [];
   if (filteredScope.length == 0) {
     // Everything ends up in a single table, so grouping by scope on the way
     // there would only shuffle it: `tests` arrives with the failures already
