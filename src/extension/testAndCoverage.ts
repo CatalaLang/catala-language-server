@@ -214,7 +214,8 @@ export class ResultController {
   }
 }
 
-class TestMap {
+/** @lintignore Built by the VS Code tests too. */
+export class TestMap {
   private map: Map<string, vscode.TestItem>;
   constructor() {
     this.map = new Map();
@@ -611,6 +612,11 @@ function makeRunHandler(
       return;
     }
     const run: vscode.TestRun = ctrl.createTestRun(request);
+    // run.token: the Stop button of Test Results, also for the panel's runs.
+    const stop = new vscode.CancellationTokenSource();
+    const stopLinks = [cancellation, run.token].map((token) =>
+      token.onCancellationRequested(() => stop.cancel())
+    );
     const testFiles =
       request.include
         // fsPath, not path: clerk needs the OS path, not the URI form.
@@ -623,10 +629,9 @@ function makeRunHandler(
       const thread: Promise<ClerkTestRunResult | Error> = clerkRunTest(
         cwd,
         testFiles,
-        cancellation,
+        stop.token,
         with_coverage
       );
-      cancellation.onCancellationRequested((_) => run.end());
       const clerk_test_result = await thread;
       if (clerk_test_result instanceof Error) throw clerk_test_result;
       resultController.refresh(clerk_test_result);
@@ -684,16 +689,22 @@ function makeRunHandler(
       // Await GUI tests processing
       await Promise.all(test_gui_threads);
     } catch (error) {
-      const msg = new vscode.TestMessage(
-        error instanceof Error ? error.message : String(error)
-      );
-      testsToRun.forEach((test) => run.errored(test, msg));
-      console.error('Error while processing test results: ', msg);
-      vscode.window.showErrorMessage(
-        'Unexpected error while executing tests. Check the console logs for more details...'
-      );
+      if (stop.token.isCancellationRequested) {
+        testsToRun.forEach((test) => run.skipped(test));
+      } else {
+        const msg = new vscode.TestMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+        testsToRun.forEach((test) => run.errored(test, msg));
+        console.error('Error while processing test results: ', msg);
+        vscode.window.showErrorMessage(
+          'Unexpected error while executing tests. Check the console logs for more details...'
+        );
+      }
     }
     run.end();
+    stopLinks.forEach((link) => link.dispose());
+    stop.dispose();
   };
   return runHandler;
 }
@@ -819,7 +830,9 @@ export async function runTestVscode(
   catalog: TestCatalog,
   testController: vscode.TestController,
   resultController: ResultController,
-  args: RunTestArgs
+  args: RunTestArgs,
+  cancellation: vscode.CancellationToken = new vscode.CancellationTokenSource()
+    .token
 ): Promise<void> {
   const testMap = catalog.testMap;
   let runTest = makeRunHandler(
@@ -847,5 +860,5 @@ export async function runTestVscode(
     }
     request = new vscode.TestRunRequest(testItems);
   }
-  await runTest(request, new vscode.CancellationTokenSource().token, false);
+  await runTest(request, cancellation, false);
 }
