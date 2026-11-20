@@ -54,11 +54,12 @@ async function spawnBinary(
       });
       proc.stdout.setEncoding('utf-8');
       proc.stderr.setEncoding('utf-8');
-      if (opts.input) {
+      // Closed even when empty: `-` reads stdin to the end.
+      if (opts.input !== undefined) {
         proc.stdin.setDefaultEncoding('utf-8');
         proc.stdin.write(opts.input);
-        proc.stdin.end();
       }
+      proc.stdin.end();
       let output = '';
       proc.stdout.on('data', (data) => {
         output += data;

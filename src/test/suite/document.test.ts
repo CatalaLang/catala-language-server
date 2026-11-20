@@ -480,3 +480,26 @@ suite('Broken test document', function () {
     );
   });
 });
+
+suite('New test document', function () {
+  this.timeout(20_000);
+
+  // "Add test" creates an empty file, then reads it: stdin was left open on
+  // empty input, so the read hung and the scope picker never came.
+  test('an empty file opens with no tests', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'catala-doc-'));
+    fs.copyFileSync(
+      path.join(fixtures, 'clerk.toml'),
+      path.join(dir, 'clerk.toml')
+    );
+    execSync('clerk start', { cwd: dir });
+    const file = path.join(dir, 'test_new.catala_en');
+    fs.writeFileSync(file, '');
+
+    const doc = await CatalaTestCaseDocument.create(
+      vscode.Uri.file(file),
+      undefined
+    );
+    assert.deepStrictEqual(doc.parseResults, { kind: 'Results', value: [] });
+  });
+});
