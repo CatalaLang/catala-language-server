@@ -40,6 +40,6 @@
   "Open the Catala GitHub repository": "Ouvrir le répertoire GitHub de Catala",
   "Create test file": "Créer un fichier de test",
   "Invalid test file name": "Nom de fichier de test invalide",
-  "The test file name must contain the word \"test\".": "Le nom du fichier de test doit contenir le mot « test ».",
+  "The test editor only opens files named {0}.": "L'éditeur de tests n'ouvre que les fichiers nommés {0}.",
   "View Catala tests": "Visualiser les tests Catala"
 }

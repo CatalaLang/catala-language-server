@@ -17,6 +17,10 @@ import { fileExists, runTestVscode, TestId } from './testAndCoverage';
 import { getCwd } from '../shared/util_client';
 import type { SettingsSource } from '../extension/settingsStore';
 import { resolveLanguage } from '../shared/settings';
+import {
+  matchesFilenamePattern,
+  mostCommonLanguage,
+} from '../shared/testFileName';
 
 // Path of a test file relative to the workspace folder it belongs to, which is
 // what the 'View Catala tests' panel displays: an absolute path is both too long
@@ -273,13 +277,24 @@ export class TestOverviewController {
             break;
           }
           let uri: vscode.Uri | undefined;
+          const projectFiles = await vscode.workspace.findFiles(
+            '**/*.catala_*',
+            '**/{_build,node_modules}/**',
+            200
+          );
+          const language =
+            mostCommonLanguage(
+              projectFiles.map((f) => path.basename(f.path))
+            ) ?? 'en';
           let defaultUri = vscode.Uri.joinPath(
             workspaceFolder.uri,
-            'test.catala_fr'
+            `test.catala_${language}`
           );
-          // This loop only finishes if the fileName created by the user contains the
-          // string "test". Otherwise, we can't open the Catala Test Case Editor properly
-          // later.
+          // The test editor's own selector: a file it would not open again
+          // later is refused here.
+          const pattern: string =
+            context.extension.packageJSON.contributes.customEditors[0]
+              .selector[0].filenamePattern;
           for (;;) {
             uri = await vscode.window.showSaveDialog({
               defaultUri,
@@ -292,10 +307,7 @@ export class TestOverviewController {
               // User cancelled the dialog.
               break;
             }
-            const fileName = path.basename(uri.fsPath).toLowerCase();
-            if (fileName.includes('test')) {
-              // FileName includes test, the Catala Test Case Editor will be
-              // properly displayed so we can exit the infinite loop.
+            if (matchesFilenamePattern(path.basename(uri.fsPath), pattern)) {
               break;
             }
             await vscode.window.showErrorMessage(
@@ -303,7 +315,8 @@ export class TestOverviewController {
               {
                 modal: true,
                 detail: vscode.l10n.t(
-                  'The test file name must contain the word "test".'
+                  'The test editor only opens files named {0}.',
+                  pattern
                 ),
               }
             );
