@@ -10,7 +10,7 @@ when:
   - event: release
 
 variables:
-  - &catala_image registry.gitlab.inria.fr/catala/registry/ocaml:debian-5
+  - &catala_image registry.gitlab.inria.fr/catala/registry/ocaml:debian-8
   - &build_env
     DUNE_PROFILE: check
     CI: true
