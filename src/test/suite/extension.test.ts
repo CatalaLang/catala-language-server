@@ -41,7 +41,7 @@ suite('Extension, end to end', function () {
     ]) {
       fs.copyFileSync(path.join(fixtures, f), path.join(dir, f));
     }
-    execSync('clerk start', { cwd: dir, stdio: 'ignore' });
+    execSync('clerk start', { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
     const uri = vscode.Uri.file(path.join(dir, 'test_optionals.catala_en'));
 
     await within(
