@@ -242,7 +242,7 @@ export class CatalaTestCaseDocument
       return;
     }
     if (targetResource.toString() === this.uri.toString()) {
-      await this.writeOriginal(catalaSource, cancellation);
+      await this.writeOriginal(catalaSource);
     } else {
       await vscode.workspace.fs.writeFile(
         targetResource,
@@ -268,10 +268,7 @@ export class CatalaTestCaseDocument
    * or wrote it (another editor, git, a script): then the tester chooses.
    * False when the file was reloaded instead of written.
    */
-  private async writeOriginal(
-    source: string,
-    cancellation: vscode.CancellationToken
-  ): Promise<boolean> {
+  private async writeOriginal(source: string): Promise<boolean> {
     const onDisk = await this.readDiskText();
     if (onDisk !== undefined && onDisk !== this._diskText) {
       const file = vscode.workspace.asRelativePath(this.uri);
@@ -289,7 +286,7 @@ export class CatalaTestCaseDocument
         reload
       );
       if (choice === reload) {
-        await this.revert(cancellation);
+        await this.reload();
         return false;
       }
       if (choice !== overwrite) {
@@ -301,7 +298,12 @@ export class CatalaTestCaseDocument
     return true;
   }
 
+  // Not cancellable: one read and one parse, nothing worth interrupting.
   async revert(_cancellation: vscode.CancellationToken): Promise<void> {
+    await this.reload();
+  }
+
+  private async reload(): Promise<void> {
     const diskContent = await CatalaTestCaseDocument.readFile(this.uri);
     this._sourceText = new TextDecoder('utf-8').decode(diskContent);
     this._diskText = this._sourceText;
@@ -453,8 +455,7 @@ export class CatalaTestCaseDocument
       );
     }
     const source = await atdToCatala(rebuilt, this.language);
-    const token = new vscode.CancellationTokenSource().token;
-    if (!(await this.writeOriginal(source, token))) return;
+    if (!(await this.writeOriginal(source))) return;
     await this.deleteWorkingCopy();
     this._parseResults = stampParseResultsUids({
       kind: 'Results',
@@ -508,7 +509,7 @@ export class CatalaTestCaseDocument
     // A pending batched edit would fire after the revert.
     this.cancelPendingEdits();
     await this.deleteWorkingCopy();
-    await this.revert(new vscode.CancellationTokenSource().token);
+    await this.reload();
   }
 
   public resetTestOutputs(testingScope: string, outputs: TestOutputs): void {
