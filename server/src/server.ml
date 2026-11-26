@@ -287,6 +287,7 @@ let add_diagnostics ({ St.diagnostics; _ } as server_state) new_diags =
   St.{ server_state with diagnostics = merge_diags new_diags diagnostics }
 
 let load_module_candidates ~get_module_content (project : Projects.project) =
+  Document_processing.ensure_stdlib project;
   let includes =
     File.Set.elements project.project_include_dirs |> List.map Global.raw_file
   in
