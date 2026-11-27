@@ -1013,3 +1013,83 @@ describe('jumping to the first unset value', () => {
     expect(anchorAfter(inOriginal[0])).toBe('StructField:pets');
   });
 });
+
+// The original lists inputs in file order, the rebuild
+// in the scope's, so the two panes put the same tab in different places.
+describe('both panes in the same order', () => {
+  const ints: Typ = { kind: 'TArray', value: { kind: 'TInt' } };
+  const inputs = (names: string[]): Map<string, TestIo> =>
+    new Map(
+      names.map((n): [string, TestIo] =>
+        n.startsWith('list')
+          ? [n, io(ints, { value: arrayVal([intVal(1)]) })]
+          : [n, io({ kind: 'TInt' }, { value: intVal(1) })]
+      )
+    );
+  const names = ['list_a', 'list_b', 'num_a', 'num_b'];
+
+  function pair(): Recovery {
+    const base = authored();
+    return {
+      tests: [
+        {
+          authored: { ...base, test_inputs: inputs(names) },
+          rebuilt: { ...base, test_inputs: inputs([...names].reverse()) },
+          outcomes: [],
+        },
+      ],
+      notes: [],
+      working_copy: 'x.repair',
+    };
+  }
+
+  const order = (pane: Element, selector: string): string[] =>
+    Array.from(pane.querySelectorAll(selector)).map(
+      (e) =>
+        [...names, 'list_gone'].find((n) => e.textContent?.includes(n)) ?? '?'
+    );
+  afterEach(() => localStorage.clear());
+
+  it('shows the tabs and fields of the original in the rebuilt order', () => {
+    const container = renderView(pair());
+    const authoredPane = container.querySelector('.broken-pane-authored')!;
+    const rebuiltPane = container.querySelector('.broken-pane-rebuilt')!;
+    for (const selector of ['.simple-item > .item-label', '.tab .tab-name']) {
+      expect(order(rebuiltPane, selector)).toHaveLength(2);
+      expect(order(authoredPane, selector)).toEqual(
+        order(rebuiltPane, selector)
+      );
+    }
+  });
+
+  it('puts a removed list last and follows the order the tester dragged', () => {
+    localStorage.setItem(
+      'catala.tabOrder:list_a,list_b',
+      JSON.stringify(['list_b', 'list_a'])
+    );
+    const base = authored();
+    const v: Recovery = {
+      tests: [
+        {
+          authored: {
+            ...base,
+            test_inputs: inputs(['list_gone', 'list_a', 'list_b']),
+          },
+          rebuilt: { ...base, test_inputs: inputs(['list_a', 'list_b']) },
+          outcomes: [],
+        },
+      ],
+      notes: [],
+      working_copy: 'x.repair',
+    };
+    const container = renderView(v);
+    const tabs = (pane: string): string[] =>
+      order(container.querySelector(pane)!, '.tab .tab-name');
+    expect(tabs('.broken-pane-rebuilt')).toEqual(['list_b', 'list_a']);
+    expect(tabs('.broken-pane-authored')).toEqual([
+      'list_b',
+      'list_a',
+      'list_gone',
+    ]);
+  });
+});
