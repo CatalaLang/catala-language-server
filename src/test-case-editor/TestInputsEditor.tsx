@@ -109,6 +109,8 @@ type Props = {
   labelExtra?: (inputName: string) => ReactNode;
   /** Decorates any nested editor by path, as the diff highlighter does. */
   editorHook?: (editor: ReactElement, path: PathSegment[]) => ReactElement;
+  /** See CompositeEditor. */
+  orderKeys?: string[];
 };
 
 export default function TestInputsEditor(props: Props): ReactElement {
@@ -180,6 +182,7 @@ export default function TestInputsEditor(props: Props): ReactElement {
         items={editorItems}
         atomicElements={true}
         currentPath={[]}
+        orderKeys={props.orderKeys}
       />
     </div>
   );

@@ -36,6 +36,9 @@ type CompositeEditorProps = {
   atomicElements?: boolean;
   /** Where these items live; lets a reveal request open the right tab. */
   currentPath?: PathSegment[];
+  /** Store tab order under these keys' set, shared with another editor; tabs
+   *  outside it go last. */
+  orderKeys?: string[];
 };
 
 // True if the type needs full-width rendering (not suitable for compact wrap).
@@ -125,7 +128,11 @@ export function CompositeEditor(props: CompositeEditorProps): ReactElement {
 
   const hasNonScalar = structuralItems.length + arrayItems.length > 0;
 
-  const orderKey = tabOrderKey(arrayItems);
+  const orderKey = tabOrderKey(
+    props.orderKeys === undefined
+      ? arrayItems
+      : arrayItems.filter((i) => props.orderKeys?.includes(i.key))
+  );
   // stored on drop only, so Esc cancels
   const [preview, setPreview] = useState<string[] | null>(null);
   const tabs = sortTabs(arrayItems, preview ?? storedTabOrder(orderKey));

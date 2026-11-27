@@ -59,6 +59,32 @@ type Props = {
   >;
 };
 
+// Keys not in [order] keep their place among themselves, after the rest.
+function ordered<V>(map: Map<string, V>, order: string[]): Map<string, V> {
+  const rank = (k: string): number => {
+    const i = order.indexOf(k);
+    return i < 0 ? order.length : i;
+  };
+  return new Map([...map].sort(([a], [b]) => rank(a) - rank(b)));
+}
+
+// The file's order is that of the old scope: show it in the new one's, so
+// both panes put each field in the same place.
+function inOrderOf(authored: Test, rebuilt: Test): Test {
+  const inputs = [...rebuilt.test_inputs.keys()];
+  const outputs = [...rebuilt.tested_scope.outputs.keys()];
+  return {
+    ...authored,
+    test_inputs: ordered(authored.test_inputs, inputs),
+    test_outputs: ordered(authored.test_outputs, outputs),
+    tested_scope: {
+      ...authored.tested_scope,
+      inputs: ordered(authored.tested_scope.inputs, inputs),
+      outputs: ordered(authored.tested_scope.outputs, outputs),
+    },
+  };
+}
+
 function pathKey(path: PathSegment[]): string {
   return path.map((s) => `${s.kind}:${s.value}`).join('/');
 }
@@ -524,6 +550,12 @@ function TestPanes({
 }): React.JSX.Element {
   const intl = useIntl();
   const meta = authored ?? rebuilt;
+  const shown =
+    authored !== undefined && rebuilt !== undefined
+      ? inOrderOf(authored, rebuilt)
+      : authored;
+  const rebuiltKeys =
+    rebuilt === undefined ? undefined : [...rebuilt.test_inputs.keys()];
   const runDiffs =
     runState?.results?.kind === 'Ok' ? runState.results.value.diffs : [];
   const scope = meta?.tested_scope;
@@ -596,7 +628,7 @@ function TestPanes({
         style={{ ['--broken-split']: `${split}%` } as React.CSSProperties}
       >
         <div className="broken-pane broken-pane-authored" ref={authoredPaneRef}>
-          {authored === undefined ? (
+          {shown === undefined ? (
             <p className="broken-empty">
               <FormattedMessage id="broken.nothingRecovered" />
             </p>
@@ -606,22 +638,23 @@ function TestPanes({
                   pane, so the two sides stay comparable. */}
               <LinkedViewsContext.Provider value={linkedInputs}>
                 <TestInputsEditor
-                  test_inputs={authored.test_inputs}
-                  tested_scope={authored.tested_scope}
+                  test_inputs={shown.test_inputs}
+                  tested_scope={shown.tested_scope}
                   onTestInputsChange={(): void => {}}
                   readOnly
+                  orderKeys={rebuiltKeys}
                   labelExtra={fateFrom(marksIn)}
                   editorHook={anchorHook('In', fateHookIn)}
                 />
               </LinkedViewsContext.Provider>
-              {authored.test_outputs.size > 0 && (
+              {shown.test_outputs.size > 0 && (
                 <>
                   <h5 className="broken-subhead">
                     <FormattedMessage id="broken.expected" />
                   </h5>
                   <LinkedViewsContext.Provider value={linkedOutputs}>
                     <TestOutputsEditor
-                      test={authored}
+                      test={shown}
                       onTestChange={(): void => {}}
                       readOnly
                       labelExtra={fateFrom(marksOut)}
